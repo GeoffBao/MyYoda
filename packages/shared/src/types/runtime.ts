@@ -150,6 +150,8 @@ export interface WorktreeInfo {
   isMain: boolean
   /** 显示名（路径最后一段） */
   name: string
+  /** HEAD commit 的 subject（用于 detached 时识别 worktree 用途） */
+  commitSubject?: string
 }
 
 /** 新 Agent 会话的 Git 执行位置 */

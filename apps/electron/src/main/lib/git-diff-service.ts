@@ -615,12 +615,15 @@ export async function listWorktrees(repoPath: string): Promise<import('@myyoda/s
   const normalizedMainRoot = mainRepoRoot ? normalizeGitRoot(mainRepoRoot) : normalizeGitRoot(root)
 
   const worktrees: import('@myyoda/shared').WorktreeInfo[] = []
+  // 解析时保留完整 HEAD hash，稍后批量查 commit subject（一次性 git log --no-walk）
+  const pendingHeads: { fullHead: string; target: import('@myyoda/shared').WorktreeInfo }[] = []
   const blocks = output.split('\n\n').filter(Boolean)
 
   for (const block of blocks) {
     const lines = block.split('\n')
     let path = ''
     let head = ''
+    let fullHead = ''
     let branch = ''
     let prunable = false
 
@@ -628,7 +631,8 @@ export async function listWorktrees(repoPath: string): Promise<import('@myyoda/s
       if (line.startsWith('worktree ')) {
         path = line.slice('worktree '.length)
       } else if (line.startsWith('HEAD ')) {
-        head = line.slice('HEAD '.length).slice(0, 7)
+        fullHead = line.slice('HEAD '.length)
+        head = fullHead.slice(0, 7)
       } else if (line.startsWith('branch refs/heads/')) {
         branch = line.slice('branch refs/heads/'.length)
       } else if (line === 'detached') {
@@ -640,13 +644,38 @@ export async function listWorktrees(repoPath: string): Promise<import('@myyoda/s
 
     if (path && !prunable && existsSync(path)) {
       const isMain = normalizeGitRoot(path) === normalizedMainRoot
-      worktrees.push({
+      const info: import('@myyoda/shared').WorktreeInfo = {
         path,
         branch: branch || 'unknown',
         head,
         isMain,
         name: basename(path),
-      })
+      }
+      worktrees.push(info)
+      if (fullHead) pendingHeads.push({ fullHead, target: info })
+    }
+  }
+
+  // 批量补 HEAD commit subject：对 detached / 用户不熟悉的 worktree，subject 比哈希直观得多
+  if (pendingHeads.length > 0) {
+    try {
+      const logOutput = await runGitCommand(
+        ['log', '--no-walk', '--format=%H%x00%s', ...pendingHeads.map((p) => p.fullHead)],
+        root,
+        { quiet: true },
+      )
+      if (logOutput) {
+        const subjectByHash = new Map<string, string>()
+        for (const line of logOutput.split('\n')) {
+          const sep = line.indexOf('\0')
+          if (sep > 0) subjectByHash.set(line.slice(0, sep), line.slice(sep + 1))
+        }
+        for (const p of pendingHeads) {
+          p.target.commitSubject = subjectByHash.get(p.fullHead) ?? undefined
+        }
+      }
+    } catch {
+      // subject 是锦上添花，失败不影响 worktree 列表
     }
   }
 
