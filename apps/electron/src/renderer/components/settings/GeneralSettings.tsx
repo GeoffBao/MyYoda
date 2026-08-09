@@ -446,7 +446,7 @@ export function GeneralSettings(): React.ReactElement {
           </SettingsRow>
           <SettingsToggle
             label="Git/PR 标识"
-            description="Agent 代你提交 commit 或创建 PR 时，附加 Made-with: MyYoda 与仓库链接，便于推广；可随时关闭"
+            description="Agent 代你提交 commit 或创建 PR 时，附加 Co-Authored-By: <模型名> in MyYoda 与仓库链接，便于推广；可随时关闭"
             checked={gitAttributionEnabled}
             onCheckedChange={(checked) => {
               void handleGitAttributionChange(checked)

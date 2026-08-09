@@ -343,6 +343,7 @@ export function createAgentSession(
       if (applyClaudeSdkAttributionSettings(
         sdkSettings,
         isGitAttributionEnabled(getSettings().gitAttributionEnabled),
+        modelId,
       )) {
         needsWrite = true
       }

@@ -1354,6 +1354,7 @@ export class AgentOrchestrator {
         if (applyClaudeSdkAttributionSettings(
           sdkProjectSettings,
           isGitAttributionEnabled(getSettings().gitAttributionEnabled),
+          selectedModelId,
         )) {
           needsWrite = true
         }
