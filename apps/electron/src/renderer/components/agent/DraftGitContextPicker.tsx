@@ -177,13 +177,15 @@ export function DraftGitContextPicker({
               <CommandEmpty>没有匹配的分支</CommandEmpty>
               <CommandGroup>
                 {visibleBranches.map((candidate) => {
-                  const disabled = mode === 'local' && !canCheckoutBranchInLocal(candidate)
+                  // Local 模式下被其他 worktree 占用的分支：不再置灰，点击时自动切到 worktree 模式并选中。
+                  // 这消除「为什么点不了」的歧义——用户无需理解两种模式的区别，点选被占用的分支本身就是
+                  // 在表达「我想用这个分支」，此时它只能以 worktree 隔离目录形式使用，系统替用户做对的事。
+                  const localOccupied = mode === 'local' && !canCheckoutBranchInLocal(candidate)
                   return (
                     <CommandItem
                       key={candidate.ref}
-                      disabled={disabled}
                       onSelect={() => {
-                        if (disabled) return
+                        if (localOccupied) updateMode('worktree')
                         setBranch(candidate.name)
                         setBranchPopoverOpen(false)
                       }}
@@ -192,7 +194,7 @@ export function DraftGitContextPicker({
                       <Check className={cn('size-3.5 shrink-0', candidate.name === branch ? 'opacity-100' : 'opacity-0')} />
                       <span className="flex-1 truncate">{candidate.name}</span>
                       <span className="shrink-0 truncate max-w-[90px] text-[10px] text-muted-foreground/60">
-                        {formatGitBranchSubtitle(candidate)}
+                        {localOccupied ? '已被占用 · 将切 worktree' : formatGitBranchSubtitle(candidate)}
                       </span>
                     </CommandItem>
                   )
