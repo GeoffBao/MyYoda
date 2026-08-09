@@ -73,7 +73,6 @@ function buildItem(
   specNodes: SpecNodeSummary[] | undefined,
   fallbackModel: string,
   taskExpertId: string | undefined,
-  adHocProject: KanbanProject | undefined,
 ): KanbanItem {
   const run = findTaskRun(session, runs)
   const totalNodes = session.taskNodeCount
@@ -83,10 +82,9 @@ function buildItem(
     ? Object.values(run.nodeStates).filter((state) => state === 'done').length
     : 0
   const binding = bindingsBySessionId.get(session.id)
-  // 未绑定真实 Project 的会话（含历史存量）懒归类到隐藏的「临时会话」容器，仅用于卡片
-  // 展示；不回写 session.projectId，不做批量迁移（对齐 Synara「无 Project 会话标记为
-  // chat」的效果，但保持 MyYoda 的会话级 sandbox 隔离不变）。
-  const project = session.projectId ? projectsById.get(session.projectId) ?? null : adHocProject ?? null
+  // 未绑定真实 Project 的会话（含历史存量）保持 project 为空，由 workspace scope
+  // （{ kind: 'workspace' } → !session.projectId）承载「未绑定」语义，不再懒归类到隐藏容器。
+  const project = session.projectId ? projectsById.get(session.projectId) ?? null : null
   const expertId = resolveExpertId(taskExpertId, project?.defaultExpertId) ?? undefined
 
   // 有 run 节点状态但还没 child session 时，用 nodeStates 合成行标题，避免卡片只有 0/N 进度条
@@ -140,7 +138,6 @@ function buildItem(
  */
 export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanViewModel {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]))
-  const adHocProject = input.projects.find((project) => project.kind === 'ad-hoc')
   const bindingsBySessionId = new Map(input.bindings.map((binding) => [binding.sessionId, binding]))
   const fallbackModel = input.fallbackModel ?? ''
   const childrenByParent = new Map<string, SubtaskChildRow[]>()
@@ -203,7 +200,6 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
         input.specNodesBySlug?.get(summary.taskSlug),
         fallbackModel,
         input.expertIdsBySlug?.get(summary.taskSlug),
-        adHocProject,
       )
       return {
         ...item,
@@ -236,7 +232,6 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
       session.taskSlug ? input.specNodesBySlug?.get(session.taskSlug) : undefined,
       fallbackModel,
       session.taskSlug ? input.expertIdsBySlug?.get(session.taskSlug) : undefined,
-      adHocProject,
     ))
     .sort((left, right) => right.session.updatedAt - left.session.updatedAt || left.id.localeCompare(right.id))
 

@@ -121,33 +121,38 @@ describe('Agent 工作区创建', () => {
   })
 })
 
-describe('隐藏容器 Project', () => {
-  test('Given 新建工作区 When 创建完成 Then 自动生成 home 与 ad-hoc 各一个隐藏 Project', () => {
+describe('隐藏容器 Project 已移除', () => {
+  test('Given 新建工作区 When 创建完成 Then 不再自动生成 home / ad-hoc 隐藏 Project', () => {
     const workspace = manager.createAgentWorkspace('隐藏容器测试')
     const projects = projectRepositoryModule.projectRepository.listProjectsAtRoot(
       configPaths.getAgentWorkspacePath(workspace.slug),
     )
 
-    const home = projects.find((project) => project.config.kind === 'home')
-    const adHoc = projects.find((project) => project.config.kind === 'ad-hoc')
-    expect(home?.config.workingDirectory).toBe(configPaths.getWorkspaceFilesDir(workspace.slug))
-    expect(adHoc?.config.workingDirectory).toBeUndefined()
-    expect(projects.filter((project) => project.config.kind === 'home')).toHaveLength(1)
-    expect(projects.filter((project) => project.config.kind === 'ad-hoc')).toHaveLength(1)
+    expect(projects.filter((project) => project.config.kind === 'home')).toHaveLength(0)
+    expect(projects.filter((project) => project.config.kind === 'ad-hoc')).toHaveLength(0)
   })
 
-  test('Given 隐藏 Project 已存在 When 重复 ensure Then 不产生重复也不覆盖已有配置', () => {
-    const workspace = manager.createAgentWorkspace('隐藏容器幂等测试')
+  test('Given 存量隐藏 Project config 存在 When 列出工作区项目 Then 读取兼容且不新增', () => {
+    const workspace = manager.createAgentWorkspace('隐藏容器兼容测试')
     const root = configPaths.getAgentWorkspacePath(workspace.slug)
-    const first = projectRepositoryModule.projectRepository.ensureHomeProject(root)
+    // 模拟历史遗留：手写一个 home 容器 config（旧版 ensureHomeProject 产物）
+    const legacyDir = join(root, 'projects', 'project')
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(join(legacyDir, 'config.json'), JSON.stringify({
+      id: 'proj_legacy_home',
+      slug: 'project',
+      name: '首页工作区',
+      workingDirectory: configPaths.getWorkspaceFilesDir(workspace.slug),
+      kind: 'home',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }, null, 2))
 
-    projectRepositoryModule.projectRepository.ensureHomeProject(root)
-    projectRepositoryModule.projectRepository.ensureAdHocProject(root)
     const projects = projectRepositoryModule.projectRepository.listProjectsAtRoot(root)
-
+    const home = projects.find((project) => project.config.kind === 'home')
+    expect(home?.config.kind).toBe('home')
+    expect(home?.config.workingDirectory).toBe(configPaths.getWorkspaceFilesDir(workspace.slug))
     expect(projects.filter((project) => project.config.kind === 'home')).toHaveLength(1)
-    expect(projects.filter((project) => project.config.kind === 'ad-hoc')).toHaveLength(1)
-    expect(projects.find((project) => project.config.kind === 'home')?.config.id).toBe(first.id)
   })
 })
 

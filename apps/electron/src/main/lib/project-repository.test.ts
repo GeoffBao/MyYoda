@@ -176,7 +176,7 @@ describe('ProjectRepository', () => {
     expect(repository.resolveEffectiveCwdForProject(root, created.config.id)?.status).toBe('managed')
   })
 
-  test('隐藏容器 Project 拒绝重命名、归档和删除', () => {
+  test('存量隐藏容器 Project（kind=home/ad-hoc）仍拒绝重命名、归档和删除（保护读兼容）', () => {
     const root = createTempWorkspaceRoot()
     const repository = createRepository({ 'ws-alpha': root })
     const home = repository.createProjectAtRoot(root, { name: '首页工作区', kind: 'home' })
@@ -190,19 +190,21 @@ describe('ProjectRepository', () => {
     expect(updated.config.color).toBe('#ff0000')
   })
 
-  test('ensureHomeProject / ensureAdHocProject 幂等且互不干扰', () => {
+  test('存量隐藏容器 config（kind）仍可被读取，新建项目不产生隐藏 kind', () => {
     const root = createTempWorkspaceRoot()
     const repository = createRepository({ 'ws-alpha': root })
+    const home = repository.createProjectAtRoot(root, { name: '首页工作区', kind: 'home' })
+    const adHoc = repository.createProjectAtRoot(root, { name: '临时会话', kind: 'ad-hoc' })
+    const regular = repository.createProjectAtRoot(root, { name: '普通项目' })
 
-    const first = repository.ensureHomeProject(root)
-    const second = repository.ensureHomeProject(root)
-    const adHoc = repository.ensureAdHocProject(root)
+    expect(home.config.kind).toBe('home')
+    expect(adHoc.config.kind).toBe('ad-hoc')
+    expect(adHoc.config.workingDirectory).toBeUndefined()
+    expect(regular.config.kind).toBeUndefined()
 
-    expect(second.id).toBe(first.id)
-    expect(first.kind).toBe('home')
-    expect(adHoc.kind).toBe('ad-hoc')
-    expect(adHoc.id).not.toBe(first.id)
-    expect(adHoc.workingDirectory).toBeUndefined()
+    // 读取兼容：重新加载后 kind 保留
+    const reloaded = repository.getProjectAtRoot(root, home.config.slug)
+    expect(reloaded?.config.kind).toBe('home')
   })
 
   test('外部目录不可用时 resolveWorkingDirectory 为 undefined，requireRunnable 抛错', () => {

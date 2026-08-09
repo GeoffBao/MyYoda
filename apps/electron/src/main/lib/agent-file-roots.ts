@@ -17,6 +17,8 @@ export interface BuildAgentSessionFileRootsInput {
   executionCwd: string
   executionSource: AgentSessionFileRoots['executionSource']
   projectId?: string
+  /** 绑定 Project 的资产库目录；未绑定 Project 时为空。 */
+  projectAssetsPath?: string
   /** Project 已绑定但目录不可达时的原始路径；透传给 UI 区分"未绑定"与"绑定但不可达"。 */
   projectUnavailablePath?: string
 }
@@ -32,6 +34,7 @@ export function buildAgentSessionFileRoots(input: BuildAgentSessionFileRootsInpu
     executionSource: input.executionSource,
     ...(projectRoot ? { projectRoot } : {}),
     ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(input.projectAssetsPath ? { projectAssetsPath: input.projectAssetsPath } : {}),
     ...(input.projectUnavailablePath ? { projectUnavailablePath: input.projectUnavailablePath } : {}),
     workspaceFilesPath: input.workspaceFilesPath,
     sessionOutboxPath: join(input.workspaceFilesPath, 'Outbox', sessionId),
@@ -60,6 +63,7 @@ export function resolveAgentSessionFileRoots(
       executionCwd: sessionDir,
       executionSource: 'sandbox',
       projectId: sessionMeta.projectId,
+      projectAssetsPath: resolveProjectAssetsPath(workspaceSlug, sessionMeta.projectId),
       projectUnavailablePath: cwdResolution.displayPath,
     })
     mkdirSync(roots.sessionOutboxPath, { recursive: true })
@@ -72,7 +76,19 @@ export function resolveAgentSessionFileRoots(
     executionCwd: cwdResolution.cwd,
     executionSource: cwdResolution.source,
     projectId: sessionMeta.projectId,
+    projectAssetsPath: resolveProjectAssetsPath(workspaceSlug, sessionMeta.projectId),
   })
   mkdirSync(roots.sessionOutboxPath, { recursive: true })
   return roots
+}
+
+/** 绑定 Project 时解析其资产库目录；未绑定或解析失败时返回 undefined。 */
+function resolveProjectAssetsPath(workspaceSlug: string, projectId?: string): string | undefined {
+  if (!projectId) return undefined
+  try {
+    const loaded = projectRepository.getProjectAtRoot(getAgentWorkspacePath(workspaceSlug), projectId)
+    return loaded?.assetsPath
+  } catch {
+    return undefined
+  }
 }

@@ -268,10 +268,14 @@ describe('buildKanbanViewModel', () => {
     ])
   })
 
-  test('无 Project 会话懒归类到隐藏的临时会话容器，仅用于卡片展示', () => {
-    const projectsWithAdHoc: KanbanProject[] = [...projects, { id: 'ad-hoc-1', name: '临时会话', kind: 'ad-hoc' }]
+  test('无 Project 会话 project 为 null，不再懒归类到历史隐藏容器', () => {
+    // 即使 projects 里存在历史 ad-hoc 隐藏容器，未绑定会话也不再懒归类到它
+    const projectsWithLegacyAdHoc: KanbanProject[] = [
+      ...projects,
+      { id: 'ad-hoc-1', name: '临时会话', kind: 'ad-hoc' },
+    ]
     const model = buildKanbanViewModel({
-      projects: projectsWithAdHoc,
+      projects: projectsWithLegacyAdHoc,
       sessions: [
         createSession({ id: 'no-project', title: '未绑定项目的会话' }),
         createSession({ id: 'has-project', title: '已绑定项目的会话', projectId: 'project-a' }),
@@ -281,7 +285,7 @@ describe('buildKanbanViewModel', () => {
       filter: {},
     })
 
-    expect(model.listItems.find((item) => item.id === 'no-project')?.project?.id).toBe('ad-hoc-1')
+    expect(model.listItems.find((item) => item.id === 'no-project')?.project).toBeNull()
     expect(model.listItems.find((item) => item.id === 'has-project')?.project?.id).toBe('project-a')
   })
 

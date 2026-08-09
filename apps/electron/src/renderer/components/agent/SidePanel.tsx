@@ -169,6 +169,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
 
   const projectFilesPath = sessionFileRoots?.projectRoot ?? null
   const projectUnavailablePath = sessionFileRoots?.projectUnavailablePath ?? null
+  const projectAssetsPath = sessionFileRoots?.projectAssetsPath ?? null
   const sessionOutboxPath = sessionFileRoots?.sessionOutboxPath ?? null
   const fileAccess = React.useMemo(() => ({ sessionId }), [sessionId])
 
@@ -459,6 +460,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       || attachedFiles.includes(path)
     const inProject =
       (!!projectFilesPath && (path === projectFilesPath || isPathUnderRoot(projectFilesPath, path)))
+      || (!!projectAssetsPath && (path === projectAssetsPath || isPathUnderRoot(projectAssetsPath, path)))
       || wsAttachedDirs.some((d) => isPathUnderRoot(d, path))
       || wsAttachedFiles.includes(path)
     const nextSource: AgentFileSourceFilter | null = inSession ? 'session' : inProject ? 'project' : null
@@ -471,7 +473,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   // RightSidePanel 完全由用户控制，不因 Agent 文件变更自动打开
 
   // 同步 basePaths ref（供 handleFilePreview 使用，避免 hooks 声明顺序问题）
-  basePathsRef.current = [sessionPath, sessionOutboxPath, projectFilesPath, workspaceFilesPath, ...fileAccessPathsMemo].filter(Boolean) as string[]
+  basePathsRef.current = [sessionPath, sessionOutboxPath, projectFilesPath, projectAssetsPath, workspaceFilesPath, ...fileAccessPathsMemo].filter(Boolean) as string[]
   const hasSessionAttachedItems = attachedDirs.length > 0 || attachedFiles.length > 0
   const hasWorkspaceAttachedItems = wsAttachedDirs.length > 0 || wsAttachedFiles.length > 0
   const hasVisibleSessionAttachedItems = showSessionFiles && hasSessionAttachedItems
@@ -672,6 +674,21 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                           />
                         </div>
                       </>
+                    )}
+                    {showProjectFiles && projectAssetsPath && (
+                      <div className="mb-1.5 mt-1 rounded-md bg-primary/[0.04] px-1 pb-1">
+                        <div className="px-2 pt-1.5 text-[11px] font-medium text-foreground/75">项目资产 · assets</div>
+                        <FileBrowser
+                          rootPath={projectAssetsPath}
+                          access={fileAccess}
+                          hideToolbar
+                          embedded
+                          hideEmpty
+                          groupByType
+                          onAddToChat={handleAddToChat}
+                          onFilePreview={handleFilePreview}
+                        />
+                      </div>
                     )}
                     {showProjectFiles && !projectFilesPath && projectUnavailablePath && (
                       <div className="mx-2 my-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">

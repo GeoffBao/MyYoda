@@ -1616,6 +1616,8 @@ export interface AgentSessionFileRoots {
   projectRoot?: string
   /** 绑定的 Project ID。 */
   projectId?: string
+  /** 绑定 Project 的资产库目录；未绑定 Project 时为空。 */
+  projectAssetsPath?: string
   /** Project 已绑定但目录不可达时的原始路径；仅此时出现，供 UI 区分"未绑定"与"绑定但不可达"。 */
   projectUnavailablePath?: string
   /** Workspace Files 根目录。 */
