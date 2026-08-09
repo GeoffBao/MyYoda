@@ -81,7 +81,7 @@ export async function fetchCommunityManifest(): Promise<CommunitySkill[]> {
   const url = `https://raw.githubusercontent.com/${COMMUNITY_MARKET.repo}/${COMMUNITY_MARKET.branch}/${COMMUNITY_MARKET.manifestPath}`
   const res = await fetch(url)
   if (!res.ok) {
-    throw new Error(`拉取 Yoda社区市场清单失败 (${res.status})`)
+    throw new Error(`拉取社区市场清单失败 (${res.status})`)
   }
   const text = await res.text()
   const skills = parseSourcesYaml(text)
@@ -104,7 +104,7 @@ async function downloadAndExtractMarket(): Promise<string> {
   const url = `https://codeload.github.com/${COMMUNITY_MARKET.repo}/tar.gz/refs/heads/${COMMUNITY_MARKET.branch}`
   const res = await fetch(url)
   if (!res.ok) {
-    throw new Error(`下载 Yoda社区市场失败 (${res.status})`)
+    throw new Error(`下载社区市场失败 (${res.status})`)
   }
   const buf = Buffer.from(await res.arrayBuffer())
   const tmpDir = join(tmpdir(), `myyoda-market-${randomUUID()}`)
@@ -140,7 +140,7 @@ export async function installCommunitySkill(
       .map((e) => join(extractedRoot, e.name))
     const repoRoot = repoDirs[0]
     if (!repoRoot) {
-      throw new Error('Yoda社区市场包结构异常')
+      throw new Error('社区市场包结构异常')
     }
 
     const sourceDir = join(repoRoot, skill.path)

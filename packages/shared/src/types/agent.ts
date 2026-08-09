@@ -1208,7 +1208,7 @@ export interface OrganizationSkillSyncResult {
   localModified?: boolean
 }
 
-// ===== 社区市场（Yoda社区市场） =====
+// ===== 社区市场 =====
 
 /** 社区市场 Skill 条目 */
 export interface CommunitySkill {
@@ -2047,7 +2047,7 @@ export const AGENT_IPC_CHANNELS = {
   /** 凭邀请码加入组织 */
   ORG_JOIN: 'org:join',
 
-  // 社区市场（Yoda社区市场）
+  // 社区市场
   /** 拉取社区市场清单 */
   COMMUNITY_FETCH_MANIFEST: 'community:fetch-manifest',
   /** 安装社区市场 Skill 到工作区 */

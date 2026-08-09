@@ -1,5 +1,5 @@
 /**
- * CommunityMarketDialog — Yoda社区市场
+ * CommunityMarketDialog — 社区市场
  *
  * 拉取 MyYoda 私有市场清单，浏览/搜索 Skill，一键安装到当前空间。
  */
@@ -46,7 +46,7 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
       setSkills(data)
     } catch (err) {
       console.error('[社区市场] 拉取清单失败:', err)
-      setError((err as Error).message || '拉取 Yoda社区市场失败')
+      setError((err as Error).message || '拉取社区市场失败')
     } finally {
       setLoading(false)
     }
@@ -66,7 +66,7 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
     setInstalling(skill.name)
     try {
       await window.electronAPI.communityInstallSkill(workspaceSlug, skill)
-      toast.success(`已从 Yoda社区市场安装 Skill：${skill.displayName ?? skill.name}`)
+      toast.success(`已从社区市场安装 Skill：${skill.displayName ?? skill.name}`)
       onImported()
     } catch (err) {
       console.error('[社区市场] 安装失败:', err)
@@ -91,10 +91,10 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Store className="size-5 text-emerald-500" />
-            Yoda社区市场
+            社区市场
           </DialogTitle>
           <DialogDescription>
-            浏览 MyYoda 官方维护的 Agent Skills，一键安装到当前空间。遵循各 Skill 的许可证。
+            浏览社区贡献的 Agent Skills，一键安装到当前空间。由 MyYoda 官方维护，遵循各 Skill 的许可证。
           </DialogDescription>
         </DialogHeader>
 
@@ -133,7 +133,7 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">
-              {skills.length === 0 ? 'Yoda社区市场暂无可用的 Skills' : '没有匹配的 Skill'}
+              {skills.length === 0 ? '社区市场暂无可用的 Skills' : '没有匹配的 Skill'}
             </div>
           ) : (
             filtered.map((skill) => {

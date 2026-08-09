@@ -887,7 +887,7 @@ export interface ElectronAPI {
   /** 从组织源更新已导入 Skill */
   orgUpdateSkill: (targetSlug: string, skillSlug: string) => Promise<SkillMeta>
 
-  // ── 社区市场（Yoda社区市场） ───────────────────────────────
+  // ── 社区市场 ───────────────────────────────
 
   /** 拉取社区市场清单 */
   communityFetchManifest: () => Promise<CommunitySkill[]>
@@ -2383,7 +2383,7 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ORG_UPDATE_SKILL, targetSlug, skillSlug)
   },
 
-  // ── 社区市场（Yoda社区市场） ───────────────────────────────
+  // ── 社区市场 ───────────────────────────────
 
   communityFetchManifest: () => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_FETCH_MANIFEST)
