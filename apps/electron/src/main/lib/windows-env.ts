@@ -162,21 +162,26 @@ function mergeRegistryPath(registryPath: string): number {
  * 注册表是 Windows 的权威环境来源（新 shell 与普通用户环境都从这里合成），
  * 读取它可以让 Agent 环境与用户真实环境保持一致，对所有用户通用。
  *
- * 结果带 60 秒 TTL 缓存：避免每次 Agent 会话启动 / 环境检测都执行两次
- * reg.exe 子进程调用（被安全软件拦截或执行慢时会阻塞调用方最多 5s）。
+ * 结果带 60 秒 TTL 缓存（成功和失败都缓存）：本函数是同步阻塞调用
+ * （execSync 最多两次，各 5s 超时），而调用方 buildSdkEnvPath 在每次
+ * 发送 Agent 消息时都会执行一次。若 reg.exe 被安全软件拦截或持续变慢，
+ * 只缓存成功结果会导致每条消息都重新触发两次同步阻塞调用（最多卡住
+ * Electron 主进程 10s），且没有退避机制会持续复现；缓存失败结果后，
+ * 同一个 60s 窗口内只会尝试一次，后续直接返回上次结果（null 也回退正常）。
  *
  * @returns 合并后的 Windows PATH 字符串；读取失败或非 Windows 返回 null，调用方需回退
  */
 const REGISTRY_PATH_CACHE_TTL_MS = 60_000
 let cachedRegistryPath: string | null = null
+let hasCachedRegistryPath = false
 let cachedRegistryPathAt = 0
 
 export function getRegistryPathFromRegistry(): string | null {
   if (process.platform !== 'win32') return null
 
-  // 命中缓存（60s 内）：直接复用，避免重复 reg.exe 子进程调用
+  // 命中缓存（60s 内）：直接复用，避免重复 reg.exe 子进程调用（无论上次成功还是失败）
   const now = Date.now()
-  if (cachedRegistryPath !== null && now - cachedRegistryPathAt < REGISTRY_PATH_CACHE_TTL_MS) {
+  if (hasCachedRegistryPath && now - cachedRegistryPathAt < REGISTRY_PATH_CACHE_TTL_MS) {
     return cachedRegistryPath
   }
 
@@ -208,10 +213,10 @@ export function getRegistryPathFromRegistry(): string | null {
   const result = entries.length > 0 ? entries.join(PATH_SEP) : null
   if (result === null) {
     console.warn('[Windows 环境] 从注册表读取 PATH 失败，Agent PATH 兜底不可用')
-  } else {
-    cachedRegistryPath = result
-    cachedRegistryPathAt = now
   }
+  cachedRegistryPath = result
+  hasCachedRegistryPath = true
+  cachedRegistryPathAt = now
   return result
 }
 

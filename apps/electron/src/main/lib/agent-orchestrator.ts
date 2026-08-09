@@ -162,7 +162,14 @@ function buildSdkEnvPath(bundledCliDir: string | undefined, processPath: string 
     return basename.toLowerCase().startsWith('bun-node-')
   }
 
-  let basePath = processPath && processPath.trim().length > 0 ? processPath : ''
+  // 无条件过滤 Bun shim：不依赖后续注册表读取是否成功。若过滤逻辑只在
+  // registry 读取成功时才执行，一旦 reg.exe 被安全软件拦截/超时（下方分支会
+  // 遇到的正是这种失败场景），basePath 会原样保留 Bun shim，导致这里要修的
+  // 问题在失败兜底路径里重新出现。
+  let basePathEntries = (processPath && processPath.trim().length > 0 ? processPath : '')
+    .split(separator)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '' && !isBunNodeShimDir(entry))
 
   // Windows：无论 processPath 是否为空，都并入注册表 PATH（系统 + 用户，展开 %VAR% 去重）。
   // GUI 应用（快捷方式 / 更新器 relaunch / msys 启动链）下主进程 PATH 可能残缺
@@ -171,9 +178,7 @@ function buildSdkEnvPath(bundledCliDir: string | undefined, processPath: string 
   if (process.platform === 'win32') {
     const registryPath = getRegistryPathFromRegistry()
     if (registryPath) {
-      const seen = new Set(
-        basePath.split(separator).filter((entry) => !isBunNodeShimDir(entry)).map((entry) => entry.trim().toLowerCase()).filter(Boolean),
-      )
+      const seen = new Set(basePathEntries.map((entry) => entry.toLowerCase()))
       const extra = registryPath.split(separator).filter((entry) => {
         const trimmed = entry.trim()
         if (!trimmed || isBunNodeShimDir(trimmed)) return false
@@ -182,14 +187,11 @@ function buildSdkEnvPath(bundledCliDir: string | undefined, processPath: string 
         seen.add(norm)
         return true
       })
-      basePath = [
-        ...basePath.split(separator).filter((entry) => entry.trim() !== '' && !isBunNodeShimDir(entry)),
-        ...extra,
-      ].join(separator)
+      basePathEntries = [...basePathEntries, ...extra]
     }
   }
 
-  return [bundledCliDir, basePath].filter(Boolean).join(separator)
+  return [bundledCliDir, basePathEntries.join(separator)].filter(Boolean).join(separator)
 }
 
 function buildPiRuntimeEnv(env: Record<string, string | undefined>): AgentRuntimeEnv {

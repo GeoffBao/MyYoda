@@ -67,11 +67,8 @@ function findNodePath(): string | null {
     // Node.js 未安装（或不在当前 PATH）
   }
 
-  // Windows 上额外检查其他安装位置
-  if (process.platform === 'win32') {
-    const reliable = getReliableNodePath()
-    if (reliable) return reliable
-  }
+  // 注：可靠来源已在函数开头查过一次并缓存（getReliableNodePath 内部 memo），
+  // 此处无需重复调用——若开头未命中，这里重新查也只会拿到相同的缓存结果。
 
   return null
 }
