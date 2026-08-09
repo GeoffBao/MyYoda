@@ -1376,7 +1376,7 @@ export class AgentOrchestrator {
       // toolPolicy=none 用于 task.yaml 生成草稿：只允许模型产出文本，不暴露任何会产生副作用的工具。
       const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug)
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
-        injectChromeDevtoolsMcpServer(mcpServers)
+        injectChromeDevtoolsMcpServer(mcpServers, sdkEnv)
       }
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
