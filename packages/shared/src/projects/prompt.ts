@@ -87,7 +87,7 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
         ? '`<project_working_directory>` 当前指向本会话绑定的 Git Worktree 隔离目录（与 `<working_directory>` 一致）；改动只会落在这个独立分支/工作树里，不影响项目主目录或其他会话。需要读代码、改代码、跑命令时，直接以该目录为基准，不要跳转到项目原始目录。'
         : '`<project_working_directory>` 是用户指定的工作区工程代码根目录；会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准，不要猜测或搜索其他路径。',
     );
-    lines.push('如果 `<project_working_directory>` 下存在 CLAUDE.md，那是人写指令（可能同时被 Claude Code CLI 等外部工具读取），只读不要自动创建或修改；这个项目的自动记忆一律通过 `<project_memory_path>` 写入 MEMORY.md，不要写入 CLAUDE.md。');
+    lines.push('如果 `<project_working_directory>` 下存在 AGENTS.md（旧版为 CLAUDE.md），那是人写指令（可能同时被其他 CLI 等外部工具读取），只读不要自动创建或修改；这个项目的自动记忆一律通过 `<project_memory_path>` 写入 MEMORY.md，不要写入指令文件。');
   }
   if (ctx.assets.length > 0) {
     lines.push('`<project_assets>` 列出用户提供的参考文件；仅在相关时按绝对路径按需读取，不必全部读完。');

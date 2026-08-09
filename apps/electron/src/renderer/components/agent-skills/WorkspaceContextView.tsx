@@ -1,7 +1,7 @@
 /**
  * WorkspaceContextView — Workspace 级记忆「Yoda 记忆」
  *
- * 管理整个 workspace 的长期记忆（CLAUDE.md + auto-memory + 用户画像），
+ * 管理整个 workspace 的长期记忆（AGENTS.md + memory + 用户画像），
  * 跨 Home / Code 两模式共享：对话、项目任务、项目等所有产物都在同一 workspace
  * 顶层文件层级下，本模块提供统一的记忆查看、编辑与初始化沉淀。
  *
@@ -69,7 +69,7 @@ export function WorkspaceContextView({ embedded = false }: { embedded?: boolean 
             <EmptyState
               icon={<Brain className="size-8 text-foreground/30" />}
               title="未选择空间"
-              hint="请先选择或创建一个空间，再来管理它的 Yoda 记忆（CLAUDE.md 与 workspace 长期记忆）。"
+              hint="请先选择或创建一个空间，再来管理它的 Yoda 记忆（AGENTS.md 与 workspace 长期记忆）。"
             />
           )}
         </div>

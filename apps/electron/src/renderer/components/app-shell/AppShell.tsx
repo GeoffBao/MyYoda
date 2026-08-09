@@ -17,7 +17,7 @@ import { appModeAtom } from '@/atoms/app-mode'
 import { codeMainViewAtom } from '@/atoms/project-atoms'
 import { WorkspaceLabelManagerDialog } from '@/components/labels/WorkspaceLabelManagerDialog'
 import { labelManagerOpenAtom, labelManagerWorkspaceRootAtom } from '@/atoms/label-manager-atoms'
-import { agentSidePanelWidthAtom, currentAgentSessionIdAtom, currentSessionSidePanelOpenAtom } from '@/atoms/agent-atoms'
+import { agentSidePanelWidthAtom, agentWorkspacesAtom, currentAgentSessionIdAtom, currentAgentWorkspaceIdAtom, currentSessionSidePanelOpenAtom } from '@/atoms/agent-atoms'
 import { leftSidebarWidthAtom, MIN_LEFT_SIDEBAR_WIDTH } from '@/atoms/sidebar-atoms'
 import { sidebarCollapsedAtom } from '@/atoms/tab-atoms'
 import { automationFormAtom } from '@/atoms/automation-atoms'
@@ -27,6 +27,7 @@ import { isLegacyCoworkMode } from '@/components/app-shell/code-main-view-model'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { WindowControls } from '@/components/WindowControls'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
+import { WorkspaceMemoryChangeObserver } from '@/components/agent-skills/WorkspaceMemoryChangeObserver'
 import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 
@@ -51,6 +52,9 @@ export interface AppShellProps {
 export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
   const [appMode, setAppMode] = useAtom(appModeAtom)
   const [codeMainView, setCodeMainView] = useAtom(codeMainViewAtom)
+  const workspaces = useAtomValue(agentWorkspacesAtom)
+  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const currentSessionId = useAtomValue(currentAgentSessionIdAtom)
   const isPanelOpen = useAtomValue(currentSessionSidePanelOpenAtom)
   const automationForm = useAtomValue(automationFormAtom)
@@ -264,6 +268,9 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
           </div>
         )}
       </div>
+
+      {/* 即使右侧文件面板未打开，也持续观测当前工作区的 memory/ 变化 */}
+      {currentWorkspace && <WorkspaceMemoryChangeObserver workspaceSlug={currentWorkspace.slug} />}
 
       {/* 全局搜索：与侧边栏折叠态解耦，收起侧边栏后 ⌘⇧F 仍要能唤出 */}
       <SearchDialog />

@@ -124,7 +124,8 @@ const isVoiceDictationIndicatorWindow = windowKind === 'voice-dictation-indicato
 const isDetachedPreviewWindow = windowKind === 'detached-preview'
 const isPlanningWindow = windowKind === 'planning'
 const isCodeClawWindow = windowKind === 'codeclaw'
-const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !isDetachedPreviewWindow && !isPlanningWindow && !isCodeClawWindow
+const isWorkspaceMemoryWindow = windowKind === 'workspace-memory'
+const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !isDetachedPreviewWindow && !isPlanningWindow && !isCodeClawWindow && !isWorkspaceMemoryWindow
 
 // 仅主窗口禁用页面级滚动；独立浮窗各自管理自己的内容高度和滚动。
 if (isMainWindow) {
@@ -1248,6 +1249,16 @@ if (isQuickTaskWindow) {
       <React.StrictMode>
         <ThemeInitializer />
         <CodeClawApp />
+      </React.StrictMode>
+    )
+  })
+} else if (isWorkspaceMemoryWindow) {
+  import('./components/agent-skills/WorkspaceMemoryWindowApp').then(({ WorkspaceMemoryWindowApp }) => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <ThemeInitializer />
+        <WorkspaceMemoryWindowApp />
+        <Toaster position="bottom-right" />
       </React.StrictMode>
     )
   })

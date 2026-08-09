@@ -49,7 +49,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession } from './agent-session-manager'
-import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory } from './agent-workspace-manager'
+import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, resolveClaudeAgentBinaryPath } from './config-paths'
 import { projectRepository } from './project-repository'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
@@ -58,6 +58,7 @@ import { resolveAgentSessionFileRoots } from './agent-file-roots'
 import { captureAgentTurnOutputs, snapshotOutputFiles } from './agent-output-capture'
 import { getRuntimeStatus } from './runtime-init'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
+import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
 import { MAX_CONTEXT_MESSAGES, buildContextPrompt, buildRecoveryPrompt, buildReferencedSessionsPrompt } from './agent-session-context-prompt'
 import { buildReferencedPlanningPrompt } from './planning-reference-context'
 import { permissionService } from './agent-permission-service'
@@ -1808,6 +1809,15 @@ export class AgentOrchestrator {
         permissionMode: initialPermissionMode,
         collaborationAvailable,
         currentModelId: selectedModelId,
+        projectKnowledgeMaintenanceApproved: workspaceSlug
+          ? isWorkspaceProjectKnowledgeMaintenanceApproved(workspaceSlug)
+          : false,
+        memoryGuidance: workspaceSlug && !automationContext && !input.triggeredBy
+          ? getWorkspaceMemoryGuidance(workspaceSlug)
+          : undefined,
+        memoryRefreshOpportunity: workspaceSlug && !automationContext && !input.triggeredBy
+          ? claimWorkspaceMemoryRefreshOpportunity(workspaceSlug)
+          : undefined,
       }) + (automationContext ? `\n\n## 定时任务执行上下文\n\n${automationContext}` : '')
         + (workContext ? `
 
