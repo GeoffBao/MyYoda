@@ -1,9 +1,9 @@
 /**
- * 社区市场服务（n-skills 接入）
+ * 社区市场服务（私有市场接入）
  *
- * n-skills（https://github.com/numman-ali/n-skills）是标准的 SKILL.md 目录市场，
+ * 默认市场为 MyYoda 自建私有市场（GeoffBao/myyoda-skills），遵循标准的 SKILL.md 目录市场规范，
  * 提供 sources.yaml 结构化清单 + skills/ 目录。本服务：
- * 1. 拉取 n-skills sources.yaml 解析 skill 清单（name/description/source/category）
+ * 1. 拉取市场 sources.yaml 解析 skill 清单（name/description/source/category）
  * 2. 下载整个仓库 tar.gz → 解压 → 按清单提取目标 skill 目录
  * 3. 写入工作区 skills/ 并标记来源（community）
  *
@@ -18,10 +18,10 @@ import decompress from 'decompress'
 import decompressTargz from 'decompress-targz'
 import { load as loadYaml } from 'js-yaml'
 
-/** 市场仓库配置（默认 n-skills） */
+/** 市场仓库配置（默认 MyYoda 私有市场） */
 export const COMMUNITY_MARKET = {
-  name: 'n-skills',
-  repo: 'numman-ali/n-skills',
+  name: 'myyoda-skills',
+  repo: 'GeoffBao/myyoda-skills',
   branch: 'main',
   manifestPath: 'sources.yaml',
   /** 清单解析后 skills 目录根（仓库内相对路径） */
