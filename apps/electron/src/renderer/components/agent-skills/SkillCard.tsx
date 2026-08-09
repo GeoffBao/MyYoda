@@ -5,7 +5,7 @@
  */
 
 import * as React from 'react'
-import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine } from 'lucide-react'
+import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine, Zap } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -82,6 +82,20 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
           </span>
         )}
 
+        {!!skill.usageCount && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                <Zap size={11} />
+                {skill.usageCount} 次调用
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {skill.lastUsedAt ? `最近使用于 ${formatUsageTime(skill.lastUsedAt)}` : '暂无最近使用记录'}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         {skill.hasUpdate && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -104,4 +118,17 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
       </div>
     </div>
   )
+}
+
+/** 相对时间：几分钟/几小时/几天前，超过 3 天显示日期 */
+export function formatUsageTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return '刚刚'
+  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
+  if (diff < day) return `${Math.floor(diff / hour)} 小时前`
+  if (diff < 3 * day) return `${Math.floor(diff / day)} 天前`
+  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }

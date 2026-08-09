@@ -317,6 +317,16 @@ export function getSessionGroupsPath(slug: string): string {
 }
 
 /**
+ * 获取指定工作区的 Skill 调用次数统计文件路径
+ *
+ * @param slug 工作区 slug
+ * @returns ~/.myyoda/agent-workspaces/{slug}/skill-usage.json
+ */
+export function getWorkspaceSkillUsagePath(slug: string): string {
+  return join(getAgentWorkspacePath(slug), 'skill-usage.json')
+}
+
+/**
  * 获取指定工作区的 Skills 目录路径
  *
  * 如果目录不存在则自动创建。

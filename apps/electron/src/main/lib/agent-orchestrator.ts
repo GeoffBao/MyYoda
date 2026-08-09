@@ -52,6 +52,7 @@ import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgen
 import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, resolveClaudeAgentBinaryPath } from './config-paths'
 import { projectRepository } from './project-repository'
+import { recordSkillUsageFromToolUse } from './skill-usage-service'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
 import { appendVisionRelayAllowedRoot } from './vision-relay-roots'
 import { resolveAgentSessionFileRoots } from './agent-file-roots'
@@ -2149,6 +2150,14 @@ ${workContext}` : '')
                 for (const block of assistantMsg.message.content) {
                   if (block.type === 'tool_use' && 'name' in block && typeof block.name === 'string') {
                     syncPlanModeFromToolUse(block.name)
+                    if (workspaceSlug) {
+                      const toolInput = (block as { input?: unknown }).input
+                      recordSkillUsageFromToolUse(
+                        workspaceSlug,
+                        block.name,
+                        toolInput && typeof toolInput === 'object' ? toolInput as Record<string, unknown> : {},
+                      )
+                    }
                   }
                 }
               }

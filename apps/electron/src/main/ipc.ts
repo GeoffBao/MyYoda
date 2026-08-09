@@ -78,6 +78,9 @@ import type {
   OrganizationSkill,
   CommunitySkill,
   CommunitySkillInstallResult,
+  GhCliStatus,
+  SkillSubmissionInput,
+  SkillSubmissionResult,
   FileEntry,
   FileSearchResult,
   EnvironmentCheckResult,
@@ -371,6 +374,8 @@ import {
   orgListSkills,
 } from './lib/org-skill-service'
 import { fetchCommunityManifest, installCommunitySkill } from './lib/community-skill-service'
+import { getGhCliStatus } from './lib/gh-cli'
+import { submitSkillToCommunity } from './lib/community-skill-submit-service'
 import { projectRepository } from './lib/project-repository'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
@@ -2991,6 +2996,22 @@ export function registerIpcHandlers(): void {
       const { getWorkspaceSkillsDir } = await import('./lib/config-paths')
       const dir = getWorkspaceSkillsDir(workspaceSlug)
       return installCommunitySkill(dir, skill)
+    }
+  )
+
+  // 检测本机 gh CLI 安装 / 登录状态
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.COMMUNITY_CHECK_GH_CLI,
+    async (): Promise<GhCliStatus> => {
+      return getGhCliStatus()
+    }
+  )
+
+  // 提交本地 Skill 到社区市场（gh CLI 自动建 PR）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.COMMUNITY_SUBMIT_SKILL,
+    async (_, input: SkillSubmissionInput): Promise<SkillSubmissionResult> => {
+      return submitSkillToCommunity(input)
     }
   )
 

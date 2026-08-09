@@ -9,7 +9,7 @@ import * as React from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
-import { Sparkles, Pencil, Save, X, FolderOpen, RefreshCw, Trash2, ArrowLeft } from 'lucide-react'
+import { Sparkles, Pencil, Save, X, FolderOpen, RefreshCw, Trash2, ArrowLeft, UploadCloud } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -20,6 +20,8 @@ import { SkillFilesPanel } from '@/components/settings/SkillFilesPanel'
 import { cn } from '@/lib/utils'
 import type { SkillMeta } from '@myyoda/shared'
 import { extractSkillBody, rebuildSkillMd } from './skillMdUtils'
+import { formatUsageTime } from './SkillCard'
+import { SubmitToCommunityDialog } from './SubmitToCommunityDialog'
 
 interface SkillDetailSheetProps {
   skill: SkillMeta | null
@@ -70,6 +72,9 @@ function SkillDetailBody({
 
   const [detailTab, setDetailTab] = React.useState<'body' | 'files'>('body')
   const [fileCount, setFileCount] = React.useState<number | null>(null)
+  const [submitOpen, setSubmitOpen] = React.useState(false)
+
+  const canSubmitToCommunity = !isBuiltin && skill.importSource?.sourceType !== 'organization'
 
   React.useEffect(() => {
     setLoadingContent(true)
@@ -172,6 +177,16 @@ function SkillDetailBody({
               {updating ? '更新中' : '更新'}
             </Button>
           )}
+          {canSubmitToCommunity && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" onClick={() => setSubmitOpen(true)}>
+                  <UploadCloud size={14} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">上传到社区市场</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="sm" variant="ghost" onClick={onOpenFolder}>
@@ -245,6 +260,14 @@ function SkillDetailBody({
               )}
               <MetaRow label="数据源" value={sourceLabel} />
               <MetaRow label="位置" value={`skills/${skill.slug}`} />
+              <MetaRow
+                label="调用次数"
+                value={
+                  skill.usageCount
+                    ? `${skill.usageCount} 次${skill.lastUsedAt ? ` · 最近使用于 ${formatUsageTime(skill.lastUsedAt)}` : ''}`
+                    : '暂无调用记录'
+                }
+              />
             </SettingsCard>
           </div>
 
@@ -321,6 +344,15 @@ function SkillDetailBody({
           </Tabs>
           </div>
         </div>
+      )}
+
+      {canSubmitToCommunity && (
+        <SubmitToCommunityDialog
+          open={submitOpen}
+          onOpenChange={setSubmitOpen}
+          workspaceSlug={workspaceSlug}
+          skill={skill}
+        />
       )}
     </div>
   )
