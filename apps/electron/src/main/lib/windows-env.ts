@@ -13,6 +13,7 @@
 
 import { execSync } from 'child_process'
 import { existsSync } from 'fs'
+import { join } from 'path'
 import { app } from 'electron'
 import type { ShellEnvResult } from '@myyoda/shared'
 
@@ -20,6 +21,19 @@ import type { ShellEnvResult } from '@myyoda/shared'
  * Windows PATH 分隔符
  */
 const PATH_SEP = ';'
+
+/**
+ * 获取 reg.exe 绝对路径。
+ *
+ * GUI 应用（尤其从快捷方式/更新器启动）的 process.env.PATH 可能不完整，
+ * 此时裸 `reg` 命令会因 PATH 中缺少 System32 而无法执行，导致注册表读取失败
+ * （鸡生蛋问题：PATH 不完整 → 无法读注册表 → 无法修复 PATH）。
+ * 使用 SystemRoot 拼接绝对路径，不依赖 PATH。
+ */
+function getRegExePath(): string {
+  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir || process.env.WINDIR
+  return systemRoot ? join(systemRoot, 'System32', 'reg.exe') : 'reg.exe'
+}
 
 /**
  * 从 Windows 注册表读取值
@@ -31,7 +45,7 @@ const PATH_SEP = ';'
 export function readRegistryValue(key: string, valueName: string): string | null {
   try {
     const output = execSync(
-      `reg query "${key}" /v "${valueName}"`,
+      `"${getRegExePath()}" query "${key}" /v "${valueName}"`,
       {
         encoding: 'utf-8',
         timeout: 5000,
@@ -137,6 +151,68 @@ function mergeRegistryPath(registryPath: string): number {
   }
 
   return addedCount
+}
+
+/**
+ * 从注册表读取完整 PATH（系统级 + 用户级），展开 %VAR% 并去重。
+ *
+ * 用途：作为 Agent / SDK 环境的 PATH 兜底来源。GUI 应用在某些启动方式
+ * （快捷方式、更新器 relaunch 等）下 process.env.PATH 可能不完整，
+ * 导致 Agent 子进程无法找到用户安装的 node / python / 包管理器等工具。
+ * 注册表是 Windows 的权威环境来源（新 shell 与普通用户环境都从这里合成），
+ * 读取它可以让 Agent 环境与用户真实环境保持一致，对所有用户通用。
+ *
+ * 结果带 60 秒 TTL 缓存：避免每次 Agent 会话启动 / 环境检测都执行两次
+ * reg.exe 子进程调用（被安全软件拦截或执行慢时会阻塞调用方最多 5s）。
+ *
+ * @returns 合并后的 Windows PATH 字符串；读取失败或非 Windows 返回 null，调用方需回退
+ */
+const REGISTRY_PATH_CACHE_TTL_MS = 60_000
+let cachedRegistryPath: string | null = null
+let cachedRegistryPathAt = 0
+
+export function getRegistryPathFromRegistry(): string | null {
+  if (process.platform !== 'win32') return null
+
+  // 命中缓存（60s 内）：直接复用，避免重复 reg.exe 子进程调用
+  const now = Date.now()
+  if (cachedRegistryPath !== null && now - cachedRegistryPathAt < REGISTRY_PATH_CACHE_TTL_MS) {
+    return cachedRegistryPath
+  }
+
+  const entries: string[] = []
+  const seen = new Set<string>()
+
+  const addPathEntries = (raw: string | null): void => {
+    if (!raw) return
+    for (const entry of raw.split(PATH_SEP)) {
+      const trimmed = entry.trim()
+      if (!trimmed) continue
+      const expanded = expandEnvVars(trimmed)
+      if (!expanded) continue
+      const norm = normalizePathForCompare(expanded)
+      if (seen.has(norm)) continue
+      seen.add(norm)
+      entries.push(expanded)
+    }
+  }
+
+  // 系统级 PATH
+  addPathEntries(readRegistryValue(
+    'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
+    'Path',
+  ))
+  // 用户级 PATH
+  addPathEntries(readRegistryValue('HKCU\\Environment', 'Path'))
+
+  const result = entries.length > 0 ? entries.join(PATH_SEP) : null
+  if (result === null) {
+    console.warn('[Windows 环境] 从注册表读取 PATH 失败，Agent PATH 兜底不可用')
+  } else {
+    cachedRegistryPath = result
+    cachedRegistryPathAt = now
+  }
+  return result
 }
 
 /**
