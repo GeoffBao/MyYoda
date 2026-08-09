@@ -18,7 +18,8 @@
     "test": "bun test",
     "sync:check": "bun scripts/upstream-sync/check.ts",
     "sync:apply-renames": "bun scripts/upstream-sync/apply-renames.ts",
-    "sync:weekly": "bun scripts/upstream-sync/weekly-sync.ts"
+    "sync:weekly": "bun scripts/upstream-sync/weekly-sync.ts",
+    "release-notes": "bun scripts/release-notes.ts"
   },
   "devDependencies": {
     "@rollup/rollup-darwin-x64": "4.56.0",
