@@ -63,6 +63,22 @@ jobs:
 
           echo "发布版本校验通过：$tag"
 
+      - name: 校验应用内本地化 release note 已归档
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          fi
+          version="${tag#v}"
+          bundled="apps/electron/resources/release-notes/${version}.md"
+          if [[ ! -f "$bundled" ]]; then
+            echo "缺少应用内版本历史文件：$bundled" >&2
+            echo "侧边栏「?」和 设置→关于/更新→版本历史 都读这个目录，发版前需要先补上（可用 bun run release-notes ${version} <content-file> 生成）。" >&2
+            exit 1
+          fi
+          echo "应用内 release note 校验通过：$bundled"
+
       # 预创建 GitHub Release 并写入发布说明；后续各平台 job 的 electron-builder
       # --publish always 会复用该 Release 并上传各自产物（多平台并行上传自动合并）。
       - name: 创建/复用 GitHub Release（含发布说明）
