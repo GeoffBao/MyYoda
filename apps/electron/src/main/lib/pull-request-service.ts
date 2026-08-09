@@ -549,13 +549,6 @@ export async function getPullRequestDetail(input: PullRequestDetailInput): Promi
   }
 }
 
-function normalizeActors(raw: unknown): PullRequestDetail['reviewers'] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map((r) => normalizeActor(r))
-    .filter((a): a is NonNullable<typeof a> => a !== null)
-}
-
 /** 从 reviews 数组派生 reviewers（去重，按首次出现顺序） */
 function normalizeReviewers(raw: unknown): PullRequestDetail['reviewers'] {
   if (!Array.isArray(raw)) return []
@@ -713,8 +706,8 @@ export async function createPullRequest(input: CreatePullRequestInput): Promise<
     ]
     if (input.draft) args.push('--draft')
     const url = await runGh(ghPath, args, root)
-    // gh pr create 输出 PR url
-    const numberMatch = url.match(/#(\d+)\s*$/)
+    // gh pr create 输出 PR url，形如 https://github.com/owner/repo/pull/123（没有 #123 片段）
+    const numberMatch = url.match(/\/pull\/(\d+)/)
     const number = numberMatch ? Number(numberMatch[1]) : 0
     return {
       number: Number.isFinite(number) && number > 0 ? number : 0,
@@ -861,10 +854,4 @@ async function listWorktreesWithBranch(repoPath: string): Promise<Array<{ path: 
   } catch {
     return []
   }
-}
-
-/** 用系统浏览器打开 PR 的 URL */
-export function openPullRequestInBrowser(url: string): void {
-  // 渲染端通过 shell.openExternal 完成；此处保留占位以便主进程侧统一处理
-  void url
 }
