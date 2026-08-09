@@ -1165,8 +1165,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
                   className="ml-auto text-xs underline underline-offset-2 hover:text-foreground transition-colors"
                   onClick={() => {
                     setAgentSkillsTab('mcp')
-                    setSettingsTab('agent-plugins')
-                    setSettingsOpen(true)
+                    setActiveView('agent-skills')
                   }}
                 >
                   前往 MCP 管理

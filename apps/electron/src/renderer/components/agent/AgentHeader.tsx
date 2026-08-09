@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { GitBranch, Layers, Pencil, UserPlus } from 'lucide-react'
+import { GitBranch, Layers, Pencil } from 'lucide-react'
 import { agentSessionsAtom } from '@/atoms/agent-atoms'
 import { tabsAtom, updateTabTitle } from '@/atoms/tab-atoms'
 import { serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom } from '@/atoms/project-atoms'
@@ -17,8 +17,6 @@ import { SessionHeader } from '@/components/tabs/SessionHeader'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatSessionGitBadge } from '@/components/agent/git-context-picker-model'
-import { ExpertCoworkPicker } from './ExpertCoworkPicker'
-import { useExpertOptions } from '@/components/agent-experts/useExpertOptions'
 
 interface AgentHeaderProps {
   sessionId: string
@@ -33,8 +31,6 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
   const setPendingTaskEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
-  const [coworkOpen, setCoworkOpen] = React.useState(false)
-  const { options: expertOptions } = useExpertOptions()
 
   if (!session) return null
 
@@ -61,9 +57,8 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
   }
 
   return (
-    <>
-      <SessionHeader
-        title={session.title}
+    <SessionHeader
+      title={session.title}
       onRename={handleRename}
       breadcrumb={project
         ? (
@@ -92,23 +87,8 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
         )
         : undefined}
       actions={
-        <>
-          {/* 会话级拉专家/专家团 cowork（对齐 Synara subagent） */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setCoworkOpen(true)}
-              >
-                <UserPlus className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom"><p>拉专家 / 专家团协作</p></TooltipContent>
-          </Tooltip>
-          {isTaskOrchestrator && (
+        isTaskOrchestrator
+          ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -123,17 +103,10 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
               </TooltipTrigger>
               <TooltipContent side="bottom"><p>编辑任务</p></TooltipContent>
             </Tooltip>
-          )}
-        </>
+          )
+          : undefined
       }
     />
-    <ExpertCoworkPicker
-      open={coworkOpen}
-      parentSessionId={session.id}
-      options={expertOptions}
-      onOpenChange={setCoworkOpen}
-      />
-    </>
   )
 }
 

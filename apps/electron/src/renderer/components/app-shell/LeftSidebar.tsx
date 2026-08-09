@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -22,7 +22,7 @@ import { SidebarToggleButton } from './SidebarToggleButton'
 import { ModeSwitcher } from './ModeSwitcher'
 import { TabNavigationControls } from '@/components/tabs/TabNavigationControls'
 import { UserAvatar } from '@/components/chat/UserAvatar'
-import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
+import { activeViewAtom, agentSkillsTabAtom, type AgentSkillsCapabilityTab } from '@/atoms/active-view'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { appModeAtom, type AppMode } from '@/atoms/app-mode'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
@@ -1034,12 +1034,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('planning')
   }, [activeView, setAutomationForm, setActiveView, store])
 
-  /** 打开设置面板的 Yoda 插件页（专家 / 专家团 / Skills / MCP / API 统一配置） */
-  const openAgentPluginsSettings = React.useCallback((tab?: 'mcp'): void => {
+  /** 打开/关闭 Yoda 插件视图（专家 / 专家团 / Skills / MCP / API 统一配置，独立左栏视图，非设置面板） */
+  const handleOpenSkills = React.useCallback((tab?: AgentSkillsCapabilityTab): void => {
     if (tab) setAgentSkillsTab(tab)
-    setSettingsTab('agent-plugins')
-    setSettingsOpen(true)
-  }, [setAgentSkillsTab, setSettingsOpen, setSettingsTab])
+    if (activeView === 'agent-skills' && !tab) {
+      setActiveView('conversations')
+      return
+    }
+    setActiveView('agent-skills')
+  }, [activeView, setActiveView, setAgentSkillsTab])
+
+  /** 打开/关闭 Yoda 记忆视图（工作区自动记忆管理，独立左栏视图，非设置面板） */
+  const handleOpenWorkspaceContext = React.useCallback((): void => {
+    if (activeView === 'workspace-context') {
+      setActiveView('conversations')
+      return
+    }
+    setActiveView('workspace-context')
+  }, [activeView, setActiveView])
 
   /** 打开/关闭 Yoda 知识库 视图（Project 模式知识库入口） */
   const handleOpenRepoWiki = React.useCallback((): void => {
@@ -1068,10 +1080,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('excalidraw-gallery')
   }, [activeView, setActiveView, setAutomationForm])
 
-  /** 打开设置面板的 Yoda 插件页并切到 MCP 管理 */
+  /** 打开 Yoda 插件视图并切到 MCP 管理 */
   const handleOpenMcpManagement = React.useCallback((): void => {
-    openAgentPluginsSettings('mcp')
-  }, [openAgentPluginsSettings])
+    handleOpenSkills('mcp')
+  }, [handleOpenSkills])
 
   // 切换模式时重置归档视图
   React.useEffect(() => {
@@ -2713,6 +2725,40 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </Tooltip>
           )}
 
+          {/* Yoda 画布：手绘白板，紧邻 Project 看板，仅 Project 模式可见 */}
+          {mode === 'agent' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Yoda 画布"
+                  onClick={handleOpenExcalidraw}
+                  className={cn(
+                    'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
+                    activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
+                      ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
+                  )}
+                >
+                  <PenTool size={16} />
+                  {excalidrawCount > 0 && (
+                    <span
+                      className={cn(
+                        'absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums',
+                        activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
+                          ? 'bg-primary-foreground text-primary'
+                          : 'bg-primary text-primary-foreground',
+                      )}
+                    >
+                      {formatSidebarModuleCount(excalidrawCount)}
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Yoda 画布{excalidrawCount > 0 ? `（${excalidrawCount} 个画布）` : ''}</TooltipContent>
+            </Tooltip>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -2746,39 +2792,47 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </TooltipContent>
           </Tooltip>
 
-          {/* 插件与 Yoda 记忆已并入设置面板（设置 > Yoda 插件 / Yoda 记忆），Home / Code 共享；左栏不再单独露出 */}
-
-          {/* Excalidraw 画布：仅 Project 模式可见 */}
+          {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置（独立左栏视图） */}
           {mode === 'agent' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Excalidraw 画布"
-                  onClick={handleOpenExcalidraw}
+                  aria-label="Yoda 插件"
+                  onClick={() => handleOpenSkills()}
                   className={cn(
                     'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
-                    activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
+                    activeView === 'agent-skills'
                       ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
                       : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
                   )}
                 >
-                  <PenTool size={16} />
-                  {excalidrawCount > 0 && (
-                    <span
-                      className={cn(
-                        'absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums',
-                        activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
-                          ? 'bg-primary-foreground text-primary'
-                          : 'bg-primary text-primary-foreground',
-                      )}
-                    >
-                      {formatSidebarModuleCount(excalidrawCount)}
-                    </span>
-                  )}
+                  <Blocks size={16} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Excalidraw 画布{excalidrawCount > 0 ? `（${excalidrawCount} 个画布）` : ''}</TooltipContent>
+              <TooltipContent side="right">Yoda 插件</TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Yoda 记忆：工作区自动记忆管理（独立左栏视图） */}
+          {mode === 'agent' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Yoda 记忆"
+                  onClick={handleOpenWorkspaceContext}
+                  className={cn(
+                    'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
+                    activeView === 'workspace-context'
+                      ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
+                  )}
+                >
+                  <Brain size={16} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Yoda 记忆</TooltipContent>
             </Tooltip>
           )}
 
@@ -3165,18 +3219,42 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       )}
 
-      {/* 插件与 Yoda 记忆已并入设置面板（设置 > Yoda 插件 / Yoda 记忆），Home / Code 共享；左栏不再单独露出 */}
-
-      {/* Excalidraw 画布：手绘风格白板，仅 Project 模式可见（通用创作工具） */}
+      {/* Yoda 画布：手绘风格白板，紧邻 Project 看板，仅 Project 模式可见（通用创作工具） */}
       {mode === 'agent' && (
         <div className="sidebar-module-zone px-3 pb-0.5">
           <SidebarModule
             icon={PenTool}
-            title="Excalidraw 画布"
+            title="Yoda 画布"
             count={excalidrawCount}
             active={activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'}
             onClick={handleOpenExcalidraw}
-            ariaLabel={`Excalidraw 画布，${excalidrawCount} 个画布`}
+            ariaLabel={`Yoda 画布，${excalidrawCount} 个画布`}
+          />
+        </div>
+      )}
+
+      {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置（独立左栏视图） */}
+      {mode === 'agent' && (
+        <div className="sidebar-module-zone px-3 pb-0.5">
+          <SidebarModule
+            icon={Blocks}
+            title="Yoda 插件"
+            active={activeView === 'agent-skills'}
+            onClick={() => handleOpenSkills()}
+            ariaLabel="Yoda 插件"
+          />
+        </div>
+      )}
+
+      {/* Yoda 记忆：工作区自动记忆管理（独立左栏视图） */}
+      {mode === 'agent' && (
+        <div className="sidebar-module-zone px-3 pb-0.5">
+          <SidebarModule
+            icon={Brain}
+            title="Yoda 记忆"
+            active={activeView === 'workspace-context'}
+            onClick={handleOpenWorkspaceContext}
+            ariaLabel="Yoda 记忆"
           />
         </div>
       )}

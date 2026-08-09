@@ -1,8 +1,8 @@
 /**
  * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / Skills / MCP / API 统一配置）
  *
- * 默认以 embedded 模式嵌入设置面板「Yoda 插件」tab（Home / Code 共享）；
- * 全屏模式（activeView='agent-skills'）保留兼容历史 deep-link。
+ * 全屏模式（activeView='agent-skills'）：左侧栏「Yoda 插件」独立入口，Home / Code 共享；
+ * `embedded` prop 保留供未来嵌入其他容器复用，当前无消费者。
  *
  * 结构：
  * - 标题栏（全屏模式）：Yoda 插件

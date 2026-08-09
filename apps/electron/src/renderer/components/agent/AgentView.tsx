@@ -2820,6 +2820,26 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const canSend = messagesLoaded && (streaming || !messagesRefreshing) && (hasTextInput || pendingFiles.length > 0 || !!suggestion) && agentChannelId !== null && hasAvailableModel && (!streaming || hasTextInput)
 
   const inputToolbarItems = React.useMemo<ToolbarItem[]>(() => [
+    {
+      key: 'cowork-expert',
+      node: (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={inputToolbarButtonClass}
+              onClick={() => setCoworkOpen(true)}
+              aria-label="拉专家 / 专家团一起协作"
+            >
+              <UserPlus className="size-[17px]" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top"><p>拉专家 / 专家团一起协作</p></TooltipContent>
+        </Tooltip>
+      ),
+    },
     ...(isCodexFastModeAvailable ? [{
       key: 'codex-fast-mode',
       kind: 'context' as const,
@@ -3083,16 +3103,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
                 isDraft={isDraftSession || isEmptySession}
                 onSelectionChange={handleDraftGitContextChange}
               />
-              {/* 会话级拉专家/专家团协作（对齐 Synara subagent；显眼入口放在输入区） */}
-              <button
-                type="button"
-                onClick={() => setCoworkOpen(true)}
-                className="ml-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border/60 bg-content-area px-2.5 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:text-primary"
-                title="拉专家 / 专家团一起协作"
-              >
-                <UserPlus className="size-3.5" />
-                拉专家
-              </button>
             </div>
             {/* 无 Agent 渠道或无可用模型提示 */}
             {(!agentChannelId || !hasAvailableModel) && (

@@ -6,8 +6,8 @@
  * 顶层文件层级下，本模块提供统一的记忆查看、编辑与初始化沉淀。
  *
  * 使用方式：
- * - 设置面板内：`<WorkspaceContextView embedded />`（由「Yoda 记忆」tab 渲染）
- * - 独立全屏视图：`<WorkspaceContextView />`（MainArea activeView='workspace-context' 兼容）
+ * - 独立全屏视图：`<WorkspaceContextView />`（MainArea activeView='workspace-context'，左侧栏「Yoda 记忆」入口）
+ * - `embedded` prop 保留供未来嵌入其他容器复用，当前无消费者
  */
 
 import * as React from 'react'
