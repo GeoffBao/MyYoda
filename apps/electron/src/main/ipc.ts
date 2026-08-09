@@ -9,7 +9,7 @@ import { join, resolve, sep, dirname } from 'node:path'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, type PlanningWorkspaceScope } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, PR_IPC_CHANNELS, type PlanningWorkspaceScope } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
 import { registerBrowserIpcHandlers } from './lib/browser/browser-ipc'
 import type {
@@ -167,6 +167,19 @@ import type { ExpertManifest, ExpertPackage } from '@myyoda/shared/experts'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { getUnstagedChanges, getFileDiff, getUntrackedContent, revertFile, getDiffContents, listWorktrees, getWorktreeChanges, getMainRepoRoot } from './lib/git-diff-service'
+import {
+  getCurrentBranchPullRequest,
+  listPullRequests,
+  getPullRequestDetail,
+  getPullRequestDiff,
+  createPullRequest,
+  pullRequestAction,
+  addPullRequestComment,
+  checkoutPullRequest,
+  getBranchWorktreeUsage,
+  getPullRequestPanelState,
+  getDefaultBranch,
+} from './lib/pull-request-service'
 import { listGitBranchesForSession, prepareSessionGitContext } from './lib/git-session-context-service'
 import { registerPromaFilePath } from './lib/local-file-protocol'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
@@ -6047,6 +6060,122 @@ export function registerIpcHandlers(): void {
       }
       return templates.sort((a, b) => a.slug.localeCompare(b.slug))
     },
+  )
+
+  // ===== Pull Request（本地 gh CLI） =====
+
+  // 获取 gh CLI 状态（安装/登录）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.GH_STATUS,
+    async (): Promise<import('@myyoda/shared').GhCliStatus> => {
+      return getGhCliStatus()
+    }
+  )
+
+  // 获取 PR 状态行面板的一次性数据（gh + git + 当前分支 PR）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.PANEL_STATE,
+    async (_, repoPath: string): Promise<import('@myyoda/shared').PullRequestPanelState> => {
+      if (!repoPath || typeof repoPath !== 'string') {
+        return {
+          gh: { installed: false, authenticated: false },
+          git: { branch: null, isDefaultBranch: false, hasUpstream: false, aheadCount: 0, behindCount: 0, hasOriginRemote: false, hasChanges: false, repoPath: null },
+          currentBranchPr: null,
+        }
+      }
+      return getPullRequestPanelState(repoPath)
+    }
+  )
+
+  // 获取当前分支关联的 open PR
+  ipcMain.handle(
+    PR_IPC_CHANNELS.GET_CURRENT_BRANCH_PR,
+    async (_, repoPath: string): Promise<import('@myyoda/shared').CurrentBranchPullRequest | null> => {
+      if (!repoPath || typeof repoPath !== 'string') return null
+      return getCurrentBranchPullRequest(repoPath)
+    }
+  )
+
+  // 获取仓库默认分支名（main/master）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.GET_DEFAULT_BRANCH,
+    async (_, repoPath: string): Promise<string> => {
+      if (!repoPath || typeof repoPath !== 'string') return 'main'
+      return getDefaultBranch(repoPath)
+    }
+  )
+
+  // 列出 open PR
+  ipcMain.handle(
+    PR_IPC_CHANNELS.LIST,
+    async (_, input: import('@myyoda/shared').PullRequestsListInput): Promise<import('@myyoda/shared').PullRequestsListResult> => {
+      return listPullRequests(input ?? {})
+    }
+  )
+
+  // 获取 PR 详情
+  ipcMain.handle(
+    PR_IPC_CHANNELS.DETAIL,
+    async (_, input: import('@myyoda/shared').PullRequestDetailInput): Promise<import('@myyoda/shared').PullRequestDetail> => {
+      if (!input?.repoPath || typeof input.repoPath !== 'string') throw new Error('repoPath 必填')
+      return getPullRequestDetail(input)
+    }
+  )
+
+  // 获取 PR diff
+  ipcMain.handle(
+    PR_IPC_CHANNELS.DIFF,
+    async (_, input: import('@myyoda/shared').PullRequestDetailInput): Promise<import('@myyoda/shared').PullRequestDiffResult> => {
+      if (!input?.repoPath || typeof input.repoPath !== 'string') throw new Error('repoPath 必填')
+      return getPullRequestDiff(input)
+    }
+  )
+
+  // 创建 PR（duplicate 防护 + push）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.CREATE,
+    async (_, input: import('@myyoda/shared').CreatePullRequestInput): Promise<import('@myyoda/shared').CreatePullRequestResult> => {
+      if (!input?.repoPath || !input?.headBranch || !input?.baseBranch) {
+        throw new Error('创建 PR 参数不完整：需要 repoPath / headBranch / baseBranch')
+      }
+      return createPullRequest(input)
+    }
+  )
+
+  // PR 操作（merge/ready/draft/close/reopen）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.ACTION,
+    async (_, input: import('@myyoda/shared').PullRequestActionInput): Promise<import('@myyoda/shared').PullRequestActionResult> => {
+      if (!input?.repoPath || !input?.number) throw new Error('PR 操作参数不完整')
+      return pullRequestAction(input)
+    }
+  )
+
+  // 发表评论
+  ipcMain.handle(
+    PR_IPC_CHANNELS.COMMENT,
+    async (_, input: import('@myyoda/shared').PullRequestCommentInput): Promise<import('@myyoda/shared').PullRequestCommentResult> => {
+      if (!input?.repoPath || !input?.number || !input?.body) throw new Error('评论参数不完整')
+      return addPullRequestComment(input)
+    }
+  )
+
+  // 检出 PR 到本地
+  ipcMain.handle(
+    PR_IPC_CHANNELS.CHECKOUT,
+    async (_, input: { repoPath: string; number: number }): Promise<{ branch: string }> => {
+      if (!input?.repoPath || !input?.number) throw new Error('检出参数不完整')
+      return checkoutPullRequest(input.repoPath, input.number)
+    }
+  )
+
+  // 查询分支是否被其他 worktree 占用（merge --delete-branch 安全）
+  ipcMain.handle(
+    PR_IPC_CHANNELS.BRANCH_WORKTREE_USAGE,
+    async (_, input: { repoPath: string; branch: string }): Promise<import('@myyoda/shared').BranchWorktreeUsage> => {
+      if (!input?.repoPath || !input?.branch) return { branch: input?.branch ?? '', worktrees: [], mainRepoOnBranch: false }
+      return getBranchWorktreeUsage(input.repoPath, input.branch)
+    }
   )
 
   // ===== 内嵌浏览器（synara 移植） =====

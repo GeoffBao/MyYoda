@@ -59,7 +59,7 @@ export function activateTab(store: Store, tabId: string): void {
         agentWorkspaceId: session.workspaceId,
       }).catch(console.error)
     }
-  } else if (tab.type === 'scratch' || tab.type === 'tutorial') {
+  } else if (tab.type === 'scratch' || tab.type === 'tutorial' || tab.type === 'pull-request') {
     store.set(currentConversationIdAtom, null)
     if (store.get(appModeAtom) !== 'agent') {
       store.set(currentAgentSessionIdAtom, null)

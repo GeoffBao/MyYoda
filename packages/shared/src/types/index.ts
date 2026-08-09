@@ -37,6 +37,9 @@ export * from './installer'
 // GitHub Release 相关类型
 export * from './github'
 
+// Pull Request 相关类型与 IPC 通道
+export * from './pr'
+
 // 本地化版本历史（Release Notes）相关类型
 export * from './release-notes'
 

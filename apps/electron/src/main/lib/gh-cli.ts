@@ -68,8 +68,14 @@ function getGhLogin(ghPath: string): string | null {
   }
 }
 
-/** 检测本机 gh CLI 的安装 / 登录状态 */
-export function getGhCliStatus(): GhCliStatus {
+// getGhCliStatus 每次调用都是同步阻塞主进程的子进程调用，且 `gh auth status` /
+// `gh api user` 各是一次真实网络请求。PR 面板每次挂载/刷新、每个 PR 操作前置校验
+// 都会调一次，短时间内会重复触发多次网络往返（阻塞整个主进程），做一个短 TTL 缓存
+// 摊掉这些重复调用——gh 的安装/登录状态在几十秒内基本不会变化。
+const GH_STATUS_CACHE_TTL_MS = 30_000
+let cachedGhStatus: { status: GhCliStatus; expiresAt: number } | null = null
+
+function computeGhCliStatus(): GhCliStatus {
   const ghPath = findGhPath()
   if (!ghPath) {
     return { installed: false, authenticated: false }
@@ -84,6 +90,17 @@ export function getGhCliStatus(): GhCliStatus {
     authenticated: !!login,
     login: login ?? undefined,
   }
+}
+
+/** 检测本机 gh CLI 的安装 / 登录状态（短 TTL 缓存，避免高频重复网络往返） */
+export function getGhCliStatus(): GhCliStatus {
+  const now = Date.now()
+  if (cachedGhStatus && cachedGhStatus.expiresAt > now) {
+    return cachedGhStatus.status
+  }
+  const status = computeGhCliStatus()
+  cachedGhStatus = { status, expiresAt: now + GH_STATUS_CACHE_TTL_MS }
+  return status
 }
 
 /** 供提交服务复用的 gh 可执行路径解析（未安装时抛错） */

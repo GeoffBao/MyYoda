@@ -7,7 +7,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, TEAMBITION_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS, BROWSER_IPC_CHANNELS, type ThreadBrowserState, type BrowserPanelBounds } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS, BROWSER_IPC_CHANNELS, PR_IPC_CHANNELS, type ThreadBrowserState, type BrowserPanelBounds } from '@myyoda/shared'
 import type { TaskAggregateSummary, TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks'
 import type { StartTodoAgentInput, StartTodoAgentResult, TodoAgentSessionActivation, PlanningWorkspaceScope } from '@myyoda/shared'
 import { LABEL_IPC_CHANNELS } from '@myyoda/shared/channels'
@@ -412,6 +412,33 @@ export interface ElectronAPI {
   openDetachedPreview: (input: DetachedPreviewWindowInput) => Promise<string | null>
   /** 获取独立预览窗口数据 */
   getDetachedPreviewData: (previewId: string) => Promise<DetachedPreviewWindowData | null>
+
+  // ===== Pull Request（本地 gh CLI） =====
+
+  /** 获取 gh CLI 安装/登录状态 */
+  getGhCliStatus: () => Promise<import('@myyoda/shared').GhCliStatus>
+  /** 获取 PR 状态行面板一次性数据（gh + git + 当前分支 PR） */
+  getPullRequestPanelState: (repoPath: string) => Promise<import('@myyoda/shared').PullRequestPanelState>
+  /** 获取当前分支关联的 open PR（无则返回 null） */
+  getCurrentBranchPullRequest: (repoPath: string) => Promise<import('@myyoda/shared').CurrentBranchPullRequest | null>
+  /** 列出 open PR */
+  listPullRequests: (input: import('@myyoda/shared').PullRequestsListInput) => Promise<import('@myyoda/shared').PullRequestsListResult>
+  /** 获取 PR 详情 */
+  getPullRequestDetail: (input: import('@myyoda/shared').PullRequestDetailInput) => Promise<import('@myyoda/shared').PullRequestDetail>
+  /** 获取 PR diff */
+  getPullRequestDiff: (input: import('@myyoda/shared').PullRequestDetailInput) => Promise<import('@myyoda/shared').PullRequestDiffResult>
+  /** 创建 PR（duplicate 防护 + push） */
+  createPullRequest: (input: import('@myyoda/shared').CreatePullRequestInput) => Promise<import('@myyoda/shared').CreatePullRequestResult>
+  /** 获取仓库默认分支名（main/master） */
+  getDefaultBranch: (repoPath: string) => Promise<string>
+  /** PR 操作（merge/ready/draft/close/reopen） */
+  pullRequestAction: (input: import('@myyoda/shared').PullRequestActionInput) => Promise<import('@myyoda/shared').PullRequestActionResult>
+  /** 发表评论 */
+  addPullRequestComment: (input: import('@myyoda/shared').PullRequestCommentInput) => Promise<import('@myyoda/shared').PullRequestCommentResult>
+  /** 检出 PR 到本地 */
+  checkoutPullRequest: (repoPath: string, number: number) => Promise<{ branch: string }>
+  /** 查询分支是否被其他 worktree 占用（merge --delete-branch 安全） */
+  getBranchWorktreeUsage: (repoPath: string, branch: string) => Promise<import('@myyoda/shared').BranchWorktreeUsage>
 
   // ===== 通用工具 =====
 
@@ -1765,6 +1792,56 @@ const electronAPI: ElectronAPI = {
 
   getDetachedPreviewData: (previewId: string) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_DETACHED_PREVIEW_DATA, previewId) as Promise<DetachedPreviewWindowData | null>
+  },
+
+  // ===== Pull Request（本地 gh CLI） =====
+
+  getGhCliStatus: () => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.GH_STATUS)
+  },
+
+  getPullRequestPanelState: (repoPath: string) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.PANEL_STATE, repoPath)
+  },
+
+  getCurrentBranchPullRequest: (repoPath: string) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.GET_CURRENT_BRANCH_PR, repoPath)
+  },
+
+  listPullRequests: (input: import('@myyoda/shared').PullRequestsListInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.LIST, input)
+  },
+
+  getPullRequestDetail: (input: import('@myyoda/shared').PullRequestDetailInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.DETAIL, input)
+  },
+
+  getPullRequestDiff: (input: import('@myyoda/shared').PullRequestDetailInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.DIFF, input)
+  },
+
+  createPullRequest: (input: import('@myyoda/shared').CreatePullRequestInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.CREATE, input)
+  },
+
+  getDefaultBranch: (repoPath: string) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.GET_DEFAULT_BRANCH, repoPath)
+  },
+
+  pullRequestAction: (input: import('@myyoda/shared').PullRequestActionInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.ACTION, input)
+  },
+
+  addPullRequestComment: (input: import('@myyoda/shared').PullRequestCommentInput) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.COMMENT, input)
+  },
+
+  checkoutPullRequest: (repoPath: string, number: number) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.CHECKOUT, { repoPath, number })
+  },
+
+  getBranchWorktreeUsage: (repoPath: string, branch: string) => {
+    return ipcRenderer.invoke(PR_IPC_CHANNELS.BRANCH_WORKTREE_USAGE, { repoPath, branch })
   },
 
   // 通用工具
