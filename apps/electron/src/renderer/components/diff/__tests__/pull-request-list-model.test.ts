@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { PullRequestListEntry } from '@myyoda/shared'
 import {
+  filterByInvolvement,
+  filterBySearch,
   formatPrListCount,
   groupPullRequests,
   isAuthoredByViewer,
@@ -76,5 +78,59 @@ describe('pull-request-list-model', () => {
   test('formatPrListCount：>99 显示 99+', () => {
     expect(formatPrListCount(5)).toBe('5')
     expect(formatPrListCount(100)).toBe('99+')
+  })
+})
+
+describe('pull-request-list-model: filterByInvolvement', () => {
+  const viewer = 'eason'
+  const reviewing = makeEntry({ number: 1, viewerReviewRequested: true })
+  const authored = makeEntry({ number: 2, author: { login: 'eason', name: null, avatarUrl: null, url: null } })
+  const others = makeEntry({ number: 3 })
+  const entries = [reviewing, authored, others]
+
+  test('all 返回全部', () => {
+    expect(filterByInvolvement(entries, 'all', viewer)).toHaveLength(3)
+  })
+
+  test('reviewing 只保留待 review', () => {
+    const filtered = filterByInvolvement(entries, 'reviewing', viewer)
+    expect(filtered.map((e) => e.number)).toEqual([1])
+  })
+
+  test('authored 只保留我创建的', () => {
+    const filtered = filterByInvolvement(entries, 'authored', viewer)
+    expect(filtered.map((e) => e.number)).toEqual([2])
+  })
+})
+
+describe('pull-request-list-model: filterBySearch', () => {
+  const entries = [
+    makeEntry({ number: 1, title: '修复浏览器缩放', headBranch: 'fix/browser-zoom', author: { login: 'alice', name: null, avatarUrl: null, url: null } }),
+    makeEntry({ number: 2, title: '新增 PR 流程', headBranch: 'feat/pr-workflow', repositoryName: 'repo-a', author: { login: 'bob', name: null, avatarUrl: null, url: null } }),
+    makeEntry({ number: 35, title: '环境 PATH 加固', headBranch: 'fix/env-path', author: { login: 'eason', name: null, avatarUrl: null, url: null } }),
+  ]
+
+  test('空查询返回全部', () => {
+    expect(filterBySearch(entries, '')).toHaveLength(3)
+  })
+
+  test('按标题搜索', () => {
+    expect(filterBySearch(entries, '浏览器').map((e) => e.number)).toEqual([1])
+  })
+
+  test('按编号搜索', () => {
+    expect(filterBySearch(entries, '35').map((e) => e.number)).toEqual([35])
+  })
+
+  test('按分支搜索', () => {
+    expect(filterBySearch(entries, 'pr-workflow').map((e) => e.number)).toEqual([2])
+  })
+
+  test('按作者搜索', () => {
+    expect(filterBySearch(entries, 'eason').map((e) => e.number)).toEqual([35])
+  })
+
+  test('无匹配返回空', () => {
+    expect(filterBySearch(entries, 'zzz')).toHaveLength(0)
   })
 })

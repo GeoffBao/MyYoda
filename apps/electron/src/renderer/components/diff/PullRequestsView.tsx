@@ -1,9 +1,14 @@
 /**
  * PullRequestsView — 左侧栏 Pull Requests 入口的全屏视图
  *
- * 列出当前工作区所有 Git 仓库的 open PR，按「待我 Review / 我创建的 / 其他」分组。
- * 数据：window.electronAPI.listPullRequests({ repoPaths })；点击条目打开 PR 详情 Tab。
- * 无 gh / 未登录时显示引导。
+ * 对齐 synara 的 Pull requests 页面形态：
+ *  - 参与度筛选 Tabs：All / Reviewing / Authored
+ *  - 状态筛选 Tabs：Open / Closed / Merged
+ *  - 搜索框（标题/编号/分支/作者/仓库名）
+ *  - 列表按「待我 Review / 我创建的 / 其他」分组展示
+ *  - 空状态引导
+ *
+ * 数据：window.electronAPI.listPullRequests({ repoPaths, state })；点击条目打开 PR 详情 Tab。
  */
 
 import * as React from 'react'
@@ -13,22 +18,43 @@ import {
   GitPullRequest,
   Loader2,
   RefreshCw,
+  Search,
   ShieldAlert,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { PullRequestListEntry, PullRequestsListResult } from '@myyoda/shared'
+import type { PullRequestListEntry, PullRequestState, PullRequestsListResult } from '@myyoda/shared'
 import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
 import { useOpenPullRequestTab } from '@/components/diff/open-pr-tab'
 import {
   groupPullRequests,
   formatPrListCount,
+  filterByInvolvement,
+  filterBySearch,
 } from '@/components/diff/pull-request-list-model'
+
+type InvolvementFilter = 'all' | 'reviewing' | 'authored'
+
+const INVOLVEMENT_TABS: Array<{ key: InvolvementFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'reviewing', label: 'Reviewing' },
+  { key: 'authored', label: 'Authored' },
+]
+
+const STATE_TABS: Array<{ key: PullRequestState; label: string }> = [
+  { key: 'open', label: 'Open' },
+  { key: 'closed', label: 'Closed' },
+  { key: 'merged', label: 'Merged' },
+]
 
 export function PullRequestsView(): React.ReactElement {
   const [result, setResult] = React.useState<PullRequestsListResult | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [repoPaths, setRepoPaths] = React.useState<string[]>([])
+  const [stateFilter, setStateFilter] = React.useState<PullRequestState>('open')
+  const [involvement, setInvolvement] = React.useState<InvolvementFilter>('all')
+  const [searchQuery, setSearchQuery] = React.useState('')
   const openPullRequestTab = useOpenPullRequestTab()
 
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
@@ -38,14 +64,13 @@ export function PullRequestsView(): React.ReactElement {
     return workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
   }, [currentWorkspaceId, workspaces])
 
-  // 加载工作区根目录 + 自动发现子 Git 仓库
+  // 加载工作区根目录作为仓库候选
   React.useEffect(() => {
     if (!currentWorkspaceSlug) return
     let cancelled = false
     window.electronAPI.getWorkspaceRootPath(currentWorkspaceSlug)
       .then((root) => {
         if (cancelled || !root) return
-        // 主进程 findAllGitRoots 会向上/向下发现子仓库；直接以根目录作为候选
         setRepoPaths([root])
       })
       .catch(() => { /* 忽略 */ })
@@ -57,40 +82,115 @@ export function PullRequestsView(): React.ReactElement {
     if (showSpinner) setLoading(true)
     setError(null)
     try {
-      const data = await window.electronAPI.listPullRequests({ repoPaths })
+      const data = await window.electronAPI.listPullRequests({ repoPaths, state: stateFilter })
       setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 PR 列表失败')
     } finally {
       setLoading(false)
     }
-  }, [repoPaths])
+  }, [repoPaths, stateFilter])
 
   React.useEffect(() => {
     void load()
   }, [load])
 
-  const groups = result ? groupPullRequests(result.entries, result.viewer) : []
+  // 切换状态筛选时重新拉取
+  const handleStateChange = React.useCallback((state: PullRequestState) => {
+    setStateFilter(state)
+    setLoading(true)
+  }, [])
+
+  // 前端过滤：参与度 + 搜索词
+  const viewer = result?.viewer ?? null
+  const involvementFiltered = React.useMemo(
+    () => filterByInvolvement(result?.entries ?? [], involvement, viewer),
+    [result, involvement, viewer],
+  )
+  const searched = React.useMemo(
+    () => filterBySearch(involvementFiltered, searchQuery),
+    [involvementFiltered, searchQuery],
+  )
+  const groups = React.useMemo(() => groupPullRequests(searched, viewer), [searched, viewer])
   const hasAny = groups.some((g) => g.entries.length > 0)
-  const ghReady = result !== null // listPullRequests 在 gh 未就绪时返回空 entries
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* 头部 */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-2 border-b border-border/50 flex items-center gap-2">
-        <GitPullRequest className="size-4 text-foreground/70" />
-        <h1 className="text-sm font-semibold">Pull Requests</h1>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          {result ? `${result.entries.length} open` : ''}
-        </span>
-        <button
-          type="button"
-          onClick={() => void load(true)}
-          className="ml-auto p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
-          aria-label="刷新 PR 列表"
-        >
-          <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-        </button>
+      <div className="flex-shrink-0 px-4 pt-3 pb-2 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <GitPullRequest className="size-4 text-foreground/70" />
+          <h1 className="text-sm font-semibold">Pull requests</h1>
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            {result ? `${searched.length} ${stateFilter}` : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => void load(true)}
+            className="ml-auto p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+            aria-label="刷新 PR 列表"
+          >
+            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+          </button>
+        </div>
+
+        {/* 状态筛选 Tabs */}
+        <div className="flex items-center gap-1 mt-2">
+          {STATE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => handleStateChange(tab.key)}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs transition-colors',
+                stateFilter === tab.key
+                  ? 'bg-foreground/10 text-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+          <span className="mx-1 w-px h-4 bg-border/60" />
+          {INVOLVEMENT_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setInvolvement(tab.key)}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs transition-colors',
+                involvement === tab.key
+                  ? 'bg-foreground/10 text-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 搜索框 */}
+        <div className="flex items-center gap-1.5 mt-2 px-2 h-7 rounded-md bg-muted/50 border border-transparent focus-within:border-primary/40 focus-within:bg-muted/70 transition-colors">
+          <Search className="size-3 text-muted-foreground flex-shrink-0" />
+          <input
+            type="text"
+            aria-label="搜索 Pull Request"
+            className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/40"
+            placeholder="Search pull requests"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              aria-label="清除搜索"
+              className="flex-shrink-0 p-0.5 rounded-sm hover:bg-foreground/[0.08] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              onClick={() => setSearchQuery('')}
+            >
+              <X className="size-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 内容 */}
@@ -112,12 +212,15 @@ export function PullRequestsView(): React.ReactElement {
               重试
             </button>
           </div>
-        ) : !ghReady || !hasAny ? (
+        ) : !hasAny ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <GitPullRequest className="size-8 text-muted-foreground/30" />
-            <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+            <p className="mt-3 text-sm font-medium text-foreground/70">No pull requests found</p>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
               {result?.viewer
-                ? '当前工作区没有 open 的 Pull Request。'
+                ? searchQuery
+                  ? 'Try another search, involvement, or state filter.'
+                  : `当前工作区没有 ${stateFilter} 状态的 Pull Request。`
                 : '未检测到 gh（GitHub CLI）登录状态。\n请在终端运行 `gh auth login` 后刷新。'}
             </p>
           </div>
@@ -171,6 +274,12 @@ function PrRow({
           {entry.isDraft && (
             <span className="shrink-0 rounded bg-muted px-1 py-px text-[10px] text-muted-foreground">Draft</span>
           )}
+          {entry.state === 'merged' && (
+            <span className="shrink-0 rounded bg-purple-500/10 text-purple-500 px-1 py-px text-[10px]">Merged</span>
+          )}
+          {entry.state === 'closed' && (
+            <span className="shrink-0 rounded bg-muted text-muted-foreground px-1 py-px text-[10px]">Closed</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
           <span className="tabular-nums">#{entry.number}</span>
@@ -178,6 +287,12 @@ function PrRow({
           <span className="truncate">{entry.repositoryName}</span>
           <span>·</span>
           <span className="truncate">{entry.author?.login ?? '未知'}</span>
+          {entry.headBranch && (
+            <>
+              <span>·</span>
+              <span className="truncate">{entry.headBranch}</span>
+            </>
+          )}
         </div>
       </div>
       <div className="flex flex-col items-end gap-0.5 shrink-0">

@@ -418,7 +418,7 @@ export async function getCurrentBranchPullRequest(repoPath: string): Promise<Cur
   }
 }
 
-/** 列出 open PR（可指定仓库，可筛选 involvement） */
+/** 列出 PR（按状态筛选；默认 open） */
 export async function listPullRequests(input: PullRequestsListInput): Promise<PullRequestsListResult> {
   const status = getGhCliStatus()
   if (!status.installed || !status.authenticated) {
@@ -426,6 +426,7 @@ export async function listPullRequests(input: PullRequestsListInput): Promise<Pu
   }
   const ghPath = resolveGhPath()
   const viewer = status.login ?? null
+  const state = input.state ?? 'open'
 
   const repoPaths = input.repoPaths && input.repoPaths.length > 0
     ? input.repoPaths
@@ -436,7 +437,7 @@ export async function listPullRequests(input: PullRequestsListInput): Promise<Pu
     const root = await findGitRoot(repoPath)
     if (!root) continue
     try {
-      const json = await runGh(ghPath, ['pr', 'list', '--state', 'open', '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,author,labels,reviewDecision,reviewRequests,additions,deletions,createdAt,updatedAt,statusCheckRollup'], root)
+      const json = await runGh(ghPath, ['pr', 'list', '--state', state, '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,author,labels,reviewDecision,reviewRequests,additions,deletions,createdAt,updatedAt,statusCheckRollup'], root)
       if (!json) continue
       const rawList = JSON.parse(json) as Array<Record<string, unknown>>
       for (const pr of rawList) {
@@ -475,9 +476,15 @@ export async function listPullRequests(input: PullRequestsListInput): Promise<Pu
     }
   }
 
+  // gh `--state closed` 会把 merged PR 也返回（merged 本质也是 closed）——
+  // 但 UI 的 Closed / Merged 是两个独立筛选，这里把 merged 从 closed 结果中剔除。
+  const filteredEntries = state === 'closed'
+    ? entries.filter((e) => e.state !== 'merged')
+    : entries
+
   // 排序：最近更新的在前
-  entries.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
-  return { viewer, entries }
+  filteredEntries.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+  return { viewer, entries: filteredEntries }
 }
 
 /** 收集可列 PR 的仓库候选：当前目录 + 常见工作区根（由渲染端显式传入更可控，此处仅回退） */

@@ -109,6 +109,8 @@ export interface PullRequestListEntry {
 export interface PullRequestsListInput {
   /** 按当前用户参与度筛选；不传返回全部 open PR */
   involvement?: PullRequestInvolvement
+  /** PR 状态筛选（open/closed/merged），默认 open */
+  state?: PullRequestState
   /** 只列出指定仓库（绝对路径）下的 PR；不传则尝试自动收集候选仓库 */
   repoPaths?: string[]
   /** 强制刷新（跳过缓存） */

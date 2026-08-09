@@ -71,3 +71,29 @@ export function groupPullRequests(
 export function formatPrListCount(count: number): string {
   return count > 99 ? '99+' : String(count)
 }
+
+/** 参与度筛选：all 返回全部；reviewing 只保留待 review；authored 只保留我创建的 */
+export function filterByInvolvement(
+  entries: PullRequestListEntry[],
+  involvement: 'all' | 'reviewing' | 'authored',
+  viewer: string | null,
+): PullRequestListEntry[] {
+  if (involvement === 'all') return entries
+  if (involvement === 'reviewing') {
+    return entries.filter((e) => isReviewingForViewer(e, viewer))
+  }
+  return entries.filter((e) => isAuthoredByViewer(e, viewer))
+}
+
+/** 按搜索词过滤 PR（标题 / 编号 / head 分支 / 作者 / 仓库名） */
+export function filterBySearch(entries: PullRequestListEntry[], query: string): PullRequestListEntry[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return entries
+  return entries.filter((e) =>
+    e.title.toLowerCase().includes(q)
+    || String(e.number).includes(q)
+    || e.headBranch.toLowerCase().includes(q)
+    || e.repositoryName.toLowerCase().includes(q)
+    || (e.author?.login ?? '').toLowerCase().includes(q)
+  )
+}
