@@ -23,8 +23,6 @@ import {
   uploadProjectAsset as uploadProjectAssetInStorage,
   writeProjectMemory as writeProjectMemoryInStorage,
 } from '../../../../../packages/shared/src/projects/storage.ts'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { getAgentWorkspace } from './agent-workspace-manager'
 import { getAgentWorkspacePath } from './config-paths'
 import {
@@ -236,40 +234,6 @@ export class ProjectRepository {
     const result = this.resolveEffectiveCwdForProject(workspaceRoot, projectId)
     if (!result) return undefined
     return assertRunnableCwd(result)
-  }
-
-  /**
-   * 每个 Workspace 恰好一个的隐藏容器 Project：已存在则直接返回，不重复创建。
-   * 不做旧数据去重/修复——这是全新引入的概念，不存在历史脏数据。
-   * 与其余 "AtRoot" 方法一致地接受 workspaceRoot，保持可测试、不依赖全局配置路径。
-   */
-  private ensureHiddenProject(
-    workspaceRoot: string,
-    kind: 'home' | 'ad-hoc',
-    input: { name: string; workingDirectory?: string },
-  ): ProjectConfig {
-    const existing = this.listProjectsAtRoot(workspaceRoot).find((project) => project.config.kind === kind)
-    if (existing) return existing.config
-    return this.createProjectAtRoot(workspaceRoot, { ...input, kind }).config
-  }
-
-  /** Chat 模式对话的隐藏容器；workingDirectory 固定为该 Workspace 的 workspace-files/ 目录。 */
-  ensureHomeProject(workspaceRoot: string): ProjectConfig {
-    const workspaceFilesDir = join(workspaceRoot, 'workspace-files')
-    mkdirSync(workspaceFilesDir, { recursive: true })
-    return this.ensureHiddenProject(workspaceRoot, 'home', {
-      name: '首页工作区',
-      workingDirectory: workspaceFilesDir,
-    })
-  }
-
-  /**
-   * 承载未绑定真实 Project 的临时 Code 会话的隐藏容器。不设置 workingDirectory——
-   * 每个会话仍使用各自独立的 session sandbox，隐藏 Project 只是归属/分组实体，
-   * 不是共享物理目录容器（避免破坏会话级隔离）。
-   */
-  ensureAdHocProject(workspaceRoot: string): ProjectConfig {
-    return this.ensureHiddenProject(workspaceRoot, 'ad-hoc', { name: '临时会话' })
   }
 
   /** 构建注入 Agent prompt 的项目上下文 */

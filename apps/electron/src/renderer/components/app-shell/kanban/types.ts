@@ -55,8 +55,8 @@ export interface KanbanProject {
   defaultExpertId?: string
   workspaceId?: string
   /**
-   * 缺省（undefined）等价于 'project'。'home' / 'ad-hoc' 是每个 Workspace 自动维护的
-   * 隐藏容器 Project，仅用于看板卡片归属展示，不应出现在项目选择/管理类 UI 中。
+   * 缺省（undefined）等价于 'project'。'home' / 'ad-hoc' 是历史遗留的隐藏容器 Project
+   * kind（存量 config 读兼容）；新建项目不再产生这两种 kind。
    */
   kind?: 'project' | 'home' | 'ad-hoc'
   /** 项目自定义看板列（ProjectConfig.kanbanColumns 透传）；未设置时看板用全局默认列 */

@@ -218,17 +218,6 @@ function copyDefaultSkills(workspaceSlug: string, options: { throwOnError?: bool
   }
 }
 
-/** 确保 Home / 临时会话两个隐藏容器 Project 存在；失败只记录日志，不阻塞工作区创建/加载。 */
-function ensureHiddenProjectsForWorkspace(slug: string): void {
-  try {
-    const workspaceRoot = getAgentWorkspacePath(slug)
-    projectRepository.ensureHomeProject(workspaceRoot)
-    projectRepository.ensureAdHocProject(workspaceRoot)
-  } catch (error) {
-    console.warn(`[Agent 工作区] 确保隐藏容器 Project 失败 (${slug}):`, error)
-  }
-}
-
 export function createAgentWorkspace(name: string): AgentWorkspace {
   const index = readIndex()
 
@@ -270,7 +259,6 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
 
   index.workspaces.unshift(workspace)
   writeIndex(index)
-  ensureHiddenProjectsForWorkspace(slug)
 
   console.log(`[Agent 工作区] 已创建工作区: ${name} (slug: ${slug})`)
   return workspace
@@ -385,7 +373,6 @@ export function ensureDefaultWorkspace(): AgentWorkspace {
     ensurePluginManifest(defaultWs.slug, defaultWs.name)
   }
 
-  ensureHiddenProjectsForWorkspace(defaultWs.slug)
   migrateWorkspaceInstructionFiles()
   migrateWorkspaceAutoMemoryDirectories()
   return defaultWs
