@@ -11,6 +11,9 @@ import { RefreshCw, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ReleaseNoteMarkdown } from './ReleaseNoteMarkdown'
 import { SettingsCard } from './primitives'
 
+/** 默认折叠展示的版本数（展开后显示全部） */
+const COLLAPSED_VISIBLE_COUNT = 4
+
 /**
  * VersionHistory 组件
  */
@@ -19,6 +22,7 @@ export function VersionHistory(): React.ReactElement {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [expandedVersions, setExpandedVersions] = React.useState<Set<string>>(new Set())
+  const [showAll, setShowAll] = React.useState(false)
 
   // 加载本地版本历史
   const loadReleaseNotes = React.useCallback(async () => {
@@ -53,6 +57,10 @@ export function VersionHistory(): React.ReactElement {
       return next
     })
   }
+
+  // 默认只展示前 COLLAPSED_VISIBLE_COUNT 个，展开后显示全部
+  const visibleNotes = showAll ? notes : notes.slice(0, COLLAPSED_VISIBLE_COUNT)
+  const totalCount = notes.length
 
   return (
     <SettingsCard>
@@ -92,7 +100,7 @@ export function VersionHistory(): React.ReactElement {
             <p className="text-sm text-muted-foreground">暂无版本历史</p>
           </div>
         ) : (
-          notes.map((note, index) => {
+          visibleNotes.map((note, index) => {
             const isExpanded = expandedVersions.has(note.version)
             const isLatest = index === 0
 
@@ -131,6 +139,23 @@ export function VersionHistory(): React.ReactElement {
           })
         )}
       </div>
+
+      {/* 显示全部 / 收起（版本数超过折叠阈值时） */}
+      {!loading && !error && notes.length > COLLAPSED_VISIBLE_COUNT && (
+        <div className="border-t p-2">
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {showAll ? '收起版本列表' : `显示全部 ${totalCount} 个版本`}
+            {showAll ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      )}
     </SettingsCard>
   )
 }

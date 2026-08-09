@@ -16,9 +16,6 @@ import {
   type ReleaseNote,
 } from '@myyoda/shared'
 
-/** 展示的最大版本数（对齐 craft-agents-oss 的 MAX_DISPLAY_NOTES） */
-const MAX_DISPLAY_NOTES = 10
-
 /** 是否为语义化版本文件名（如 "0.7.1.md"），排除 next.md 等辅助文件 */
 const VERSION_FILE_RE = /^\d+\.\d+\.\d+\.md$/
 
@@ -75,16 +72,19 @@ function getNotes(): Record<string, string> {
   return cachedNotes
 }
 
-/** 获取版本历史列表（semver 降序，最近 MAX_DISPLAY_NOTES 条） */
-export function getReleaseNotesList(): ReleaseNote[] {
+/**
+ * 获取版本历史列表（semver 降序，完整历史）。
+ * 调用方可传 limit 截断（如「最新动态」只取 3 条）；不传时返回全部版本。
+ */
+export function getReleaseNotesList(limit?: number): ReleaseNote[] {
   const notes = getNotes()
-  return Object.entries(notes)
+  const list = Object.entries(notes)
     .map(([file, content]) => ({
       version: parseReleaseVersion(file),
       content,
     }))
     .sort((a, b) => compareReleaseSemver(a.version, b.version))
-    .slice(0, MAX_DISPLAY_NOTES)
+  return typeof limit === 'number' && limit >= 0 ? list.slice(0, limit) : list
 }
 
 /** 获取最新版本号 */
@@ -92,7 +92,7 @@ export function getLatestReleaseVersion(): string | undefined {
   return getReleaseNotesList()[0]?.version
 }
 
-/** 获取合并后的完整版本历史 Markdown（每条之间用 --- 分隔，自动补版本标题） */
+/** 获取合并后的完整版本历史 Markdown（每条之间用 --- 分隔，自动补版本标题；不截断，含全部历史） */
 export function getCombinedReleaseNotes(): string {
   return getReleaseNotesList()
     .map((n) => {

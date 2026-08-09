@@ -46,6 +46,7 @@ export function ReleaseNotesPopover({
 }: ReleaseNotesPopoverProps): React.ReactElement {
   const [open, setOpen] = React.useState(false)
   const [fullDialogOpen, setFullDialogOpen] = React.useState(false)
+  const [dialogInitialVersion, setDialogInitialVersion] = React.useState<string | undefined>(undefined)
   const setShortcutGuideOpen = useSetAtom(shortcutGuideOpenAtom)
   const setFaqDialogOpen = useSetAtom(faqDialogOpenAtom)
 
@@ -54,9 +55,15 @@ export function ReleaseNotesPopover({
     if (next) onMarkSeen()
   }
 
-  const handleOpenFullChangelog = (): void => {
+  /** 打开完整更新日志；传版本号时滚动定位到该版本，缺省从最新（顶部）开始 */
+  const openFullChangelog = (version?: string): void => {
     setOpen(false)
+    setDialogInitialVersion(version)
     setFullDialogOpen(true)
+  }
+
+  const handleOpenFullChangelog = (): void => {
+    openFullChangelog()
   }
 
   const handleOpenShortcutGuide = (): void => {
@@ -108,7 +115,7 @@ export function ReleaseNotesPopover({
                   <button
                     key={note.version}
                     type="button"
-                    onClick={handleOpenFullChangelog}
+                    onClick={() => openFullChangelog(note.version)}
                     className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
                   >
                     <span className="flex-1 min-w-0 truncate">{headline}</span>
@@ -158,7 +165,11 @@ export function ReleaseNotesPopover({
           </div>
         </PopoverContent>
       </Popover>
-      <ReleaseNotesDialog open={fullDialogOpen} onOpenChange={setFullDialogOpen} />
+      <ReleaseNotesDialog
+        open={fullDialogOpen}
+        onOpenChange={setFullDialogOpen}
+        initialVersion={dialogInitialVersion}
+      />
     </>
   )
 }

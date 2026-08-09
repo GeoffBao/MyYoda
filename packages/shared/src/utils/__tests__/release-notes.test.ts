@@ -61,6 +61,41 @@ describe('extractReleaseHeadline', () => {
     expect(extractReleaseHeadline(content)).toBe('首个要点')
   })
 
+  test('跳过固定章节标题（新功能/修复/下载），取第一个具体功能标题', () => {
+    const content =
+      '# MyYoda v0.7.3 更新\n\n## 新功能\n\n### Yoda 插件 / Yoda 记忆迁回左侧栏独立视图\n\n- 详情\n\n## 修复\n\n- 修复内容\n\n## 下载\n\n- 下载列表'
+    expect(extractReleaseHeadline(content)).toBe('Yoda 插件 / Yoda 记忆迁回左侧栏独立视图')
+  })
+
+  test('非固定章节的二级标题优先于三级标题', () => {
+    const content =
+      '# MyYoda v0.7.1 更新\n\n## 品牌视觉：应用图标全面替换为最新素材\n\n### 更细的点\n\n## 修复\n\n- 其他'
+    expect(extractReleaseHeadline(content)).toBe('品牌视觉：应用图标全面替换为最新素材')
+  })
+
+  test('所有二级标题都是固定章节时取第一个三级标题', () => {
+    const content = '# Title\n\n## 新功能\n\n### 第一个功能\n\n## 修复\n\n### 修复A'
+    expect(extractReleaseHeadline(content)).toBe('第一个功能')
+  })
+
+  test('跳过 macOS 打开说明等前缀章节，不回退到下载条目', () => {
+    const content =
+      '# Title\n\n## 新功能\n\n### 核心特性\n\n## macOS 打开说明（重要）\n\n> 安装包损坏说明'
+    expect(extractReleaseHeadline(content)).toBe('核心特性')
+  })
+
+  test('无三级标题时回退到列表项加粗文本', () => {
+    const content =
+      '# LuxCoder v0.6.5 更新\n\n## 新功能\n\n- **项目看板自定义列**：Project 支持自定义看板列\n- **Claude 订阅登录修复**：...\n\n## 界面与体验\n\n- **新会话空状态**：...'
+    expect(extractReleaseHeadline(content)).toBe('项目看板自定义列')
+  })
+
+  test('固定章节全集（界面与体验/项目与看板等）均跳过', () => {
+    const content =
+      '# Title\n\n## 项目与看板\n\n- **隐藏容器 Project**：每个工作区自动维护...\n\n## Task 日历\n\n- **日程可关联项目**：...'
+    expect(extractReleaseHeadline(content)).toBe('隐藏容器 Project')
+  })
+
   test('空内容或只有一级标题时返回空串', () => {
     expect(extractReleaseHeadline('')).toBe('')
     expect(extractReleaseHeadline('# 只有标题')).toBe('')
