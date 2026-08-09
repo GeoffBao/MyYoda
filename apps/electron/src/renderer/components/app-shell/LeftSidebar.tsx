@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain, Globe } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain, Globe, GitPullRequest } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -3297,6 +3297,19 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             active={activeView === 'browser'}
             onClick={handleOpenBrowser}
             ariaLabel="浏览器"
+          />
+        </div>
+      )}
+
+      {/* Pull Requests：列出当前工作区 open PR（独立左栏视图） */}
+      {mode === 'agent' && (
+        <div className="sidebar-module-zone px-3 pb-0.5">
+          <SidebarModule
+            icon={GitPullRequest}
+            title="Pull Requests"
+            active={activeView === 'pull-requests'}
+            onClick={() => setActiveView(activeView === 'pull-requests' ? 'conversations' : 'pull-requests')}
+            ariaLabel="Pull Requests"
           />
         </div>
       )}

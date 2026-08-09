@@ -31,6 +31,7 @@ import { WorkspaceContextView } from '@/components/agent-skills/WorkspaceContext
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
 import { BrowserPanel } from '@/components/browser/BrowserPanel'
+import { PullRequestsView } from '@/components/diff/PullRequestsView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
@@ -265,6 +266,9 @@ export function MainArea(): React.ReactElement {
             ) : activeView === 'browser' ? (
               // 内嵌浏览器（synara 移植）：Agent 浏览器面板，全屏取代 TabBar + TabContent
               <BrowserPanel />
+            ) : activeView === 'pull-requests' ? (
+              // Pull Requests：列出当前工作区 open PR，全屏取代 TabBar + TabContent
+              <PullRequestsView />
             ) : (
               <>
                 <TabBar />

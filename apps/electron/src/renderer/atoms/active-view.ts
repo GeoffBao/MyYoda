@@ -20,6 +20,7 @@ export type ActiveView = 'conversations' | 'planning' | 'agent-skills'
   | 'excalidraw-gallery'
   | 'excalidraw-editor'
   | 'browser'
+  | 'pull-requests'
 /** Yoda 插件视图的子页：专家/专家团平级置顶，随后是 Skills / MCP / API（增强工具）。Context 已独立为 Yoda 记忆视图。 */
 export type AgentSkillsCapabilityTab = 'experts' | 'teams' | 'skills' | 'mcp' | 'api'
 

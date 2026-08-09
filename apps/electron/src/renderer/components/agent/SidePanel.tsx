@@ -45,6 +45,7 @@ import { agentSideChatMapAtom } from '@/atoms/chat-atoms'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { previewFileMapAtom } from '@/atoms/preview-atoms'
 import { useOpenPreview } from '@/components/diff/preview-opener'
+import { useOpenPullRequestTab } from '@/components/diff/open-pr-tab'
 import { detectIsWindows } from '@/lib/platform'
 import type { FileEntry, AgentPendingFile, AgentSessionFileRoots } from '@myyoda/shared'
 import { setFilePanelDragData, getMediaTypeFromFilename, dispatchInsertFileMention } from '@/lib/file-panel-drag'
@@ -85,6 +86,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const selectedFilePath = previewFileMap.get(sessionId)?.filePath
 
   const openPreview = useOpenPreview()
+  const openPullRequestTab = useOpenPullRequestTab()
 
   // 用 ref 存 basePaths 相关值，避免声明顺序问题
   const basePathsRef = React.useRef<string[]>([])
@@ -555,6 +557,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                 nonGitFileChanges={nonGitFileChanges}
                 currentFileChangeRunId={fileChangesCurrentRunId}
                 onPlainFileClick={handleFilePreview}
+                onOpenPullRequest={(repoPath, number) => openPullRequestTab(repoPath, number)}
+                onPrCreated={({ number }) => {
+                  // 创建成功后打开 PR 详情 Tab（用会话目录定位仓库，主进程会 findGitRoot）
+                  if (sessionPath) openPullRequestTab(sessionPath, number)
+                }}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs">等待会话初始化...</div>
