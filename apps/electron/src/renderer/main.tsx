@@ -38,6 +38,7 @@ import {
   currentAgentSessionIdAtom,
   workspaceCapabilitiesVersionAtom,
   workspaceFilesVersionAtom,
+  workspaceGitDiffRefreshVersionAtom,
   agentThinkingAtom,
   agentEffortAtom,
   agentMaxBudgetUsdAtom,
@@ -205,6 +206,7 @@ function AgentSettingsInitializer(): null {
   const setCurrentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const bumpFiles = useSetAtom(workspaceFilesVersionAtom)
+  const bumpGitDiffRefresh = useSetAtom(workspaceGitDiffRefreshVersionAtom)
   const setThinking = useSetAtom(agentThinkingAtom)
   const setEffort = useSetAtom(agentEffortAtom)
   const setMaxBudget = useSetAtom(agentMaxBudgetUsdAtom)
@@ -359,13 +361,18 @@ function AgentSettingsInitializer(): null {
     })
     const unsubFiles = window.electronAPI.onWorkspaceFilesChanged(() => {
       bumpFiles((v) => v + 1)
+      // watcher 已在主进程失效命中的 repo cache；所有已挂载 Changes 面板由此重新拉取。
+      bumpGitDiffRefresh((v) => v + 1)
+      // 外部本地项目目录变动时，主进程在 LIST_WORKSPACES 中重新计算根目录状态。
+      // 这里仅响应 watcher 事件刷新一次，避免在侧栏每次渲染时同步访问文件系统。
+      window.electronAPI.listAgentWorkspaces().then(setAgentWorkspaces).catch(console.error)
     })
 
     return () => {
       unsubCapabilities()
       unsubFiles()
     }
-  }, [bumpCapabilities, bumpFiles, currentWorkspaceId, workspaces])
+  }, [bumpCapabilities, bumpFiles, bumpGitDiffRefresh, currentWorkspaceId, setAgentWorkspaces, workspaces])
 
   return null
 }

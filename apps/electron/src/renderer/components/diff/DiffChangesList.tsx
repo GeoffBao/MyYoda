@@ -10,7 +10,12 @@ import { useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FileTypeIcon } from '@/components/file-browser/FileTypeIcon'
-import { agentDiffUnseenFilesAtom, agentDiffDataAtom, agentSelectedWorktreeAtom } from '@/atoms/agent-atoms'
+import {
+  agentDiffUnseenFilesAtom,
+  agentDiffDataAtom,
+  agentSelectedWorktreeAtom,
+  workspaceGitDiffRefreshVersionAtom,
+} from '@/atoms/agent-atoms'
 import type { ChangedFileEntry, ChangedFileStatus, ChangeSource, UntrackedFileEntry, WorktreeInfo } from '@myyoda/shared'
 import { WorktreeSelector } from './WorktreeSelector'
 import { PullRequestStatusBar } from './PullRequestStatusBar'
@@ -141,6 +146,7 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   // Diff 数据缓存：mount 时若已有上次结果，立即用作初值，避免空数组闪 1s "没有代码改动"
   const diffDataMap = useAtomValue(agentDiffDataAtom)
   const setDiffDataMap = useSetAtom(agentDiffDataAtom)
+  const workspaceGitDiffRefreshVersion = useAtomValue(workspaceGitDiffRefreshVersionAtom)
   const cached = diffDataMap.get(diffCacheKey)
   const [files, setFiles] = React.useState<ChangedFileEntry[]>(() => cached?.files ?? [])
   const [untrackedFiles, setUntrackedFiles] = React.useState<UntrackedFileEntry[]>(() => cached?.untrackedFiles ?? [])
@@ -205,7 +211,7 @@ export const DiffChangesList = React.memo(function DiffChangesList({
 
   React.useEffect(() => {
     fetchChanges()
-  }, [fetchChanges, refreshVersion])
+  }, [fetchChanges, refreshVersion, workspaceGitDiffRefreshVersion])
 
   // 窗口聚焦刷新已统一在 useGlobalAgentListeners 中处理（递增 refreshVersion）
 
