@@ -56,7 +56,7 @@ import { recordSkillUsageFromToolUse } from './skill-usage-service'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
 import { appendVisionRelayAllowedRoot } from './vision-relay-roots'
 import { resolveAgentSessionFileRoots } from './agent-file-roots'
-import { captureAgentTurnOutputs, snapshotOutputFiles } from './agent-output-capture'
+import { captureAgentTurnOutputs, buildOutputCaptureRoots, snapshotOutputFiles } from './agent-output-capture'
 import { getRuntimeStatus } from './runtime-init'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
@@ -1290,11 +1290,7 @@ export class AgentOrchestrator {
               createdAt: Date.now(),
               updatedAt: Date.now(),
             }, ws.slug)
-            turnOutputSnapshot = snapshotOutputFiles([
-              { root: sessionFileRoots.sessionOutboxPath, scope: 'outbox' },
-              { root: sessionFileRoots.sessionDir, scope: 'session' },
-              ...(sessionFileRoots.projectRoot ? [{ root: sessionFileRoots.projectRoot, scope: 'project' as const }] : []),
-            ])
+            turnOutputSnapshot = snapshotOutputFiles(buildOutputCaptureRoots(sessionFileRoots))
           } catch (error) {
             console.warn('[Agent 产出] turn 前快照失败，不影响 Agent 执行:', error)
           }

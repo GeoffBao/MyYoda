@@ -9,6 +9,7 @@ describe('buildAgentSessionFileRoots', () => {
       executionCwd: '/myyoda/workspaces/default/projects/demo/workdir',
       executionSource: 'project',
       projectId: 'project-1',
+      projectAssetsPath: '/myyoda/workspaces/default/projects/demo/assets',
     })
 
     expect(result).toMatchObject({
@@ -16,6 +17,7 @@ describe('buildAgentSessionFileRoots', () => {
       executionCwd: '/myyoda/workspaces/default/projects/demo/workdir',
       executionSource: 'project',
       projectRoot: '/myyoda/workspaces/default/projects/demo/workdir',
+      projectAssetsPath: '/myyoda/workspaces/default/projects/demo/assets',
       sessionOutboxPath: '/myyoda/workspaces/default/workspace-files/Outbox/session-1',
     })
   })

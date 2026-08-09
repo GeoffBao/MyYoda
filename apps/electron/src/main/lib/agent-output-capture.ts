@@ -39,6 +39,19 @@ const SKIP_DIRS = new Set([
   '.output',
 ])
 
+/**
+ * 统一构造一轮输出捕获的文件根。Outbox / session / projectRoot / projectAssets 四类根；
+ * 供 turn 前后快照与终态捕获共用，保证 before/after 一致。
+ */
+export function buildOutputCaptureRoots(roots: AgentSessionFileRoots): OutputCaptureRoot[] {
+  return [
+    { root: roots.sessionOutboxPath, scope: 'outbox' },
+    { root: roots.sessionDir, scope: 'session' },
+    ...(roots.projectRoot ? [{ root: roots.projectRoot, scope: 'project' as const }] : []),
+    ...(roots.projectAssetsPath ? [{ root: roots.projectAssetsPath, scope: 'project' as const }] : []),
+  ]
+}
+
 const MAX_FILES = 10_000
 const MAX_DEPTH = 12
 const OUTPUT_INDEX_VERSION = 1
@@ -149,11 +162,7 @@ export function captureAgentTurnOutputs(
     turnStartedAt: number
   },
 ): AgentOutputRecord[] {
-  const after = snapshotOutputFiles([
-    { root: roots.sessionOutboxPath, scope: 'outbox' },
-    { root: roots.sessionDir, scope: 'session' },
-    ...(roots.projectRoot ? [{ root: roots.projectRoot, scope: 'project' as const }] : []),
-  ])
+  const after = snapshotOutputFiles(buildOutputCaptureRoots(roots))
   const capturedAt = Date.now()
   const records = diffOutputSnapshots(before, after).map((item) => ({
     id: `${context.sessionId}:${item.path}:${context.turnStartedAt}`,
