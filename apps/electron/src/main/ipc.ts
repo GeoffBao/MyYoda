@@ -2974,7 +2974,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ── 社区市场（n-skills） ─────────────────────────────────
+  // ── 社区市场（Yoda社区市场） ─────────────────────────────────
 
   // 拉取社区市场清单
   ipcMain.handle(

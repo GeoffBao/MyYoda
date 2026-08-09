@@ -288,7 +288,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </button>
         )}
 
-        {/* 社区市场（n-skills） */}
+        {/* Yoda社区市场 */}
         {tab === 'skills' && (
           <button
             type="button"
@@ -296,7 +296,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-[13px] font-medium text-emerald-600 shadow-sm transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
           >
             <Store size={14} />
-            <span>社区市场</span>
+            <span>Yoda社区市场</span>
           </button>
         )}
 
