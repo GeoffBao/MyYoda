@@ -32,6 +32,7 @@ import memoryPreview from '@/assets/faq/faq-memory.png'
 import skillsPreview from '@/assets/faq/faq-skills.png'
 import automationPreview from '@/assets/faq/faq-automation.png'
 import usagePreview from '@/assets/faq/faq-usage.png'
+import { ImageLightbox } from '@/components/tutorial/ImageLightbox'
 
 const GROUP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'getting-started': BookOpen,
@@ -41,6 +42,7 @@ const GROUP_ICONS: Record<string, React.ComponentType<{ className?: string }>> =
   knowledge: BrainCircuit,
   integrations: Users,
   privacy: ShieldCheck,
+  troubleshooting: Wrench,
 }
 
 interface SearchResult {
@@ -214,7 +216,7 @@ export function FaqDialog(): React.ReactElement {
                         {FAQ_VISUALS.map((visual) => (
                           <article key={visual.title} className="group overflow-hidden rounded-2xl border border-border/60 bg-background/55 shadow-[0_8px_24px_rgba(15,30,20,0.05)]">
                             <div className="relative aspect-[1.55] overflow-hidden bg-muted">
-                              <img src={visual.image} alt="" className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.035]" />
+                              <ImageLightbox src={visual.image} alt={`${visual.title}界面截图`} title={visual.title} description={visual.caption} imageClassName="object-top transition-transform duration-500 group-hover:scale-[1.035]" />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
                               <span className="absolute bottom-2.5 left-3 text-xs font-medium text-white">{visual.title}</span>
                             </div>

@@ -38,6 +38,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         answer: '可以。MyYoda 支持配置 Anthropic、OpenAI、Google、DeepSeek、智谱、MiniMax、通义千问等渠道，也支持自定义 OpenAI 兼容端点。',
         keywords: ['Provider', '模型', '自定义端点'],
       },
+      {
+        question: '第一次任务应该怎么写？',
+        answer: '建议同时写清目标、范围、限制和验收标准。先从一个可以在几分钟内验证的小任务开始，再把有效做法沉淀到 Project 记忆或 Skill。',
+        keywords: ['提示词', '任务描述', '入门'],
+      },
+      {
+        question: '什么时候应该新建 Project？',
+        answer: '当工作需要固定目录、持续积累文件和记忆，或者会反复执行同一类流程时，就应该创建 Project；一次性问答不必创建。',
+        keywords: ['新建项目', '长期工作', '工作流'],
+      },
     ],
   },
   {
@@ -59,6 +69,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: 'Agent 可以调用哪些工具？',
         answer: '工具由当前空间的 MCP、Skills 和内置能力共同决定。会话执行时会显示工具活动；遇到需要确认的操作，MyYoda 会先请求你的授权。',
         keywords: ['MCP', '权限', '技能'],
+      },
+      {
+        question: '怎样让 Agent 更容易一次做对？',
+        answer: '提供相关文件或目录，明确目标和边界，并要求它先检查再行动、完成后运行验证。不要把多个无关目标混在同一个会话里。',
+        keywords: ['上下文', '验收', '提示词'],
+      },
+      {
+        question: '长任务应该一直放在同一个会话里吗？',
+        answer: '不建议无限延长。一个会话尽量聚焦一个小目标；阶段性结论写入 Project 文件或记忆，再开新会话继续，能让上下文更干净。',
+        keywords: ['会话', '长任务', '上下文'],
       },
     ],
   },
@@ -82,6 +102,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         answer: 'Project 记忆用于沉淀稳定规则、技术约定、偏好和已确认结论。它会随 Project 注入相关 Agent 会话，不等同于完整的聊天记录。',
         keywords: ['MEMORY.md', '上下文', '规则'],
       },
+      {
+        question: '会话文件、Project 文件和 Workspace 文件怎么区分？',
+        answer: '当前任务的临时材料放会话文件；项目内多个会话共享的资料放 Project 文件；跨 Project 通用的资料和规则放 Workspace 文件。',
+        keywords: ['文件组织', 'Workspace', '附件'],
+      },
+      {
+        question: '什么时候应该把内容写进记忆？',
+        answer: '只有稳定、反复有用且已经确认的规则、偏好和结论才适合写入记忆。临时想法、未验证结论和一次性任务记录应留在会话或 Project 文件中。',
+        keywords: ['记忆', 'MEMORY.md', '最佳实践'],
+      },
     ],
   },
   {
@@ -103,6 +133,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: '任务执行失败后怎么办？',
         answer: '先打开运行记录查看失败阶段和 Agent 输出，再从对应会话继续修复。可以调整渠道、权限模式或工作目录后重新运行。',
         keywords: ['失败', '重试', '运行记录'],
+      },
+      {
+        question: 'Task 和普通 Agent 会话应该怎么选？',
+        answer: '需要状态、负责人、列流转、依赖或可复盘运行记录时使用 Task；只是临时讨论或一次性执行时，普通 Agent 会话更轻量。',
+        keywords: ['Task', '会话', '看板'],
+      },
+      {
+        question: '自动任务适合安排什么？',
+        answer: '适合定期检查、汇总、同步和生成固定格式报告等重复流程。第一次使用时先手动跑通流程，再设置频率和最大运行次数。',
+        keywords: ['Automation', '定时任务', '报告'],
       },
     ],
   },
@@ -159,6 +199,33 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: '为什么 Agent 没有直接执行某个操作？',
         answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再检查空间设置中的 MCP 与 Skills。',
         keywords: ['MCP', '权限模式', '工具'],
+      },
+    ],
+  },
+  {
+    id: 'troubleshooting',
+    topic: '故障排查',
+    description: '先定位问题所在层级，再决定是重试还是调整配置。',
+    items: [
+      {
+        question: '模型配置成功，但 Agent 不能执行怎么办？',
+        answer: '先确认当前会话使用的渠道和模型，再检查权限模式、工作目录和工具是否启用。Chat 能回答不代表该模型一定支持完整的 Code 执行能力。',
+        keywords: ['模型', 'Agent', '执行失败', '渠道'],
+      },
+      {
+        question: 'Agent 为什么找不到我的文件？',
+        answer: '检查会话是否绑定了正确的 Project，以及 Project 的工作目录是否指向真实目录。必要时在任务中明确写出文件路径或使用文件引用。',
+        keywords: ['文件', '工作目录', 'Project', '路径'],
+      },
+      {
+        question: '权限提示太多，应该怎么设置？',
+        answer: '建议从 safe 或 ask 模式开始，只对可信工作目录和明确理解的操作放宽权限。不要为了省确认而直接使用最宽松的模式。',
+        keywords: ['权限', 'safe', 'ask', '安全'],
+      },
+      {
+        question: 'MCP 或 Skill 没有生效怎么办？',
+        answer: '先确认当前 Workspace 已启用对应能力，再检查工具活动里是否出现调用记录。变更 MCP 或 Skill 后，必要时重新打开会话让能力上下文刷新。',
+        keywords: ['MCP', 'Skill', 'Workspace', '工具'],
       },
     ],
   },

@@ -23,6 +23,7 @@ import skillsPreview from '@/assets/faq/faq-skills.png'
 import automationPreview from '@/assets/faq/faq-automation.png'
 import usagePreview from '@/assets/faq/faq-usage.png'
 import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
+import { ImageLightbox } from './ImageLightbox'
 
 interface GuideFeature {
   title: string
@@ -44,6 +45,41 @@ const QUICK_START = [
   ['配置一个模型渠道', '进入设置 → 模型配置，添加可用的 API 或订阅渠道。'],
   ['创建一个 Project', '选择工作目录，让会话、文件、任务和记忆拥有明确的归属。'],
   ['从一个真实任务开始', '告诉 Agent 目标、范围、限制和验收标准，先做小任务再逐步沉淀方法。'],
+] as const
+
+const GUIDE_SECTIONS = [
+  {
+    id: 'task-prompt',
+    eyebrow: 'Make it actionable',
+    title: '把任务说清楚，Agent 才能真正帮你完成',
+    summary: '不要只说“帮我处理一下”。把目标、范围、限制和验收标准一起交给 Agent。',
+    steps: ['先说明最终想得到什么结果', '指出相关文件、目录或 Project', '写出不能做什么和需要确认的边界', '告诉 Agent 如何验证已经完成'],
+    example: '请检查当前项目的登录流程，先定位根因，不要修改数据库结构。实现后运行相关测试，并说明改动文件和剩余风险。',
+  },
+  {
+    id: 'context',
+    eyebrow: 'Keep context clean',
+    title: '文件、记忆和会话，各自承担不同的上下文',
+    summary: '好的工作流不是把所有资料都塞给 Agent，而是让每类信息放在正确的位置。',
+    steps: ['当前任务临时材料放在会话文件', '多个会话共享的资料放在 Project 文件', '稳定规则和结论写入 Project 记忆', '跨项目通用偏好放入 Yoda 记忆'],
+    example: '请先读取 Project 资料中的接口约定，再修改当前会话中的实现；完成后把稳定的约定补充到 Project 记忆。',
+  },
+  {
+    id: 'capabilities',
+    eyebrow: 'Compose capabilities',
+    title: '先选工作方式，再组合 Skills、MCP 和专家',
+    summary: '能力越多不一定越好。根据任务选择最小的一组工具，结果通常更稳定、更容易复查。',
+    steps: ['简单问答和阅读优先使用 Chat', '需要文件和命令执行时使用 Code', '重复流程沉淀为 Skill', '需要外部系统数据时再启用 MCP'],
+    example: '请用当前空间的“研究整理”专家，读取指定资料并生成一份带来源的报告；不要调用与本任务无关的工具。',
+  },
+  {
+    id: 'troubleshooting',
+    eyebrow: 'When blocked',
+    title: '遇到问题时，先定位在哪一层',
+    summary: '模型、权限、工具、工作目录和任务状态是不同问题，按层排查比反复重试更快。',
+    steps: ['模型不可用：检查渠道、模型和网络代理', 'Agent 不执行：检查权限模式与工具是否启用', '找不到文件：检查 Project 工作目录', '任务失败：查看运行记录后从对应会话继续'],
+    example: 'Agent 没有修改文件时，先查看工具活动和权限提示，再确认当前会话绑定的 Project 与工作目录。',
+  },
 ] as const
 
 export function GuideView(): React.ReactElement {
@@ -113,8 +149,33 @@ export function GuideView(): React.ReactElement {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {GUIDE_FEATURES.map(({ title, description, image, icon: Icon }) => (
               <article key={title} className="group overflow-hidden rounded-2xl border border-border/60 bg-background/45 shadow-[0_8px_24px_rgba(15,30,20,0.04)]">
-                <div className="relative aspect-[1.55] overflow-hidden bg-muted"><img src={image} alt="" className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.035]" /><div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" /><div className="absolute bottom-3 left-3 flex items-center gap-2 text-white"><Icon className="size-4" /><span className="text-sm font-medium">{title}</span></div></div>
+                <div className="relative aspect-[1.55] overflow-hidden bg-muted"><ImageLightbox src={image} alt={`${title}界面截图`} title={title} description={description} imageClassName="object-top transition-transform duration-500 group-hover:scale-[1.035]" /><div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" /><div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-2 text-white"><Icon className="size-4" /><span className="text-sm font-medium">{title}</span></div></div>
                 <p className="px-4 py-3 text-xs leading-5 text-muted-foreground">{description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-14" aria-labelledby="guide-path-heading">
+          <div className="mb-5"><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Practical path</p><h2 id="guide-path-heading" className="mt-1 text-xl font-semibold tracking-[-0.02em]">从会用到用好</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">下面四个知识点来自旧版长教程，改成了可以直接照做的步骤和示例。</p></div>
+          <nav aria-label="使用指南章节" className="mb-5 flex flex-wrap gap-2 rounded-2xl border border-border/60 bg-muted/25 p-3">
+            {GUIDE_SECTIONS.map((section, index) => <a key={section.id} href={`#${section.id}`} className="rounded-xl bg-background/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">0{index + 1} {section.title}</a>)}
+          </nav>
+          <div className="space-y-4">
+            {GUIDE_SECTIONS.map((section, index) => (
+              <article key={section.id} id={section.id} className="scroll-mt-8 rounded-2xl border border-border/60 bg-background/45 p-5 shadow-sm md:p-6">
+                <div className="flex gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">0{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">{section.eyebrow}</p>
+                    <h3 className="mt-1 text-base font-semibold">{section.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{section.summary}</p>
+                    <div className="mt-4 grid gap-2 md:grid-cols-2">
+                      {section.steps.map((step, stepIndex) => <div key={step} className="flex gap-2 text-xs leading-5 text-foreground/80"><span className="font-mono text-primary/70">{stepIndex + 1}.</span><span>{step}</span></div>)}
+                    </div>
+                    <div className="mt-4 rounded-xl bg-muted/45 px-4 py-3"><p className="mb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">可以直接复制</p><p className="text-xs leading-5 text-foreground/80">{section.example}</p></div>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
