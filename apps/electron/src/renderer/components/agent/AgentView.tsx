@@ -2991,7 +2991,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   const inputTrailingNode = (
     <>
-      <div className="flex min-w-0 items-center gap-1 [&_.model-selector-trigger>span]:max-w-[min(12rem,30vw)]">
+      <div className="flex min-w-0 items-center gap-1 [&_.model-selector-trigger>span]:max-w-[min(18rem,42vw)]">
         <ModelSelector
           filterChannelIds={sessionAgentRuntime === 'pi' ? undefined : agentChannelIds}
           externalSelectedModel={externalSelectedModel}
