@@ -8,7 +8,9 @@
  *  - 列表按「待我 Review / 我创建的 / 其他」分组展示
  *  - 空状态引导
  *
- * 数据：window.electronAPI.listPullRequests({ repoPaths, state })；点击条目打开 PR 详情 Tab。
+ * 数据：window.electronAPI.listPullRequests({ repoPaths, state })；仓库候选取当前工作区下
+ * 各 Project 的 workingDirectory（不是 Agent 工作区根目录本身，那不是 git 仓库）。
+ * 点击条目打开 PR 详情 Tab。
  */
 
 import * as React from 'react'
@@ -24,7 +26,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PullRequestListEntry, PullRequestState, PullRequestsListResult } from '@myyoda/shared'
-import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
+import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
 import { useOpenPullRequestTab } from '@/components/diff/open-pr-tab'
 import {
   groupPullRequests,
@@ -51,31 +53,23 @@ export function PullRequestsView(): React.ReactElement {
   const [result, setResult] = React.useState<PullRequestsListResult | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [repoPaths, setRepoPaths] = React.useState<string[]>([])
   const [stateFilter, setStateFilter] = React.useState<PullRequestState>('open')
   const [involvement, setInvolvement] = React.useState<InvolvementFilter>('all')
   const [searchQuery, setSearchQuery] = React.useState('')
   const openPullRequestTab = useOpenPullRequestTab()
 
-  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
-  const workspaces = useAtomValue(agentWorkspacesAtom)
-  const currentWorkspaceSlug = React.useMemo(() => {
-    if (!currentWorkspaceId) return null
-    return workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
-  }, [currentWorkspaceId, workspaces])
+  // serverKanbanProjectsAtom 已按当前工作区加载（切工作区时 ProjectsInitializer 会清空重载）
+  const projects = useAtomValue(serverKanbanProjectsAtom)
 
-  // 加载工作区根目录作为仓库候选
-  React.useEffect(() => {
-    if (!currentWorkspaceSlug) return
-    let cancelled = false
-    window.electronAPI.getWorkspaceRootPath(currentWorkspaceSlug)
-      .then((root) => {
-        if (cancelled || !root) return
-        setRepoPaths([root])
-      })
-      .catch(() => { /* 忽略 */ })
-    return () => { cancelled = true }
-  }, [currentWorkspaceSlug])
+  // 仓库候选取当前工作区下各 Project 绑定的 workingDirectory（真实 git 仓库路径）。
+  // 注意：不能用 Agent 工作区根目录（~/.myyoda/agent-workspaces/{slug}）本身，
+  // 那是 MyYoda 内部配置目录，不是 git 仓库，findGitRoot 永远找不到，PR 列表会一直是空的。
+  const repoPaths = React.useMemo(() => {
+    const dirs = projects
+      .map((p) => p.workingDirectory)
+      .filter((dir): dir is string => !!dir)
+    return Array.from(new Set(dirs))
+  }, [projects])
 
   const load = React.useCallback(async (showSpinner = false) => {
     if (repoPaths.length === 0) return
