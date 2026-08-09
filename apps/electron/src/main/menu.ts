@@ -1,4 +1,21 @@
 import { Menu, shell, BrowserWindow } from 'electron'
+import { IPC_CHANNELS } from '@myyoda/shared'
+
+/**
+ * 菜单缩放（role: zoomIn/zoomOut/resetZoom）不会触发 webContents 的 'zoom-changed' 事件
+ * （该事件仅在滚轮/触控板缩放时触发），因此改用自定义 click 处理并显式广播新的缩放系数。
+ * 内嵌浏览器 WebContentsView 的 bounds 换算依赖这个广播（renderer 的 CSS px 在非 100%
+ * 缩放下与原生视图的 DIP 坐标不再 1:1，需要按缩放系数换算，见 BrowserPanel.tsx）。
+ */
+function applyZoomDelta(delta: number) {
+  return (_menuItem: Electron.MenuItem, win: Electron.BaseWindow | undefined): void => {
+    if (!win || win.isDestroyed() || !(win instanceof BrowserWindow)) return
+    const wc = win.webContents
+    const nextLevel = delta === 0 ? 0 : Math.max(-8, Math.min(9, wc.getZoomLevel() + delta))
+    wc.setZoomLevel(nextLevel)
+    wc.send(IPC_CHANNELS.WINDOW_ZOOM_FACTOR_CHANGED, wc.getZoomFactor())
+  }
+}
 
 export function createApplicationMenu(): Menu {
   const isMac = process.platform === 'darwin'
@@ -90,9 +107,12 @@ export function createApplicationMenu(): Menu {
         { role: 'forceReload' as const, label: '强制重新加载' },
         { role: 'toggleDevTools' as const, label: '切换开发者工具' },
         { type: 'separator' as const },
-        { role: 'resetZoom' as const, label: '重置缩放' },
-        { role: 'zoomIn' as const, label: '放大' },
-        { role: 'zoomOut' as const, label: '缩小' },
+        // 原生 role: zoomIn/zoomOut/resetZoom 不会触发 webContents 的 zoom-changed 事件，
+        // 改为自定义 click 处理以便广播新缩放系数给 renderer（内嵌浏览器 bounds 换算依赖）；
+        // 加速键沿用与原 role 相同的默认值。
+        { label: '重置缩放', accelerator: 'CmdOrCtrl+0', click: applyZoomDelta(0) },
+        { label: '放大', accelerator: 'CmdOrCtrl+Plus', click: applyZoomDelta(0.5) },
+        { label: '缩小', accelerator: 'CmdOrCtrl+-', click: applyZoomDelta(-0.5) },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const, label: '切换全屏' },
       ],
