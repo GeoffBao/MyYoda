@@ -839,6 +839,22 @@ export async function buildPiBuiltinTools(
     }
   }
 
+  // Browser 内嵌浏览器（synara 移植），与 Claude runtime 共用同一 host。
+  if (isBuiltinMcpUserEnabled('browser')) {
+    try {
+      const { buildPiBrowserTools } = await import('../browser/browser-pi-tools')
+      const { getAgentWorkspacePath } = await import('../config-paths')
+      tools.push(...buildPiBrowserTools(sdk, {
+        sessionId: ctx.sessionId,
+        channelId: ctx.channelId,
+        workspaceSlug: ctx.workspaceSlug,
+        workspaceRoot: ctx.workspaceSlug ? getAgentWorkspacePath(ctx.workspaceSlug) : undefined,
+      }))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 browser 工具失败:', error)
+    }
+  }
+
   // Planning（Todo/日程/分组/标签/提醒）不受 builtin MCP 开关控制，始终对 Pi Agent 可用。
   try {
     tools.push(...buildPlanningTools(sdk, ctx))

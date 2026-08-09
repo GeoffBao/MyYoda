@@ -7,7 +7,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, TEAMBITION_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS, BROWSER_IPC_CHANNELS, type ThreadBrowserState, type BrowserPanelBounds } from '@myyoda/shared'
 import type { TaskAggregateSummary, TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks'
 import type { StartTodoAgentInput, StartTodoAgentResult, TodoAgentSessionActivation, PlanningWorkspaceScope } from '@myyoda/shared'
 import { LABEL_IPC_CHANNELS } from '@myyoda/shared/channels'
@@ -432,6 +432,10 @@ export interface ElectronAPI {
   windowIsMaximized: () => Promise<boolean>
   /** 窗口是否处于原生全屏状态 */
   windowIsFullScreen: () => Promise<boolean>
+  /** 获取当前窗口页面缩放系数（webContents.getZoomFactor，100% 为 1） */
+  getZoomFactor: () => Promise<number>
+  /** 订阅页面缩放系数变化（Cmd+/Cmd-、菜单缩放、滚轮/触控板缩放） */
+  onZoomFactorChange: (callback: (zoomFactor: number) => void) => () => void
   /** 订阅窗口尺寸变化事件 */
   onWindowResize: (callback: () => void) => () => void
 
@@ -1674,6 +1678,26 @@ export interface ElectronAPI {
     /** 弹出桌宠右键菜单 */
     openContextMenu: () => Promise<void>
   }
+
+  /** 内嵌浏览器（synara 移植）：Agent 浏览器面板控制 */
+  browser: {
+    open: (threadId: string, url?: string, newTab?: boolean) => Promise<{ tabId: string; state: ThreadBrowserState }>
+    close: (threadId: string) => Promise<boolean>
+    closeTab: (threadId: string, tabId?: string) => Promise<{ closedTabId: string | null; activeTabId: string | null }>
+    selectTab: (threadId: string, tabId: string) => Promise<boolean>
+    hide: (threadId: string) => Promise<boolean>
+    getState: (threadId: string) => Promise<ThreadBrowserState>
+    setBounds: (threadId: string, bounds: BrowserPanelBounds | null) => void
+    navigate: (threadId: string, url: string) => Promise<boolean>
+    back: (threadId: string) => Promise<boolean>
+    forward: (threadId: string) => Promise<boolean>
+    reload: (threadId: string) => Promise<boolean>
+    onStateChange: (callback: (state: ThreadBrowserState) => void) => () => void
+    getAnnotations: (threadId: string) => Promise<Array<{ id: string; ref: string; role?: string; name?: string; selector?: string; comment: string }>>
+    clearAnnotations: (threadId: string) => Promise<boolean>
+    setAnnotationInteractive: (threadId: string, interactive: boolean) => Promise<boolean>
+    onAnnotationCommitted: (callback: (threadId: string, annotation: { id: string; ref: string; role?: string; name?: string; selector?: string; comment: string }) => void) => () => void
+  }
 }
 
 interface MigrationExportResult {
@@ -1771,6 +1795,16 @@ const electronAPI: ElectronAPI = {
 
   windowIsFullScreen: () => {
     return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_FULLSCREEN)
+  },
+
+  getZoomFactor: () => {
+    return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_ZOOM_FACTOR)
+  },
+
+  onZoomFactorChange: (callback: (zoomFactor: number) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, zoomFactor: number): void => callback(zoomFactor)
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_ZOOM_FACTOR_CHANGED, listener)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_ZOOM_FACTOR_CHANGED, listener) }
   },
 
   onWindowResize: (callback: () => void) => {
@@ -3675,6 +3709,34 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.invoke(CODECLAW_IPC_CHANNELS.SET_SOUND, enabled),
     openContextMenu: () =>
       ipcRenderer.invoke(CODECLAW_IPC_CHANNELS.OPEN_CONTEXT_MENU),
+  },
+
+  // ===== 内嵌浏览器（synara 移植） =====
+  browser: {
+    open: (threadId: string, url?: string, newTab?: boolean) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.open, { threadId, url, newTab }),
+    close: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.close, { threadId }),
+    closeTab: (threadId: string, tabId?: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.closeTab, { threadId, tabId }),
+    selectTab: (threadId: string, tabId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.selectTab, { threadId, tabId }),
+    hide: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.hide, { threadId }),
+    getState: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getState, { threadId }),
+    setBounds: (threadId: string, bounds: BrowserPanelBounds | null) => ipcRenderer.send(BROWSER_IPC_CHANNELS.setBounds, { threadId, bounds }),
+    navigate: (threadId: string, url: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.navigate, { threadId, url }),
+    back: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.back, { threadId }),
+    forward: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.forward, { threadId }),
+    reload: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.reload, { threadId }),
+    onStateChange: (callback: (state: ThreadBrowserState) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, state: ThreadBrowserState): void => callback(state)
+      ipcRenderer.on(BROWSER_IPC_CHANNELS.stateEvent, listener)
+      return () => { ipcRenderer.removeListener(BROWSER_IPC_CHANNELS.stateEvent, listener) }
+    },
+    getAnnotations: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.getAnnotations, { threadId }),
+    clearAnnotations: (threadId: string) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.clearAnnotations, { threadId }),
+    setAnnotationInteractive: (threadId: string, interactive: boolean) => ipcRenderer.invoke(BROWSER_IPC_CHANNELS.setAnnotationInteractive, { threadId, interactive }),
+    onAnnotationCommitted: (callback: (threadId: string, annotation: { id: string; ref: string; role?: string; name?: string; selector?: string; comment: string }) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, payload: { threadId: string; annotation: { id: string; ref: string; role?: string; name?: string; selector?: string; comment: string } }): void => callback(payload.threadId, payload.annotation)
+      ipcRenderer.on(BROWSER_IPC_CHANNELS.annotationCommitted, listener)
+      return () => { ipcRenderer.removeListener(BROWSER_IPC_CHANNELS.annotationCommitted, listener) }
+    },
   },
 }
 

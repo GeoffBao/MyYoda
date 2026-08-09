@@ -30,6 +30,7 @@ import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
 import { WorkspaceContextView } from '@/components/agent-skills/WorkspaceContextView'
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
+import { BrowserPanel } from '@/components/browser/BrowserPanel'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
@@ -261,6 +262,9 @@ export function MainArea(): React.ReactElement {
               <RepoWikiView />
             ) : activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor' ? (
               <ExcalidrawView />
+            ) : activeView === 'browser' ? (
+              // 内嵌浏览器（synara 移植）：Agent 浏览器面板，全屏取代 TabBar + TabContent
+              <BrowserPanel />
             ) : (
               <>
                 <TabBar />

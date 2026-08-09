@@ -9,6 +9,7 @@
  * - repo-wiki: Project 模式 Yoda 知识库（LLM 知识库）入口
  * - projects: 遗留值（项目中心已移除；运行时回退到 conversations）
  * - excalidraw-gallery / excalidraw-editor: 手绘白板视图
+ * - browser: 内嵌浏览器面板（Agent 浏览器，synara 移植）
  */
 
 import { atom } from 'jotai'
@@ -18,6 +19,7 @@ export type ActiveView = 'conversations' | 'planning' | 'agent-skills'
   | 'repo-wiki'
   | 'excalidraw-gallery'
   | 'excalidraw-editor'
+  | 'browser'
 /** Yoda 插件视图的子页：专家/专家团平级置顶，随后是 Skills / MCP / API（增强工具）。Context 已独立为 Yoda 记忆视图。 */
 export type AgentSkillsCapabilityTab = 'experts' | 'teams' | 'skills' | 'mcp' | 'api'
 

@@ -10,6 +10,7 @@ import { injectAgentCollaborationMcpServer } from '../agent-collaboration-tools'
 import { injectAutomationMcpServer } from '../automation-agent-tools'
 import { injectCreateTaskMcpServer } from '../create-task-agent-tool'
 import { injectNanoBananaMcpServer } from '../chat-tools/nano-banana-mcp'
+import { injectBrowserMcpServer } from '../browser/browser-mcp-server'
 import { isBuiltinMcpUserEnabled } from './settings'
 
 export interface BuiltinMcpInjectContext {
@@ -36,6 +37,17 @@ async function injectBuiltinSafely(name: string, task: () => Promise<void>): Pro
 }
 
 export async function injectBuiltinMcpServers(ctx: BuiltinMcpInjectContext): Promise<{ collaborationAvailable: boolean }> {
+  if (isBuiltinMcpUserEnabled('browser')) {
+    await injectBuiltinSafely('browser', () => injectBrowserMcpServer(
+      ctx.sdk,
+      ctx.mcpServers,
+      ctx.sessionId,
+      ctx.channelId,
+      ctx.workspaceSlug,
+      ctx.agentCwd,
+    ))
+  }
+
   if (isBuiltinMcpUserEnabled('nano-banana')) {
     await injectBuiltinSafely('nano-banana', () => injectNanoBananaMcpServer(
       ctx.sdk,
