@@ -67,7 +67,7 @@ export function isVoiceDictationTargetInput(
 }
 
 /** Scratch Pad 编辑器的语音输入目标 ID */
-export const SCRATCH_PAD_VOICE_INPUT_ID = '__luxcoder-scratch-pad__'
+export const SCRATCH_PAD_VOICE_INPUT_ID = '__myyoda-scratch-pad__'
 
 /** 主进程派发到渲染进程、再由当前焦点编辑器消费的事件名 */
 export const VOICE_DICTATION_INSERT_EVENT = 'myyoda:insert-voice-dictation-text'

@@ -79,7 +79,7 @@ extraResources:
     to: default-skills
     filter:
       - "**/*"
-  # 默认专家模板（首次启动时同步到 ~/.luxcoder/default-experts/templates/）
+  # 默认专家模板（首次启动时同步到 ~/.myyoda/default-experts/templates/）
   - from: default-experts
     to: default-experts
     filter:

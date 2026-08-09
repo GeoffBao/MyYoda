@@ -9,7 +9,7 @@ import { mockElectronModule } from './__tests__/electron-mock'
 const sendMock = mock(() => undefined)
 let tempHome: string
 const originalHome = process.env.HOME
-const originalLuxcoderDev = process.env.MYYODA_DEV
+const originalMyyodaDev = process.env.MYYODA_DEV
 const originalPromaDev = process.env.PROMA_DEV
 
 // chat-service.ts 间接 import conversation-manager / attachment-service 等模块，
@@ -62,8 +62,8 @@ beforeAll(async () => {
 
 afterAll(() => {
   process.env.HOME = originalHome
-  if (originalLuxcoderDev === undefined) delete process.env.MYYODA_DEV
-  else process.env.MYYODA_DEV = originalLuxcoderDev
+  if (originalMyyodaDev === undefined) delete process.env.MYYODA_DEV
+  else process.env.MYYODA_DEV = originalMyyodaDev
   if (originalPromaDev === undefined) delete process.env.PROMA_DEV
   else process.env.PROMA_DEV = originalPromaDev
   rmSync(tempHome, { recursive: true, force: true })

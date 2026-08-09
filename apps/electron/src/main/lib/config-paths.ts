@@ -439,14 +439,14 @@ export function getDefaultSkillsDir(): string {
 }
 
 /**
- * 获取 Agent 专家模板目录（~/.luxcoder/default-experts/templates/）
+ * 获取 Agent 专家模板目录（~/.myyoda/default-experts/templates/）
  */
 export function getDefaultExpertTemplatesDir(): string {
   return join(getConfigDir(), 'default-experts', 'templates')
 }
 
 /**
- * 从 app bundle 同步内置专家模板到 ~/.luxcoder/default-experts/templates/
+ * 从 app bundle 同步内置专家模板到 ~/.myyoda/default-experts/templates/
  *
  * 打包模式从 process.resourcesPath/default-experts 复制，开发模式从源码 default-experts/。
  * 模板文件很小且「缺失即写」即可：新模板随应用分发自动出现，已存在的不覆盖

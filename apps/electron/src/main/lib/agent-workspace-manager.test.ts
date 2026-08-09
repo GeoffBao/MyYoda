@@ -13,7 +13,7 @@ let configPaths: ConfigPathsModule
 let projectRepositoryModule: ProjectRepositoryModule
 let tempHome: string
 const originalHome = process.env.HOME
-const originalLuxcoderDev = process.env.MYYODA_DEV
+const originalMyyodaDev = process.env.MYYODA_DEV
 const originalPromaDev = process.env.PROMA_DEV
 
 mockElectronModule({
@@ -50,10 +50,10 @@ afterAll(() => {
   } else {
     process.env.HOME = originalHome
   }
-  if (originalLuxcoderDev === undefined) {
+  if (originalMyyodaDev === undefined) {
     delete process.env.MYYODA_DEV
   } else {
-    process.env.MYYODA_DEV = originalLuxcoderDev
+    process.env.MYYODA_DEV = originalMyyodaDev
   }
   if (originalPromaDev === undefined) {
     delete process.env.PROMA_DEV

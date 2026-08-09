@@ -1,5 +1,5 @@
 /**
- * Browser 主进程管理器（移植自 synara browserManager.ts，精简适配 LuxCoder）。
+ * Browser 主进程管理器（移植自 synara browserManager.ts，精简适配 MyYoda）。
  *
  * 职责：
  * - 每个 Agent 会话（threadId=sessionId）一个浏览器实例（WebContentsView 内嵌主窗口）

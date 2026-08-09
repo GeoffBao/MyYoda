@@ -86,7 +86,7 @@ describe('extractReleaseHeadline', () => {
 
   test('无三级标题时回退到列表项加粗文本', () => {
     const content =
-      '# LuxCoder v0.6.5 更新\n\n## 新功能\n\n- **项目看板自定义列**：Project 支持自定义看板列\n- **Claude 订阅登录修复**：...\n\n## 界面与体验\n\n- **新会话空状态**：...'
+      '# MyYoda v0.6.5 更新\n\n## 新功能\n\n- **项目看板自定义列**：Project 支持自定义看板列\n- **Claude 订阅登录修复**：...\n\n## 界面与体验\n\n- **新会话空状态**：...'
     expect(extractReleaseHeadline(content)).toBe('项目看板自定义列')
   })
 

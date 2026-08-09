@@ -11,7 +11,7 @@ let groupService: GroupService
 let sessionManager: SessionManager
 let tempHome: string
 const originalHome = process.env.HOME
-const originalLuxcoderDev = process.env.MYYODA_DEV
+const originalMyyodaDev = process.env.MYYODA_DEV
 const originalPromaDev = process.env.PROMA_DEV
 
 mockElectronModule({
@@ -58,8 +58,8 @@ beforeEach(() => {
 afterAll(() => {
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
-  if (originalLuxcoderDev === undefined) delete process.env.MYYODA_DEV
-  else process.env.MYYODA_DEV = originalLuxcoderDev
+  if (originalMyyodaDev === undefined) delete process.env.MYYODA_DEV
+  else process.env.MYYODA_DEV = originalMyyodaDev
   if (originalPromaDev === undefined) delete process.env.PROMA_DEV
   else process.env.PROMA_DEV = originalPromaDev
   rmSync(tempHome, { recursive: true, force: true })

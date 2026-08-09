@@ -187,7 +187,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         question: '我的数据默认保存在哪里？',
-        answer: 'MyYoda 优先使用本地文件保存设置、会话、Project 和附件，不依赖本地数据库。开发模式通常使用 ~/.luxcoder-dev/，正式环境使用 ~/.myyoda/。',
+        answer: 'MyYoda 优先使用本地文件保存设置、会话、Project 和附件，不依赖本地数据库。开发模式通常使用 ~/.myyoda-dev/，正式环境使用 ~/.myyoda/。',
         keywords: ['本地优先', '存储', 'JSONL'],
       },
       {

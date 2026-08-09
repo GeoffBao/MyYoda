@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "bun build --compile --outfile dist/luxcoder src/index.ts",
+    "build": "bun build --compile --outfile dist/myyoda src/index.ts",
     "start": "bun src/index.ts"
   },
   "dependencies": {

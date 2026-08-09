@@ -3740,13 +3740,13 @@ const electronAPI: ElectronAPI = {
   },
 }
 
-const luxcoderWindowKind = process.argv
+const myyodaWindowKind = process.argv
   .find((arg) => arg.startsWith('--myyoda-window='))
   ?.slice('--myyoda-window='.length)
 
 // 将 API 暴露到渲染进程的 window 对象上
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
-contextBridge.exposeInMainWorld('__myyodaWindowKind', luxcoderWindowKind)
+contextBridge.exposeInMainWorld('__myyodaWindowKind', myyodaWindowKind)
 
 // 扩展 Window 接口的类型定义
 declare global {

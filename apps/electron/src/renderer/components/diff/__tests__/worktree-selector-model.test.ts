@@ -19,7 +19,7 @@ function makeWorktree(overrides: Partial<WorktreeInfo>): WorktreeInfo {
 }
 
 const named = makeWorktree({ name: 'agent-experts-teams', branch: 'feat/agent-experts-teams' })
-const named2 = makeWorktree({ name: 'p1a-branding', branch: 'luxagents/branding' })
+const named2 = makeWorktree({ name: 'p1a-branding', branch: 'myyoda/branding' })
 const detachedA = makeWorktree({ name: 'cranky-mccarthy-d473c5', branch: '(detached)', head: 'afcb12c' })
 const detachedB = makeWorktree({ name: '155b5997-main', branch: '(detached)', head: 'b7d1ec1' })
 

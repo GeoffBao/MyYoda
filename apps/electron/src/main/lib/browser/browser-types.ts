@@ -1,6 +1,6 @@
 /**
  * Browser 内置工具本地类型定义（移植自 synara @synara/contracts 的浏览器部分，
- * 精简为 LuxCoder 需要的子集，不引入 @synara/contracts 依赖）。
+ * 精简为 MyYoda 需要的子集，不引入 @synara/contracts 依赖）。
  */
 
 export type ThreadId = string
