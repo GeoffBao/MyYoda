@@ -80,6 +80,8 @@ import {
   activeSessionIdAtom,
   sidebarCollapsedAtom,
   closeTab,
+  openTab,
+  TUTORIAL_TAB_ID,
   updateTabTitle,
   sessionViewStateMapAtom,
 } from '@/atoms/tab-atoms'
@@ -704,6 +706,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   // Tab 状态
   const [tabs, setTabs] = useAtom(tabsAtom)
   const [activeTabId, setActiveTabId] = useAtom(activeTabIdAtom)
+
+  const handleOpenGuide = React.useCallback((): void => {
+    const result = openTab(tabs, { type: 'tutorial', sessionId: TUTORIAL_TAB_ID, title: 'MyYoda 使用指南' })
+    setTabs(result.tabs)
+    setActiveTabId(result.activeTabId)
+    setAutomationForm({ open: false, draft: null })
+    setActiveView('conversations')
+    setSettingsOpen(false)
+  }, [setActiveTabId, setActiveView, setAutomationForm, setSettingsOpen, setTabs, tabs])
   // 会话高亮按"激活 Tab 所属会话"判定：预览 Tab 激活时其 owner 会话仍保持高亮
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
@@ -2855,6 +2866,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           tooltipSide="right"
           side="right"
           align="end"
+          onOpenGuide={handleOpenGuide}
         />
 
         {deleteDialog}
@@ -3611,6 +3623,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               tooltipSide="top"
               side="top"
               align="end"
+              onOpenGuide={handleOpenGuide}
             />
           )}
           <button

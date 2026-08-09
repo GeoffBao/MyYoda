@@ -11,13 +11,14 @@
 
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
-import { HelpCircle, Keyboard, ChevronRight } from 'lucide-react'
+import { HelpCircle, Keyboard, ChevronRight, CircleHelp, BookOpen, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractReleaseHeadline, type ReleaseNote } from '@myyoda/shared'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { shortcutGuideOpenAtom } from '@/atoms/shortcut-guide'
+import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
 
 export interface ReleaseNotesPopoverProps {
   version: string
@@ -29,6 +30,7 @@ export interface ReleaseNotesPopoverProps {
   tooltipSide: 'right' | 'top'
   side: 'right' | 'top'
   align: 'start' | 'center' | 'end'
+  onOpenGuide?: () => void
 }
 
 export function ReleaseNotesPopover({
@@ -40,10 +42,12 @@ export function ReleaseNotesPopover({
   tooltipSide,
   side,
   align,
+  onOpenGuide,
 }: ReleaseNotesPopoverProps): React.ReactElement {
   const [open, setOpen] = React.useState(false)
   const [fullDialogOpen, setFullDialogOpen] = React.useState(false)
   const setShortcutGuideOpen = useSetAtom(shortcutGuideOpenAtom)
+  const setFaqDialogOpen = useSetAtom(faqDialogOpenAtom)
 
   const handleOpenChange = (next: boolean): void => {
     setOpen(next)
@@ -58,6 +62,11 @@ export function ReleaseNotesPopover({
   const handleOpenShortcutGuide = (): void => {
     setOpen(false)
     setShortcutGuideOpen(true)
+  }
+
+  const handleOpenFaq = (): void => {
+    setOpen(false)
+    setFaqDialogOpen(true)
   }
 
   return (
@@ -80,9 +89,16 @@ export function ReleaseNotesPopover({
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>更新日志与帮助 · 当前 v{version}</TooltipContent>
         </Tooltip>
-        <PopoverContent side={side} align={align} className="w-72 p-0">
-          <div className="px-3 pt-3 pb-1.5 text-xs font-medium text-muted-foreground">最新动态</div>
-          <div className="px-1.5 pb-1.5">
+        <PopoverContent side={side} align={align} className="w-80 overflow-hidden rounded-2xl p-0 shadow-[0_18px_50px_rgba(15,30,20,0.16)]">
+          <div className="border-b border-border/60 bg-[radial-gradient(circle_at_100%_0%,rgba(121,170,139,0.2),transparent_42%),hsl(var(--muted)/0.28)] px-4 pb-3 pt-3.5">
+            <div className="flex items-center gap-2">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><Sparkles size={14} /></span>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold">更新与帮助</p><p className="mt-0.5 text-[10px] text-muted-foreground">MyYoda v{version}</p></div>
+              {unseen && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">有新内容</span>}
+            </div>
+          </div>
+          <div className="px-2 pb-2 pt-2">
+            <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">最新动态</div>
             {recentNotes.length === 0 ? (
               <p className="px-2 py-2 text-xs text-muted-foreground">暂无更新日志</p>
             ) : (
@@ -93,7 +109,7 @@ export function ReleaseNotesPopover({
                     key={note.version}
                     type="button"
                     onClick={handleOpenFullChangelog}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
                   >
                     <span className="flex-1 min-w-0 truncate">{headline}</span>
                     <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
@@ -106,17 +122,35 @@ export function ReleaseNotesPopover({
             <button
               type="button"
               onClick={handleOpenFullChangelog}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-primary transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+              className="mt-1 flex w-full items-center justify-between rounded-xl bg-primary/[0.06] px-2.5 py-2 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus:bg-primary/10 focus:outline-none"
             >
               查看完整更新日志
               <ChevronRight size={14} className="shrink-0" />
             </button>
           </div>
-          <div className="border-t border-border/60 p-1.5">
+          <div className="border-t border-border/60 bg-muted/15 p-2">
+            {onOpenGuide && (
+              <button
+                type="button"
+                onClick={() => { setOpen(false); onOpenGuide() }}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+              >
+                <BookOpen size={15} className="shrink-0 text-primary" />
+                使用指南
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleOpenFaq}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+            >
+              <CircleHelp size={15} className="shrink-0 text-muted-foreground" />
+              常见问题 FAQ
+            </button>
             <button
               type="button"
               onClick={handleOpenShortcutGuide}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
             >
               <Keyboard size={15} className="shrink-0 text-muted-foreground" />
               键盘快捷键
