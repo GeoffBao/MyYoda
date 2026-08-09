@@ -272,6 +272,8 @@ interface AgentProjectGroup {
 const AUTOMATION_GROUP_ID = '__automations__'
 /** 置顶（Agent 模式）分组在 collapsedFlatGroupIds 中的 key，与日期分组的 groupId/label 隔离 */
 const PINNED_AGENT_GROUP_KEY = '__pinned-agent__'
+/** 置顶会话默认最多展示数量，超出部分折叠为「显示更多」 */
+const PINNED_SESSION_VISIBLE_LIMIT = 5
 /** 供合成组复用 AgentProjectGroupItem 时填充无意义的 workspace 专属回调 */
 const noopVoid = (): void => {}
 const noopAsync = async (): Promise<void> => {}
@@ -2294,6 +2296,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   // 扁平模式（state/customGroup/none）折叠态
   const [flatModeExpanded, setFlatModeExpanded] = React.useState(false)
+  /** 置顶会话溢出部分是否展开（超过 PINNED_SESSION_VISIBLE_LIMIT 的部分），Chat / Agent 置顶区共用 */
+  const [pinnedOverflowExpanded, setPinnedOverflowExpanded] = React.useState(false)
+  /** 置顶溢出数量：Chat 模式按置顶对话数，Agent 模式按置顶会话树数 */
+  const pinnedChatOverflow = Math.max(0, pinnedConversations.length - PINNED_SESSION_VISIBLE_LIMIT)
+  const pinnedAgentOverflow = Math.max(0, pinnedAgentSessionTrees.length - PINNED_SESSION_VISIBLE_LIMIT)
   /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组 */
   const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(new Set())
   // 项目模式下「新建项目」弹窗（状态已在顶层声明 creatingProject/setCreatingProject）
@@ -3292,7 +3299,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           >
             <div className="px-2">
               <div className="ml-4 flex flex-col gap-0.5">
-                {pinnedConversations.map((conv) => (
+                {(pinnedOverflowExpanded ? pinnedConversations : pinnedConversations.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((conv) => (
                   <ConversationItem
                     key={`pinned-${conv.id}`}
                     conversation={conv}
@@ -3307,6 +3314,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     onToggleArchive={handleToggleArchive}
                   />
                 ))}
+                {pinnedChatOverflow > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPinnedOverflowExpanded((prev) => !prev)}
+                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                  >
+                    {pinnedOverflowExpanded ? '收起' : `显示更多 (${pinnedChatOverflow})`}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -3337,7 +3353,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           {!isPinnedAgentGroupCollapsed && (
             <div className="px-2">
               <div className="ml-4 flex flex-col gap-0.5">
-                {pinnedAgentSessionTrees.map((item) => {
+                {(pinnedOverflowExpanded ? pinnedAgentSessionTrees : pinnedAgentSessionTrees.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((item) => {
                   const childCount = item.childSessions.length
                   const childProgress = getSessionTreeProgress(item, agentIndicatorMap)
                   const delegatedChildCount = item.childSessions.filter((child) => child.parentSessionId === item.session.id && !!child.sourceDelegationId).length
@@ -3424,6 +3440,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     </div>
                   )
                 })}
+                {pinnedAgentOverflow > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPinnedOverflowExpanded((prev) => !prev)}
+                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                  >
+                    {pinnedOverflowExpanded ? '收起' : `显示更多 (${pinnedAgentOverflow})`}
+                  </button>
+                )}
               </div>
             </div>
           )}
