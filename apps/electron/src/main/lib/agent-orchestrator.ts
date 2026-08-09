@@ -51,6 +51,7 @@ import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession } from './agent-session-manager'
 import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, resolveClaudeAgentBinaryPath } from './config-paths'
+import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
 import { recordSkillUsageFromToolUse } from './skill-usage-service'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
@@ -116,6 +117,81 @@ type RecoverableAgentQueryOptions = {
 
 function sdkPermissionModeForMyYodaMode(mode: MyYodaPermissionMode): MyYodaPermissionMode {
   return MYYODA_PERMISSION_MODE_CONFIG[mode].sdkMode
+}
+
+/**
+ * 大小写不敏感地从环境对象取值。
+ *
+ * Windows 环境块中 PATH 的 key 拼写可能随启动链而异（"Path" / "PATH" / "path"），
+ * Node 的 process.env 鸭子对象对属性访问不区分大小写，但普通对象（如 cleanEnv）
+ * 的属性访问是区分大小写的。若直接读 `cleanEnv.PATH`，在 key 为 "Path" 时会得到
+ * undefined，导致 Agent 环境 PATH 只剩 bundled CLI 目录，用户安装的 node/python
+ * 等工具全部不可用。这里用大小写不敏感查找，兼容所有拼写。
+ */
+function getCaseInsensitiveEnvValue(
+  env: Record<string, string | undefined> | undefined,
+  key: string,
+): string | undefined {
+  if (!env) return undefined
+  const exact = env[key]
+  if (exact !== undefined) return exact
+  const foundKey = Object.keys(env).find((k) => k.toLowerCase() === key.toLowerCase())
+  return foundKey ? env[foundKey] : undefined
+}
+
+/**
+ * 构造 Agent SDK 环境的 PATH（通用兜底）。
+ *
+ * 优先级：
+ * 1. bundled CLI 目录（始终放在最前，保证 yoda CLI 可发现）
+ * 2. process.env 中的 PATH（大小写不敏感获取，兼容 Path/PATH/path）
+ * 3. Windows 上若上述缺失/为空，从注册表重建完整 PATH（系统 + 用户，展开 %VAR% 去重）
+ *
+ * 这样无论 GUI 启动链如何（快捷方式 / 更新器 relaunch / 大小写差异），
+ * Agent 子进程都能拿到与用户真实环境一致的完整 PATH。
+ */
+function buildSdkEnvPath(bundledCliDir: string | undefined, processPath: string | undefined): string {
+  const separator = process.platform === 'win32' ? ';' : ':'
+
+  // 过滤 Bun 的临时 node 兼容 shim 目录（%TEMP%\bun-node-*）。
+  // Bun 1.3+ 在 Windows 上运行时会把 node 兼容 wrapper（不支持 --version 等参数）
+  // 注入到 PATH 最前面，把用户真实安装的 Node 挤掉，导致 Agent 里 node 解析到 Bun。
+  // 这些目录名固定为 bun-node-<hash>，过滤后真实 node 才能生效。
+  const isBunNodeShimDir = (entry: string): boolean => {
+    const basename = entry.split(/[\\/]/).filter(Boolean).pop() ?? ''
+    return basename.toLowerCase().startsWith('bun-node-')
+  }
+
+  // 无条件过滤 Bun shim：不依赖后续注册表读取是否成功。若过滤逻辑只在
+  // registry 读取成功时才执行，一旦 reg.exe 被安全软件拦截/超时（下方分支会
+  // 遇到的正是这种失败场景），basePath 会原样保留 Bun shim，导致这里要修的
+  // 问题在失败兜底路径里重新出现。
+  let basePathEntries = (processPath && processPath.trim().length > 0 ? processPath : '')
+    .split(separator)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '' && !isBunNodeShimDir(entry))
+
+  // Windows：无论 processPath 是否为空，都并入注册表 PATH（系统 + 用户，展开 %VAR% 去重）。
+  // GUI 应用（快捷方式 / 更新器 relaunch / msys 启动链）下主进程 PATH 可能残缺
+  // （例如只剩 msys 目录、缺 Python\bin / node 等用户条目），此时 processPath 非空
+  // 但依然不完整；注册表是权威环境来源，并入后能保证 Agent 拿到用户真实 PATH。
+  if (process.platform === 'win32') {
+    const registryPath = getRegistryPathFromRegistry()
+    if (registryPath) {
+      const seen = new Set(basePathEntries.map((entry) => entry.toLowerCase()))
+      const extra = registryPath.split(separator).filter((entry) => {
+        const trimmed = entry.trim()
+        if (!trimmed || isBunNodeShimDir(trimmed)) return false
+        const norm = trimmed.toLowerCase()
+        if (seen.has(norm)) return false
+        seen.add(norm)
+        return true
+      })
+      basePathEntries = [...basePathEntries, ...extra]
+    }
+  }
+
+  return [bundledCliDir, basePathEntries.join(separator)].filter(Boolean).join(separator)
 }
 
 function buildPiRuntimeEnv(env: Record<string, string | undefined>): AgentRuntimeEnv {
@@ -398,9 +474,17 @@ export class AgentOrchestrator {
       ...(getBundledCliPath()
         ? {
             MYYODA_CLI: getBundledCliPath(),
-            PATH: `${dirname(getBundledCliPath()!)}${process.platform === 'win32' ? ';' : ':'}${cleanEnv.PATH ?? ''}`,
           }
         : {}),
+      // 无条件构造完整 PATH（不依赖 getBundledCliPath）：
+      // - 大小写不敏感取值（兼容 Windows 环境块 "Path"/"PATH"/"path" 拼写差异）
+      // - process.env 缺失/为空时从注册表重建完整 PATH（系统 + 用户，展开 %VAR% 去重）
+      // - 这样开发模式（无 bundled CLI、主进程 PATH 可能残缺）下 Agent 子进程
+      //   也能拿到与用户真实环境一致的 PATH，python/node 等工具可直接使用。
+      PATH: buildSdkEnvPath(
+        getBundledCliPath() ? dirname(getBundledCliPath()!) : undefined,
+        getCaseInsensitiveEnvValue(cleanEnv, 'PATH'),
+      ),
       // 启用 Tasks 功能
       CLAUDE_CODE_ENABLE_TASKS: 'true',
       // 禁用 SDK 内置 Workflows，避免每轮注入 workflow 相关提示词。
