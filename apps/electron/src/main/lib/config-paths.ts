@@ -8,7 +8,6 @@
 import { join, basename } from 'node:path'
 import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { createRequire } from 'node:module'
 import { rmSyncWithRetry } from './fs-retry'
 
 /**
@@ -506,70 +505,6 @@ export function getBundledCliPath(): string | undefined {
   const binName = process.platform === 'win32' ? 'myyoda.exe' : 'myyoda'
   const cliPath = join(process.resourcesPath, 'bin', binName)
   return existsSync(cliPath) ? cliPath : undefined
-}
-
-/**
- * 解析已打包的真实官方 `claude` 二进制路径（`@anthropic-ai/claude-agent-sdk-{platform}-{arch}`）。
- *
- * 从 `agent-orchestrator.ts` 抽取而来：Agent（Code）模式的 SDK 执行与
- * `claude-oauth-service.ts` 的订阅登录都需要定位同一个二进制，抽到这里
- * 避免登录服务依赖体量巨大的 orchestrator 模块图。
- *
- * 0.2.113+ 起 SDK 改为按平台分发 native binary，通过 optionalDependencies 安装到
- * `@anthropic-ai/claude-agent-sdk-{platform}-{arch}` 子包，与主包 `@anthropic-ai/claude-agent-sdk`
- * 同级。binary 名 macOS/Linux 为 `claude`，Windows 为 `claude.exe`。
- *
- * SDK 作为 esbuild external 依赖，require.resolve 可在运行时解析主包入口路径，
- * 再沿父目录 `@anthropic-ai/` 找到同级的平台子包。
- *
- * 多种策略降级：createRequire → 全局 require → cwd/node_modules 手动查找。
- * 打包环境下：asar 内的路径需要转换为 asar.unpacked 路径。
- */
-export function resolveClaudeAgentBinaryPath(): string {
-  const { app } = require('electron')
-  const subpkg = `claude-agent-sdk-${process.platform}-${process.arch}`
-  const scopedSubpkg = `@anthropic-ai/${subpkg}`
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude'
-  let binaryPath: string | null = null
-
-  try {
-    const cjsRequire = createRequire(__filename)
-    const sdkEntryPath = cjsRequire.resolve('@anthropic-ai/claude-agent-sdk')
-    const anthropicDir = join(sdkEntryPath, '..', '..')
-    binaryPath = join(anthropicDir, subpkg, binaryName)
-    if (!existsSync(binaryPath)) {
-      const subpkgPackagePath = cjsRequire.resolve(`${scopedSubpkg}/package.json`)
-      binaryPath = join(subpkgPackagePath, '..', binaryName)
-    }
-  } catch (e) {
-    console.warn('[配置路径] createRequire 解析 Claude 二进制路径失败:', e)
-  }
-
-  if (!binaryPath || !existsSync(binaryPath)) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const sdkEntryPath = require.resolve('@anthropic-ai/claude-agent-sdk')
-      const anthropicDir = join(sdkEntryPath, '..', '..')
-      binaryPath = join(anthropicDir, subpkg, binaryName)
-      if (!existsSync(binaryPath)) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const subpkgPackagePath = require.resolve(`${scopedSubpkg}/package.json`)
-        binaryPath = join(subpkgPackagePath, '..', binaryName)
-      }
-    } catch (e) {
-      console.warn('[配置路径] require.resolve 解析 Claude 二进制路径失败:', e)
-    }
-  }
-
-  if (!binaryPath || !existsSync(binaryPath)) {
-    binaryPath = join(__dirname, '..', 'node_modules', '@anthropic-ai', subpkg, binaryName)
-  }
-
-  if (app.isPackaged && binaryPath.includes('.asar')) {
-    binaryPath = binaryPath.replace(/\.asar([/\\])/, '.asar.unpacked$1')
-  }
-
-  return binaryPath
 }
 
 /**

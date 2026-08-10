@@ -13,11 +13,6 @@ import {
   type MyYodaPermissionMode,
 } from '@myyoda/shared'
 
-const PERMISSION_RANK: Record<MyYodaPermissionMode, number> = {
-  plan: 0,
-  bypassPermissions: 1,
-}
-
 export const MAX_RUNNING_DELEGATIONS_PER_PARENT = 50
 
 /**
@@ -69,14 +64,9 @@ export interface RecoveredDelegationState {
 export function resolveDelegationPermissionMode(
   parentMode: MyYodaPermissionMode | undefined,
   requestedMode: MyYodaPermissionMode | undefined,
-  agentRuntime?: AgentRuntime,
 ): MyYodaPermissionMode {
-  // Pi 子会话目前不支持 Plan 模式下的完整工具集，固定直接执行。
-  if (agentRuntime === 'pi') return 'bypassPermissions'
-
-  const parent = parentMode ?? MYYODA_DEFAULT_PERMISSION_MODE
-  const requested = requestedMode ?? parent
-  return PERMISSION_RANK[requested] <= PERMISSION_RANK[parent] ? requested : parent
+  // Pi-only: 子会话固定直接执行（Claude runtime 已于 2026-08 退役）。
+  return 'bypassPermissions'
 }
 
 export function buildRecoveredDelegationState(input: {

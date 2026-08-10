@@ -1000,7 +1000,8 @@ function cacheNull(key: string): null {
 }
 
 function isAgentRuntime(value: unknown): value is AgentRuntime {
-  return value === 'claude' || value === 'pi'
+  // Pi-only：所有 runtime 值归一化为 'pi'，历史 'claude' 仅用于兼容读取。
+  return value === 'pi' || value === 'claude'
 }
 
 /**
@@ -2495,7 +2496,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_SESSION,
     async (_, title?: string, channelId?: string, workspaceId?: string, modelId?: string): Promise<AgentSessionMeta> => {
-      const session = createAgentSession(title, channelId, workspaceId, modelId, getSettings().agentRuntime ?? 'pi')
+      const session = createAgentSession(title, channelId, workspaceId, modelId, undefined)
       feishuBridgeManager.ensureSessionMirror(session).catch((error) => {
         console.error('[飞书 Session 镜像] 新会话建群失败:', error)
       })
@@ -3374,29 +3375,8 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.UPDATE_SESSION_AGENT_RUNTIME,
-    async (_, sessionId: string, runtime: AgentRuntime): Promise<AgentSessionMeta> => {
-      if (!isAgentRuntime(runtime)) {
-        throw new Error(`无效的 Agent runtime: ${String(runtime)}`)
-      }
-      const current = getAgentSessionMeta(sessionId)
-      if (!current) {
-        throw new Error(`Agent 会话不存在: ${sessionId}`)
-      }
-
-      if (isAgentSessionActive(sessionId)) {
-        throw new Error('Agent 正在运行，完成后再切换内核')
-      }
-
-      // 历史会话缺失 runtime 时按 Claude 处理，避免将 Claude SDK 会话 ID 交给 Pi 恢复。
-      const previousRuntime: AgentRuntime = isAgentRuntime(current.agentRuntime) ? current.agentRuntime : 'claude'
-      const updates: Partial<Pick<AgentSessionMeta, 'agentRuntime' | 'sdkSessionId'>> = {
-        agentRuntime: runtime,
-      }
-      if (previousRuntime !== runtime) {
-        updates.sdkSessionId = undefined
-      }
-
-      return updateAgentSessionMeta(sessionId, updates)
+    async (): Promise<AgentSessionMeta> => {
+      throw new Error('Agent runtime 已统一为 Pi，不支持内核切换。')
     }
   )
 
@@ -5585,7 +5565,7 @@ export function registerIpcHandlers(): void {
       input.channelId,
       input.workspaceId,
       input.modelId,
-      getSettings().agentRuntime ?? 'pi',
+      undefined,
     )
     touchTodoSession(todo.id, session.id)
     broadcastPlanningChanged(['todos'])
@@ -5806,9 +5786,7 @@ export function registerIpcHandlers(): void {
     if (i.maxRuns !== undefined && (!isFiniteInt(i.maxRuns) || i.maxRuns < 1)) {
       throw new Error(`非法的 maxRuns: ${String(i.maxRuns)}`)
     }
-    if (i.agentRuntime !== undefined && !isAgentRuntime(i.agentRuntime)) {
-      throw new Error(`非法的 agentRuntime: ${String(i.agentRuntime)}`)
-    }
+    // agentRuntime 字段已随 Claude runtime 退役移除。
     if (i.permissionMode !== undefined && !validPermissionMode(i.permissionMode)) {
       throw new Error(`非法的 permissionMode: ${String(i.permissionMode)}`)
     }
@@ -5818,19 +5796,12 @@ export function registerIpcHandlers(): void {
     validateAutomationNotificationTargets(i.notificationTargets)
   }
 
+  // Claude runtime 已退役，所有自动化任务统一 Pi。不再需要 runtime 校验。
   const validateAutomationRuntimePolicy = (
-    input: Partial<CreateAutomationInput | UpdateAutomationInput>,
-    existing?: Automation,
+    _input: Partial<CreateAutomationInput | UpdateAutomationInput>,
+    _existing?: Automation,
   ): void => {
-    // 更新历史任务时，缺失的持久化 runtime 仍按 Claude 解释；仅新建任务使用 Pi 默认值。
-    const finalRuntime: AgentRuntime = input.agentRuntime ?? existing?.agentRuntime ?? (existing ? 'claude' : 'pi')
-    const finalChannelId = input.channelId !== undefined ? input.channelId : existing?.channelId
-    if (finalRuntime === 'claude' && finalChannelId) {
-      const agentChannelIds = getSettings().agentChannelIds ?? []
-      if (!agentChannelIds.includes(finalChannelId)) {
-        throw new Error('Claude Agent 内核只能使用已启用的 Agent 兼容渠道')
-      }
-    }
+    // no-op
   }
 
   const validateAutomationScheduleComplete = (

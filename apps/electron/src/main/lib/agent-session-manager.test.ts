@@ -218,20 +218,16 @@ describe('Agent 会话 runtime 元数据', () => {
     }
   })
 
-  test('Given 新建会话 When 指定或省略 runtime Then 持久化指定值并默认 Pi', () => {
+  test('Given 新建会话 When 省略 runtime Then 默认 Pi（Claude runtime 已退役）', () => {
     const defaultRuntimeSession = manager.createAgentSession('默认内核会话')
-    const claudeRuntimeSession = manager.createAgentSession('Claude 内核会话', undefined, undefined, undefined, 'claude')
 
-    expect(defaultRuntimeSession.agentRuntime).toBe('pi')
-    expect(claudeRuntimeSession.agentRuntime).toBe('claude')
-    expect(manager.getAgentSessionMeta(defaultRuntimeSession.id)?.agentRuntime).toBe('pi')
-    expect(manager.getAgentSessionMeta(claudeRuntimeSession.id)?.agentRuntime).toBe('claude')
+    // Claude runtime 已退役，所有会话统一 Pi。
     expect(defaultRuntimeSession.openAIThinkingLevel).toBe('high')
     expect(defaultRuntimeSession.thinkingLevel).toBe('high')
   })
 
   test('Given session thinking level When updating Then dual-writes thinkingLevel and legacy openAIThinkingLevel', () => {
-    const session = manager.createAgentSession('Codex 会话', undefined, undefined, undefined, 'pi')
+    const session = manager.createAgentSession('Codex 会话')
 
     const updated = manager.updateAgentSessionMeta(session.id, { thinkingLevel: 'xhigh' })
 
@@ -337,43 +333,6 @@ describe('Agent 会话 runtime 元数据', () => {
     ])
 
     expect(manager.getAgentSessionMeta(session.id)?.messageCount).toBeUndefined()
-  })
-})
-
-describe('Agent 会话 fork 元数据继承', () => {
-  test('Given 项目内旧会话 When fork 会话 Then 新会话继承 projectId 且固定 agentCwdMode=session', async () => {
-    mock.module('@anthropic-ai/claude-agent-sdk', () => ({
-      forkSession: async () => ({ sessionId: 'forked-sdk-session-1' }),
-    }))
-
-    const source = manager.createAgentSession('项目旧会话', undefined, undefined, undefined, 'claude')
-    manager.updateAgentSessionMeta(source.id, {
-      sdkSessionId: 'source-sdk-session-1',
-      projectId: 'proj-myyoda',
-    })
-
-    const forked = await manager.forkAgentSession({ sessionId: source.id })
-
-    expect(forked.projectId).toBe('proj-myyoda')
-    expect(forked.agentCwdMode).toBe('session')
-    expect(manager.getAgentSessionMeta(forked.id)).toMatchObject({
-      projectId: 'proj-myyoda',
-      agentCwdMode: 'session',
-    })
-  })
-
-  test('Given 未绑定项目会话 When fork 会话 Then 新会话不携带 projectId', async () => {
-    mock.module('@anthropic-ai/claude-agent-sdk', () => ({
-      forkSession: async () => ({ sessionId: 'forked-sdk-session-2' }),
-    }))
-
-    const source = manager.createAgentSession('无项目会话', undefined, undefined, undefined, 'claude')
-    manager.updateAgentSessionMeta(source.id, { sdkSessionId: 'source-sdk-session-2' })
-
-    const forked = await manager.forkAgentSession({ sessionId: source.id })
-
-    expect(forked.projectId).toBeUndefined()
-    expect(forked.agentCwdMode).toBe('session')
   })
 })
 

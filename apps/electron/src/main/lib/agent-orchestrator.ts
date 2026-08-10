@@ -31,26 +31,23 @@ import {
   inferAgentSdkContextWindow,
   inferReasoningTransport,
   resolveReasoningProfile,
-  isAgentCompatibleProvider,
 } from '@myyoda/shared'
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
-import type { ClaudeAgentQueryOptions } from './adapters/claude-agent-adapter'
-import { normalizeAgentRuntime } from './agent-runtime-normalize'
-import { isPromptTooLongError, isThinkingSignatureError, friendlyErrorMessage, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './adapters/claude-agent-adapter'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
+import { friendlyErrorMessage, isPromptTooLongError, isThinkingSignatureError, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './agent-error-utils'
 import { AgentEventBus } from './agent-event-bus'
 import { decryptApiKey, getChannelById, listChannels, persistCodexOAuthCredentials, persistXaiOAuthCredentials, resolveChannelRuntimeApiKey, resolveClaudeOAuthCredentials, resolveCodexOAuthCredentials, resolveXaiOAuthCredentials } from './channel-manager'
-import { getAdapter, fetchTitle, normalizeAnthropicBaseUrlForSdk, getAppUserAgent } from '@myyoda/core'
+import { getAdapter, fetchTitle, getAppUserAgent } from '@myyoda/core'
 import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
-import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession } from './agent-session-manager'
+import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, rewindPiAgentSession } from './agent-session-manager'
 import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
-import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, resolveClaudeAgentBinaryPath } from './config-paths'
+import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
@@ -67,12 +64,9 @@ import type { PermissionResult, CanUseToolOptions } from './agent-permission-ser
 import { resolvePlanningDeletionPermission } from './planning-permission-policy'
 import { askUserService } from './agent-ask-user-service'
 import { exitPlanService, type ExitPlanPermissionResult } from './agent-exit-plan-service'
-import { removeMyYodaAutoCompactSettings } from './agent-auto-compact-settings'
-import { applyClaudeSdkAttributionSettings, isGitAttributionEnabled } from './agent-git-attribution'
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
-import { injectBuiltinMcpServers } from './builtin-mcp/registry'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
@@ -80,8 +74,6 @@ import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import type { AgentRuntimeEnv } from './agent-runtime-env'
 import { selectWindowsShell } from './windows-shell-selection'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
-import { applyAgentSdkAuthEnv } from './agent-sdk-auth-env'
-import { getAgentSdkMaxOutputTokens } from './agent-sdk-output-limits'
 import { resolvePiThinkingLevel } from './agent-thinking-level'
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
 import { generateCodexTitle } from './adapters/pi-codex-title-generator'
@@ -115,83 +107,11 @@ type RecoverableAgentQueryOptions = {
 // ===== 工具函数 =====
 
 function sdkPermissionModeForMyYodaMode(mode: MyYodaPermissionMode): MyYodaPermissionMode {
-  return MYYODA_PERMISSION_MODE_CONFIG[mode].sdkMode
+  // Pi runtime 直接使用 MyYoda 权限模式，不需要 Claude SDK 模式映射。
+  return mode
 }
 
-/**
- * 大小写不敏感地从环境对象取值。
- *
- * Windows 环境块中 PATH 的 key 拼写可能随启动链而异（"Path" / "PATH" / "path"），
- * Node 的 process.env 鸭子对象对属性访问不区分大小写，但普通对象（如 cleanEnv）
- * 的属性访问是区分大小写的。若直接读 `cleanEnv.PATH`，在 key 为 "Path" 时会得到
- * undefined，导致 Agent 环境 PATH 只剩 bundled CLI 目录，用户安装的 node/python
- * 等工具全部不可用。这里用大小写不敏感查找，兼容所有拼写。
- */
-function getCaseInsensitiveEnvValue(
-  env: Record<string, string | undefined> | undefined,
-  key: string,
-): string | undefined {
-  if (!env) return undefined
-  const exact = env[key]
-  if (exact !== undefined) return exact
-  const foundKey = Object.keys(env).find((k) => k.toLowerCase() === key.toLowerCase())
-  return foundKey ? env[foundKey] : undefined
-}
-
-/**
- * 构造 Agent SDK 环境的 PATH（通用兜底）。
- *
- * 优先级：
- * 1. bundled CLI 目录（始终放在最前，保证 yoda CLI 可发现）
- * 2. process.env 中的 PATH（大小写不敏感获取，兼容 Path/PATH/path）
- * 3. Windows 上若上述缺失/为空，从注册表重建完整 PATH（系统 + 用户，展开 %VAR% 去重）
- *
- * 这样无论 GUI 启动链如何（快捷方式 / 更新器 relaunch / 大小写差异），
- * Agent 子进程都能拿到与用户真实环境一致的完整 PATH。
- */
-function buildSdkEnvPath(bundledCliDir: string | undefined, processPath: string | undefined): string {
-  const separator = process.platform === 'win32' ? ';' : ':'
-
-  // 过滤 Bun 的临时 node 兼容 shim 目录（%TEMP%\bun-node-*）。
-  // Bun 1.3+ 在 Windows 上运行时会把 node 兼容 wrapper（不支持 --version 等参数）
-  // 注入到 PATH 最前面，把用户真实安装的 Node 挤掉，导致 Agent 里 node 解析到 Bun。
-  // 这些目录名固定为 bun-node-<hash>，过滤后真实 node 才能生效。
-  const isBunNodeShimDir = (entry: string): boolean => {
-    const basename = entry.split(/[\\/]/).filter(Boolean).pop() ?? ''
-    return basename.toLowerCase().startsWith('bun-node-')
-  }
-
-  // 无条件过滤 Bun shim：不依赖后续注册表读取是否成功。若过滤逻辑只在
-  // registry 读取成功时才执行，一旦 reg.exe 被安全软件拦截/超时（下方分支会
-  // 遇到的正是这种失败场景），basePath 会原样保留 Bun shim，导致这里要修的
-  // 问题在失败兜底路径里重新出现。
-  let basePathEntries = (processPath && processPath.trim().length > 0 ? processPath : '')
-    .split(separator)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '' && !isBunNodeShimDir(entry))
-
-  // Windows：无论 processPath 是否为空，都并入注册表 PATH（系统 + 用户，展开 %VAR% 去重）。
-  // GUI 应用（快捷方式 / 更新器 relaunch / msys 启动链）下主进程 PATH 可能残缺
-  // （例如只剩 msys 目录、缺 Python\bin / node 等用户条目），此时 processPath 非空
-  // 但依然不完整；注册表是权威环境来源，并入后能保证 Agent 拿到用户真实 PATH。
-  if (process.platform === 'win32') {
-    const registryPath = getRegistryPathFromRegistry()
-    if (registryPath) {
-      const seen = new Set(basePathEntries.map((entry) => entry.toLowerCase()))
-      const extra = registryPath.split(separator).filter((entry) => {
-        const trimmed = entry.trim()
-        if (!trimmed || isBunNodeShimDir(trimmed)) return false
-        const norm = trimmed.toLowerCase()
-        if (seen.has(norm)) return false
-        seen.add(norm)
-        return true
-      })
-      basePathEntries = [...basePathEntries, ...extra]
-    }
-  }
-
-  return [bundledCliDir, basePathEntries.join(separator)].filter(Boolean).join(separator)
-}
+// Claude SDK 环境函数（buildSdkEnvPath、getCaseInsensitiveEnvValue）已随 Claude runtime 退役。
 
 function buildPiRuntimeEnv(env: Record<string, string | undefined>): AgentRuntimeEnv {
   const cleanEnv: Record<string, string> = {}
@@ -441,137 +361,7 @@ export class AgentOrchestrator {
    * 注入 API Key、Base URL、代理、Shell 配置等。
    * 对 Kimi Coding Plan / MiniMax Coding Plan：使用 Bearer 认证（ANTHROPIC_AUTH_TOKEN）。
    */
-  private async buildSdkEnv(
-    apiKey: string,
-    baseUrl: string | undefined,
-    provider: ProviderType,
-    modelId: string | undefined,
-  ): Promise<Record<string, string | undefined>> {
-    const DEFAULT_ANTHROPIC_URL = 'https://api.anthropic.com'
-
-    // 从 process.env 继承系统变量，但清理所有 ANTHROPIC_ 前缀的变量，
-    // 防止本地开发环境（如 ANTHROPIC_AUTH_TOKEN、ANTHROPIC_API_KEY、
-    // ANTHROPIC_BASE_URL 等）干扰 SDK 的认证和请求目标。
-    // 即使 index.ts 启动时已清理过一次，initializeRuntime() 中的
-    // loadShellEnv() 可能从 shell 配置文件（~/.zshrc 等）重新注入这些变量。
-    const cleanEnv: Record<string, string | undefined> = {}
-    for (const [key, value] of Object.entries(process.env)) {
-      if (!key.startsWith('ANTHROPIC_') && key !== 'CLAUDE_CODE_MAX_OUTPUT_TOKENS' && key !== 'CLAUDE_CODE_OAUTH_TOKEN') {
-        cleanEnv[key] = value
-      }
-    }
-
-    const maxOutputTokens = getAgentSdkMaxOutputTokens(modelId)
-
-    const sdkEnv: Record<string, string | undefined> = {
-      ...cleanEnv,
-      // 仅 Claude 模型显式提高输出上限；其它兼容模型不注入 max_tokens 覆盖。
-      ...(maxOutputTokens ? { CLAUDE_CODE_MAX_OUTPUT_TOKENS: maxOutputTokens } : {}),
-      // 暴露打包进 App 的 myyoda CLI 路径，供 session-cleaner 等 skill / Agent 调用
-      // （开发模式无编译二进制，getBundledCliPath 返回 undefined，此处不注入，
-      //   skill 回退到源码运行 bun apps/cli/src/index.ts）。
-      ...(getBundledCliPath()
-        ? {
-            MYYODA_CLI: getBundledCliPath(),
-          }
-        : {}),
-      // 无条件构造完整 PATH（不依赖 getBundledCliPath）：
-      // - 大小写不敏感取值（兼容 Windows 环境块 "Path"/"PATH"/"path" 拼写差异）
-      // - process.env 缺失/为空时从注册表重建完整 PATH（系统 + 用户，展开 %VAR% 去重）
-      // - 这样开发模式（无 bundled CLI、主进程 PATH 可能残缺）下 Agent 子进程
-      //   也能拿到与用户真实环境一致的 PATH，python/node 等工具可直接使用。
-      PATH: buildSdkEnvPath(
-        getBundledCliPath() ? dirname(getBundledCliPath()!) : undefined,
-        getCaseInsensitiveEnvValue(cleanEnv, 'PATH'),
-      ),
-      // 启用 Tasks 功能
-      CLAUDE_CODE_ENABLE_TASKS: 'true',
-      // 禁用 SDK 内置 Workflows，避免每轮注入 workflow 相关提示词。
-      CLAUDE_CODE_DISABLE_WORKFLOWS: '1',
-      // 禁用实验性 beta 功能，使用稳定模式
-      CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: '1',
-      // 禁用 Tool Search：Claude 模型连接第一方 Anthropic API 时，SDK CLI 会自动启用
-      // Tool Search（optimistic 模式），将外部 MCP 工具标记为 deferred 而非 eager 注册，
-      // 导致 HTTP MCP 服务器（如 Nowledge Mem）的工具无法直接调用。
-      // MyYoda 自行管理工具呈现和 MCP 连接，不依赖此机制。
-      ENABLE_TOOL_SEARCH: 'false',
-      // MCP 工具单次调用硬超时（Claude runtime 识别；Pi runtime 的 MCP 客户端已有自己的
-      // DEFAULT_MCP_REQUEST_TIMEOUT_MS=60s 硬超时，不依赖此变量）。防止某个 MCP 工具
-      // 挂起不返回时，SDK 子进程无限等待导致会话卡死。
-      MCP_TOOL_TIMEOUT: '120000',
-      // 禁用 attribution block：SDK 默认会在 system prompt 最前面注入一段
-      // 文本（含客户端版本号与基于会话内容计算的指纹），且每次请求都变化。
-      // 经第三方 Anthropic 兼容代理/网关中转时，会导致缓存前缀变化、命中率骤降。
-      // 官方文档确认直连 Anthropic API 不受此设置影响，故对所有 provider 无条件禁用。
-      CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
-      // 配置隔离：让 SDK 使用独立的配置目录，不读取用户的 ~/.claude.json
-      CLAUDE_CONFIG_DIR: getSdkConfigDir(),
-    }
-
-    // 认证方式按 provider 分支
-    // - Coding Plan / Token Plan：只认 Bearer，通过 ANTHROPIC_CUSTOM_HEADERS 注入 MyYoda UA
-    // - MiniMax Coding Plan：Claude Code 场景使用 Bearer（ANTHROPIC_AUTH_TOKEN）
-    // - 通过 ANTHROPIC_AUTH_TOKEN 让 SDK 发 Authorization: Bearer
-    // - 其它：ANTHROPIC_API_KEY（SDK 内部会同时带上 x-api-key 和 Bearer）
-    applyAgentSdkAuthEnv(sdkEnv, provider, apiKey, getAppUserAgent(pkg.version))
-    if (provider === 'minimax') {
-      sdkEnv.API_TIMEOUT_MS = '3000000'
-      sdkEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
-    }
-
-    // 全局 API 超时保护：防止网络环境变化（代理断开/WiFi 切换等）导致 SDK 子进程的
-    // HTTP 请求无限挂起。MiniMax 有自己的超时值，不覆盖。
-    if (!sdkEnv.API_TIMEOUT_MS) {
-      sdkEnv.API_TIMEOUT_MS = '300000' // 5 分钟
-    }
-
-    // 显式控制 ANTHROPIC_BASE_URL：仅在用户配置了自定义 Base URL 时注入
-    // 使用统一的 normalizeAnthropicBaseUrlForSdk 规范化，SDK 内部会自动拼接 /v1/messages
-    if (baseUrl && baseUrl !== DEFAULT_ANTHROPIC_URL) {
-      sdkEnv.ANTHROPIC_BASE_URL = normalizeAnthropicBaseUrlForSdk(baseUrl)
-    }
-
-    const proxyUrl = await getEffectiveProxyUrl()
-    if (proxyUrl) {
-      sdkEnv.HTTPS_PROXY = proxyUrl
-      sdkEnv.HTTP_PROXY = proxyUrl
-    }
-
-    // Windows 平台：配置 Shell 环境。默认优先 Git Bash，用户可在设置里显式切到 WSL
-    // （selectWindowsShell 在首选项不可用时会安全回退到另一可用 Shell）。
-    if (process.platform === 'win32') {
-      const runtimeStatus = getRuntimeStatus()
-      const shellStatus = runtimeStatus?.shell
-
-      if (shellStatus) {
-        const shellKind = selectWindowsShell(shellStatus, getSettings().windowsShellPreference)
-
-        if (shellKind === 'git-bash' && shellStatus.gitBash.path) {
-          sdkEnv.CLAUDE_CODE_SHELL = shellStatus.gitBash.path
-          console.log(`[Agent 编排] 配置 Shell 环境: Git Bash (${shellStatus.gitBash.path})`)
-        } else if (shellKind === 'wsl') {
-          sdkEnv.CLAUDE_CODE_SHELL = 'wsl'
-          console.log(`[Agent 编排] 配置 Shell 环境: WSL ${shellStatus.wsl.version} (${shellStatus.wsl.defaultDistro})`)
-        } else {
-          console.warn('[Agent 编排] Windows 平台未检测到可用的 Shell 环境（Git Bash / WSL）')
-        }
-        sdkEnv.CLAUDE_BASH_NO_LOGIN = '1'
-      }
-    }
-
-    // 针对 claude-agent-sdk 0.2.111+ 的 options.env 叠加语义加固：
-    // SDK 将 options.env 叠加到 process.env 之上传递给子进程。
-    // 若 shell 中存在 ANTHROPIC_CUSTOM_HEADERS、ANTHROPIC_MODEL 等变量，
-    // 且 sdkEnv 未显式管理，叠加后会回流到 SDK 子进程。
-    // 对于 sdkEnv 未显式管理的 ANTHROPIC_* 变量，显式置空字符串以覆盖回流。
-    for (const key of Object.keys(process.env)) {
-      if (key.startsWith('ANTHROPIC_') && !(key in sdkEnv)) {
-        sdkEnv[key] = ''
-      }
-    }
-
-    return sdkEnv
-  }
+  // buildSdkEnv 已删除（Claude runtime 退役）。Pi runtime 使用 buildPiRuntimeEnv。
 
   /**
    * 构建工作区 MCP 服务器配置
@@ -964,8 +754,14 @@ export class AgentOrchestrator {
    * 核心编排方法，从 agent-service.ts 的 runAgent 提取。
    * 通过 EventBus 分发 AgentEvent，通过 callbacks 发送控制信号。
    */
-  async sendMessage(input: AgentSendInput, callbacks: SessionCallbacks): Promise<void> {
-    const { sessionId, userMessage, rawUserMessage, channelId, modelId, agentRuntime: inputAgentRuntime, workspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, mentionedTodoIds, mentionedCalendarEventIds, automationContext, workContext, retryOfErrorUuid, toolPolicy } = input
+  async sendMessage(
+    input: AgentSendInput,
+    callbacks: SessionCallbacks,
+    extensions: { piCustomTools?: import('@earendil-works/pi-coding-agent').ToolDefinition[] } = {},
+  ): Promise<void> {
+    const { sessionId, userMessage, rawUserMessage, channelId, modelId, workspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, mentionedTodoIds, mentionedCalendarEventIds, automationContext, workContext, retryOfErrorUuid, toolPolicy } = input
+    // Claude runtime 已于 2026-08 退役，所有会话统一走 Pi。
+    const agentRuntime: import('@myyoda/shared').AgentRuntime = 'pi'
     const toolsDisabled = toolPolicy === 'none'
     const stderrChunks: string[] = []
     const streamStartedAt = input.startedAt ?? Date.now()
@@ -1142,46 +938,26 @@ export class AgentOrchestrator {
 
     const appSettings = getSettings()
     let sessionMeta = getAgentSessionMeta(sessionId)
-    // 历史会话缺失 runtime 时按 Claude 兼容；新会话创建时已持久化其默认 runtime。
-    // previousAgentRuntime 只用于判断"本轮真正切换了执行引擎"（决定是否要清空 sdkSessionId，
-    // 因为 pi/claude 的 session id 格式互不兼容），不能用它来决定要不要持久化 agentRuntime：
-    // normalizeAgentRuntime 在 provider 为 anthropic-oauth（或全局 Claude 内核关闭）时会强制
-    // 结果为固定值，此时旧值和新值被强制成同一个结果，即使 sessionMeta 里存的原始值早就不对
-    // （例如渠道切到 anthropic-oauth 后，存量会话的 agentRuntime 字段永远卡在 'pi'，
-    // 而实际每轮都在用 claude 运行时执行——fork/rewind 等按 sessionMeta.agentRuntime 原始值
-    // 分发的逻辑会因此一直走错分支）。持久化判断必须比较"原始存储值"与"本轮生效值"。
-    const previousAgentRuntime = normalizeAgentRuntime(sessionMeta?.agentRuntime ?? 'claude', channel.provider)
-    const agentRuntime = normalizeAgentRuntime(inputAgentRuntime ?? sessionMeta?.agentRuntime ?? 'claude', channel.provider)
-    if (sessionMeta?.agentRuntime !== agentRuntime) {
-      try {
-        sessionMeta = updateAgentSessionMeta(sessionId, {
-          agentRuntime,
-          ...(previousAgentRuntime !== agentRuntime ? { sdkSessionId: undefined } : {}),
-        })
-      } catch {
-        // 新会话索引异常时继续运行，后续错误路径会正常暴露。
-      }
+    // Claude runtime 已于 2026-08 退役，所有会话统一走 Pi。
+    // 历史回退点（resumeAtMessageUuid）与新 session 统一由 Pi 处理。
+    console.log(`[Agent 编排] Agent runtime: pi`)
+
+    if (sessionMeta?.legacyTranscript?.continuationRequired) {
+      reportPreflightError({
+        code: 'agent_runtime_not_found',
+        title: '历史会话需要迁移',
+        message: '这是已退役 Claude runtime 的只读历史会话。请新建 Pi Agent 会话，并通过会话引用带入此历史。',
+        actions: [],
+        canRetry: false,
+      })
+      return
     }
-    console.log(`[Agent 编排] Agent runtime: ${agentRuntime}`)
 
     if (!channel.enabled) {
       reportPreflightError({
         code: 'channel_disabled',
         title: '渠道已禁用',
         message: '当前会话引用的渠道已被禁用，请在设置中启用渠道或重新选择模型。',
-        actions: [
-          { key: 's', label: '打开渠道设置', action: 'open_channel_settings' },
-        ],
-        canRetry: false,
-      })
-      return
-    }
-
-    if (agentRuntime === 'claude' && !isAgentCompatibleProvider(channel.provider)) {
-      reportPreflightError({
-        code: 'agent_provider_not_supported',
-        title: '渠道不兼容 Claude Core',
-        message: '此渠道使用的不是 Anthropic Messages 协议。请切换到 Pi Core，或在设置中配置 Anthropic 兼容渠道。',
         actions: [
           { key: 's', label: '打开渠道设置', action: 'open_channel_settings' },
         ],
@@ -1241,22 +1017,12 @@ export class AgentOrchestrator {
     }
 
     // 3. 构建环境变量
-    // 同步凭证到 process.env（SDK in-process 代码可能直接读取 process.env）
-    // 先清理再注入，确保 SDK 无论从 env 选项还是 process.env 都拿到正确值
+    // Claude runtime 已退役：不再向 process.env 注入 CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_* 认证变量。
+    // Pi runtime 通过 registerProvider({ apiKey, baseUrl }) 传递认证，无需污染全局环境。
     delete process.env.ANTHROPIC_API_KEY
     delete process.env.ANTHROPIC_AUTH_TOKEN
     delete process.env.ANTHROPIC_BASE_URL
     delete process.env.ANTHROPIC_CUSTOM_HEADERS
-    delete process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
-    delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-    applyAgentSdkAuthEnv(process.env, channel.provider, apiKey, getAppUserAgent(pkg.version))
-    // 使用与 buildSdkEnv 相同的规范化逻辑，确保 process.env 和 sdkEnv 中的 URL 一致
-    if (channel.baseUrl && channel.baseUrl !== 'https://api.anthropic.com') {
-      process.env.ANTHROPIC_BASE_URL = normalizeAnthropicBaseUrlForSdk(channel.baseUrl)
-    }
-
-    const proxyUrl = await getEffectiveProxyUrl()
-    const sdkEnv = await this.buildSdkEnv(apiKey, channel.baseUrl, channel.provider, modelId || DEFAULT_MODEL_ID)
 
     // 4. 读取已有的 SDK session ID（用于 resume）
     let existingSdkSessionId = sessionMeta?.sdkSessionId
@@ -1288,42 +1054,12 @@ export class AgentOrchestrator {
     let turnOutputSnapshot: ReturnType<typeof snapshotOutputFiles> | undefined
 
     try {
-      const sdk = agentRuntime === 'claude' ? await import('@anthropic-ai/claude-agent-sdk') : undefined
-      const cliPath = agentRuntime === 'claude' ? resolveClaudeAgentBinaryPath() : undefined
-
-      if (agentRuntime === 'claude' && cliPath && !existsSync(cliPath)) {
-        const subpkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`
-        console.error(`[Agent 编排] SDK native binary 不存在: ${cliPath}`)
-        reportPreflightError({
-          code: 'claude_binary_not_found',
-          title: 'Claude 核心未就绪',
-          message:
-            '应用安装包里缺少 Claude Agent SDK 的核心可执行文件（claude.exe）。这通常是打包时未包含当前平台的 SDK 组件导致。请重新下载最新安装包，或提交 issue 告知我们。',
-          details: [
-            `缺失文件: ${cliPath}`,
-            `需要的子包: ${subpkg}`,
-          ],
-          actions: [
-            {
-              key: 'd',
-              label: '下载最新安装包',
-              action: 'open_external',
-              payload: UPDATER_LINKS.releases,
-            },
-            {
-              key: 'i',
-              label: '报告问题',
-              action: 'open_external',
-              payload: 'https://github.com/ErlichLiu/MyYoda/issues/new',
-            },
-          ],
-          canRetry: false,
-        })
-        return
-      }
+      // Claude runtime 已于 2026-08 退役；Pi 无需额外二进制。
+      const sdk = undefined
+      const cliPath = undefined
 
       console.log(
-        `[Agent 编排] 启动 ${agentRuntime} runtime — ${cliPath ? `binary: ${cliPath}, ` : ''}模型: ${modelId || DEFAULT_MODEL_ID}, resume: ${existingSdkSessionId ?? '无'}`,
+        `[Agent 编排] 启动 Pi runtime — 模型: ${modelId || DEFAULT_MODEL_ID}, resume: ${existingSdkSessionId ?? '无'}`,
       )
 
       // 确定 Agent 工作目录
@@ -1382,10 +1118,6 @@ export class AgentOrchestrator {
             console.warn('[Agent 产出] turn 前快照失败，不影响 Agent 执行:', error)
           }
 
-          if (agentRuntime === 'claude') {
-            ensurePluginManifest(ws.slug, ws.name)
-          }
-
           if (existingSdkSessionId) {
             console.log(`[Agent 编排] 将尝试 resume: ${existingSdkSessionId}`)
           } else {
@@ -1410,47 +1142,7 @@ export class AgentOrchestrator {
       // （它仍用于 additionalDirectories / prompt）。
       const visionRelayAllowedRoots = appendVisionRelayAllowedRoot(allAdditionalDirectories, agentCwd, undefined, agentSandboxDir)
 
-      // 9.5 确保 SDK 项目设置（plansDirectory → .context）
-      if (agentRuntime === 'claude') {
-        const claudeSettingsDir = join(agentCwd, '.claude')
-        if (!existsSync(claudeSettingsDir)) mkdirSync(claudeSettingsDir, { recursive: true })
-        const settingsPath = join(claudeSettingsDir, 'settings.json')
-        let sdkProjectSettings: Record<string, unknown> = {}
-        try {
-          sdkProjectSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
-        } catch { /* 文件不存在或解析失败 */ }
-        let needsWrite = false
-        if (sdkProjectSettings.plansDirectory !== '.context') {
-          sdkProjectSettings.plansDirectory = '.context'
-          needsWrite = true
-        }
-        if (sdkProjectSettings.skipWebFetchPreflight !== true) {
-          sdkProjectSettings.skipWebFetchPreflight = true
-          needsWrite = true
-        }
-        if (workspaceSlug) {
-          const autoMemoryDirectory = getWorkspaceAutoMemoryDir(workspaceSlug)
-          if (sdkProjectSettings.autoMemoryDirectory !== autoMemoryDirectory) {
-            sdkProjectSettings.autoMemoryDirectory = autoMemoryDirectory
-            needsWrite = true
-          }
-        }
-        if (removeMyYodaAutoCompactSettings(sdkProjectSettings)) {
-          needsWrite = true
-        }
-        // MyYoda Git/PR 推广标识：覆盖 Claude SDK 默认 Co-Authored-By / Generated with
-        if (applyClaudeSdkAttributionSettings(
-          sdkProjectSettings,
-          isGitAttributionEnabled(getSettings().gitAttributionEnabled),
-          selectedModelId,
-        )) {
-          needsWrite = true
-        }
-        if (needsWrite) {
-          writeFileSync(settingsPath, JSON.stringify(sdkProjectSettings, null, 2))
-          console.log(`[Agent 编排] 已设置 SDK settings (plansDirectory, skipWebFetchPreflight, autoMemoryDirectory, autoCompact, attribution)`)
-        }
-      }
+      // 9.5 Pi runtime 不需要 .claude/settings.json（Claude runtime 已退役）。
 
       // 9.6 直接信任已保存的 sdkSessionId，跳过 listSessions 预验证
       // 原因：listSessions({ dir }) 基于 cwd 路径哈希查找，但 session 级别的 cwd
@@ -1465,34 +1157,19 @@ export class AgentOrchestrator {
       // toolPolicy=none 用于 task.yaml 生成草稿：只允许模型产出文本，不暴露任何会产生副作用的工具。
       const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug)
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
-        injectChromeDevtoolsMcpServer(mcpServers, sdkEnv)
+        injectChromeDevtoolsMcpServer(mcpServers)
       }
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const builtinMcpResult = toolsDisabled
         ? { collaborationAvailable: false }
-        : agentRuntime === 'claude' && sdk
-          ? await injectBuiltinMcpServers({
-            sdk,
-            mcpServers,
-            sessionId,
-            channelId,
-            modelId,
-            agentRuntime,
-            workspaceId,
-            workspaceSlug,
-            agentCwd,
-            permissionMode: permissionModeOverride ?? sessionMeta?.permissionMode ?? MYYODA_DEFAULT_PERMISSION_MODE,
-            triggeredBy: input.triggeredBy,
-            sessionMeta,
-          })
-          : await (async () => {
+        : await (async () => {
             const piSdk = await import('@earendil-works/pi-coding-agent')
             const result = await buildPiBuiltinTools(piSdk, {
               sessionId,
               channelId,
               modelId: selectedModelId,
-              agentRuntime,
+              agentRuntime: 'pi',
               workspaceId,
               workspaceSlug,
               projectId: sessionMeta?.projectId,
@@ -1513,7 +1190,7 @@ export class AgentOrchestrator {
 
       // Pi SDK 没有 Claude Agent SDK 的 mcpServers 参数；Claude 路径保持原生 MCP 不变，
       // Pi 路径由 Proma 主进程连接用户 MCP server，并转换为 Pi customTools。
-      if (!toolsDisabled && agentRuntime === 'pi' && Object.keys(mcpServers).length > 0) {
+      if (!toolsDisabled && Object.keys(mcpServers).length > 0) {
         try {
           piMcpTools = await buildPiMcpTools(mcpServers)
         } catch (error) {
@@ -1564,7 +1241,7 @@ export class AgentOrchestrator {
       const referencedPlanningBlock = buildReferencedPlanningPrompt(
         mentionedTodoIds,
         mentionedCalendarEventIds,
-        { requireToolRead: agentRuntime === 'pi' },
+        { requireToolRead: true },
       )
       if (referencedPlanningBlock) {
         enrichedMessage = `${referencedPlanningBlock}\n\n${enrichedMessage}`
@@ -1881,12 +1558,8 @@ export class AgentOrchestrator {
       const maxTurns = appSettings.agentMaxTurns && appSettings.agentMaxTurns > 0
         ? appSettings.agentMaxTurns
         : undefined
-      const piReasoningCapability = agentRuntime === 'pi'
-        ? await resolvePiReasoningCapability(channel.provider, selectedModelId)
-        : undefined
-      const piThinkingLevel = agentRuntime === 'pi'
-        ? resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
-        : undefined
+      const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId)
+      const piThinkingLevel = resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
       const systemPromptAppend = buildSystemPrompt({
         agentRuntime,
         workspaceName: workspace?.name,
@@ -1914,14 +1587,20 @@ ${workContext}` : '')
         // 仅在 session_id 真正变化时才持久化。SDK v2 几乎每条消息都会回调 onSessionId，
         // capturedSdkSessionId 已初始化为 existingSdkSessionId，并在 recovery 时同步重置。
         const isNewSessionId = sdkSessionId !== capturedSdkSessionId
-        const needsPiSessionFile = agentRuntime === 'pi' && !!piSessionFile && sessionMeta?.piSessionFile !== piSessionFile
+        const needsPiSessionFile = !!piSessionFile && sessionMeta?.piSessionFile !== piSessionFile
         capturedSdkSessionId = sdkSessionId
         if (isNewSessionId || needsPiSessionFile) {
           try {
-            updateAgentSessionMeta(sessionId, {
-              sdkSessionId,
-              ...(agentRuntime === 'pi' && piSessionFile ? { piSessionFile } : {}),
-            })
+            // 运行中切到其他内核后，保留旧 turn 展示但不再写入 Pi 专用恢复 artifact。
+            const latestSessionMeta = getAgentSessionMeta(sessionId)
+            if (latestSessionMeta?.legacyTranscript?.continuationRequired) {
+              console.log(`[Agent 编排] 忽略只读历史会话的 session artifact: ${sdkSessionId}`)
+            } else {
+              updateAgentSessionMeta(sessionId, {
+                sdkSessionId,
+                ...(piSessionFile ? { piSessionFile } : {}),
+              })
+            }
             console.log(`[Agent 编排] 已保存 SDK session_id: ${sdkSessionId}`)
           } catch (err) {
             console.error(`[Agent 编排] 保存 SDK session_id 失败:`, err)
@@ -1953,14 +1632,11 @@ ${workContext}` : '')
           event: { type: 'context_window', contextWindow },
         })
       }
-      const piCustomTools = [...piBuiltinTools, ...piMcpTools]
-      const queryOptions: ClaudeAgentQueryOptions | PiAgentQueryOptions = agentRuntime === 'pi' ? {
-        agentRuntime: 'pi',
+      const piCustomTools = [...piBuiltinTools, ...piMcpTools, ...(extensions.piCustomTools ?? [])]
+      const proxyUrl = await getEffectiveProxyUrl()
+      const queryOptions: PiAgentQueryOptions = {
         sessionId,
         prompt: finalPrompt,
-        // pi runtime 不支持 Claude Agent SDK 的 `[1m]` 扩展上下文变体：
-        // 智谱等端点不识别 glm-5.2[1m] 这类后缀，会返回 1211「模型不存在」。
-        // 因此 pi 分支直接使用用户配置的原始模型 ID，不追加任何 `[1m]`。
         model: selectedModelId,
         cwd: agentCwd,
         apiKey,
@@ -1969,7 +1645,7 @@ ${workContext}` : '')
         channelId,
         channelName: channel.name,
         proxyUrl,
-        runtimeEnv: buildPiRuntimeEnv(sdkEnv),
+        runtimeEnv: buildPiRuntimeEnv({}), // Claude sdkEnv 不再需要
         ...(maxTurns != null && { maxTurns }),
         permissionMode: initialPermissionMode,
         canUseTool,
@@ -2010,6 +1686,8 @@ ${workContext}` : '')
         onSessionId: handleSessionId,
         onPiEntryBindings: (bindings) => {
           const latest = getAgentSessionMeta(sessionId)
+          // 运行中切到其他内核后，保留旧 turn 展示但不再写入 Pi 专用恢复 artifact。
+          if (latest?.legacyTranscript?.continuationRequired) return
           updateAgentSessionMeta(sessionId, {
             piEntryBindings: { ...(latest?.piEntryBindings ?? {}), ...bindings },
           })
@@ -2020,60 +1698,6 @@ ${workContext}` : '')
         onRetry: (retry) => {
           this.eventBus.emit(sessionId, { kind: 'myyoda_event', event: { type: 'retry', ...retry } })
         },
-      } : {
-        agentRuntime: 'claude',
-        sessionId,
-        prompt: finalPrompt,
-        model: modelId || DEFAULT_MODEL_ID,
-        cwd: agentCwd,
-        sdkCliPath: cliPath!,
-        env: sdkEnv,
-        ...(maxTurns != null && { maxTurns }),
-        sdkPermissionMode: sdkPermissionModeForMyYodaMode(initialPermissionMode),
-        // permissionMode 负责表达 plan/bypassPermissions。
-        // 当提供 canUseTool 回调时这里必须为 false，否则 CLI 同时收到
-        // --allow-dangerously-skip-permissions 和 --permission-prompt-tool stdio
-        // 两个矛盾的指令，导致 ExitPlanMode/AskUserQuestion 等交互式工具失败。
-        // bypassPermissions 下 SDK 可能在 canUseTool 前直接放行工具，因此计划态还会
-        // 从实际 tool_use 流里同步，避免 UI 停留在计划阶段。
-        allowDangerouslySkipPermissions: !canUseTool,
-        canUseTool,
-        ...(toolsDisabled ? { allowedTools: [] } : {}),
-        // claude_code preset 提供基础环境信息（platform/shell/OS/git/model/知识截止日期等）
-        // buildSystemPrompt 追加 MyYoda 特有指令（角色定义、子 Agent 委派策略、工作区信息等）
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: systemPromptAppend,
-        },
-        resumeSessionId: existingSdkSessionId,
-        // 回退后 resume：从指定消息处继续（SDK 在同一 JSONL 内创建分支）
-        ...(rewindResumeAt && { resumeSessionAt: rewindResumeAt }),
-        ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
-        strictMcpConfig: true,
-        ...(workspaceSlug && {
-          plugins: [{ type: 'local' as const, path: getAgentWorkspacePath(workspaceSlug), skipMcpDiscovery: true }],
-        }),
-        // 合并附加目录：用户当次输入 + 会话级 + 工作区级（详见 collectAttachedDirectories）
-        ...(allAdditionalDirectories.length > 0 ? { additionalDirectories: allAdditionalDirectories } : {}),
-        // 启用文件检查点，支持 rewindFiles 回退
-        enableFileCheckpointing: true,
-        // SDK 0.2.52+ 新增选项（从 settings 读取）
-        ...(appSettings.agentThinking && { thinking: appSettings.agentThinking }),
-        effort: appSettings.agentEffort ?? 'high',
-        ...(appSettings.agentMaxBudgetUsd != null && appSettings.agentMaxBudgetUsd > 0 && {
-          maxBudgetUsd: appSettings.agentMaxBudgetUsd,
-        }),
-        // MyYoda 统一使用 collaboration 派生子会话承载子 Agent 委派，避免 SDK 临时
-        // Agent/Task 与 MyYoda 会话体系分裂。
-        disallowedTools: ['Agent', 'Task'],
-        onStderr: (data: string) => {
-          stderrChunks.push(data)
-          console.error(`[Agent SDK stderr] ${data}`)
-        },
-        onSessionId: handleSessionId,
-        onModelResolved: handleModelResolved,
-        onContextWindow: handleContextWindow,
       }
 
       console.log(`[Agent 编排] 开始通过 Adapter 遍历事件流...`)
@@ -2092,7 +1716,7 @@ ${workContext}` : '')
       // Pi runtime 使用其 session 内的 native retry（agent.continue），能保留已完成的
       // tool_result；禁止外层以原 prompt 重开 query，但保留 session-not-found 等显式恢复。
       const canReplayPromptForRetry = (attempt: number): boolean =>
-        agentRuntime !== 'pi' && canAutoRetry(attempt)
+        false && canAutoRetry(attempt)
 
       const canTryThinkingSignatureRecovery = (attempt: number): boolean =>
         !thinkingSignatureRecoveryAttempted &&
@@ -2244,11 +1868,8 @@ ${workContext}` : '')
             if (msg.type === 'assistant' && !isPartialMessage) {
               const assistantMsg = msg as SDKAssistantMessage
               if (assistantMsg.error) {
-                // Pi 把已生成文本和终态传输错误分开存放；Claude 那套内容优先的
-                // extractErrorDetails 会误把生成文本当成错误详情，Pi 分支要单独取。
-                const { detailedMessage, originalError } = agentRuntime === 'pi'
-                  ? getPiAssistantErrorDetails(assistantMsg)
-                  : extractErrorDetails(assistantMsg as unknown as Parameters<typeof extractErrorDetails>[0])
+                // Pi 把已生成文本和终态传输错误分开存放，直接取 Pi 专用错误详情。
+                const { detailedMessage, originalError } = getPiAssistantErrorDetails(assistantMsg)
                 let errorCode = assistantMsg.error.errorType || 'unknown_error'
                 if (isPromptTooLongError(detailedMessage, originalError)) {
                   errorCode = 'prompt_too_long'
@@ -2341,7 +1962,7 @@ ${workContext}` : '')
                 // 不可重试 → 终止
                 // Pi 可能在流失败前已生成一段正文：把它从错误字段里剥离，
                 // 当作普通 assistant 消息保留下来，不能因为终态错误就整体丢弃。
-                const hasPiPartialOutput = agentRuntime === 'pi' && hasPiAssistantTextContent(assistantMsg)
+                const hasPiPartialOutput = hasPiAssistantTextContent(assistantMsg)
                 if (hasPiPartialOutput) {
                   const partialOutput = stripPiAssistantError(assistantMsg)
                   if (modelId) partialOutput._channelModelId = modelId
@@ -2909,74 +2530,24 @@ ${workContext}` : '')
     }
 
     const sessionMeta = getAgentSessionMeta(sessionId)
+    if (sessionMeta?.legacyTranscript?.continuationRequired) {
+      throw new Error('这是已退役 Claude runtime 的只读历史会话，不能回退；请以 Pi 新会话继续。')
+    }
     if (!sessionMeta?.sdkSessionId) {
       throw new Error('会话没有 SDK session ID，无法回退')
     }
 
     // Pi 使用原生树状 session 导出一个持久 artifact；不能复用 Claude snapshot
     // 或仅截断 renderer JSONL，否则下一轮 resume 会重新加载被舍弃的上下文。
-    if (sessionMeta.agentRuntime === 'pi') {
-      await rewindPiAgentSession(sessionId, assistantMessageUuid)
-      const kept = truncateSDKMessages(sessionId, assistantMessageUuid)
-      return {
-        remainingMessages: kept.length,
-        fileRewind: {
-          canRewind: false,
-          error: '已回退 Pi 对话；Pi 文件回退尚未启用，当前未修改任何文件。',
-        },
-      }
-    }
-
-    // 0.5 从 SDK session JSONL 解析对应的 user message UUID（rewindFiles 需要）
-    let projectDir: string | undefined
-    let workspaceSlug: string | undefined
-    if (sessionMeta.workspaceId) {
-      const ws = getAgentWorkspace(sessionMeta.workspaceId)
-      if (ws) {
-        workspaceSlug = ws.slug
-        projectDir = getAgentSessionWorkspacePath(ws.slug, sessionMeta.id)
-      }
-    }
-    const userMessageUuid = resolveUserUuidFromSDK(sessionMeta.sdkSessionId, assistantMessageUuid, projectDir, sessionMeta.forkSourceSdkSessionId)
-    console.log(`[Agent 编排] 回退: 解析 user uuid=${userMessageUuid || '未找到'} (assistant uuid=${assistantMessageUuid}, forkSource=${sessionMeta.forkSourceSdkSessionId ?? 'none'})`)
-
-    // 1. 文件恢复：直接从 SDK JSONL 的 file-history-snapshot 恢复，无需临时 Query
-    let fileRewindResult: { canRewind: boolean; error?: string; filesChanged?: string[]; insertions?: number; deletions?: number } | undefined
-    if (userMessageUuid === '__LAST_TURN__') {
-      // 最后一个 turn：当前文件系统已是该 turn 完成后的状态，无需回退文件
-      console.log(`[Agent 编排] 回退: 最后一个 turn，跳过文件恢复`)
-      fileRewindResult = { canRewind: true, filesChanged: [] }
-    } else if (userMessageUuid) {
-      try {
-        // 确定 cwd（文件的基准路径）
-        let cwd = homedir()
-        if (projectDir) cwd = projectDir
-        // 收集附加目录（必须与 sendMessage 中传给 SDK 的 additionalDirectories 一致，
-        // 否则会话级 attachedDirectories 内的文件会因路径越界检查被静默跳过）
-        const rewindAttachedDirs = collectAttachedDirectories({ sessionMeta, workspaceSlug })
-        console.log(`[Agent 编排] 回退: 直接从 snapshot 恢复文件 (cwd=${cwd}, forkSource=${sessionMeta.forkSourceSdkSessionId ?? 'none'}, attachedDirs=${rewindAttachedDirs.length})`)
-        fileRewindResult = rewindFilesFromSnapshot(sessionMeta.sdkSessionId, userMessageUuid, cwd, projectDir, sessionMeta.forkSourceSdkSessionId, rewindAttachedDirs)
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        console.warn('[Agent 编排] 文件恢复失败，继续截断对话:', errMsg)
-        if (err instanceof Error && err.stack) console.warn('[Agent 编排] 文件恢复错误堆栈:', err.stack)
-        fileRewindResult = { canRewind: false, error: errMsg }
-      }
-    } else {
-      fileRewindResult = { canRewind: false, error: '无法从 SDK session 中解析 user message UUID' }
-    }
-
-    // 2. 截断 MyYoda JSONL
+    // Claude runtime 已退役，历史 Claude 会话在迁移时已清除 sdkSessionId，不会走到这里。
+    await rewindPiAgentSession(sessionId, assistantMessageUuid)
     const kept = truncateSDKMessages(sessionId, assistantMessageUuid)
-
-    // 3. 记录 resumeAtMessageUuid，下次发消息时 SDK 从此点继续
-    updateAgentSessionMeta(sessionId, { resumeAtMessageUuid: assistantMessageUuid })
-
-    console.log(`[Agent 编排] 回退完成: sessionId=${sessionId}, 保留 ${kept.length} 条消息, 文件恢复=${fileRewindResult?.canRewind ?? '跳过'}`)
-
     return {
       remainingMessages: kept.length,
-      fileRewind: fileRewindResult,
+      fileRewind: {
+        canRewind: false,
+        error: '已回退 Pi 对话；Pi 文件回退尚未启用，当前未修改任何文件。',
+      },
     }
   }
 
@@ -3047,11 +2618,11 @@ ${workContext}` : '')
       }
       enrichedText = `<mentioned_tools>\n${toolLines.join('\n')}\n</mentioned_tools>\n\n${enrichedText}`
     }
-    // Planning read tools are Pi-native. Do not direct Claude sessions to unavailable tools.
+    // Planning read tools are Pi-native.
     const referencedPlanningBlock = buildReferencedPlanningPrompt(
       mentionedTodoIds,
       mentionedCalendarEventIds,
-      { requireToolRead: normalizeAgentRuntime(meta?.agentRuntime ?? 'claude') === 'pi' },
+      { requireToolRead: true },
     )
     if (referencedPlanningBlock) {
       enrichedText = `${referencedPlanningBlock}\n\n${enrichedText}`

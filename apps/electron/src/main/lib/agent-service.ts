@@ -28,9 +28,7 @@ import type {
   AgentExternalRunSource,
   AgentMessage,
 } from '@myyoda/shared'
-import { ClaudeAgentAdapter, scanAndKillOrphanedClaudeSubprocesses } from './adapters/claude-agent-adapter'
 import { PiAgentAdapter, cleanupPiRuntimeResources } from './adapters/pi-agent-adapter'
-import { RuntimeRoutingAgentAdapter } from './adapters/runtime-routing-agent-adapter'
 import { AgentEventBus } from './agent-event-bus'
 import { AgentOrchestrator } from './agent-orchestrator'
 import { getAgentSessionWorkspacePath, getWorkspaceFilesDir } from './config-paths'
@@ -41,10 +39,7 @@ import { getHeadlessAgentRunTarget } from './agent-headless-run-target'
 // ===== 实例创建 =====
 
 const eventBus = new AgentEventBus()
-const adapter = new RuntimeRoutingAgentAdapter({
-  claude: new ClaudeAgentAdapter(),
-  pi: new PiAgentAdapter(),
-})
+const adapter = new PiAgentAdapter()
 const orchestrator = new AgentOrchestrator(adapter, eventBus)
 
 function getCompletionSessionOrigin(sessionId: string): { sourceDelegationId?: string; taskNodeId?: string } {
@@ -182,6 +177,7 @@ eventBus.use((sessionId, payload, next) => {
 export async function runAgent(
   input: AgentSendInput,
   webContents: WebContents,
+  extensions?: { piCustomTools?: import('@earendil-works/pi-coding-agent').ToolDefinition[] },
 ): Promise<void> {
   // 更新 webContents 映射（允许覆盖 — 由 orchestrator.activeSessions 处理真正的并发保护）
   registerWebContents(input.sessionId, webContents)
@@ -250,7 +246,7 @@ export async function runAgent(
           event: { type: 'run_started', startedAt },
         })
       },
-    })
+    }, extensions)
   } catch (err) {
     console.error('[Agent 服务] runAgent 未处理异常:', err)
     const errorMessage = err instanceof Error ? err.message : '未知错误'
@@ -299,6 +295,7 @@ export async function runAgentHeadless(
     source?: AgentExternalRunSource
     originSessionId?: string
   },
+  extensions?: { piCustomTools?: import('@earendil-works/pi-coding-agent').ToolDefinition[] },
 ): Promise<void> {
   // 委派子会话优先回到父会话所在 renderer，外部无界面运行才回退任意主窗口。
   const wc = getHeadlessAgentRunTarget(
@@ -435,13 +432,12 @@ export function stopAllAgents(): void {
 }
 
 /**
- * 退出前最后兜底：扫描并强杀所有孤儿 claude-agent-sdk 子进程
+ * 退出前清理 Pi runtime 资源。
  *
- * 必须在 stopAllAgents() 之后调用。针对 pidMap 未覆盖、dispose 漏杀等极端场景。
- * 同步执行，不 await，确保 before-quit 能在 Electron 超时前完成。
+ * 必须在 stopAllAgents() 之后调用。同步执行，确保 before-quit 能在 Electron 超时前完成。
  */
 export function killOrphanedClaudeSubprocesses(): void {
-  scanAndKillOrphanedClaudeSubprocesses()
+  // Claude runtime 已于 2026-08 退役，此函数仅保留兼容 app lifecycle 调用。
   cleanupPiRuntimeResources()
 }
 

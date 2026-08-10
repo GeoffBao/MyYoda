@@ -83,8 +83,9 @@ function buildWorkspacePromptPaths(workspaceSlug: string, sessionId: string) {
 export function buildSystemPrompt(ctx: SystemPromptContext): string {
   const profile = getUserProfile()
   const userName = profile.userName || '用户'
-  const agentRuntime = ctx.agentRuntime ?? 'claude'
-  const runtimeName = agentRuntime === 'pi' ? 'Pi Agent SDK' : 'Claude Agent SDK'
+  // Claude runtime 已于 2026-08 退役，所有会话统一 Pi。
+  const agentRuntime: AgentRuntime = 'pi'
+  const runtimeName = 'Pi Agent SDK'
   const currentModelId = ctx.currentModelId?.trim()
   const piDelegationModelInstruction = currentModelId
     ? `**派生子会话的模型**：当前 Agent 选择的模型 ID 是 \`${currentModelId}\`。调用 collaboration 派生子会话时，如果用户没有明确指定目标模型，必须在工具参数中显式传入 \`modelId: "${currentModelId}"\`，复用当前模型；不要自行从可用模型中挑选。只有用户明确要求其他模型时，才先查询可用模型并传入其指定的 \`modelId\`。`

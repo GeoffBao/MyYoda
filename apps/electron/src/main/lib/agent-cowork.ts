@@ -59,7 +59,7 @@ function resolveParentContext(parent: AgentSessionMeta): CoworkParentContext {
     modelId: parent.modelId,
     workspaceId: parent.workspaceId,
     permissionMode: parent.permissionMode,
-    agentRuntime: parent.agentRuntime,
+    
     projectId: parent.projectId,
     workingDirectory: parent.workingDirectory,
     rootSessionId: parent.rootSessionId ?? parent.id,
@@ -99,7 +99,6 @@ function spawnChildSession(
     input.channelId,
     parentCtx.workspaceId,
     input.modelId,
-    (parentCtx.agentRuntime as 'pi' | 'claude' | undefined) ?? 'pi',
   )
   updateAgentSessionMeta(child.id, {
     parentSessionId: parent.id,

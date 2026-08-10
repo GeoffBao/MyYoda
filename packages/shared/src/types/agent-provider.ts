@@ -2,23 +2,13 @@
  * Agent Provider 适配器接口
  *
  * 定义 MyYoda 自己的 Agent 接口层，让底层 SDK 可替换。
- * 当前实现：ClaudeAgentAdapter / PiAgentAdapter 双 runtime。
+ * 当前实现：PiAgentAdapter 单 runtime（Claude runtime 已于 2026-08 退役）。
  */
 
 import type { SDKMessage } from './agent'
 
-/** Agent runtime 实现 */
-export type AgentRuntime = 'claude' | 'pi'
-
-/**
- * 是否向用户开放 Claude Agent 内核。
- *
- * 默认关闭：仅使用 Pi，避免暴露双内核选择给用户造成困扰。
- * - UI 层：隐藏内核选择器与 Claude 徽章。
- * - 执行层：`normalizeAgentRuntime` 在此关闭时强制回落到 Pi（含历史会话）。
- * 后续如需在 release 版本恢复 Claude 选项，将此改为 true 即可。
- */
-export const CLAUDE_RUNTIME_ENABLED = false
+/** Agent runtime 实现（仅保留 Pi；Claude runtime 已退役） */
+export type AgentRuntime = 'pi'
 
 /** SDK 用户消息（队列消息注入用，匹配 SDK SDKUserMessage 结构） */
 export interface SDKUserMessageInput {
@@ -47,8 +37,6 @@ export interface SendQueuedMessageOptions {
  * SDK 特定配置通过 Adapter 的扩展输入类型传入。
  */
 export interface AgentQueryInput {
-  /** 本轮使用的 Agent runtime */
-  agentRuntime?: AgentRuntime
   /** 会话 ID */
   sessionId: string
   /** 用户 prompt（已包含上下文注入） */
