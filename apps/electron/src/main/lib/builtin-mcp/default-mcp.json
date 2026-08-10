@@ -166,6 +166,22 @@
       ]
     },
     {
+      "id": "context7",
+      "name": "context7",
+      "displayName": "Context7 文档",
+      "description": "查询 5000+ 主流开源库的最新官方文档（Upstash Context7 远程服务）。仅在不确定第三方库/框架 API 用法时使用；查询参数只允许公开库名与标准 API 名称，禁止发送项目内部代码、内部库名或文件路径。",
+      "category": "knowledge",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        { "name": "resolve-library-id", "description": "确认文档库的标准 ID（输入公开库名，如 next.js / zod）。", "readOnly": true },
+        { "name": "get-library-docs", "description": "拉取指定公开库的最新文档片段（仅传标准库 ID）。", "readOnly": true },
+        { "name": "search-docs", "description": "在公开库文档中搜索用法（仅传公开库名 + 标准 API/概念关键词）。", "readOnly": true }
+      ]
+    },
+    {
       "id": "create-task",
       "name": "create_task",
       "displayName": "创建任务",
