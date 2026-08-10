@@ -1247,6 +1247,7 @@ export function useGlobalAgentListeners(): void {
           activeTabId: store.get(activeTabIdAtom),
           currentAgentSessionId: currentSessionId,
           sessionId: data.sessionId,
+          session: completionSession,
           documentHasFocus: document.hasFocus(),
         })
         if (completionMarkers.markUnviewedCompleted && !backgroundTasksPending) {

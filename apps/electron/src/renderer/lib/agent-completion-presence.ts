@@ -6,6 +6,8 @@ export interface AgentCompletionPresenceInput {
   activeTabId: string | null
   currentAgentSessionId: string | null
   sessionId: string
+  /** 委派子会话 / Task 节点由父会话汇总，不计入用户级未读完成。 */
+  session?: Pick<AgentSessionMeta, 'sourceDelegationId' | 'taskNodeId'>
   /** 完成发生时应用窗口是否处于前台。窗口失焦时即使是当前 Tab 也不算"正在查看"。 */
   documentHasFocus: boolean
 }
@@ -48,7 +50,8 @@ export function isAgentSessionActiveForCompletion({
 export function getAgentCompletionMarkers(input: AgentCompletionPresenceInput): AgentCompletionMarkers {
   const isActiveSession = isAgentSessionActiveForCompletion(input)
   return {
-    markUnviewedCompleted: !isActiveSession,
+    // 委派子会话 / Task 节点由父会话汇总，不进入用户级未读完成角标（与 shouldNotifyAgentCompletion 语义一致）。
+    markUnviewedCompleted: !input.session?.sourceDelegationId && !input.session?.taskNodeId && !isActiveSession,
   }
 }
 

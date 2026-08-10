@@ -69,6 +69,46 @@ describe('Agent 完成归属判断', () => {
       markUnviewedCompleted: true,
     })
   })
+
+  test('Given 委派子会话完成 When session 存在 sourceDelegationId Then 不计入未读角标', () => {
+    const tabs: TabItem[] = [
+      { id: '__scratch-pad__', type: 'scratch', sessionId: '__scratch-pad__', title: '草稿' },
+      { id: 'child-1', type: 'agent', sessionId: 'child-1', title: '委派子会话' },
+    ]
+    const input = {
+      tabs,
+      activeTabId: '__scratch-pad__',
+      currentAgentSessionId: 'parent-1',
+      sessionId: 'child-1',
+      session: { sourceDelegationId: 'delegation-1' },
+      documentHasFocus: true,
+    }
+
+    expect(isAgentSessionActiveForCompletion(input)).toBe(false)
+    expect(getAgentCompletionMarkers(input)).toEqual({
+      markUnviewedCompleted: false,
+    })
+  })
+
+  test('Given Task DAG 子任务节点完成 When session 存在 taskNodeId Then 不计入未读角标', () => {
+    const tabs: TabItem[] = [
+      { id: '__scratch-pad__', type: 'scratch', sessionId: '__scratch-pad__', title: '草稿' },
+      { id: 'node-a', type: 'agent', sessionId: 'node-a', title: '子任务节点' },
+    ]
+    const input = {
+      tabs,
+      activeTabId: '__scratch-pad__',
+      currentAgentSessionId: 'root-1',
+      sessionId: 'node-a',
+      session: { taskNodeId: 'node-a' },
+      documentHasFocus: true,
+    }
+
+    expect(isAgentSessionActiveForCompletion(input)).toBe(false)
+    expect(getAgentCompletionMarkers(input)).toEqual({
+      markUnviewedCompleted: false,
+    })
+  })
 })
 
 describe('Agent 完成桌面通知边界', () => {
