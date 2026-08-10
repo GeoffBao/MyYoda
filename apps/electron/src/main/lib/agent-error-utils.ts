@@ -12,6 +12,7 @@ import {
   isThinkingSignatureError as matchesThinkingSignatureError,
 } from '@myyoda/shared'
 import { TRANSIENT_NETWORK_PATTERN, isMalformedResponseError } from './error-patterns'
+import { buildClaudeSubscriptionLimitMessage, isClaudeSubscriptionLimitError } from './adapters/pi-subscription-limit'
 
 // SDK 错误消息友好化
 // ============================================================================
@@ -133,6 +134,22 @@ export function mapSDKErrorToTypedError(
       ],
       canRetry: true,
       retryDelayMs: 1000,
+      originalError,
+    }
+  }
+
+  // Claude 订阅（Pro/Max）5 小时窗口限流：区别于瞬时 API 限流，重试无意义。
+  // Pi SDK 会把 "rate limit" 误判为瞬时限流重试，这里把终态错误映射为
+  // 订阅限额提示，避免 UI 显示误导性的「请求频率限制」。
+  if (isClaudeSubscriptionLimitError(detailedMessage, originalError)) {
+    return {
+      code: 'rate_limited',
+      title: 'Claude 订阅用量已达上限',
+      message: buildClaudeSubscriptionLimitMessage(),
+      actions: [
+        { key: 's', label: '设置', action: 'open_channel_settings' },
+      ],
+      canRetry: false,
       originalError,
     }
   }

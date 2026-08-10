@@ -25,12 +25,13 @@ const CLAUDE_SUBSCRIPTION_LIMIT_PATTERNS: RegExp[] = [
 ]
 
 /**
- * 判断一段错误文本是否命中 Claude 订阅窗口限流。
- * 纯函数，便于单测。
+ * 判断一段或多段错误文本是否命中 Claude 订阅窗口限流。
+ * 纯函数，便于单测；支持多段文本（如 detailedMessage + originalError）。
  */
-export function isClaudeSubscriptionLimitError(errorText?: string | null): boolean {
-  if (!errorText) return false
-  return CLAUDE_SUBSCRIPTION_LIMIT_PATTERNS.some((pattern) => pattern.test(errorText))
+export function isClaudeSubscriptionLimitError(...texts: Array<string | null | undefined>): boolean {
+  const combined = texts.filter(Boolean).join('\n')
+  if (!combined) return false
+  return CLAUDE_SUBSCRIPTION_LIMIT_PATTERNS.some((pattern) => pattern.test(combined))
 }
 
 /**

@@ -35,3 +35,23 @@ describe('buildClaudeSubscriptionLimitMessage', () => {
     expect(buildClaudeSubscriptionLimitMessage()).toContain('用量上限')
   })
 })
+
+describe('mapSDKErrorToTypedError 订阅限流映射（agent-error-utils 集成）', () => {
+  test('Given 订阅窗口限流错误 When 映射 Then 返回专用提示而非「请求频率限制」', async () => {
+    const { mapSDKErrorToTypedError } = await import('../agent-error-utils')
+    const err = mapSDKErrorToTypedError(
+      'rate_limited',
+      'This request would exceed your account\'s rate limit. Please try again later.',
+      '429 {"error":{"type":"rate_limit_error"}}',
+    )
+    expect(err.title).toBe('Claude 订阅用量已达上限')
+    expect(err.message).toContain('5 小时')
+    expect(err.canRetry).toBe(false)
+  })
+
+  test('Given 瞬时 API 限流错误 When 映射 Then 保持原「请求频率限制」', async () => {
+    const { mapSDKErrorToTypedError } = await import('../agent-error-utils')
+    const err = mapSDKErrorToTypedError('rate_limited', 'Too many requests', '429')
+    expect(err.title).toBe('请求频率限制')
+  })
+})
