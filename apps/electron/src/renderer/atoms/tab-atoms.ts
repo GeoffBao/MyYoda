@@ -22,7 +22,7 @@ import type { PreviewFile } from './preview-atoms'
 // ===== 类型定义 =====
 
 /** 标签页类型（Settings 不作为 Tab，保留独立视图） */
-export type TabType = 'chat' | 'agent' | 'scratch' | 'preview' | 'tutorial' | 'pull-request'
+export type TabType = 'chat' | 'agent' | 'scratch' | 'preview' | 'tutorial'
 
 /** Scratch Pad 专用的固定 sessionId */
 export const SCRATCH_PAD_ID = '__scratch-pad__'
@@ -33,9 +33,6 @@ export const TUTORIAL_TAB_TITLE = 'MyYoda 使用指南'
 
 /** 会话预览 Tab 的 ID 前缀：运行时临时入口，不参与持久化 */
 const PREVIEW_TAB_PREFIX = '__preview__:'
-
-/** Pull Request Tab 的 ID 前缀：运行时临时入口，不参与持久化 */
-const PULL_REQUEST_TAB_PREFIX = '__pr__:'
 
 /** Scratch Pad 标签默认标题 */
 export const SCRATCH_PAD_TITLE = 'Scratch Pad'
@@ -201,27 +198,6 @@ export function createPreviewTabId(sessionId: string): string {
   return `${PREVIEW_TAB_PREFIX}${sessionId}`
 }
 
-/** 生成 PR Tab 的 ID（${repoPath}::${number}） */
-export function createPullRequestTabId(repoPath: string, number: number): string {
-  return `${PULL_REQUEST_TAB_PREFIX}${repoPath}::${number}`
-}
-
-/** 从 PR Tab ID 解析出 repoPath + number（解析失败返回 null） */
-export function parsePullRequestTabId(tabId: string): { repoPath: string; number: number } | null {
-  if (!tabId.startsWith(PULL_REQUEST_TAB_PREFIX)) return null
-  const rest = tabId.slice(PULL_REQUEST_TAB_PREFIX.length)
-  const sepIndex = rest.lastIndexOf('::')
-  if (sepIndex <= 0) return null
-  const repoPath = rest.slice(0, sepIndex)
-  const number = Number(rest.slice(sepIndex + 2))
-  if (!repoPath || !Number.isFinite(number)) return null
-  return { repoPath, number }
-}
-
-export function isPullRequestTab(tab: TabItem): boolean {
-  return tab.type === 'pull-request' || tab.id.startsWith(PULL_REQUEST_TAB_PREFIX)
-}
-
 export function getFileBaseName(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() || filePath
 }
@@ -239,7 +215,7 @@ function isSessionTab(tab: TabItem): boolean {
 }
 
 function getPersistentTabs(tabs: TabItem[]): TabItem[] {
-  return tabs.filter((tab) => tab.id !== SCRATCH_PAD_ID && tab.id !== TUTORIAL_TAB_ID && !isPreviewTab(tab) && !isPullRequestTab(tab))
+  return tabs.filter((tab) => tab.id !== SCRATCH_PAD_ID && tab.id !== TUTORIAL_TAB_ID && !isPreviewTab(tab))
 }
 
 export function getPersistableTabState(
@@ -306,26 +282,6 @@ export function openTab(
     return {
       tabs: [scratchTab, ownerAgentTab, previewTab],
       activeTabId: previewTab.id,
-    }
-  }
-
-  // Pull Request Tab：一个 PR 一个 Tab，可同时开多个（不绑定会话）；已存在则聚焦
-  if (item.type === 'pull-request') {
-    // sessionId 即 PR key（repoPath::number），同时用作 Tab ID
-    const tabId = item.sessionId
-    const existing = tabs.find((t) => t.id === tabId)
-    if (existing) {
-      return { tabs, activeTabId: existing.id }
-    }
-    const prTab: TabItem = {
-      id: tabId,
-      type: 'pull-request',
-      sessionId: tabId,
-      title: item.title,
-    }
-    return {
-      tabs: [...tabs.filter((t) => t.id !== SCRATCH_PAD_ID), scratchTab, prTab],
-      activeTabId: prTab.id,
     }
   }
 

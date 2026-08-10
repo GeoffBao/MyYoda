@@ -11,7 +11,6 @@ import { tabsAtom } from '@/atoms/tab-atoms'
 import { ChatView } from '@/components/chat'
 import { AgentView } from '@/components/agent'
 import { PreviewTabContent } from '@/components/diff/PreviewTabContent'
-import { PullRequestTabContent } from '@/components/diff/PullRequestTabContent'
 import { ScratchPadView } from '@/components/scratch-pad/ScratchPadView'
 import { GuideView } from '@/components/tutorial/GuideView'
 import { TabErrorBoundary } from './TabErrorBoundary'
@@ -59,14 +58,6 @@ export function TabContent({ tabId }: TabContentProps): React.ReactElement {
     return (
       <TabErrorBoundary key={tab.id} sessionId={tab.sessionId}>
         <PreviewTabContent sessionId={tab.sessionId} />
-      </TabErrorBoundary>
-    )
-  }
-
-  if (tab.type === 'pull-request') {
-    return (
-      <TabErrorBoundary key={tab.id} sessionId={tab.id}>
-        <PullRequestTabContent tabId={tab.id} />
       </TabErrorBoundary>
     )
   }

@@ -18,7 +18,6 @@ import {
 } from '@/atoms/agent-atoms'
 import type { ChangedFileEntry, ChangedFileStatus, ChangeSource, UntrackedFileEntry, WorktreeInfo } from '@myyoda/shared'
 import { WorktreeSelector } from './WorktreeSelector'
-import { PullRequestStatusBar } from './PullRequestStatusBar'
 import { groupSessionFileChanges } from '@/lib/session-file-changes'
 import type { SessionFileChange } from '@/lib/session-file-changes'
 
@@ -79,10 +78,6 @@ interface DiffChangesListProps {
   currentFileChangeRunId?: string
   /** 点击非 Git 文件时打开纯文件预览 */
   onPlainFileClick?: (filePath: string) => void
-  /** 打开 PR 详情 Tab（repoPath + PR 编号） */
-  onOpenPullRequest?: (repoPath: string, number: number) => void
-  /** 创建 PR 成功后的回调 */
-  onPrCreated?: (result: { number: number; url: string; reusedExisting: boolean }) => void
 }
 
 /** 文件来源 badge 的颜色和文案 */
@@ -108,8 +103,6 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   nonGitFileChanges = [],
   currentFileChangeRunId,
   onPlainFileClick,
-  onOpenPullRequest,
-  onPrCreated,
 }: DiffChangesListProps): React.ReactElement {
   // Worktree 选择状态（内联 WorktreeSelector）——手动选择优先；用户没有手动选过时，
   // 若会话本身就绑定了 Worktree 执行上下文，默认用它（见 sessionWorktreeContext 注释）。
@@ -281,17 +274,6 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   const shouldShowSearch = isGitRepo && (hasAnyChanges || searchQuery.length > 0)
   const shouldShowWorktreeSelector = isGitRepo && Boolean(workspaceSlug || (worktreeRepoPaths?.length ?? 0) > 0)
 
-  // PR 状态行使用的仓库根目录：优先用当前选中的 worktree / 会话 worktree，否则用第一个文件组的 gitRoot 或 dirPath
-  const prRepoPath = React.useMemo(() => {
-    if (selectedWorktreePath) return selectedWorktreePath
-    if (sessionWorktreeContext?.path) return sessionWorktreeContext.path
-    if (fileGroups.length > 0) return fileGroups[0]!.gitRoot || dirPath
-    return dirPath
-  }, [selectedWorktreePath, sessionWorktreeContext, fileGroups, dirPath])
-
-  // PR 状态行仅在 Git 仓库且面板可见时显示；refreshVersion 由父级在窗口聚焦时递增
-  const shouldShowPrStatusBar = isGitRepo && prRepoPath
-
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {/* Worktree 分支选择器仅作用于 Git 改动。 */}
@@ -302,16 +284,6 @@ export const DiffChangesList = React.memo(function DiffChangesList({
           repoPaths={worktreeRepoPaths}
           selectedPath={selectedWorktreePath}
           onSelect={handleWorktreeSelect}
-        />
-      )}
-
-      {/* PR 状态行 + 主操作按钮（仅 Git 仓库；刷新时机：挂载/手动/窗口聚焦，不做轮询） */}
-      {shouldShowPrStatusBar && (
-        <PullRequestStatusBar
-          repoPath={prRepoPath}
-          refreshVersion={refreshVersion}
-          onOpenPullRequest={onOpenPullRequest}
-          onPrCreated={onPrCreated}
         />
       )}
 
