@@ -89,6 +89,11 @@ extraResources:
     to: logos
     filter:
       - "**/*"
+  # Repo Map 资源（tree-sitter 语言查询 + 核心 WASM，Agent 代码库地图注入使用）
+  - from: resources/repo-map
+    to: repo-map
+    filter:
+      - "**/*"
   # 默认 Dock 图标（macOS app.dock.setIcon 使用）
   - from: resources/icon.png
     to: icon.png

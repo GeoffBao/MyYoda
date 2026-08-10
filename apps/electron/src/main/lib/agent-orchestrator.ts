@@ -57,6 +57,7 @@ import { resolveAgentSessionFileRoots } from './agent-file-roots'
 import { captureAgentTurnOutputs, buildOutputCaptureRoots, snapshotOutputFiles } from './agent-output-capture'
 import { getRuntimeStatus } from './runtime-init'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
+import { repoMapService, extractMentionContext } from './repo-map/repo-map-service'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
 import { MAX_CONTEXT_MESSAGES, buildContextPrompt, buildRecoveryPrompt, buildReferencedSessionsPrompt } from './agent-session-context-prompt'
 import { buildReferencedPlanningPrompt } from './planning-reference-context'
@@ -70,6 +71,7 @@ import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
+import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import type { AgentRuntimeEnv } from './agent-runtime-env'
@@ -1160,6 +1162,17 @@ export class AgentOrchestrator {
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
+      // Context7 文档查询（远程 HTTP MCP）：默认关闭，用户可在能力列表手动开启
+      if (!toolsDisabled && isBuiltinMcpUserEnabled('context7')) {
+        const serverName = getBuiltinMcpName('context7')
+        if (!mcpServers[serverName]) {
+          mcpServers[serverName] = {
+            type: 'http',
+            url: 'https://mcp.context7.com/mcp',
+            required: false,
+          } as unknown as Record<string, unknown>
+        }
+      }
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const builtinMcpResult = toolsDisabled
@@ -1218,6 +1231,19 @@ export class AgentOrchestrator {
         ...(workspaceDefaultWorkingDirectory ? { workspaceDefaultWorkingDirectory } : {}),
       })
 
+      // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录）。
+      // 服务层按 cwd + git HEAD 缓存：同一 worktree 内多会话共享；首条消息最多等 2s，超时后台继续生成。
+      let repoMapBlock: string | undefined
+      if (projectContext && agentCwd) {
+        repoMapBlock = await repoMapService.getRepoMapForPrompt(
+          agentCwd,
+          extractMentionContext(userMessage, agentCwd),
+        )
+      }
+      const finalDynamicCtx = repoMapBlock
+        ? `${dynamicCtx}\n\n<repo_map>\n当前仓库代码地图（按符号重要度排序，用于快速定位；地图可能不完整，动手前仍需 Read/Grep 确认）：\n${repoMapBlock}\n</repo_map>`
+        : dynamicCtx
+
       // 11.5 注入 mention 引用指令（Skill/MCP/会话）— 仅影响 prompt，不影响持久化
       let enrichedMessage = userMessage
       const referencedSessionsBlock = buildReferencedSessionsPrompt(sessionId, mentionedSessionIds, workspaceSlug)
@@ -1249,7 +1275,7 @@ export class AgentOrchestrator {
         console.log(`[Agent 编排] 注入 referenced_planning: ${mentionedTodoIds?.length ?? 0} todos, ${mentionedCalendarEventIds?.length ?? 0} calendar events`)
       }
 
-      const contextualMessage = `${dynamicCtx}\n\n${enrichedMessage}`
+      const contextualMessage = `${finalDynamicCtx}\n\n${enrichedMessage}`
 
       const isCompactCommand = userMessage.trim() === '/compact'
       const finalPrompt = isCompactCommand
