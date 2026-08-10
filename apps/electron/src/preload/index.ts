@@ -1761,6 +1761,7 @@ const electronAPI: ElectronAPI = {
   },
 
   getFileDiff: (input: import('@myyoda/shared').GetFileDiffInput) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GET_FILE_DIFF, input)
   },
 
   getUntrackedContent: (input: import('@myyoda/shared').GetFileDiffInput) => {
