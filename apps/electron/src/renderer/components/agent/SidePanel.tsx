@@ -171,7 +171,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const projectUnavailablePath = sessionFileRoots?.projectUnavailablePath ?? null
   const projectAssetsPath = sessionFileRoots?.projectAssetsPath ?? null
   const sessionOutboxPath = sessionFileRoots?.sessionOutboxPath ?? null
-  const fileAccess = React.useMemo(() => ({ sessionId }), [sessionId])
+  // 文件面板展示的是 Agent 实际操作的文件系统，不能再被会话附件范围二次截断。
+  const fileAccess = React.useMemo(() => ({ sessionId, unrestricted: true }), [sessionId])
 
   // 项目目录不可用时跳转到该 Project 的设置页，那里已有可编辑的工作目录字段。
   const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)

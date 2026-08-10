@@ -21,8 +21,6 @@ export interface PreviewFile {
   readOnly?: boolean
   /** 候选基础目录（用于相对路径解析） */
   basePaths?: string[]
-  /** 文件是否落在当前会话的 diff scope 内（与 getUnstagedChanges 的 candidates 对齐） */
-  inDiffScope?: boolean
   /** 基准 ref（如 "origin/main"），用于 worktree vs main 模式的 diff 对比 */
   baseRef?: string
 }

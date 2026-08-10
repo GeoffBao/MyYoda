@@ -680,30 +680,12 @@ export function useGlobalAgentListeners(): void {
         }
       }
 
-      // 检查文件是否落在当前会话的 diff scope 内（与 getUnstagedChanges 的 candidates 对齐）
-      // 注：未纳入 dirPath，因为 DiffChangesList 调用时 dirPath 始终等于 sessionPath
-      // 路径分隔符统一为正斜杠，避免 Windows 下 client 与服务端（path.sep='\\'）方向不一致导致反向错配
-      const toForwardSlash = (p: string) => p.replace(/\\/g, '/')
-      const sessionScopePaths = uniqueTruthyPaths([
-        sessionPath,
-        roots?.executionCwd,
-        roots?.projectRoot,
-        roots?.sessionOutboxPath,
-        workspaceFilesPath,
-        ...sessionAttachedDirs,
-        ...workspaceAttachedDirs,
-      ]).map(toForwardSlash)
-      const absTarget = toForwardSlash(resolvedTargetPath)
-      const inDiffScope = sessionScopePaths.some((root) => {
-        const r = root.replace(/\/+$/, '') + '/'
-        return absTarget === root || absTarget.startsWith(r)
-      })
-
+      // 右侧改动面板应记录 Agent 实际写入的所有路径；会话附件只约束初始上下文，
+      // 不应让已完成的外部文件操作从用户可见的变更记录中消失。
       return {
         filePath: resolvedTargetPath,
         dirPath: dirPath || undefined,
         previewOnly,
-        inDiffScope,
         basePaths: basePaths.length > 0 ? basePaths : undefined,
       }
     }
@@ -1006,7 +988,7 @@ export function useGlobalAgentListeners(): void {
               })
               if (writtenPath) {
                 buildWrittenFilePreviewInfo(sessionId, writtenPath).then((previewFile) => {
-                  if (!previewFile || !previewFile.inDiffScope) return
+                  if (!previewFile) return
 
                   store.set(agentDiffUnseenChangesAtom, (prev) => {
                     const m = new Map(prev); m.set(sessionId, true); return m

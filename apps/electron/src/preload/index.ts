@@ -1115,7 +1115,7 @@ export interface ElectronAPI {
   showInFolder: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<void>
 
   /** 使用系统终端打开文件夹（仅 macOS） */
-  openFolderInTerminal: (folderPath: string) => Promise<void>
+  openFolderInTerminal: (folderPath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<void>
 
   /** 在系统文件管理器中显示文件（无工作区限制，支持候选基础目录） */
   showItemInFolder: (filePath: string, candidateBasePaths?: string[]) => Promise<boolean>
@@ -2763,8 +2763,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SHOW_IN_FOLDER, filePath, access)
   },
 
-  openFolderInTerminal: (folderPath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_FOLDER_IN_TERMINAL, folderPath)
+  openFolderInTerminal: (folderPath: string, access?: import('@myyoda/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_FOLDER_IN_TERMINAL, folderPath, access)
   },
 
   /** 在系统文件管理器中显示文件（无工作区限制，支持候选基础目录） */
