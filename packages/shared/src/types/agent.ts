@@ -1133,10 +1133,6 @@ export interface SkillMeta {
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
   hasUpdate?: boolean
-  /** 累计被 Agent 调用次数（跨会话持久化，来自 skill-usage.json） */
-  usageCount?: number
-  /** 最近一次被调用的时间（ISO 8601） */
-  lastUsedAt?: string
 }
 
 /** 其他工作区 Skill 分组（导入对话框用） */
@@ -1232,31 +1228,6 @@ export interface CommunitySkillInstallResult {
   slug: string
   name: string
   version: string
-}
-
-/** GitHub CLI（gh）本机可用性检测结果 */
-export interface GhCliStatus {
-  installed: boolean
-  version?: string
-  authenticated: boolean
-  /** 已登录时的 GitHub 用户名 */
-  login?: string
-}
-
-/** 提交本地 Skill 到社区市场的输入 */
-export interface SkillSubmissionInput {
-  workspaceSlug: string
-  skillSlug: string
-  /** sources.yaml 里的 target.category */
-  category: string
-  license: string
-  homepage?: string
-}
-
-/** 提交结果 */
-export interface SkillSubmissionResult {
-  prUrl: string
-  branch: string
 }
 
 // ===== Skill 批量导入 =====
@@ -2083,10 +2054,6 @@ export const AGENT_IPC_CHANNELS = {
   COMMUNITY_FETCH_MANIFEST: 'community:fetch-manifest',
   /** 安装社区市场 Skill 到工作区 */
   COMMUNITY_INSTALL_SKILL: 'community:install-skill',
-  /** 检测本机 gh CLI 安装/登录状态 */
-  COMMUNITY_CHECK_GH_CLI: 'community:check-gh-cli',
-  /** 提交本地 Skill 到社区市场（gh CLI 自动建 PR） */
-  COMMUNITY_SUBMIT_SKILL: 'community:submit-skill',
 
   // 流式事件（主进程 → 渲染进程推送）
   /** Agent 流式事件 */

@@ -28,7 +28,6 @@ import {
 import { findAllGitRoots, normalizeGitRoot } from './git-diff-service'
 import { projectRepository } from './project-repository'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
-import { readSkillUsageMap } from './skill-usage-service'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
 import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
@@ -627,7 +626,7 @@ export function saveWorkspaceMcpConfig(workspaceSlug: string, config: WorkspaceM
 
 /** 扫描工作区活跃 Skills，仅返回 skills/ 下的 Skill */
 export function getWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, workspaceSlug)
+  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
 }
 
 /** 解析 SKILL.md 的 YAML frontmatter，支持单行值、block scalar（`|` / `>`）和多行缩进 */
@@ -728,9 +727,8 @@ function isSkillDirectoryEntry(dir: string, entry: Dirent): boolean {
   }
 }
 
-function scanSkillsInDir(dir: string, enabled: boolean, workspaceSlug: string): SkillMeta[] {
+function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
   const skills: SkillMeta[] = []
-  const usageMap = readSkillUsageMap(workspaceSlug)
 
   try {
     const entries = readdirSync(dir, { withFileTypes: true })
@@ -744,12 +742,6 @@ function scanSkillsInDir(dir: string, enabled: boolean, workspaceSlug: string): 
       try {
         const content = readFileSync(skillMdPath, 'utf-8')
         const meta = parseSkillFrontmatter(content, entry.name, enabled)
-
-        const usage = usageMap[entry.name]
-        if (usage) {
-          meta.usageCount = usage.count
-          meta.lastUsedAt = usage.lastUsedAt
-        }
 
         // 如果是导入的 Skill，读取来源信息并检测更新
         const importSource = readSkillImportSource(join(dir, entry.name))
@@ -799,8 +791,8 @@ export function getDefaultSkillSlugs(): string[] {
 
 /** 获取工作区所有 Skills（含活跃和不活跃），用于设置页 UI */
 export function getAllWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, workspaceSlug)
-  const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false, workspaceSlug)
+  const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
+  const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false)
   return [...activeSkills, ...inactiveSkills]
 }
 

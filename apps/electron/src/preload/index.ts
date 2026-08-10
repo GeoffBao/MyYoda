@@ -86,9 +86,6 @@ import type {
   OrganizationSkillSyncResult,
   CommunitySkill,
   CommunitySkillInstallResult,
-  GhCliStatus,
-  SkillSubmissionInput,
-  SkillSubmissionResult,
   WorkspaceCapabilities,
   WorkspaceMemorySummary,
   FileEntry,
@@ -902,10 +899,6 @@ export interface ElectronAPI {
   communityFetchManifest: () => Promise<CommunitySkill[]>
   /** 安装社区市场 Skill 到工作区 */
   communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => Promise<CommunitySkillInstallResult>
-  /** 检测本机 gh CLI 安装 / 登录状态 */
-  communityCheckGhCli: () => Promise<GhCliStatus>
-  /** 提交本地 Skill 到社区市场（gh CLI 自动建 PR） */
-  communitySubmitSkill: (input: SkillSubmissionInput) => Promise<SkillSubmissionResult>
 
   /** 读取 SKILL.md 全文内容 */
   readSkillContent: (workspaceSlug: string, skillSlug: string) => Promise<string>
@@ -2438,14 +2431,6 @@ const electronAPI: ElectronAPI = {
 
   communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL, workspaceSlug, skill)
-  },
-
-  communityCheckGhCli: () => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_CHECK_GH_CLI)
-  },
-
-  communitySubmitSkill: (input: SkillSubmissionInput) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_SUBMIT_SKILL, input)
   },
 
   readSkillContent: (workspaceSlug: string, skillSlug: string) => {
