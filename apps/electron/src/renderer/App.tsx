@@ -6,6 +6,9 @@ import { TutorialBanner } from './components/tutorial/TutorialBanner'
 import { EnvironmentCheckDialog } from './components/environment/EnvironmentCheckDialog'
 import { MigrationImportDialog } from './components/migration/MigrationImportDialog'
 import { TooltipProvider } from './components/ui/tooltip'
+import { WindowControls } from './components/WindowControls'
+import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from './lib/platform'
+import { cn } from './lib/utils'
 import { conversationsAtom } from './atoms/chat-atoms'
 import { environmentCheckDialogOpenAtom } from './atoms/environment'
 import { settingsOpenAtom, settingsTabAtom } from './atoms/settings-tab'
@@ -24,6 +27,7 @@ export default function App(): React.ReactElement {
   const store = useStore()
   const [isLoading, setIsLoading] = React.useState(true)
   const [showOnboarding, setShowOnboarding] = React.useState(false)
+  const isWindows = React.useMemo(() => detectIsWindows(), [])
 
   // 初始化：检查是否需要显示 Onboarding
   // macOS/Linux 上 SDK 自带 claude native binary 不依赖宿主 Node/Git；
@@ -91,8 +95,19 @@ export default function App(): React.ReactElement {
   if (showOnboarding) {
     return (
       <TooltipProvider delayDuration={200}>
-        <OnboardingView onComplete={handleOnboardingComplete} />
-        <MigrationImportDialog />
+        <div className="relative h-screen w-screen overflow-hidden">
+          {/* Onboarding 绕过 AppShell 时仍需提供隐藏标题栏窗口的拖拽区，并避开 Windows 控制按钮。 */}
+          <div
+            aria-hidden="true"
+            className={cn(
+              'titlebar-drag-region fixed left-0 top-0 z-50 h-[50px]',
+              isWindows ? WINDOW_CONTROLS_INSET_RIGHT : 'right-0',
+            )}
+          />
+          <WindowControls />
+          <OnboardingView onComplete={handleOnboardingComplete} />
+          <MigrationImportDialog />
+        </div>
       </TooltipProvider>
     )
   }
