@@ -75,6 +75,7 @@ import {
 import { DEFAULT_CONTEXT_WINDOW, buildModel } from './pi-model-registry'
 import { createPartialMessageCoalescer, type PartialMessageCoalescer } from './pi-streaming-control'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
+import { isClaudeSubscriptionLimitError } from './pi-subscription-limit'
 import {
   closePiRequestProxyDispatcher,
   createPiRequestProxyDispatcher,
@@ -1699,6 +1700,31 @@ export class PiAgentAdapter implements AgentProviderAdapter {
                 break
               }
               const deferredRetryError = retryTerminalGate.peek()
+              // Claude 订阅（Pro/Max）窗口限流特判：Anthropic 对 5 小时滚动窗口限流
+              // 返回 429 + "exceed your account's rate limit"。Pi SDK 会把 "rate limit"
+              // 误判为瞬时限流并自动重试 8 次（指数退避），但订阅窗口是分钟/小时级，
+              // 重试毫无意义且会连续刷屏。命中时立即终止 native retry 并透传终态错误。
+              if (
+                event.willRetry &&
+                input.provider === 'anthropic-oauth' &&
+                isClaudeSubscriptionLimitError(deferredRetryError?.assistantMessage.errorMessage)
+              ) {
+                console.warn('[Pi Agent] Claude 订阅窗口限流，终止 native retry（不重试）')
+                const terminalRetryError = retryTerminalGate.settle(false)
+                pendingNativeOverflowRecovery = false
+                if (terminalRetryError) {
+                  emitTerminalRetryError(terminalRetryError)
+                }
+                // 阻止 Pi 在同一 session 上继续重试：置位 abortRequested，后续 agent loop 结束。
+                active.abortRequested = true
+                session.abort().catch(() => {})
+                pendingTerminalResult = convertResultMessage(
+                  event.messages,
+                  session.sessionId,
+                  runtimeGuard.getResultOverride(event.messages),
+                )
+                break
+              }
               const waitsForNativeOverflowRecovery = shouldDeferPiOverflowTerminalError(
                 deferredRetryError?.assistantMessage,
                 model.contextWindow,

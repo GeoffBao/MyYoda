@@ -23,6 +23,7 @@ import { UPDATER_LINKS } from '@myyoda/shared'
 import {
   MYYODA_DEFAULT_PERMISSION_MODE,
   MYYODA_PERMISSION_MODE_CONFIG,
+  PROVIDER_DEFAULT_URLS,
   THINKING_SIGNATURE_ERROR_CODE,
   THINKING_SIGNATURE_ERROR_MESSAGE,
   THINKING_SIGNATURE_ERROR_TITLE,
@@ -1634,13 +1635,16 @@ ${workContext}` : '')
       }
       const piCustomTools = [...piBuiltinTools, ...piMcpTools, ...(extensions.piCustomTools ?? [])]
       const proxyUrl = await getEffectiveProxyUrl()
+      // 存量 anthropic-oauth 渠道（迁移前创建）的 baseUrl 可能是空串，Pi runtime
+      // 需要真实 endpoint；缺失时兜底到官方 Anthropic API。
+      const effectiveBaseUrl = channel.baseUrl || (channel.provider === 'anthropic-oauth' ? PROVIDER_DEFAULT_URLS['anthropic-oauth'] : channel.baseUrl)
       const queryOptions: PiAgentQueryOptions = {
         sessionId,
         prompt: finalPrompt,
         model: selectedModelId,
         cwd: agentCwd,
         apiKey,
-        baseUrl: channel.baseUrl,
+        baseUrl: effectiveBaseUrl,
         provider: channel.provider,
         channelId,
         channelName: channel.name,
