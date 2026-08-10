@@ -1330,6 +1330,9 @@ export class AgentOrchestrator {
       agentCwd = homedir()
       workspaceSlug = undefined
       workspace = undefined
+      // 会话专属 sandbox 目录：用户上传/拖拽的文件会被复制到这里，无论最终 cwd 决策
+      // 结果如何（project 模式 cwd=项目目录），它都必须是 VisionRelay 的授权根之一。
+      let agentSandboxDir: string | undefined
       if (workspaceId) {
         const ws = getAgentWorkspace(workspaceId)
         if (ws) {
@@ -1339,6 +1342,7 @@ export class AgentOrchestrator {
           // （放置 .claude/settings.json、.context/ 等会话级辅助文件，与实际
           // 工作目录解耦，避免 project 模式下污染用户真实项目目录）。
           const sandboxCwd = getAgentSessionWorkspacePath(ws.slug, sessionId)
+          agentSandboxDir = sandboxCwd
           const cwdResolution = resolveSessionCwd({
             gitWorktreePath: sessionMeta?.gitWorktreePath,
             agentCwdMode: sessionMeta?.agentCwdMode,
@@ -1402,8 +1406,9 @@ export class AgentOrchestrator {
       })
 
       // 视觉助手授权根：在附加目录基础上，把当前会话的实际工作目录（项目 workingDirectory）
-      // 也纳入，但不动 allAdditionalDirectories（它仍用于 additionalDirectories / prompt）。
-      const visionRelayAllowedRoots = appendVisionRelayAllowedRoot(allAdditionalDirectories, agentCwd)
+      // 与会话专属 sandbox（用户上传附件所在）也纳入，但不动 allAdditionalDirectories
+      // （它仍用于 additionalDirectories / prompt）。
+      const visionRelayAllowedRoots = appendVisionRelayAllowedRoot(allAdditionalDirectories, agentCwd, undefined, agentSandboxDir)
 
       // 9.5 确保 SDK 项目设置（plansDirectory → .context）
       if (agentRuntime === 'claude') {

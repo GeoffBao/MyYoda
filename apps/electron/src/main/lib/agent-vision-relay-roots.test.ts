@@ -26,4 +26,28 @@ describe('appendVisionRelayAllowedRoot', () => {
     const base = ['/tmp/additional']
     expect(appendVisionRelayAllowedRoot(base, HOME, HOME)).toEqual(base)
   })
+
+  test('sessionSandboxDir 不在基础列表 → 追加到授权根（project 模式下上传附件所在目录）', () => {
+    const base = ['/tmp/additional', PROJECT_DIR]
+    const sandbox = '/Users/admin/.myyoda/agent-workspaces/default/abc-123'
+    const result = appendVisionRelayAllowedRoot(base, PROJECT_DIR, HOME, sandbox)
+    expect(result).toEqual([...base, sandbox])
+  })
+
+  test('sessionSandboxDir 已在基础列表 → 不重复追加', () => {
+    const base = ['/tmp/additional', PROJECT_DIR]
+    const sandbox = '/Users/admin/.myyoda/agent-workspaces/default/abc-123'
+    const result = appendVisionRelayAllowedRoot([...base, sandbox], PROJECT_DIR, HOME, sandbox)
+    expect(result).toEqual([...base, sandbox])
+  })
+
+  test('sessionSandboxDir 等于 homedir → 不追加（防御）', () => {
+    const base = ['/tmp/additional']
+    expect(appendVisionRelayAllowedRoot(base, undefined, HOME, HOME)).toEqual(base)
+  })
+
+  test('sessionSandboxDir 未提供 → 行为与旧签名一致', () => {
+    const base = ['/tmp/additional']
+    expect(appendVisionRelayAllowedRoot(base, PROJECT_DIR, HOME)).toEqual([...base, PROJECT_DIR])
+  })
 })
