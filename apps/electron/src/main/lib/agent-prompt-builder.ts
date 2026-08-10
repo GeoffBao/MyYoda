@@ -131,6 +131,22 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // 工具使用指南（复用常量）
   sections.push(TOOL_USAGE_GUIDELINES)
 
+  // DeepSeek 模型专属编码规范（B1）：补偿 deepseek-v4 系列在工具调用纪律/验证闭环/陌生仓库定位上的短板。
+  // 参考 Aider model-settings（use_repo_map/examples_as_sys_msg/小步验证）与社区 DeepSeek 适配实践。
+  if (currentModelId && /^deepseek-v4/i.test(currentModelId)) {
+    sections.push(`## 模型专属编码规范（DeepSeek runtime）
+
+当前模型为 deepseek-v4 系列，与 Claude/GPT 在编码行为上存在差异，请严格遵守以下约束：
+
+- **工具调用纪律**：工具参数必须输出合法 JSON 且与 schema 严格一致；一次只调用一个工具，收到结果并确认后再继续；不要批量并行调用多个修改类工具
+- **先读后改**：修改任何文件前，先用 Read / Grep / Glob 定位真实代码与调用方，禁止凭记忆假设文件内容或行号
+- **小步验证**：大文件改动拆成小步——先 Read 相关段落 → Edit 精确替换 → 检查结果；每次工具调用后确认无误再进入下一步
+- **改后必验证**：完成代码改动后，主动运行 build / typecheck / test 验证，不依赖"看起来对"；若验证失败，阅读真实报错原文并修复
+- **禁止编造 API**：拿不准第三方库或框架 API 用法时，优先 Grep 仓库内既有用法；有 Context7 / 文档查询工具时先查文档，禁止凭记忆编造参数或签名
+- **影响面清单**：涉及多处修改时，先列出影响面（改动文件 × 依赖关系 × 调用方），再动手；改动后检查所有受影响位置
+- **谨慎提交**：提交代码前自查 diff，确认无调试残留、无无关改动`)
+  }
+
   sections.push(`## 子 Agent 委派策略
 
 MyYoda 统一使用 collaboration 派生子会话承载子 Agent 委派。不要使用 SDK 临时 SubAgent、Agent 工具或 \`Task\` 工具来拆分子任务；这些临时 sidechain 不进入 MyYoda 会话体系，不利于追踪、恢复和继续协作。注意：这里的 \`Task\` 不包含可见进度工具 TaskCreate / TaskUpdate；委派前后仍应持续用后者维护父任务清单。
