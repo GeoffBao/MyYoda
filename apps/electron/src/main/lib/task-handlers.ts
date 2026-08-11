@@ -34,11 +34,14 @@ import {
   extractYaml,
 } from '@myyoda/shared/tasks'
 import {
+  getProjectPath,
+} from '@myyoda/shared/projects/storage'
+import {
+  taskDir,
   getLatestRunId,
   listResumableRuns,
   listTaskSlugs,
   loadTaskSpec,
-  deleteTaskSpec,
   parseTaskYaml,
   readRunLog,
   readRunSpecSnapshot,
@@ -63,6 +66,7 @@ import { validateTeamSquad, type TeamMemberResolver } from '@myyoda/shared/exper
 import type { RunSnapshot } from './task-runner'
 import { loadExpertWorkspaceBinding } from './expert-binding-service'
 import { projectRepository } from './project-repository'
+import { quarantineForRecovery } from './recovery-trash-service'
 import { resolveRegisteredWorkspaceRoot, type WorkspaceRootRegistration } from './workspace-root-access-policy'
 import { analyzeProjectDeleteImpact, analyzeTaskDeleteImpact } from './project-impact-service'
 import {
@@ -742,7 +746,13 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
       impact,
     )
 
-    projectRepository.deleteProjectAtRoot(context.workspaceRoot, slug)
+    const deletableSlug = projectRepository.assertProjectDeletableAtRoot(context.workspaceRoot, slug)
+    quarantineForRecovery(
+      context.workspaceRoot,
+      getProjectPath(context.workspaceRoot, deletableSlug),
+      'project',
+      deletableSlug,
+    )
     broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
   })
 
@@ -1026,7 +1036,12 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
       `${context.workspaceRoot}/tasks/${slug}`,
       impact,
     )
-    deleteTaskSpec(context.workspaceRoot, slug)
+    quarantineForRecovery(
+      context.workspaceRoot,
+      taskDir(context.workspaceRoot, slug),
+      'task',
+      slug,
+    )
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.GET_RESULTS, (_event, workspaceRoot: string, slug: string, runId?: string) => {
