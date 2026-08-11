@@ -3,20 +3,23 @@
  *
  * 默认市场为 MyYoda 自建私有市场（GeoffBao/myyoda-skills），遵循标准的 SKILL.md 目录市场规范，
  * 提供 sources.yaml 结构化清单 + skills/ 目录。本服务：
- * 1. 拉取市场 sources.yaml 解析 skill 清单（name/description/source/category）
- * 2. 下载整个仓库 tar.gz → 解压 → 按清单提取目标 skill 目录
- * 3. 写入工作区 skills/ 并标记来源（community）
+ * 1. 拉取市场 sources.yaml 解析 skill 清单（name/description/category/version/downloads/source）
+ * 2. 安装本仓库托管 skill：下载市场仓库 tar.gz → 解压 → 按清单提取目标 skill 目录
+ * 3. 安装外部收录 skill（source.repo）：从上游仓库下载对应目录
+ * 4. 写入工作区 skills/ 并标记来源（community）
+ * 5. 安装成功后上报下载统计（本地计数 + 可选远端统计服务）
  *
  * 市场地址可配置（未来接入其他市场只需换清单 URL 与仓库地址）。
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import decompress from 'decompress'
 import decompressTargz from 'decompress-targz'
 import { load as loadYaml } from 'js-yaml'
+import type { CommunitySkill as SharedCommunitySkill } from '@myyoda/shared'
 
 /** 市场仓库配置（默认 MyYoda 私有市场） */
 export const COMMUNITY_MARKET = {
@@ -28,17 +31,11 @@ export const COMMUNITY_MARKET = {
   skillsRoot: 'skills',
 } as const
 
+/** 可选远端下载统计服务（未配置时仅本地计数） */
+export const COMMUNITY_STATS_ENDPOINT = process.env.MYYODA_SKILL_STATS_URL ?? ''
+
 /** 市场 skill 条目（来自 sources.yaml） */
-export interface CommunitySkill {
-  name: string
-  description: string
-  /** 显示名称（target.name） */
-  displayName?: string
-  /** 分类（target.category，如 tools/automation/workflow） */
-  category?: string
-  license?: string
-  authorName?: string
-  homepage?: string
+export interface CommunitySkill extends SharedCommunitySkill {
   /** 仓库内 skill 目录相对路径（target.path） */
   path: string
 }
@@ -60,6 +57,17 @@ export function parseSourcesYaml(text: string): CommunitySkill[] {
     const target = (entry.target ?? {}) as Record<string, unknown>
     const targetPath = typeof target.path === 'string' ? target.path.trim() : ''
     if (!targetPath) continue
+
+    // 外部收录源
+    const sourceEntry = (entry.source ?? {}) as Record<string, unknown>
+    const source = sourceEntry.repo
+      ? {
+          repo: String(sourceEntry.repo).trim(),
+          path: String(sourceEntry.path ?? '').trim(),
+          ref: typeof sourceEntry.ref === 'string' ? sourceEntry.ref.trim() : undefined,
+        }
+      : undefined
+
     skills.push({
       name,
       description: String(entry.description ?? '').trim(),
@@ -71,6 +79,11 @@ export function parseSourcesYaml(text: string): CommunitySkill[] {
         : undefined,
       homepage: typeof entry.homepage === 'string' ? entry.homepage.trim() : undefined,
       path: targetPath,
+      version: typeof entry.version === 'string' ? entry.version.trim() : undefined,
+      downloads: typeof entry.downloads === 'number' ? entry.downloads : typeof entry.downloads === 'string' ? Number(entry.downloads) || 0 : 0,
+      verified: typeof entry.verified === 'boolean' ? entry.verified : undefined,
+      source,
+      external: Boolean(source),
     })
   }
   return skills
@@ -85,11 +98,25 @@ export async function fetchCommunityManifest(): Promise<CommunitySkill[]> {
   }
   const text = await res.text()
   const skills = parseSourcesYaml(text)
-  // 补充 category（从 path 推断）
-  return skills.map((s) => ({
+  // 补充 category（从 path 推断）+ 合并远端统计（可选）
+  const merged = skills.map((s) => ({
     ...s,
     category: s.category ?? inferCategory(s.path),
   }))
+  if (COMMUNITY_STATS_ENDPOINT) {
+    try {
+      const statsRes = await fetch(`${COMMUNITY_STATS_ENDPOINT}/stats`)
+      if (statsRes.ok) {
+        const stats = (await statsRes.json()) as Record<string, number>
+        for (const s of merged) {
+          if (stats[s.name] != null) s.downloads = stats[s.name] ?? s.downloads ?? 0
+        }
+      }
+    } catch {
+      // 远端统计不可用则保留 sources.yaml 静态值
+    }
+  }
+  return merged
 }
 
 /** 从仓库内 path 推断分类 */
@@ -99,12 +126,12 @@ function inferCategory(path: string): string {
   return 'other'
 }
 
-/** 下载市场仓库 tar.gz 到临时目录并解压，返回解压目录 */
-async function downloadAndExtractMarket(): Promise<string> {
-  const url = `https://codeload.github.com/${COMMUNITY_MARKET.repo}/tar.gz/refs/heads/${COMMUNITY_MARKET.branch}`
+/** 下载任意 GitHub 仓库 tar.gz 到临时目录并解压，返回解压后的仓库根目录 */
+async function downloadAndExtractRepo(repo: string, branch: string): Promise<string> {
+  const url = `https://codeload.github.com/${repo}/tar.gz/refs/heads/${branch}`
   const res = await fetch(url)
   if (!res.ok) {
-    throw new Error(`下载社区市场失败 (${res.status})`)
+    throw new Error(`下载仓库失败 ${repo} (${res.status})`)
   }
   const buf = Buffer.from(await res.arrayBuffer())
   const tmpDir = join(tmpdir(), `myyoda-market-${randomUUID()}`)
@@ -113,9 +140,34 @@ async function downloadAndExtractMarket(): Promise<string> {
     await decompress(buf, tmpDir, { plugins: [decompressTargz()] })
   } catch (err) {
     rmSync(tmpDir, { recursive: true, force: true })
-    throw new Error(`解压社区市场失败: ${(err as Error).message}`)
+    throw new Error(`解压仓库失败 ${repo}: ${(err as Error).message}`)
   }
-  return tmpDir
+  // GitHub tar.gz 解压后目录名: <repo>-<branch>/
+  const repoDirs = readdirSync(tmpDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => join(tmpDir, e.name))
+  const repoRoot = repoDirs[0]
+  if (!repoRoot) {
+    rmSync(tmpDir, { recursive: true, force: true })
+    throw new Error('仓库包结构异常')
+  }
+  return repoRoot
+}
+
+/** 上报下载统计（远端 + 本地落盘），失败静默 */
+async function reportDownload(name: string): Promise<void> {
+  // 远端统计服务（可选）
+    try {
+      if (COMMUNITY_STATS_ENDPOINT) {
+        await fetch(`${COMMUNITY_STATS_ENDPOINT}/download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skill: name }),
+        }).catch(() => {})
+      }
+    } catch {
+      // 静默
+    }
 }
 
 /**
@@ -132,19 +184,15 @@ export async function installCommunitySkill(
     throw new Error(`当前空间已存在同名 Skill: ${skill.name}`)
   }
 
-  const extractedRoot = await downloadAndExtractMarket()
-  try {
-    // GitHub tar.gz 解压后目录名: <repo>-<branch>/
-    const repoDirs = (await import('node:fs')).readdirSync(extractedRoot, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => join(extractedRoot, e.name))
-    const repoRoot = repoDirs[0]
-    if (!repoRoot) {
-      throw new Error('社区市场包结构异常')
-    }
+  // 外部收录：从上游仓库下载；本仓库托管：从市场仓库下载
+  const repo = skill.source?.repo ?? COMMUNITY_MARKET.repo
+  const branch = skill.source?.ref ?? COMMUNITY_MARKET.branch
+  const skillPath = skill.source ? (skill.source.path || skill.path) : skill.path
 
-    const sourceDir = join(repoRoot, skill.path)
-    // 社区市场仓库遵循 Claude Code plugin 格式：SKILL.md 可能在 <dir>/skills/<name>/ 嵌套目录
+  const repoRoot = await downloadAndExtractRepo(repo, branch)
+  try {
+    const sourceDir = join(repoRoot, skillPath)
+    // 兼容：SKILL.md 可能在 <dir>/skills/<name>/ 嵌套目录
     const nestedSkillDir = join(sourceDir, 'skills', skill.name)
     let actualSkillDir = sourceDir
     if (existsSync(join(sourceDir, 'SKILL.md'))) {
@@ -166,10 +214,12 @@ export async function installCommunitySkill(
     const sourceMeta = {
       sourceType: 'community',
       communityName: COMMUNITY_MARKET.name,
-      communityRepo: COMMUNITY_MARKET.repo,
+      communityRepo: skill.source?.repo ?? COMMUNITY_MARKET.repo,
       communitySkill: skill.name,
+      external: Boolean(skill.source),
       importedAt: new Date().toISOString(),
       license: skill.license,
+      version: skill.version,
     }
     writeFileSync(join(targetPath, '.source.json'), JSON.stringify(sourceMeta, null, 2), 'utf-8')
 
@@ -181,13 +231,16 @@ export async function installCommunitySkill(
       return m?.[1]?.trim()
     }
     const name = getField('name') ?? skill.displayName ?? skill.name
-    const version = getField('version') ?? '0.0.0'
+    const version = getField('version') ?? skill.version ?? '0.0.0'
     const slug = getField('slug') ?? skill.name
 
-    console.log(`[社区市场] 已安装 Skill: ${skill.name} → ${workspaceSkillsDir}`)
+    // 下载统计上报（异步，不阻塞安装）
+    void reportDownload(skill.name)
+
+    console.log(`[社区市场] 已安装 Skill: ${skill.name} (${version}) → ${workspaceSkillsDir}`)
     return { slug, name, version }
   } finally {
-    rmSync(extractedRoot, { recursive: true, force: true })
+    rmSync(repoRoot, { recursive: true, force: true })
   }
 }
 

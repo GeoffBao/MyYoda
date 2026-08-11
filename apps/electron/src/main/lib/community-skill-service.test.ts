@@ -72,3 +72,58 @@ describe('社区市场服务', () => {
     expect(skills[0]?.path.startsWith('skills/tools/')).toBe(true)
   })
 })
+
+describe('社区市场服务 · 增强字段', () => {
+  const ENHANCED_YAML = `skills:
+  - name: hosted-skill
+    description: hosted desc
+    version: 2.0.1
+    downloads: 42
+    verified: true
+    target:
+      category: devtools
+      path: skills/hosted-skill
+    license: MIT
+    author:
+      name: GeoffBao
+
+  - name: external-skill
+    description: external desc
+    version: latest
+    downloads: 0
+    verified: true
+    source:
+      repo: some/repo
+      path: skills/external-skill
+      ref: main
+    target:
+      category: video
+      path: external/external-skill
+    license: Apache-2.0
+`
+
+  test('解析 version / downloads / verified 字段', () => {
+    const skills = parseSourcesYaml(ENHANCED_YAML)
+    const hosted = skills.find((s) => s.name === 'hosted-skill')!
+    expect(hosted.version).toBe('2.0.1')
+    expect(hosted.downloads).toBe(42)
+    expect(hosted.verified).toBe(true)
+    expect(hosted.external).toBe(false)
+    expect(hosted.source).toBeUndefined()
+  })
+
+  test('解析外部收录 source 并标记 external', () => {
+    const skills = parseSourcesYaml(ENHANCED_YAML)
+    const ext = skills.find((s) => s.name === 'external-skill')!
+    expect(ext.version).toBe('latest')
+    expect(ext.external).toBe(true)
+    expect(ext.source).toEqual({ repo: 'some/repo', path: 'skills/external-skill', ref: 'main' })
+    expect(ext.downloads).toBe(0)
+  })
+
+  test('downloads 支持字符串数字', () => {
+    const text = 'skills:\n  - name: s\n    description: d\n    downloads: "123"\n    target:\n      path: skills/s\n'
+    const skills = parseSourcesYaml(text)
+    expect(skills[0]?.downloads).toBe(123)
+  })
+})

@@ -1,16 +1,17 @@
 /**
  * CommunityMarketDialog — 社区市场
  *
- * 拉取 MyYoda 私有市场清单，浏览/搜索 Skill，一键安装到当前空间。
+ * 拉取 MyYoda 私有市场清单，浏览/搜索 Skill（支持分类筛选、版本号、下载量），一键安装到当前空间。
  */
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Store, Download, RefreshCw, Search, ExternalLink } from 'lucide-react'
+import { Store, Download, RefreshCw, Search, ExternalLink, ShieldCheck, GitBranch, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import type { CommunitySkill } from '@myyoda/shared'
 
 interface CommunityMarketDialogProps {
@@ -21,11 +22,20 @@ interface CommunityMarketDialogProps {
   onImported: () => void
 }
 
+/** 格式化下载量（1234 → 1.2k） */
+function formatDownloads(n: number | undefined): string {
+  if (!n || n <= 0) return '0'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
+
 export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, installedSkills, onImported }: CommunityMarketDialogProps): React.ReactElement {
   const [skills, setSkills] = React.useState<CommunitySkill[]>([])
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
+  const [activeCategory, setActiveCategory] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
   const installed = React.useMemo(
@@ -54,19 +64,22 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return skills
-    return skills.filter((s) =>
-      s.name.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.category?.toLowerCase().includes(q),
-    )
-  }, [skills, search])
+    return skills.filter((s) => {
+      if (activeCategory && s.category !== activeCategory) return false
+      if (!q) return true
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.category?.toLowerCase().includes(q)
+      )
+    })
+  }, [skills, search, activeCategory])
 
   const handleInstall = async (skill: CommunitySkill): Promise<void> => {
     setInstalling(skill.name)
     try {
       await window.electronAPI.communityInstallSkill(workspaceSlug, skill)
-      toast.success(`已从社区市场安装 Skill：${skill.displayName ?? skill.name}`)
+      toast.success(`已从社区市场安装 Skill：${skill.displayName ?? skill.name}${skill.version && skill.version !== 'latest' ? ` v${skill.version}` : ''}`)
       onImported()
     } catch (err) {
       console.error('[社区市场] 安装失败:', err)
@@ -76,14 +89,19 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
     }
   }
 
-  const categoryCount = React.useMemo(() => {
+  const categories = React.useMemo(() => {
     const map = new Map<string, number>()
     for (const s of skills) {
       const c = s.category ?? 'other'
       map.set(c, (map.get(c) ?? 0) + 1)
     }
-    return map
+    return [...map.entries()].sort((a, b) => b[1] - a[1])
   }, [skills])
+
+  const totalDownloads = React.useMemo(
+    () => skills.reduce((acc, s) => acc + (s.downloads ?? 0), 0),
+    [skills],
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,9 +110,15 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
           <DialogTitle className="flex items-center gap-2">
             <Store className="size-5 text-emerald-500" />
             社区市场
+            {totalDownloads > 0 && (
+              <span className="ml-auto flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                <TrendingDown className="size-3.5" />
+                累计下载 {formatDownloads(totalDownloads)}
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription>
-            浏览社区贡献的 Agent Skills，一键安装到当前空间。由 MyYoda 官方维护，遵循各 Skill 的许可证。
+            浏览社区贡献的 Agent Skills（{skills.length} 个），一键安装到当前空间。由 MyYoda 官方维护，遵循各 Skill 的许可证。
           </DialogDescription>
         </DialogHeader>
 
@@ -113,14 +137,29 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
           </Button>
         </div>
 
-        {categoryCount.size > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {[...categoryCount.entries()].map(([cat, count]) => (
-              <Badge key={cat} variant="secondary" className="gap-1 text-[11px]">
-                {cat} · {count}
+        {categories.length > 0 && (
+          <ScrollArea className="w-full">
+            <div className="flex flex-wrap gap-1.5">
+              <Badge
+                key="__all"
+                variant={activeCategory === null ? 'default' : 'secondary'}
+                className={`cursor-pointer gap-1 text-[11px] ${activeCategory === null ? 'bg-emerald-600' : ''}`}
+                onClick={() => setActiveCategory(null)}
+              >
+                全部 · {skills.length}
               </Badge>
-            ))}
-          </div>
+              {categories.map(([cat, count]) => (
+                <Badge
+                  key={cat}
+                  variant={activeCategory === cat ? 'default' : 'secondary'}
+                  className={`cursor-pointer gap-1 text-[11px] ${activeCategory === cat ? 'bg-emerald-600' : ''}`}
+                  onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
+                >
+                  {cat} · {count}
+                </Badge>
+              ))}
+            </div>
+          </ScrollArea>
         )}
 
         <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
@@ -143,10 +182,32 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium">{skill.displayName ?? skill.name}</span>
-                      {skill.category && <Badge variant="outline" className="text-[10px]">{skill.category}</Badge>}
-                      {skill.license && <span className="shrink-0 text-[10px] text-muted-foreground">{skill.license}</span>}
+                      {skill.verified && (
+                        <span className="shrink-0 text-emerald-500" title="已人工审核">
+                          <ShieldCheck className="size-3.5" />
+                        </span>
+                      )}
+                      {skill.version && skill.version !== 'latest' && (
+                        <Badge variant="outline" className="shrink-0 text-[10px]">v{skill.version}</Badge>
+                      )}
+                      {skill.external && (
+                        <Badge variant="outline" className="shrink-0 gap-0.5 text-[10px] text-blue-500">
+                          <GitBranch className="size-2.5" />
+                          外部
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{skill.description || '暂无描述'}</p>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      {skill.category && <Badge variant="secondary" className="text-[10px]">{skill.category}</Badge>}
+                      {(skill.downloads ?? 0) > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                          <TrendingDown className="size-3" />
+                          {formatDownloads(skill.downloads)} 次下载
+                        </span>
+                      )}
+                      {skill.license && <span className="shrink-0 text-[10px] text-muted-foreground">{skill.license}</span>}
+                    </div>
                     {skill.authorName && (
                       <p className="mt-0.5 text-[10px] text-muted-foreground/70">by {skill.authorName}</p>
                     )}
