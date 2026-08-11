@@ -23,7 +23,7 @@ import {
   getSdkConfigDir,
 } from './config-paths'
 import { getAgentWorkspace, getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspace-manager'
-import { removeSessionWorktree } from './git-session-context-service'
+import { assertWorktreeClean, removeSessionWorktree } from './git-session-context-service'
 
 import type {
   AgentSessionMeta,
@@ -665,6 +665,12 @@ export function deleteAgentSession(id: string): void {
   if (idx === -1) {
     console.warn(`[Agent 会话] 会话不存在，跳过删除: ${id}`)
     return
+  }
+
+  const candidate = index.sessions[idx]!
+  if (candidate.gitWorktreePath && candidate.gitRepoPath) {
+    const stillReferenced = index.sessions.some((session) => session.id !== id && session.gitWorktreePath === candidate.gitWorktreePath)
+    if (!stillReferenced) assertWorktreeClean(candidate.gitWorktreePath)
   }
 
   const removed = index.sessions.splice(idx, 1)[0]!

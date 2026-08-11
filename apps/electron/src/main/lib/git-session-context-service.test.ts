@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { AgentSessionMeta } from '@myyoda/shared'
-import { listGitBranchesForSession, prepareSessionGitContext } from './git-session-context-service'
+import { assertWorktreeClean, listGitBranchesForSession, prepareSessionGitContext, removeSessionWorktree } from './git-session-context-service'
 
 const roots: string[] = []
 
@@ -125,6 +125,29 @@ describe('git-session-context-service', () => {
       gitWorktreePath: expectedWorktree,
       gitBaseRef: 'main',
     })
+  })
+
+  test('Given a dirty Worktree When removing it Then blocks deletion and preserves the user changes', () => {
+    const repo = makeRepo()
+    const worktree = join(repo, '.worktrees', 'dirty')
+    sh(repo, ['worktree', 'add', worktree, 'feature/alpha'])
+    writeFileSync(join(worktree, 'uncommitted.txt'), 'keep me\n', 'utf-8')
+
+    expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
+    expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
+    expect(existsSync(join(worktree, 'uncommitted.txt'))).toBe(true)
+    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+  })
+
+  test('Given a clean Worktree When removing it Then removes the Worktree registration and directory', () => {
+    const repo = makeRepo()
+    const worktree = join(repo, '.worktrees', 'clean')
+    sh(repo, ['worktree', 'add', worktree, 'feature/alpha'])
+
+    removeSessionWorktree(repo, worktree)
+
+    expect(existsSync(worktree)).toBe(false)
+    expect(sh(repo, ['worktree', 'list', '--porcelain'])).not.toContain(`worktree ${worktree}`)
   })
 
   test('Given Local mode with dirty working tree When switching branch Then refuses without changing session meta', () => {
