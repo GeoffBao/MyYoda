@@ -81,7 +81,7 @@ export function GeneralSettings(): React.ReactElement {
     window.electronAPI.getSettings().then((settings) => {
       setArchiveAfterDays(settings.archiveAfterDays ?? 7)
       setDefaultThinkingLevel(settings.defaultThinkingLevel ?? DEFAULT_AGENT_THINKING_LEVEL)
-      setCodingMode(settings.codingMode ?? false)
+      setCodingMode(settings.optimizedCoding ?? settings.codingMode ?? false)
       setGitAttributionEnabled(settings.gitAttributionEnabled ?? true)
       setCodeClawEnabled(settings.codeClaw?.enabled ?? false)
       setCodeClawThemeId(isCodeClawThemeId(settings.codeClaw?.themeId) ? settings.codeClaw.themeId : DEFAULT_CODECLAW_THEME_ID)
@@ -473,12 +473,15 @@ export function GeneralSettings(): React.ReactElement {
             </div>
           </SettingsRow>
           <SettingsToggle
-            label="Coding 模式"
-            description="编码任务更充分推理：未设置会话级思考时，新会话默认思考深度提升到 max（会话级设置优先）"
+            label="编码优化模式"
+            description="一键开启 DeepSeek 编码优化全家桶：仓库代码地图（repo map）、模型专属编码规范、提前压缩阈值、外部能力分工指引、编码相关预置技能（code-review/ultraqa/deep-interview/ai-slop-cleaner）。未设置会话级思考时默认思考深度提升到 max。默认关闭，按需开启。"
             checked={codingMode}
             onCheckedChange={(checked) => {
-              void window.electronAPI.updateSettings({ codingMode: checked }).catch((error) => {
-                console.error('[通用设置] 更新 Coding 模式失败:', error)
+              // 乐观更新：先切 UI 再持久化，失败回滚（对齐 gitAttribution 开关模式）
+              setCodingMode(checked)
+              void window.electronAPI.updateSettings({ optimizedCoding: checked }).catch((error) => {
+                console.error('[通用设置] 更新编码优化模式失败:', error)
+                setCodingMode(!checked)
               })
             }}
           />

@@ -21,6 +21,8 @@
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
     "build:guest-preload": "esbuild src/preload/browser-annotation-guest.ts --bundle --platform=node --format=cjs --outfile=dist/browser-annotation-guest.cjs --external:electron",
     "watch:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:web-tree-sitter --watch=forever",
+    "watch:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron --watch=forever",
+    "watch:guest-preload": "esbuild src/preload/browser-annotation-guest.ts --bundle --platform=node --format=cjs --outfile=dist/browser-annotation-guest.cjs --external:electron --watch=forever",
     "build:renderer": "node ../../node_modules/vite/bin/vite.js build",
     "build:resources": "cp -r resources dist/ 2>/dev/null || true",
     "build:eventkit-native": "bun run scripts/build-eventkit-native.ts",
