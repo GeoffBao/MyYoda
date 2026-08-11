@@ -256,9 +256,8 @@ export async function createMyYodaConductorSessionHost(): Promise<MyYodaConducto
   ])
   return new MyYodaConductorSessionHost({
     createAgentSession: (title, channelId, workspaceId, modelId) => {
-      // Work/Kanban 会话显式跟随全局默认 runtime（与 Code 新建会话一致），避免静默依赖 createAgentSession 默认参数。
-      const agentRuntime = settingsService.getSettings().agentRuntime ?? 'pi'
-      return sessionManager.createAgentSession(title, channelId, workspaceId, modelId, agentRuntime)
+      // Pi-only：不传 agentCwdMode，createAgentSession 默认按 project 语义。
+      return sessionManager.createAgentSession(title, channelId, workspaceId, modelId)
     },
     getAgentSessionMeta: sessionManager.getAgentSessionMeta,
     listAgentSessions: sessionManager.listAgentSessions,

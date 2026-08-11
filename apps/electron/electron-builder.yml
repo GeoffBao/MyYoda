@@ -20,7 +20,6 @@ compression: normal
 # 启用 ASAR 归档，将 SDK native binary / Pi native addon 解压到 app.asar.unpacked/ 避免路径问题
 asar: true
 asarUnpack:
-  - "node_modules/@anthropic-ai/**"
   - "node_modules/@silvia-odwyer/**"
   - "node_modules/@mariozechner/**"
   - "node_modules/@napi-rs/**"
@@ -42,13 +41,6 @@ files:
   # 将 external 依赖闭包同步到 apps/electron/node_modules。
   - node_modules/**/*
   # 显式列出 Claude SDK 主包 + 平台子包（sync:check / 打包门禁要求）
-  - node_modules/@anthropic-ai/claude-agent-sdk/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-win32-arm64/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/**/*
-  - node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/**/*
   # PDF 内联预览使用本地 PDF.js 资源，避免运行时依赖 CDN。
   - node_modules/pdfjs-dist/**/*
   # 排除 workspace 包的 symlink（代码已被 esbuild/Vite 打包到 dist/ 中）
@@ -140,7 +132,6 @@ mac:
       role: Editor
   # 架构由 CLI 参数控制（CI 矩阵分别传 --arm64 / --x64），
   # 每个 runner 只构建其宿主架构对应的产物，与 bun 按 os/cpu 装好的
-  # @anthropic-ai/claude-agent-sdk-darwin-{arch} native binary 对齐。
   target:
     - dmg
     - zip

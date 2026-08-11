@@ -302,6 +302,7 @@ function normalizePiApi(provider: ProviderType): Api {
 function candidatePiProviders(provider: ProviderType): KnownProvider[] {
   switch (provider) {
     case 'anthropic':
+    case 'anthropic-oauth':
       return ['anthropic']
     case 'openai':
     case 'openai-responses':

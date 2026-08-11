@@ -92,6 +92,9 @@ import {
 } from './feishu/prompt-builder'
 
 import { redactSensitiveLogText, redactSensitiveLogValue } from './bridge-log-redaction'
+import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
+import { Type } from 'typebox'
+import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 
 // ===== 类型定义 =====
 
@@ -1100,7 +1103,6 @@ class FeishuBridge {
       channelId,
       workspaceId,
       undefined,
-      appSettings.agentRuntime ?? 'claude',
     )
 
     // 绑定
@@ -1729,13 +1731,10 @@ class FeishuBridge {
     })
 
     // fire-and-forget，不阻塞事件回调
-    // 群聊时注入动态 MCP 工具（允许 Agent 主动拉取更多群聊历史）
-    let customMcpServers: Record<string, Record<string, unknown>> | undefined
+    // 群聊时注入绑定 chatId 的 Pi read-only tool，模型无法通过参数跨群读取历史。
+    let piCustomTools: ToolDefinition[] | undefined
     if (msgCtx.chatType === 'group') {
-      const mcpServer = await this.createFeishuChatMcpServer(chatId)
-      if (mcpServer) {
-        customMcpServers = { feishu_chat: mcpServer as unknown as Record<string, unknown> }
-      }
+      piCustomTools = [this.buildPiFeishuChatHistoryTool(chatId)]
     }
 
     // 渠道/模型解析：binding（per-chat 用户在 IM 里切过的）优先，其次 Bot 配置、应用设置
@@ -1750,7 +1749,6 @@ class FeishuBridge {
       modelId,
       workspaceId: binding.workspaceId,
       permissionModeOverride: 'bypassPermissions',
-      ...(customMcpServers && { customMcpServers }),
     }
 
     // 直接 await runAgentHeadless 的 Promise——它会在 orchestrator.sendMessage
@@ -1777,7 +1775,7 @@ class FeishuBridge {
         onTitleUpdated: (_title) => {
           // 标题更新可选通知
         },
-      })
+      }, piCustomTools ? { piCustomTools } : undefined)
     } catch (error) {
       console.error('[飞书 Bridge] Agent 运行异常:', redactSensitiveLogValue(error))
     }
@@ -2371,60 +2369,43 @@ class FeishuBridge {
    *
    * 提供 `fetch_group_chat_history` 工具，让 Agent 可以主动拉取更多群聊历史。
    */
-  private async createFeishuChatMcpServer(
-    chatId: string,
-  ): Promise<Record<string, unknown> | null> {
-    try {
-      const sdk = await import('@anthropic-ai/claude-agent-sdk')
-      const { z } = await import('zod')
+  /**
+   * 构建绑定到当前群 chatId 的 Pi read-only custom tool。chatId 不暴露为模型参数，
+   * 避免任意 tool call 越权读取其他群聊。
+   */
+  private buildPiFeishuChatHistoryTool(chatId: string): ToolDefinition {
+    return {
+      name: 'mcp__feishu_chat__fetch_group_chat_history',
+      label: '读取飞书群聊历史',
+      description: '获取当前飞书群聊的更多历史消息。当需要补充群聊上下文时使用；返回发送者、时间和内容。',
+      promptSnippet: 'Feishu group history: use only when more context from the current group is necessary.',
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50, description: '要获取的消息数量，默认 20，最多 50。' })),
+        before_timestamp: Type.Optional(Type.Number({ description: '获取此 Unix 毫秒时间戳之前的消息，用于向前翻页。' })),
+      }),
+      execute: async (_toolCallId, args): Promise<AgentToolResult<unknown>> => {
+        const input = args && typeof args === 'object' ? args as Record<string, unknown> : {}
+        const limit = typeof input.limit === 'number' ? input.limit : undefined
+        const beforeTimestamp = typeof input.before_timestamp === 'number' ? input.before_timestamp : undefined
+        const messages = await this.fetchChatHistory(chatId, { pageSize: limit, beforeTimestamp })
+        if (messages.length === 0) {
+          return {
+            content: [{ type: 'text', text: '没有更多历史消息。' }],
+            details: { count: 0 },
+          } as AgentToolResult<unknown>
+        }
 
-      const server = sdk.createSdkMcpServer({
-        name: 'feishu_chat',
-        version: '1.0.0',
-        tools: [
-          sdk.tool(
-            'fetch_group_chat_history',
-            '获取飞书群聊的历史消息。当你需要了解更多群聊上下文来完成任务时使用此工具。' +
-            '返回指定数量的历史消息，包含发送者、时间和内容。',
-            {
-              limit: z.number().min(1).max(50).optional()
-                .describe('要获取的消息数量（默认 20，最多 50）'),
-              before_timestamp: z.number().optional()
-                .describe('获取此时间戳（毫秒）之前的消息，用于向前翻页'),
-            },
-            async (args) => {
-              const messages = await this.fetchChatHistory(chatId, {
-                pageSize: args.limit,
-                beforeTimestamp: args.before_timestamp,
-              })
-
-              if (messages.length === 0) {
-                return {
-                  content: [{ type: 'text' as const, text: '没有更多历史消息。' }],
-                }
-              }
-
-              const formatted = this.formatChatHistoryContext(messages)
-              const oldestTimestamp = messages[0]?.createTime ?? 0
-
-              return {
-                content: [{
-                  type: 'text' as const,
-                  text: `${formatted}\n\n（如需更早的消息，使用 before_timestamp: ${oldestTimestamp}）`,
-                }],
-              }
-            },
-            { annotations: { readOnlyHint: true } },
-          ),
-        ],
-      })
-
-      console.log('[飞书 Bridge] 已创建群聊 MCP 工具')
-      return server as unknown as Record<string, unknown>
-    } catch (error) {
-      console.warn('[飞书 Bridge] 创建群聊 MCP 工具失败:', redactSensitiveLogValue(error))
-      return null
-    }
+        const oldestTimestamp = messages[0]?.createTime
+        const formatted = this.formatChatHistoryContext(messages)
+        return {
+          content: [{
+            type: 'text',
+            text: `${formatted}${oldestTimestamp ? `\n\n（如需更早的消息，使用 before_timestamp: ${oldestTimestamp}）` : ''}`,
+          }],
+          details: { count: messages.length, oldestTimestamp },
+        } as AgentToolResult<unknown>
+      },
+    } as ToolDefinition
   }
 
   /**
