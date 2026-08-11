@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve, sep } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type {
@@ -49,7 +49,9 @@ function getCurrentBranch(repoPath: string): string {
 }
 
 function hasDirtyChanges(repoPath: string): boolean {
-  return runGit(repoPath, ['status', '--porcelain']).length > 0
+  // Include ignored files as well: an ignored `.env`, generated asset, or user file
+  // is still data that must never be removed by a session cleanup operation.
+  return runGit(repoPath, ['status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching']).length > 0
 }
 
 function ensureValidBranchName(repoPath: string, branchName: string): void {
@@ -168,8 +170,8 @@ function getWorktreeInfoByPath(repoRoot: string, worktreePath: string): { branch
 
 /**
  * 移除会话对应的 Git Worktree（供正常清理和失败回滚共用）。
- * `git worktree remove` 失败时退化为物理删除 + `git worktree prune`，
- * 避免在 `.git/worktrees/` 留下"已注册但目录缺失"的孤儿元数据。
+ * 只允许 Git 自身在确认干净后完成删除；Git 删除失败时保留目录并抛错，
+ * 避免用物理递归删除制造不可恢复的数据损失或 Worktree 元数据竞态。
  */
 export function assertWorktreeClean(worktreePath: string): void {
   if (!existsSync(worktreePath)) return
@@ -187,17 +189,9 @@ export function removeSessionWorktree(repoRoot: string, worktreePath: string): v
   assertWorktreeClean(worktreePath)
   try {
     runGit(repoRoot, ['worktree', 'remove', worktreePath])
-    return
-  } catch {
-    // clean worktree but git remove failed; only then use the bounded fallback.
+  } catch (error) {
+    throw new Error(`Git Worktree 删除失败，已保留目录以避免数据丢失: ${worktreePath}`, { cause: error })
   }
-  assertWorktreeClean(worktreePath)
-  try {
-    rmSync(worktreePath, { recursive: true, force: true })
-  } catch {
-    // best effort
-  }
-  runGitOrNull(repoRoot, ['worktree', 'prune'])
 }
 
 function worktreePathFor(repoRoot: string, input: PrepareSessionGitContextInput): string {

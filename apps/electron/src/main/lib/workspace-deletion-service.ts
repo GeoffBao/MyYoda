@@ -15,6 +15,8 @@ export interface WorkspaceDeletionDependencies {
   listSessions: () => WorkspaceScopedRef[]
   listAutomations: () => WorkspaceScopedRef[]
   isSessionActive: (sessionId: string) => boolean
+  /** 只读预检查；必须在停止会话或删除任何级联资源前完成。 */
+  assertSessionDeletionSafe: (sessionId: string) => void
   stopSession: (sessionId: string) => void
   deleteSession: (sessionId: string) => void
   deleteAutomation: (automationId: string) => void
@@ -52,6 +54,11 @@ export function deleteWorkspaceCascade(
   const automationIds = dependencies.listAutomations()
     .filter((automation) => automation.workspaceId === workspaceId)
     .map((automation) => automation.id)
+
+  // 先检查全部会话，避免前几个会话已删除后才在 dirty Worktree 上失败。
+  for (const sessionId of sessionIds) {
+    dependencies.assertSessionDeletionSafe(sessionId)
+  }
 
   for (const sessionId of sessionIds) {
     if (dependencies.isSessionActive(sessionId)) {

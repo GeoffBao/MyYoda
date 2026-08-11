@@ -22,8 +22,9 @@ function makeRepo(): string {
   sh(root, ['init', '-b', 'main'])
   sh(root, ['config', 'user.email', 'test@example.com'])
   sh(root, ['config', 'user.name', 'Test User'])
+  writeFileSync(join(root, '.gitignore'), '*.secret\n', 'utf-8')
   writeFileSync(join(root, 'README.md'), '# Test\n', 'utf-8')
-  sh(root, ['add', 'README.md'])
+  sh(root, ['add', '.gitignore', 'README.md'])
   sh(root, ['commit', '-m', 'initial'])
   sh(root, ['branch', 'feature/alpha'])
   return root
@@ -136,6 +137,18 @@ describe('git-session-context-service', () => {
     expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
     expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
     expect(existsSync(join(worktree, 'uncommitted.txt'))).toBe(true)
+    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+  })
+
+  test('Given an ignored user file in a Worktree When removing it Then blocks deletion and preserves the file', () => {
+    const repo = makeRepo()
+    const worktree = join(repo, '.worktrees', 'ignored')
+    sh(repo, ['worktree', 'add', worktree, 'feature/alpha'])
+    writeFileSync(join(worktree, 'credentials.secret'), 'keep me\n', 'utf-8')
+
+    expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
+    expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
+    expect(existsSync(join(worktree, 'credentials.secret'))).toBe(true)
     expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
   })
 

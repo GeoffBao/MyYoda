@@ -1266,8 +1266,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         setAgentSessions(sessions)
       } catch (error) {
         console.error('[侧边栏] 删除 Agent 会话失败:', error)
-        // 即使后端报错，也从本地列表移除（可能是会话已不存在）
-        setAgentSessions((prev) => prev.filter((s) => s.id !== pendingDeleteId))
+        // 后端可能因 dirty Worktree 等安全守卫拒绝删除；重新读取而不是
+        // 乐观移除，避免 Renderer 隐藏仍然存在的会话。
+        try {
+          const sessions = await window.electronAPI.listAgentSessions()
+          setAgentSessions(sessions)
+        } catch (refreshError) {
+          console.error('[侧边栏] 删除失败后的会话列表刷新失败:', refreshError)
+        }
       } finally {
         // 清理该会话的消息缓存，避免已删除会话的消息数组滞留内存
         setAgentMessagesCache((prev) => {
