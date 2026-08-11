@@ -177,12 +177,12 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 ### .context 目录层级
 
 存在多个 \`.context/\` 目录，用途不同：
-- **会话级** \`${join(workspacePaths.sessionDir, '.context')}\`（会话沙箱下）：当前会话的临时工作台，存放本次任务的 todo.md、plan/、临时笔记等
+- **会话级** \`${join(workspacePaths.sessionDir, '.context')}\`（会话沙箱下）：当前会话的临时工作台，存放 todo.md、临时笔记、handoff 等；执行计划不放这里
 - **工作区级** \`${workspacePaths?.workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、工作区级知识等
 - **项目级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：该 Project 自己的持久记忆，含 MEMORY.md（按日期+状态记录该 Project 的决策/踩坑）。**这和该目录下人写的 AGENTS.md（旧版为 CLAUDE.md）是两回事——AGENTS.md 可能同时被其他 CLI 等外部工具读取，只读不要自动创建或修改；Project 自动记忆一律按消息里的 \`<project_memory_path>\` 写入，不要写入指令文件。**
 
 选择写入哪个目录时：
-- 只与当前任务相关的内容 → 会话级 \`.context/\`
+- 当前任务的临时笔记、todo、handoff 等 → 会话级 \`.context/\`
 - 跨会话有参考价值、但不专属于某个 Project 的内容（调研报告、架构分析等） → 工作区级 \`.context/\`
 - 专属于当前绑定 Project 的决策/踩坑/约定 → 按 \`<project_memory_path>\` 写入该 Project 的 MEMORY.md；该路径可能在项目级 \`.context/\` 下，也可能仍是 MyYoda 托管路径，取决于消息里给出的实际值，不要自行猜测或改写路径本身
 - 用户明确指定了位置时，按用户要求
@@ -211,7 +211,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
     sections.push(`## 计划模式
 
 你当前处于计划模式，只能进行调研和规划，不能执行写操作。规则：
-1. 将计划文件写入当前工作目录的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）
+1. 将计划文件写入实际执行 cwd 的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）；绑定 Project 时该 cwd 是 Project effective cwd，不要写入会话沙箱
 2. 完成计划后，**不要立即调用 ExitPlanMode**
 3. 先向用户展示计划摘要，以及完整的计划文档的路径地址，然后等待用户确认后再退出计划模式
 4. 用户确认执行后，再调用 ExitPlanMode 退出计划模式
@@ -219,7 +219,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
   } else {
     sections.push(`## 计划模式文件路径
 
-当进入计划模式（EnterPlanMode）时，计划文件必须写入当前工作目录的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）。`)
+当进入计划模式（EnterPlanMode）时，计划文件必须写入实际执行 cwd 的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）；绑定 Project 时该 cwd 是 Project effective cwd，不要写入会话沙箱的 \`.context/\`。`)
   }
 
   // MyYoda 知识维护架构
@@ -264,11 +264,11 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 | 专属于当前绑定 Project 的决策、踩坑、约定 | → 按消息里的 \`<project_memory_path>\` 写入该 Project 的 MEMORY.md；不要写入 Project 自己的 AGENTS.md（旧版 CLAUDE.md） |
 | 用户偏好、误判纠正、问题解决/未解决/加重、跨会话经验 | → 必要时小幅更新 memory/MEMORY.md 或主题文件 |
 | 重复流程、固定检查清单、可复用工作方式 | → 搜索/创建/更新 Skill |
-| 当前任务的临时计划、进度、交接和中间结论 | → 写入会话级 .context/ |
+| 当前任务的临时进度、交接和中间结论 | → 写入会话级 .context/ |
 | 跨会话可复用的调研、方案对比、代码分析、长 checklist | → 写入工作区级 .context/ 或工作区文档，并在 AGENTS.md/Memory/Skill 中只保留入口 |
 | 多步骤任务的当前进度 | → 更新会话级 .context/todo.md；长期工作区进度才放工作区级 .context/todo.md |
 | 简单问答、一次性修改 | → 直接回复，不写文件 |
-| 执行计划 | → 写入 .context/plan/ 目录 |
+| 执行计划 | → 写入实际执行 cwd 下的 .context/plan/ 目录；绑定 Project 时即 Project effective cwd |
 
 维护这些长期文件前，先按需搜索当前会话、会话级 Context、工作区级 Context、AGENTS.md、长期记忆索引和 Skills 元数据；涉及长期副作用时，优先提出简短维护建议，让用户知道会改哪里、为什么改、下次会怎样。`)
 
