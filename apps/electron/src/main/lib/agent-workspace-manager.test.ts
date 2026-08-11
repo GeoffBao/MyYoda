@@ -4,6 +4,16 @@ import * as os from 'node:os'
 import { join } from 'node:path'
 import { mockElectronModule } from './__tests__/electron-mock'
 
+// Windows 非开发者模式/非管理员下创建 symlink 会抛 EPERM，此时跳过 symlink 相关测试
+let symlinkSupported = true
+try {
+  const probeDir = mkdtempSync(join(os.tmpdir(), 'myyoda-symlink-probe-'))
+  symlinkSync(join(probeDir, 'missing'), join(probeDir, 'link'), 'dir')
+  rmSync(probeDir, { recursive: true, force: true })
+} catch {
+  symlinkSupported = false
+}
+
 type AgentWorkspaceManager = typeof import('./agent-workspace-manager')
 type ConfigPathsModule = typeof import('./config-paths')
 type ProjectRepositoryModule = typeof import('./project-repository')
@@ -214,7 +224,7 @@ describe('Agent 工作区删除边界', () => {
 })
 
 describe('Agent 工作区 Skill 扫描', () => {
-  test('Given Skills 目录包含 broken symlink When 获取工作区 Skills Then 跳过坏条目并继续扫描后续 Skill', () => {
+  test.skipIf(!symlinkSupported)('Given Skills 目录包含 broken symlink When 获取工作区 Skills Then 跳过坏条目并继续扫描后续 Skill', () => {
     const workspaceSlug = 'workspace-a'
     const skillsDir = configPaths.getWorkspaceSkillsDir(workspaceSlug)
 

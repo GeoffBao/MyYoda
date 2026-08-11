@@ -97,6 +97,12 @@ export class RepoMapService {
   /** 生成失败/无源码目录的冷却截止时间（避免每条消息都触发重建并白等） */
   private readonly cooldownUntil = new Map<string, number>()
   private static readonly FAILURE_COOLDOWN_MS = 5 * 60_000
+  /** git HEAD 解析器（测试可注入固定值，避免全量测试并发时被其他 git 操作干扰） */
+  private readonly headProvider: (cwd: string) => string | undefined
+
+  constructor(options?: { headProvider?: (cwd: string) => string | undefined }) {
+    this.headProvider = options?.headProvider ?? this.getGitHead
+  }
 
   /** 同步读取已缓存地图（git HEAD 变化自动失效）；无缓存返回 undefined。 */
   getCachedMap(cwd: string): string | undefined {
@@ -104,7 +110,7 @@ export class RepoMapService {
     const cached = this.mapCache.get(cwd)
     if (!cached) return undefined
 
-    const head = this.getGitHead(cwd)
+    const head = this.headProvider(cwd)
     // 非 git 目录（双方 head 均为 undefined）视为命中；只有 git HEAD 发生变化（或缓存被篡改）才失效
     if (head !== cached.head) {
       this.mapCache.delete(cwd)
@@ -159,7 +165,7 @@ export class RepoMapService {
   }
 
   private async ensureMap(cwd: string, mention?: RepoMapMentionContext): Promise<string | undefined> {
-    const head = this.getGitHead(cwd)
+    const head = this.headProvider(cwd)
 
     // 再次检查缓存（并发请求时避免重复生成）
     const cached = this.mapCache.get(cwd)

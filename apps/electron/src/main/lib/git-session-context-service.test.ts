@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { normalizePathForCompare } from '@myyoda/shared/utils'
 import type { AgentSessionMeta } from '@myyoda/shared'
 import { listGitBranchesForSession, prepareSessionGitContext } from './git-session-context-service'
 
@@ -107,8 +108,10 @@ describe('git-session-context-service', () => {
     const repoRoot = sh(repo, ['rev-parse', '--show-toplevel'])
     const expectedWorktree = join(repoRoot, '.worktrees', 'session-one')
     expect(result.createdWorktree).toBe(true)
+    // git 输出的 repoRoot 是正斜杠（MSYS），实现存的是原始输入（Windows 反斜杠）——
+    // 用 normalizePathForCompare 归一化后比较，跨平台稳定
+    expect(normalizePathForCompare(result.context.repoPath)).toBe(normalizePathForCompare(repoRoot))
     expect(result.context).toMatchObject({
-      repoPath: repoRoot,
       branch: 'main',
       executionMode: 'worktree',
       workingDirectory: expectedWorktree,
@@ -117,9 +120,9 @@ describe('git-session-context-service', () => {
     })
     expect(existsSync(expectedWorktree)).toBe(true)
     expect(sh(expectedWorktree, ['branch', '--show-current'])).toBe('')
+    expect(normalizePathForCompare(updates.at(-1)?.gitRepoPath ?? '')).toBe(normalizePathForCompare(repoRoot))
     expect(updates.at(-1)).toMatchObject({
       workingDirectory: expectedWorktree,
-      gitRepoPath: repoRoot,
       gitBranch: 'main',
       gitExecutionMode: 'worktree',
       gitWorktreePath: expectedWorktree,

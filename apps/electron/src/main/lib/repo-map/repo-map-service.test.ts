@@ -28,20 +28,38 @@ describe('extractMentionContext', () => {
 
 describe('RepoMapService', () => {
   test('生成后缓存命中；HEAD 失效后重新生成', async () => {
-    const service = new RepoMapService()
+    // 用隔离的临时目录 + 固定 HEAD，避免全量测试并发时受真实仓库 git 状态/全局缓存竞争影响
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-map-cache-hit-'))
+    try {
+      for (let i = 1; i <= 3; i++) {
+        fs.writeFileSync(
+          path.join(tmpDir, `mod${i}.ts`),
+          [
+            `/** Module ${i} */`,
+            `export interface Result${i} { value: number }`,
+            `export function helper${i}(x: number): number { return x + ${i} }`,
+            `export const DEFAULT_${i} = { value: ${i} } as const`,
+          ].join('\n') + '\n',
+        )
+      }
 
-    // 首次：等待生成（小目录应远小于 2s 默认等待）
-    const first = await service.getRepoMapForPrompt(sampleDir, undefined, 10_000)
-    expect(typeof first).toBe('string')
-    expect((first ?? '').length).toBeGreaterThan(120)
+      const service = new RepoMapService({ headProvider: () => 'fixed-head-123' })
 
-    // 命中缓存：同步读取（head 校验通过）
-    const cached = service.getCachedMap(sampleDir)
-    expect(cached).toBe(first)
+      // 首次：等待生成
+      const first = await service.getRepoMapForPrompt(tmpDir, undefined, 10_000)
+      expect(typeof first).toBe('string')
+      expect((first ?? '').length).toBeGreaterThan(120)
 
-    // 再次调用走缓存（should be fast）
-    const second = await service.getRepoMapForPrompt(sampleDir)
-    expect(second).toBe(first)
+      // 命中缓存：同步读取（head 校验通过）
+      const cached = service.getCachedMap(tmpDir)
+      expect(cached).toBe(first)
+
+      // 再次调用走缓存（should be fast）
+      const second = await service.getRepoMapForPrompt(tmpDir)
+      expect(second).toBe(first)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 
   test('不适用目录（空目录）返回 undefined 且不缓存', async () => {
@@ -68,7 +86,8 @@ describe('RepoMapService', () => {
         )
       }
 
-      const service = new RepoMapService()
+      // 注入 headProvider=undefined 模拟非 git 目录（不真实调用 execSync git，避免全量并发时 git 进程竞争）
+      const service = new RepoMapService({ headProvider: () => undefined })
       const first = await service.getRepoMapForPrompt(tmpDir, undefined, 10_000)
       expect(typeof first).toBe('string')
       expect((first ?? '').length).toBeGreaterThan(0)
