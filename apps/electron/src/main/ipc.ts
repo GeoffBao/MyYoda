@@ -4051,7 +4051,7 @@ export function registerIpcHandlers(): void {
   // 解析文件路径并读取内容（供内联预览使用）
   ipcMain.handle(
     'file:resolve-and-read',
-    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<{ resolvedPath: string; content: string } | null> => {
+    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null> => {
       const { resolveAndReadFile, resolveFilePath } = await import('./lib/file-preview-service')
       const options = normalizeFileAccessOptions(access)
       const allowedBasePaths = getAllowedCandidateBasePaths(options)
@@ -4184,7 +4184,7 @@ export function registerIpcHandlers(): void {
       const resolved = resolveFilePath(filePath, getAllowedCandidateBasePaths(options))
       if (!resolved || !isPathAllowed(resolved, options)) return null
       const st = statSync(resolved)
-      if (maxSize && st.size > maxSize) return null
+      if (st.size > effectiveMaxSize) return null
       return readFileSync(resolved).toString('base64')
     }
   )
