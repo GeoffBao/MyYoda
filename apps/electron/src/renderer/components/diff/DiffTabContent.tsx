@@ -1,7 +1,7 @@
 /**
  * DiffTabContent — 单文件 Diff 或纯文件预览内容
  *
- * previewOnly=true 时：代码高亮预览（@pierre/diffs File）或 Markdown 渲染
+ * previewOnly=true 时：代码高亮预览（@pierre/diffs File）、Markdown 或 HTML 渲染
  * previewOnly=false（默认）：显示 git diff（旧版本 vs 磁盘）
  */
 
@@ -56,6 +56,7 @@ import {
 } from '@/lib/markdown-editor-state'
 
 const MD_EXTS = new Set(['.md', '.markdown'])
+const HTML_EXTS = new Set(['.html', '.htm'])
 const PLAIN_TEXT_EDIT_EXTS = new Set(['.txt', '.text', '.log'])
 const PDF_EXTS = new Set(['.pdf'])
 const DOCX_EXTS = new Set(['.docx'])
@@ -86,6 +87,8 @@ type CacheEntry = {
   docxHtml?: string
   officeHtml?: string
   officeText?: string
+  /** HTML 预览的目录级 token URL，允许加载同目录相对资源 */
+  htmlPreviewUrl?: string
   /** 二进制或其他不可安全内联渲染的文件提示 */
   unsupportedPreviewReason?: string
 }
@@ -263,6 +266,7 @@ interface DiffTabContentProps {
 export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewOnly, readOnly, basePaths, workspaceSkillSlug, legacySkillFilePath, onEmptyDiff, toolbarActions, baseRef }: DiffTabContentProps): React.ReactElement {
   const ext = getExtension(filePath)
   const isMarkdown = previewOnly && MD_EXTS.has(ext)
+  const isHtml = previewOnly && HTML_EXTS.has(ext)
   const isPlainTextEditable = previewOnly && PLAIN_TEXT_EDIT_EXTS.has(ext)
   const isEditableText = isMarkdown || isPlainTextEditable
   const isPdf = previewOnly && PDF_EXTS.has(ext)
@@ -332,6 +336,9 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const [docxHtml, setDocxHtml] = React.useState('')
   const [officeHtml, setOfficeHtml] = React.useState('')
   const [officeText, setOfficeText] = React.useState('')
+  // HTML 默认展示运行后的页面；用户可随时切换回源码高亮预览。
+  const [htmlPreviewUrl, setHtmlPreviewUrl] = React.useState('')
+  const [htmlSourceMode, setHtmlSourceMode] = React.useState(false)
   const [pdfSrc, setPdfSrc] = React.useState('')
   const [pdfZoom, setPdfZoom] = React.useState(100)
   const pdfIframeRef = React.useRef<HTMLIFrameElement>(null)
@@ -362,6 +369,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     previewOnly &&
     !activeMarkdownEditing &&
     !isMarkdown &&
+    (!isHtml || htmlSourceMode) &&
     !isPdf &&
     !isImage &&
     !isDocx &&
@@ -395,9 +403,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     oldLength: oldContent.length,
     docxLength: docxHtml.length,
     officeLength: officeHtml.length,
+    htmlPreviewUrl,
+    htmlSourceMode,
     markdownEditing: activeMarkdownEditing,
     markdownSourceMode: activeMarkdownEditing && markdownSourceMode,
-  }), [docxHtml.length, filePath, loading, activeMarkdownEditing, markdownSourceMode, newContent.length, officeHtml.length, oldContent.length, previewOnly, viewMode])
+  }), [docxHtml.length, filePath, loading, activeMarkdownEditing, markdownSourceMode, newContent.length, officeHtml.length, htmlPreviewUrl, htmlSourceMode, oldContent.length, previewOnly, viewMode])
 
   // 目录提取只需在「文件本身或其内容」变化时重建，避免 loading/编辑态切换造成的抖动
   const tocContentKey = React.useMemo(
@@ -634,6 +644,8 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     setDocxHtml('')
     setOfficeHtml('')
     setOfficeText('')
+    setHtmlPreviewUrl('')
+    setHtmlSourceMode(false)
     setPdfSrc('')
     setPdfZoom(100)
     setHtmlUrl('')
@@ -798,6 +810,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       setDocxHtml(cached.docxHtml ?? '')
       setOfficeHtml(cached.officeHtml ?? '')
       setOfficeText(cached.officeText ?? '')
+      setHtmlPreviewUrl(cached.htmlPreviewUrl ?? '')
       setUnsupportedPreviewReason(cached.unsupportedPreviewReason ?? '')
       setPdfSrc(cached.pdfSrc ?? '')
       setPdfZoom(100)
@@ -821,6 +834,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         setDocxHtml('')
         setOfficeHtml('')
         setOfficeText('')
+        setHtmlPreviewUrl('')
         setUnsupportedPreviewReason('')
         setPdfSrc('')
         setPdfZoom(100)
@@ -844,6 +858,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       try {
         let content = cached?.newContent ?? ''
         let old = cached?.oldContent ?? ''
+        let htmlUrl = cached?.htmlPreviewUrl ?? ''
 
         if (!cached) {
           if (previewOnly) {
@@ -917,6 +932,12 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               return
             }
             content = result?.content ?? ''
+            if (isHtml) {
+              const preview = await window.electronAPI.resolveHtmlPreviewPath(filePath, fileAccess)
+              if (cancelled) return
+              htmlUrl = preview?.url ?? ''
+              setHtmlPreviewUrl(htmlUrl)
+            }
           } else {
             const result = await window.electronAPI.getDiffContents({ dirPath, filePath, gitRoot, sessionId, baseRef })
             if (cancelled) return
@@ -932,7 +953,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
           setOldContent(old)
           setNewContent(content)
 
-          if (cacheKey) cacheSet(cacheKey, { oldContent: old, newContent: content })
+          if (cacheKey) cacheSet(cacheKey, { oldContent: old, newContent: content, htmlPreviewUrl: htmlUrl || undefined })
         }
 
         if (previewOnly && !MD_EXTS.has(ext) && content) {
@@ -1536,6 +1557,18 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
           </div>
         )}
 
+        {previewOnly && isHtml && (
+          <button
+            type="button"
+            onClick={() => setHtmlSourceMode((sourceMode) => !sourceMode)}
+            className="ml-auto p-1 rounded hover:bg-foreground/[0.06] text-foreground/40 hover:text-foreground/60 shrink-0"
+            title={htmlSourceMode ? '切换到渲染预览' : '切换到源码预览'}
+            aria-label={htmlSourceMode ? '切换到渲染预览' : '切换到源码预览'}
+          >
+            {htmlSourceMode ? <Eye className="size-3.5" /> : <Code2 className="size-3.5" />}
+          </button>
+        )}
+
         {previewOnly && isEditableText && !readOnly && (
           markdownEditing ? (
             <div className="ml-auto flex items-center gap-1">
@@ -1786,18 +1819,20 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
                   />
                 </div>
               ) : null
-            ) : isHtml ? (
-              htmlUrl ? (
+            ) : isHtml && !htmlSourceMode ? (
+              htmlPreviewUrl ? (
                 <iframe
-                  ref={htmlIframeRef}
-                  src={htmlUrl}
-                  className="w-full h-full border-0"
-                  title={filePath.split('/').pop() || 'HTML'}
-                  // HTML 文件默认按不可信内容预览：不授予脚本、same-origin、表单或弹窗能力。
-                  // 资源仍由主进程签发的 myyoda-file:// token 提供，目录越界由协议拒绝。
-                  sandbox=""
+                  src={htmlPreviewUrl}
+                  className="h-full w-full border-0 bg-white"
+                  title={`${filePath.split('/').pop() || 'HTML'} 渲染预览`}
+                  sandbox="allow-scripts allow-forms"
+                  referrerPolicy="no-referrer"
                 />
-              ) : null
+              ) : (
+                <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
+                  无法加载 HTML 预览资源，请切换到源码预览或刷新后重试。
+                </div>
+              )
             ) : isMarkdown ? (
               activeMarkdownEditing && markdownSourceMode ? (
                 <textarea
