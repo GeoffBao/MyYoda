@@ -10,8 +10,9 @@
  * 所有业务逻辑已委托给 AgentOrchestrator。
  */
 
-import { join, dirname } from 'node:path'
+import { dirname, relative } from 'node:path'
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { resolveSafeChildPath } from './agent-file-path-policy'
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 import { AGENT_IPC_CHANNELS, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
@@ -489,7 +490,7 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
   const usedPaths = new Set<string>()
 
   for (const file of input.files) {
-    let targetPath = join(sessionDir, file.filename)
+    let targetPath = resolveSafeChildPath(sessionDir, file.filename)
 
     // 防止同名文件覆盖
     if (usedPaths.has(targetPath) || existsSync(targetPath)) {
@@ -497,10 +498,10 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
       const baseName = dotIdx > 0 ? file.filename.slice(0, dotIdx) : file.filename
       const ext = dotIdx > 0 ? file.filename.slice(dotIdx) : ''
       let counter = 1
-      let candidate = join(sessionDir, `${baseName}-${counter}${ext}`)
+      let candidate = resolveSafeChildPath(sessionDir, `${baseName}-${counter}${ext}`)
       while (usedPaths.has(candidate) || existsSync(candidate)) {
         counter++
-        candidate = join(sessionDir, `${baseName}-${counter}${ext}`)
+        candidate = resolveSafeChildPath(sessionDir, `${baseName}-${counter}${ext}`)
       }
       targetPath = candidate
     }
@@ -518,7 +519,7 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
     const buffer = Buffer.from(file.data, 'base64')
     writeFileSync(targetPath, buffer)
 
-    const actualFilename = targetPath.slice(sessionDir.length + 1)
+    const actualFilename = relative(sessionDir, targetPath)
     results.push({ filename: actualFilename, targetPath })
     console.log(`[Agent 服务] 文件已保存: ${targetPath} (${buffer.length} bytes)`)
   }
@@ -537,7 +538,7 @@ export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): 
   const usedPaths = new Set<string>()
 
   for (const file of input.files) {
-    let targetPath = join(wsFilesDir, file.filename)
+    let targetPath = resolveSafeChildPath(wsFilesDir, file.filename)
 
     // 防止同名文件覆盖
     if (usedPaths.has(targetPath) || existsSync(targetPath)) {
@@ -545,10 +546,10 @@ export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): 
       const baseName = dotIdx > 0 ? file.filename.slice(0, dotIdx) : file.filename
       const ext = dotIdx > 0 ? file.filename.slice(dotIdx) : ''
       let counter = 1
-      let candidate = join(wsFilesDir, `${baseName}-${counter}${ext}`)
+      let candidate = resolveSafeChildPath(wsFilesDir, `${baseName}-${counter}${ext}`)
       while (usedPaths.has(candidate) || existsSync(candidate)) {
         counter++
-        candidate = join(wsFilesDir, `${baseName}-${counter}${ext}`)
+        candidate = resolveSafeChildPath(wsFilesDir, `${baseName}-${counter}${ext}`)
       }
       targetPath = candidate
     }
@@ -564,7 +565,7 @@ export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): 
     const buffer = Buffer.from(file.data, 'base64')
     writeFileSync(targetPath, buffer)
 
-    const actualFilename = targetPath.slice(wsFilesDir.length + 1)
+    const actualFilename = relative(wsFilesDir, targetPath)
     results.push({ filename: actualFilename, targetPath })
     console.log(`[Agent 服务] 工作区文件已保存: ${targetPath} (${buffer.length} bytes)`)
   }
