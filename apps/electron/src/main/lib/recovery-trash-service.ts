@@ -1,8 +1,8 @@
-import { appendFileSync, existsSync, mkdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, lstatSync, mkdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-export type RecoveryTrashKind = 'project' | 'task'
+export type RecoveryTrashKind = 'project' | 'task' | 'workspace'
 
 export interface RecoveryTrashRecord {
   id: string
@@ -38,32 +38,58 @@ export function quarantineForRecovery(
 
   const id = randomUUID()
   const recoveryRoot = join(root, '.recovery-trash')
-  const operationRoot = join(recoveryRoot, id)
-  const quarantinePath = join(operationRoot, basename(source))
+  if (existsSync(recoveryRoot)) {
+    const recoveryStat = lstatSync(recoveryRoot)
+    if (recoveryStat.isSymbolicLink() || !recoveryStat.isDirectory()) {
+      throw new Error('恢复隔离区不是安全的本地目录')
+    }
+  } else {
+    mkdirSync(recoveryRoot, { recursive: true })
+  }
+  const recoveryReal = realpathSync(recoveryRoot)
+  if (!recoveryReal.startsWith(`${root}${sep}`)) {
+    throw new Error('恢复隔离区越出 Workspace 根目录')
+  }
+
+  const operationRoot = join(recoveryReal, id)
+  mkdirSync(operationRoot, { recursive: true })
+  const operationReal = realpathSync(operationRoot)
+  if (!operationReal.startsWith(`${root}${sep}`) || !statSync(operationReal).isDirectory()) {
+    throw new Error('恢复操作目录不在 Workspace 根目录内')
+  }
+  const safeQuarantinePath = join(operationReal, basename(source))
   const record: RecoveryTrashRecord = {
     id,
     kind,
     target,
     sourcePath: source,
-    quarantinePath,
+    quarantinePath: safeQuarantinePath,
     status: 'prepared',
     createdAt: new Date().toISOString(),
   }
-
-  mkdirSync(operationRoot, { recursive: true })
-  const journalPath = join(operationRoot, 'journal.json')
+  const journalPath = join(operationReal, 'journal.json')
   writeFileSync(journalPath, JSON.stringify(record, null, 2), 'utf-8')
 
   try {
-    renameSync(source, quarantinePath)
+    renameSync(source, safeQuarantinePath)
   } catch (error) {
     // Keep the prepared journal for diagnosis/recovery; the source remains intact.
     throw new Error(`无法将删除目标移入恢复隔离区，源文件已保留: ${source}`, { cause: error })
   }
 
   const completed: RecoveryTrashRecord = { ...record, status: 'quarantined' }
-  writeFileSync(journalPath, JSON.stringify(completed, null, 2), 'utf-8')
-  appendFileSync(join(recoveryRoot, 'journal.jsonl'), `${JSON.stringify(completed)}\n`, 'utf-8')
+  // Rename 已成功后，不能把 journal 的次级写入失败冒充为源数据删除失败：
+  // 数据仍在 operation directory，prepared journal 也足以支持人工恢复扫描。
+  try {
+    writeFileSync(journalPath, JSON.stringify(completed, null, 2), 'utf-8')
+  } catch (error) {
+    console.warn(`[recovery] 完成 journal 写入失败，保留隔离目录供恢复扫描: ${operationReal}`, error)
+  }
+  try {
+    appendFileSync(join(recoveryReal, 'journal.jsonl'), `${JSON.stringify(completed)}\n`, 'utf-8')
+  } catch (error) {
+    console.warn(`[recovery] recovery journal 索引追加失败，保留 operation journal: ${operationReal}`, error)
+  }
   return completed
 }
 
