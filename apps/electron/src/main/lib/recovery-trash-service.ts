@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, lstatSync, mkdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join, resolve, sep } from 'node:path'
+import { basename, join, relative, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export type RecoveryTrashKind = 'project' | 'task' | 'workspace'
@@ -12,6 +12,20 @@ export interface RecoveryTrashRecord {
   quarantinePath: string
   status: 'prepared' | 'quarantined'
   createdAt: string
+}
+
+function assertNoSymlinkPath(root: string, candidate: string): void {
+  const relativePath = relative(root, candidate)
+  if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === '..' || resolve(root, relativePath) !== candidate) {
+    throw new Error('恢复隔离目标必须位于 Workspace 根目录内')
+  }
+  let current = root
+  for (const part of relativePath.split(sep)) {
+    current = join(current, part)
+    if (lstatSync(current).isSymbolicLink()) {
+      throw new Error('恢复隔离目标路径不能包含符号链接')
+    }
+  }
 }
 
 /**
@@ -27,10 +41,13 @@ export function quarantineForRecovery(
   kind: RecoveryTrashKind,
   target: string,
 ): RecoveryTrashRecord {
-  const root = realpathSync(resolve(workspaceRoot))
-  const source = realpathSync(resolve(sourcePath))
+  const workspaceRootCandidate = resolve(workspaceRoot)
+  const root = realpathSync(workspaceRootCandidate)
+  const sourceCandidate = resolve(sourcePath)
+  assertNoSymlinkPath(workspaceRootCandidate, sourceCandidate)
+  const source = realpathSync(sourceCandidate)
   if (!source.startsWith(`${root}${sep}`)) {
-    throw new Error('恢复隔离目标必须位于 Workspace 根目录内')
+    throw new Error('恢复隔离目标路径不能包含符号链接')
   }
   if (source.startsWith(`${join(root, '.recovery-trash')}${sep}`)) {
     throw new Error('恢复隔离目标不能位于 recovery trash 内')

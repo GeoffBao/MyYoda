@@ -45,6 +45,19 @@ describe('recovery-trash-service', () => {
     expect(existsSync(join(outside, 'secret'))).toBe(false)
   })
 
+  test('rejects a symlinked source path before moving the real target', () => {
+    const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
+    roots.push(root)
+    const realSource = join(root, 'tasks', 'real')
+    mkdirSync(realSource, { recursive: true })
+    const symlinkSource = join(root, 'tasks', 'alias')
+    symlinkSync(realSource, symlinkSource, 'dir')
+
+    expect(() => quarantineForRecovery(root, symlinkSource, 'task', 'alias')).toThrow('符号链接')
+    expect(existsSync(realSource)).toBe(true)
+    expect(existsSync(symlinkSource)).toBe(true)
+  })
+
   test('rejects a target outside the workspace before moving anything', () => {
     const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
     const outside = mkdtempSync(join(tmpdir(), 'myyoda-recovery-outside-'))
