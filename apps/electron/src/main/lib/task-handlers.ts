@@ -4,7 +4,7 @@
  * 这里是 Electron 主进程与本地文件存储、TaskRunner、Agent 编排器之间的薄桥接层。
  */
 import { BrowserWindow, ipcMain } from 'electron'
-import { basename, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import {
   LABEL_IPC_CHANNELS,
   PROJECT_IPC_CHANNELS,
@@ -60,6 +60,7 @@ import { validateTeamSquad, type TeamMemberResolver } from '@myyoda/shared/exper
 import type { RunSnapshot } from './task-runner'
 import { loadExpertWorkspaceBinding } from './expert-binding-service'
 import { projectRepository } from './project-repository'
+import { resolveRegisteredWorkspaceRoot, type WorkspaceRootRegistration } from './workspace-root-access-policy'
 import { analyzeProjectDeleteImpact, analyzeTaskDeleteImpact } from './project-impact-service'
 import {
   openOrCreateProjectForPath,
@@ -193,15 +194,26 @@ async function getRunnerFor(workspaceRoot: string, workspaceId: string): Promise
   return runner
 }
 
-function workspaceIdFor(workspaceRoot: string): string {
-  return basename(workspaceRoot)
-}
-
 type WorkspaceRootResolver = (workspaceId: string) => string | undefined
 
 function resolveKnownWorkspaceRoot(workspaceId: string): string | undefined {
   const workspace = getAgentWorkspace(workspaceId)
   return workspace ? getAgentWorkspacePath(workspace.slug) : undefined
+}
+
+function requireRegisteredProjectWorkspaceRoot(
+  requestedRoot: unknown,
+  registrations: readonly WorkspaceRootRegistration[] = listAgentWorkspaces().map((workspace) => ({
+    id: workspace.id,
+    root: getAgentWorkspacePath(workspace.slug),
+  })),
+): {
+  workspaceId: string
+  workspaceRoot: string
+} {
+  const resolved = resolveRegisteredWorkspaceRoot(requestedRoot, registrations)
+  if (!resolved) throw new Error('项目 IPC 收到未注册或不可达的 Workspace 根目录')
+  return resolved
 }
 
 export function validateSessionLabelAssignment(
@@ -591,8 +603,21 @@ async function runTaskOrTeam(
  * 注册所有 Projects、Tasks、Session 与 Teambition IPC handlers。
  * 重建窗口时只更新推送目标，不重复调用 ipcMain.handle。
  */
-export function registerTaskHandlers(window: BrowserWindow): void {
+export interface TaskHandlerRegistrationOptions {
+  /** 测试/嵌入环境可提供主进程已注册的 Workspace 根；生产默认每次读取 Workspace 索引。 */
+  workspaceRegistrations?: () => readonly WorkspaceRootRegistration[]
+}
+
+export function registerTaskHandlers(window: BrowserWindow, options: TaskHandlerRegistrationOptions = {}): void {
   mainWindow = window
+  const getRegisteredWorkspaceRoots = options.workspaceRegistrations ?? (() => listAgentWorkspaces().map((workspace) => ({
+    id: workspace.id,
+    root: getAgentWorkspacePath(workspace.slug),
+  })))
+  const requireProjectWorkspaceRoot = (requestedRoot: unknown) => requireRegisteredProjectWorkspaceRoot(
+    requestedRoot,
+    getRegisteredWorkspaceRoots(),
+  )
   if (handlersRegistered) return
   handlersRegistered = true
 
@@ -610,78 +635,90 @@ export function registerTaskHandlers(window: BrowserWindow): void {
   }
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.GET, (_event, workspaceRoot: string) => {
-    return projectRepository.listProjectsAtRoot(workspaceRoot)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return projectRepository.listProjectsAtRoot(context.workspaceRoot)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.GET_ONE, (_event, workspaceRoot: string, idOrSlug: string) => {
-    return projectRepository.getProjectAtRoot(workspaceRoot, idOrSlug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return projectRepository.getProjectAtRoot(context.workspaceRoot, idOrSlug)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.CREATE, (_event, workspaceRoot: string, input: CreateProjectInput) => {
-    const project = projectRepository.createProjectAtRoot(workspaceRoot, input)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const project = projectRepository.createProjectAtRoot(context.workspaceRoot, input)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
     return project
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.UPDATE, (_event, workspaceRoot: string, slug: string, patch: UpdateProjectInput) => {
-    const project = projectRepository.updateProjectAtRoot(workspaceRoot, slug, patch)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const project = projectRepository.updateProjectAtRoot(context.workspaceRoot, slug, patch)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
     return project
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, slug: string) => {
-    const project = projectRepository.getProjectAtRoot(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const project = projectRepository.getProjectAtRoot(context.workspaceRoot, slug)
     if (!project) throw new Error(`项目不存在: ${slug}`)
     if (!project.config.archivedAt) throw new Error('永久删除前必须先归档项目')
 
     // 在执行删除的同一主进程 command 内重新分析，不能信任 Renderer 中可能过期的预览。
-    const impact = analyzeProjectDeleteImpact(workspaceRoot, project.config, listAgentSessions())
+    const impact = analyzeProjectDeleteImpact(context.workspaceRoot, project.config, listAgentSessions())
     if (!impact.canPurge) {
       throw new Error(`项目仍有关联数据，不能永久删除：${impact.blockers.join('；')}`)
     }
 
-    projectRepository.deleteProjectAtRoot(workspaceRoot, slug)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    projectRepository.deleteProjectAtRoot(context.workspaceRoot, slug)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.ANALYZE_DELETE_IMPACT, (_event, workspaceRoot: string, idOrSlug: string) => {
-    const project = projectRepository.getProjectAtRoot(workspaceRoot, idOrSlug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const project = projectRepository.getProjectAtRoot(context.workspaceRoot, idOrSlug)
     if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
-    return analyzeProjectDeleteImpact(workspaceRoot, project.config, listAgentSessions())
+    return analyzeProjectDeleteImpact(context.workspaceRoot, project.config, listAgentSessions())
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.LIST_ASSETS, (_event, workspaceRoot: string, slug: string) => {
-    return projectRepository.listProjectAssetsAtRoot(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return projectRepository.listProjectAssetsAtRoot(context.workspaceRoot, slug)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.UPLOAD_ASSET, (_event, workspaceRoot: string, slug: string, input: UploadProjectAssetInput) => {
-    const asset = projectRepository.uploadProjectAssetAtRoot(workspaceRoot, slug, input)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const asset = projectRepository.uploadProjectAssetAtRoot(context.workspaceRoot, slug, input)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
     return asset
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.DELETE_ASSET, (_event, workspaceRoot: string, slug: string, filename: string) => {
-    projectRepository.deleteProjectAssetAtRoot(workspaceRoot, slug, filename)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    projectRepository.deleteProjectAssetAtRoot(context.workspaceRoot, slug, filename)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.READ_MEMORY, (_event, workspaceRoot: string, slug: string) => {
-    return projectRepository.readProjectMemoryAtRoot(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return projectRepository.readProjectMemoryAtRoot(context.workspaceRoot, slug)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.WRITE_MEMORY, (_event, workspaceRoot: string, slug: string, content: string) => {
-    projectRepository.writeProjectMemoryAtRoot(workspaceRoot, slug, content)
-    broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    projectRepository.writeProjectMemoryAtRoot(context.workspaceRoot, slug, content)
+    broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
   })
 
   ipcMain.handle(
     PROJECT_IPC_CHANNELS.OPEN_OR_CREATE_BY_PATH,
     (_event, workspaceRoot: string, folderPath: string) => {
-      const result = openOrCreateProjectForPath(workspaceRoot, folderPath)
+      const context = requireProjectWorkspaceRoot(workspaceRoot)
+      const result = openOrCreateProjectForPath(context.workspaceRoot, folderPath)
       if (result.created) {
-        broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+        broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
       }
-      const loaded = projectRepository.getProjectAtRoot(workspaceRoot, result.project.slug)
+      const loaded = projectRepository.getProjectAtRoot(context.workspaceRoot, result.project.slug)
       if (!loaded) throw new Error(`项目创建或复用后无法加载: ${result.project.slug}`)
       return { project: loaded, created: result.created }
     },
@@ -690,19 +727,21 @@ export function registerTaskHandlers(window: BrowserWindow): void {
   ipcMain.handle(
     PROJECT_IPC_CHANNELS.RESOLVE_EFFECTIVE_CWD,
     (_event, workspaceRoot: string, projectSlug: string) => {
-      const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
+      const context = requireProjectWorkspaceRoot(workspaceRoot)
+      const loaded = projectRepository.getProjectAtRoot(context.workspaceRoot, projectSlug)
       if (!loaded) throw new Error(`项目不存在: ${projectSlug}`)
-      return resolveEffectiveCwd(workspaceRoot, loaded.config)
+      return resolveEffectiveCwd(context.workspaceRoot, loaded.config)
     },
   )
 
   ipcMain.handle(
     PROJECT_IPC_CHANNELS.RELOCATE_WORKING_DIRECTORY,
     (_event, workspaceRoot: string, projectSlug: string, newPath: string) => {
-      relocateProjectWorkingDirectory(workspaceRoot, projectSlug, newPath)
-      const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
+      const context = requireProjectWorkspaceRoot(workspaceRoot)
+      relocateProjectWorkingDirectory(context.workspaceRoot, projectSlug, newPath)
+      const loaded = projectRepository.getProjectAtRoot(context.workspaceRoot, projectSlug)
       if (!loaded) throw new Error(`重新定位后无法加载项目: ${projectSlug}`)
-      broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+      broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
       return loaded
     },
   )
@@ -710,10 +749,11 @@ export function registerTaskHandlers(window: BrowserWindow): void {
   ipcMain.handle(
     PROJECT_IPC_CHANNELS.RESTORE_WORKING_DIRECTORY,
     (_event, workspaceRoot: string, projectSlug: string) => {
-      restoreProjectWorkingDirectory(workspaceRoot, projectSlug)
-      const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
+      const context = requireProjectWorkspaceRoot(workspaceRoot)
+      restoreProjectWorkingDirectory(context.workspaceRoot, projectSlug)
+      const loaded = projectRepository.getProjectAtRoot(context.workspaceRoot, projectSlug)
       if (!loaded) throw new Error(`恢复目录后无法加载项目: ${projectSlug}`)
-      broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
+      broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
       return loaded
     },
   )

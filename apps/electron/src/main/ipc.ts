@@ -438,6 +438,8 @@ import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDin
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
+import { normalizeFileAccessOptions } from './lib/file-access-policy'
+import { isSafeDeleteTarget } from './lib/destructive-file-policy'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -526,22 +528,7 @@ function isPathAllowed(filePath: string, options?: FileAccessOptions): boolean {
   } catch {
     return false
   }
-  // 文件面板应反映 Agent 实际可访问的路径。调用方已明确开启 unrestricted 时，
-  // 保留 realpath 校验以拒绝不存在的目标，但不再按会话附件重复收窄范围。
-  if (options?.unrestricted) return true
   return getAuthorizedRoots(options).some((root) => isUnderRoot(resolved, root))
-}
-
-function normalizeFileAccessOptions(value?: FileAccessOptions | string[]): FileAccessOptions | undefined {
-  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined
-  return {
-    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
-    workspaceSlug: typeof value.workspaceSlug === 'string' ? value.workspaceSlug : undefined,
-    candidateBasePaths: Array.isArray(value.candidateBasePaths)
-      ? value.candidateBasePaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
-      : undefined,
-    unrestricted: value.unrestricted === true,
-  }
 }
 
 function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
@@ -3860,9 +3847,25 @@ export function registerIpcHandlers(): void {
       const { rmSync } = await import('node:fs')
       const { resolve } = await import('node:path')
 
+      const options = normalizeFileAccessOptions(access)
       const safePath = resolve(filePath)
-      if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
+      if (!isPathAllowed(safePath, options)) {
         throw new Error('访问路径超出当前会话的授权范围')
+      }
+
+      const protectedRoots = [
+        ...getAuthorizedRoots(options),
+        ...listAgentWorkspaces().map((workspace) => getAgentWorkspacePath(workspace.slug)),
+      ]
+      if (options?.sessionId) {
+        const meta = getAgentSessionMeta(options.sessionId)
+        const workspace = meta?.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
+        if (workspace) {
+          protectedRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
+        }
+      }
+      if (!isSafeDeleteTarget(realpathOrResolve(safePath), protectedRoots.map(realpathOrResolve))) {
+        throw new Error('不能删除 Workspace、Session 或其他受管访问根目录')
       }
 
       rmSync(safePath, { recursive: true, force: true })
