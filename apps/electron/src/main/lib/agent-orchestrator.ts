@@ -77,7 +77,7 @@ import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import type { AgentRuntimeEnv } from './agent-runtime-env'
 import { selectWindowsShell } from './windows-shell-selection'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
-import { resolvePiThinkingLevel } from './agent-thinking-level'
+import { resolveOptimizedCodingEnabled, resolvePiThinkingLevel } from './agent-thinking-level'
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
 import { generateCodexTitle } from './adapters/pi-codex-title-generator'
 import { buildRegenerateTitlePrompt, createFallbackTitle, extractAssistantMessageText, extractGenuineUserMessageText, sanitizeGeneratedTitle, selectSpreadMessages, shouldRegenerateTitleAtUserMessageCount, stripContextWrappersForTitle, TITLE_PROMPT } from './title-generation'
@@ -1162,17 +1162,6 @@ export class AgentOrchestrator {
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
-      // Context7 文档查询（远程 HTTP MCP）：默认关闭，用户可在能力列表手动开启
-      if (!toolsDisabled && isBuiltinMcpUserEnabled('context7')) {
-        const serverName = getBuiltinMcpName('context7')
-        if (!mcpServers[serverName]) {
-          mcpServers[serverName] = {
-            type: 'http',
-            url: 'https://mcp.context7.com/mcp',
-            required: false,
-          } as unknown as Record<string, unknown>
-        }
-      }
       // code-review-graph 代码库知识图谱（stdio）：默认关闭；依赖用户已安装 code-review-graph 命令。
       // 用户手动配置的同名 server（如绝对路径 exe）优先，内置注入仅在无同名条目时生效。
       if (!toolsDisabled && isBuiltinMcpUserEnabled('code-review-graph')) {
@@ -1244,10 +1233,12 @@ export class AgentOrchestrator {
         ...(workspaceDefaultWorkingDirectory ? { workspaceDefaultWorkingDirectory } : {}),
       })
 
-      // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录）。
-      // 服务层按 cwd + git HEAD 缓存：同一 worktree 内多会话共享；首条消息最多等 2s，超时后台继续生成。
+      // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录），
+      // 且编码优化总开关开启时注入。服务层按 cwd + git HEAD 缓存：同一 worktree 内多会话共享；
+      // 首条消息最多等 2s，超时后台继续生成。
+      const optimizedCodingEnabled = resolveOptimizedCodingEnabled(appSettings)
       let repoMapBlock: string | undefined
-      if (projectContext && agentCwd) {
+      if (projectContext && agentCwd && optimizedCodingEnabled) {
         repoMapBlock = await repoMapService.getRepoMapForPrompt(
           agentCwd,
           extractMentionContext(userMessage, agentCwd),
@@ -1608,6 +1599,7 @@ export class AgentOrchestrator {
         permissionMode: initialPermissionMode,
         collaborationAvailable,
         currentModelId: selectedModelId,
+        optimizedCoding: optimizedCodingEnabled,
         projectKnowledgeMaintenanceApproved: workspaceSlug
           ? isWorkspaceProjectKnowledgeMaintenanceApproved(workspaceSlug)
           : false,
@@ -1699,6 +1691,7 @@ ${workContext}` : '')
         piSessionDir: join(getSdkConfigDir(), 'sessions'),
         ...(allAdditionalDirectories.length > 0 && { additionalDirectories: allAdditionalDirectories }),
         ...(workspaceSlug ? { additionalSkillPaths: [getWorkspaceSkillsDir(workspaceSlug)] } : {}),
+        ...(optimizedCodingEnabled ? { optimizedCoding: true } : {}),
         ...(mentionedSkills?.length ? { skillMentions: mentionedSkills } : {}),
         ...(isCompactCommand ? { compactRequest: true } : {}),
         ...(sessionMeta?.codexFastMode && channel.provider === 'openai-codex' ? { codexFastMode: true } : {}),

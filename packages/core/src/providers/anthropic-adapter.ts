@@ -316,9 +316,11 @@ export class AnthropicAdapter implements ProviderAdapter {
       maxTokens = 2048
     } else if (capability.mode === 'effort-based-max') {
       // DeepSeek v4 系列：max_tokens 是「思考+回答」的总硬上限。
-      // 思考开启时给足 64K 避免长重构截断（上限需以 DeepSeek 端点实测为准）；
-      // 关闭思考时也适度提高到 16K，支撑长文件生成。
-      maxTokens = input.thinkingEnabled ? 64000 : 16384
+      // C1：编码优化总开关开启时给足 64K（思考）/16K（关闭）避免长输出截断；
+      // 关闭时保守 32K/8K（端点兼容兜底）。上限 384K 已由官方文档确认，64K 安全。
+      maxTokens = input.optimizedCoding
+        ? (input.thinkingEnabled ? 64000 : 16384)
+        : (input.thinkingEnabled ? 32000 : 8192)
     } else if (!input.thinkingEnabled) {
       maxTokens = 8192
     } else if (capability.mode === 'manual-only') {

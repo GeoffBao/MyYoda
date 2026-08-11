@@ -107,3 +107,32 @@ describe('A1 Coding 模式', () => {
     )).toBe('high')
   })
 })
+
+describe('A1 编码优化总开关（optimizedCoding 兼容）', () => {
+  test('Given optimizedCoding 开启且无会话级覆盖 When 解析 Then 默认 max', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, optimizedCoding: true },
+      undefined,
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('max')
+  })
+
+  test('Given optimizedCoding 优先于旧 codingMode 字段（均为 true 时一致）', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, optimizedCoding: true, codingMode: false },
+      undefined,
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('max')
+  })
+
+  test('Given 两个开关均未设置 When 解析 Then 走默认思考深度', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, defaultThinkingLevel: 'high' },
+      undefined,
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('high')
+  })
+})

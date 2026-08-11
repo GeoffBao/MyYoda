@@ -14,11 +14,11 @@ describe('calculatePiAutoCompactionReserveTokens', () => {
     )
   })
 
-  test('D2：DeepSeek 提前压缩阈值 0.7：1M 窗口预留 30%（300K）', () => {
+  test('thresholdRatio 参数化：0.7 时 1M 窗口预留 30%（300K）', () => {
     expect(calculatePiAutoCompactionReserveTokens(1_000_000, PI_EARLY_COMPACTION_THRESHOLD_RATIO)).toBe(300_000)
   })
 
-  test('200K 窗口：默认 40K 预留 vs 提前 60K 预留', () => {
+  test('200K 窗口：默认 40K 预留 vs 参数 0.7 时 60K 预留', () => {
     expect(calculatePiAutoCompactionReserveTokens(200_000)).toBe(40_000)
     expect(calculatePiAutoCompactionReserveTokens(200_000, PI_EARLY_COMPACTION_THRESHOLD_RATIO)).toBe(60_000)
   })
@@ -30,7 +30,7 @@ describe('calculatePiAutoCompactionReserveTokens', () => {
 })
 
 describe('calculatePiAutoCompactionThresholdTokens', () => {
-  test('1M 窗口默认阈值 = 800K；提前 = 700K', () => {
+  test('1M 窗口默认阈值 = 800K；参数 0.7 时 = 700K', () => {
     expect(calculatePiAutoCompactionThresholdTokens(1_000_000)).toBe(800_000)
     expect(
       1_000_000 - calculatePiAutoCompactionReserveTokens(1_000_000, PI_EARLY_COMPACTION_THRESHOLD_RATIO),
