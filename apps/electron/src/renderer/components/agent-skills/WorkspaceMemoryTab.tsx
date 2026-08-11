@@ -45,15 +45,15 @@ function buildWorkspaceMemoryInitPrompt(historyRange: MemoryHistoryRange): strin
     ? '这次处理全部可用历史；如果历史很多，请优先最新、最有代表性和用户实际完成工作的会话，避免把临时过程写入长期记忆。'
     : `如果你认为需要覆盖超过${rangeLabel.replace('最近', '')}的历史，请先在最终回复里建议用户扩大范围；这次默认只处理${rangeLabel}。`
 
-  return `请帮我初始化并沉淀当前空间的长期记忆。
+  return `请帮我初始化并沉淀当前工作区的长期记忆。
 
 目标：
-1. 读取当前空间${rangeLabel}的 Agent 工作会话，优先关注最新、最有代表性、用户实际完成工作的会话。如果证据不足，请说明而不是编造。
-2. 同时检查当前 Workspace 下所有 Project 的 Project Knowledge（各工作区 MEMORY.md）、工作区 assets、工作区级 plan/spec/design 文档，以及会话级 Context（各会话 cwd 下的 .context/）和空间级 Context（workspace-files/.context/ 及相关本地文档）；必须保留来源 Project，区分工作区专属事实、跨工作区通用知识、当前任务临时产物与跨会话长期资料。
-3. Yoda 记忆要吸收 Project Knowledge 中对整个 Workspace 有长期价值的稳定知识，而不是只总结 Workspace 根目录文件；工作区专属事实仍保留在对应 Project Knowledge，并在汇总内容中注明来源，避免丢失上下文。
-4. 从这些会话、Project Knowledge、工作区资料和 Context 中提炼空间级别的稳定知识，包括工作区结构、常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
-5. 更新空间根目录的 AGENTS.md：只写稳定、跨会话有价值的空间指令和工作方式，避免写临时过程和聊天流水账。
-6. 更新空间 memory/MEMORY.md，必要时创建主题文件：MEMORY.md 只放主题索引和路由，详细内容拆到主题文件；只记录应该长期回忆的经验。
+1. 读取当前工作区${rangeLabel}的 Agent 工作会话，优先关注最新、最有代表性、用户实际完成工作的会话。如果证据不足，请说明而不是编造。
+2. 同时检查当前工作区下所有项目的项目知识（Project Knowledge，各项目 MEMORY.md）、项目资产、项目级 plan/spec/design 文档，以及会话级 Context（各会话 cwd 下的 .context/）和工作区级 Context（workspace-files/.context/ 及相关本地文档）；必须保留来源项目，区分项目专属事实、工作区内跨项目通用知识、当前任务临时产物与跨会话长期资料。
+3. 工作区记忆要吸收项目知识中对整个工作区有长期价值的稳定知识，而不是只总结工作区根目录文件；项目专属事实仍保留在对应项目知识中，并在汇总内容中注明来源，避免丢失上下文。
+4. 从这些会话、项目知识、工作区资料和 Context 中提炼工作区级别的稳定知识，包括工作区结构、跨项目常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
+5. 更新工作区根目录的 AGENTS.md：只写稳定、跨会话有价值的工作区指令和工作方式，避免写临时过程和聊天流水账。
+6. 更新工作区 memory/MEMORY.md，必要时创建主题文件：MEMORY.md 只放主题索引和路由，详细内容拆到主题文件；只记录应该长期回忆的经验。
 7. 沉淀并持续迭代一份「用户画像」记忆，写入 memory/user-profile.md（并在 MEMORY.md 索引中登记）。这份画像用于让未来的 Agent 越来越懂用户，应包含：
    - 用户的角色、技术背景与擅长领域
    - 稳定的工作方式与协作偏好（沟通风格、语言、颗粒度、对确认/自动化的偏好等）
@@ -64,7 +64,7 @@ function buildWorkspaceMemoryInitPrompt(historyRange: MemoryHistoryRange): strin
 9. ${rangeGuidance}
 
 要求：
-- 先查看当前空间可用的会话和文件（包括已有的 user-profile.md），再决定如何写。
+- 先查看当前工作区可用的会话和文件（包括已有的 user-profile.md），再决定如何写。
 - 写入内容要简洁、可维护、方便用户审阅；用户画像要条目化、可追溯，避免笼统空话。
 - 优先小幅增量修改，不要为了显得完整而重写已有记忆；MEMORY.md 保持短索引，避免承载长正文。
 - 不要删除用户已有的有效内容；发现过时内容时先保守修订或标注。
@@ -356,7 +356,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
     return () => { cancelled = true }
   }, [workspaceSlug])
 
-  // 加载空间默认工作目录（未绑定项目的新会话回退使用）
+  // 加载工作区默认工作目录（未绑定项目的新会话回退使用）
   React.useEffect(() => {
     let cancelled = false
     void window.electronAPI.getWorkspaceDefaultWorkingDirectory(workspaceSlug)
@@ -456,8 +456,8 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       <div className="grid gap-3 lg:grid-cols-2">
         <MemoryStatCard
           icon={<BookOpen size={18} />}
-          title="空间指令"
-          subtitle="空间根目录 AGENTS.md"
+          title="工作区指令"
+          subtitle="工作区根目录 AGENTS.md"
           value={summary.agentsMd.exists ? formatBytes(summary.agentsMd.size) : '尚未创建'}
           detail={`更新于 ${formatTime(summary.agentsMd.updatedAt)}`}
           active={selected?.kind === 'agents'}
@@ -479,7 +479,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground">默认工作目录</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              新会话未选择或新建空间时，Agent 会把这里当作工程代码所在地（不改变会话隔离目录本身）。
+              新会话未选择或新建项目时，Agent 会把这里作为工程代码目录的回退位置（不改变会话隔离目录本身）。
             </div>
           </div>
           <WorkingDirectoryField
@@ -495,7 +495,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground">从历史会话生成 Yoda 记忆</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              新建一个 Agent 会话，读取当前空间{historyRangeLabel}的工作会话，沉淀并更新 AGENTS.md 与长期记忆文件。
+              新建一个 Agent 会话，读取当前工作区{historyRangeLabel}的工作会话，沉淀并更新 AGENTS.md 与长期记忆文件。
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -542,7 +542,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
                 active={selected?.kind === 'agents'}
                 icon={<FileText size={14} />}
                 label="AGENTS.md"
-                meta="空间指令"
+                meta="工作区指令"
                 onClick={() => void openClaude(summary)}
               />
               <div className="mt-3 px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
@@ -656,7 +656,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
                 spellCheck={false}
                 className="min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-[13px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
                 placeholder={selected.kind === 'agents'
-                  ? '# 空间指令\n\n写下未来 Agent 必须知道的空间规范、命令和决策。'
+                  ? '# 工作区指令\n\n写下未来 Agent 必须知道的工作区规范、命令和决策。'
                   : '# MEMORY\n\n写下稳定、可复用的长期记忆索引。'}
               />
             ) : selected ? (

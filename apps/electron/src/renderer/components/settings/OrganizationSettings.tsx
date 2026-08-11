@@ -6,7 +6,7 @@
  * - 显示我的组织与角色
  * - 创建组织 / 凭邀请码加入组织
  * - 查看组织成员
- * - 浏览企业组织技能（导入到当前空间由 agent-skills 面板完成）
+ * - 浏览企业组织技能（导入到当前工作区由 agent-skills 面板完成）
  */
 
 import * as React from 'react'
@@ -24,7 +24,7 @@ import type {
 } from '@myyoda/shared'
 
 interface OrganizationSettingsProps {
-  /** 当前空间 slug（Skills 导入目标） */
+  /** 当前工作区 slug（Skills 导入目标） */
   workspaceSlug?: string
 }
 
@@ -382,7 +382,7 @@ export function OrganizationSettings({ workspaceSlug }: OrganizationSettingsProp
       {selectedOrgId && (
         <SettingsSection
           title={`企业组织技能 (${skills.length})`}
-          description="组织管理员发布的 Skills。可在空间的「Agent 技能」面板中导入/更新这些 Skills。"
+          description="组织管理员发布的 Skills。可在工作区的「Agent 技能」面板中导入/更新这些 Skills。"
         >
           <SettingsCard>
             <div className="px-4 py-3 space-y-2">
@@ -407,7 +407,7 @@ export function OrganizationSettings({ workspaceSlug }: OrganizationSettingsProp
       )}
 
       <p className="text-xs text-muted-foreground px-1">
-        导入企业组织技能到当前空间：前往「Agent 技能」面板，选择「从组织导入」。
+        导入企业组织技能到当前工作区：前往「Agent 技能」面板，选择「从组织导入」。
       </p>
     </div>
   )

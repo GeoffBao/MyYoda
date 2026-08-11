@@ -3,7 +3,7 @@
  *
  * 双 Tab 布局：
  * - Bot 配置：飞书应用凭证、连接状态、默认配置、创建引导、命令说明
- * - 绑定管理：查看/管理所有活跃的飞书聊天绑定（群聊/单聊的空间/会话分配）
+ * - 绑定管理：查看/管理所有活跃的飞书聊天绑定（群聊/单聊的工作区/会话分配）
  */
 
 import * as React from 'react'
@@ -332,7 +332,7 @@ const FEISHU_CLI_PROMPT = `请帮我配置飞书 CLI 开发环境，按以下步
 1. 安装飞书 CLI 到全局
 npm install -g @larksuite/cli
 
-2. 将 SKILL 配置到本空间（默认配置本空间，但请提醒用户是否需要额外安装到全局，会使得预置上下文增加，造成不必要的Token消耗）
+2. 将 SKILL 配置到本工作区（默认配置本工作区，但请提醒用户是否需要额外安装到全局，会使得预置上下文增加，造成不必要的Token消耗）
 npx skills add https://github.com/larksuite/cli -y -g
 
 3. 初始化 CLI 配置（创建一个全新的飞书 CLI 应用，与 MyYoda 飞书 Bot 互不影响）
@@ -366,7 +366,7 @@ function FeishuCliSection(): React.ReactElement {
     >
       <SettingsCard divided={false}>
         <div className="px-4 py-4 space-y-2 text-sm text-muted-foreground">
-          <p className="text-xs">复制配置提示词，并前往飞书Bot日常绑定的<strong>空间</strong>，创建新的 MyYoda Agent 对话并发送即可让 MyYoda 协助完成配置。</p>
+          <p className="text-xs">复制配置提示词，并前往飞书Bot日常绑定的<strong>工作区</strong>，创建新的 MyYoda Agent 对话并发送即可让 MyYoda 协助完成配置。</p>
           <button
             type="button"
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -380,7 +380,7 @@ function FeishuCliSection(): React.ReactElement {
             <div className="bg-muted/50 rounded-md p-3 font-mono text-xs space-y-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-base">
               <div><span className="text-foreground/70 font-semibold">步骤 1</span> — 安装飞书 CLI 到全局</div>
               <div className="pl-3 text-foreground/60">npm install -g @larksuite/cli</div>
-              <div className="pt-1"><span className="text-foreground/70 font-semibold">步骤 2</span> — 将 SKILL 配置到本空间（默认本空间；如需全局会增加 Token 消耗）</div>
+              <div className="pt-1"><span className="text-foreground/70 font-semibold">步骤 2</span> — 将 SKILL 配置到本工作区（默认本工作区；如需全局会增加 Token 消耗）</div>
               <div className="pl-3 text-foreground/60">npx skills add https://github.com/larksuite/cli -y -g</div>
               <div className="pt-1"><span className="text-foreground/70 font-semibold">步骤 3</span> — 初始化 CLI（新建独立 CLI 应用，不影响 MyYoda 飞书 Bot）</div>
               <div className="pl-3 text-foreground/60">lark-cli config init --new</div>
@@ -433,7 +433,7 @@ const FeishuBindingCard = React.memo(function FeishuBindingCard({
   const displayName = isGroup ? (binding.groupName ?? '未知群组') : '单聊'
   const isArchived = !!binding.archived
 
-  // 当前绑定空间下的会话列表
+  // 当前绑定工作区下的会话列表
   const workspaceSessions = React.useMemo(
     () => sessionsByWorkspaceId.get(binding.workspaceId) ?? [],
     [sessionsByWorkspaceId, binding.workspaceId]
@@ -497,9 +497,9 @@ const FeishuBindingCard = React.memo(function FeishuBindingCard({
         </div>
       </div>
 
-      {/* 空间选择 */}
+      {/* 工作区选择 */}
       <div className="grid grid-cols-[80px_1fr] gap-2 items-center text-sm">
-        <span className="text-muted-foreground">空间</span>
+        <span className="text-muted-foreground">工作区</span>
         <Select
           value={binding.workspaceId}
           open={workspaceSelectOpen}
@@ -507,8 +507,8 @@ const FeishuBindingCard = React.memo(function FeishuBindingCard({
           onValueChange={(value) => onUpdate(binding.chatId, { workspaceId: value })}
         >
           <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="选择空间">
-              {currentWorkspace?.name ?? '未知空间'}
+            <SelectValue placeholder="选择工作区">
+              {currentWorkspace?.name ?? '未知工作区'}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -849,7 +849,7 @@ function CliRecommendationCard(): React.ReactElement {
         <div className="flex-1 text-xs text-foreground/80 leading-relaxed">
           <div className="font-medium text-foreground mb-0.5">想要更完整的飞书生态体验？</div>
           补全飞书 CLI 后 MyYoda Agent 还可以直接读写你的文档、查日历、发邮件等。
-          复制下方提示词到任意空间的新对话发送即可，Agent 会全程引导完成。
+          复制下方提示词到任意工作区的新对话发送即可，Agent 会全程引导完成。
         </div>
       </div>
       <Button
@@ -1526,7 +1526,7 @@ function FeishuConfigTab(): React.ReactElement {
       {/* Bot 列表 */}
       <SettingsSection
         title="飞书 Bot 列表"
-        description="管理多个飞书机器人，每个 Bot 可绑定不同的空间和模型"
+        description="管理多个飞书机器人，每个 Bot 可绑定不同的工作区和模型"
         action={
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setRegisterOpen(true)}>

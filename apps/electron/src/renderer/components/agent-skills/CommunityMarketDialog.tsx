@@ -1,7 +1,7 @@
 /**
  * CommunityMarketDialog — 社区市场
  *
- * 拉取 MyYoda 私有市场清单，浏览/搜索 Skill（支持分类筛选、版本号、下载量），一键安装到当前空间。
+ * 拉取 MyYoda 私有市场清单，浏览/搜索 Skill（支持分类筛选、版本号、下载量），一键安装到当前工作区。
  */
 
 import * as React from 'react'
@@ -118,7 +118,7 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
             )}
           </DialogTitle>
           <DialogDescription>
-            浏览社区贡献的 Agent Skills（{skills.length} 个），一键安装到当前空间。由 MyYoda 官方维护，遵循各 Skill 的许可证。
+            浏览社区贡献的 Agent Skills（{skills.length} 个），一键安装到当前工作区。由 MyYoda 官方维护，遵循各 Skill 的许可证。
           </DialogDescription>
         </DialogHeader>
 

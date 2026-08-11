@@ -222,7 +222,7 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
 
   const duplicate = index.workspaces.find((w) => w.name === name)
   if (duplicate) {
-    throw new Error(`空间名称「${name}」已存在`)
+    throw new Error(`工作区名称「${name}」已存在`)
   }
 
   const existingSlugs = new Set(index.workspaces.map((w) => w.slug))
@@ -253,7 +253,7 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
       }
     }
     console.error(`[Agent 工作区] 创建工作区失败 (${name}, slug: ${slug}):`, error)
-    throw new Error(`创建空间失败: ${(error as Error)?.message ?? '初始化空间目录失败'}`)
+    throw new Error(`创建工作区失败: ${(error as Error)?.message ?? '初始化工作区目录失败'}`)
   }
 
   index.workspaces.unshift(workspace)
@@ -272,14 +272,14 @@ export function updateAgentWorkspace(
   const idx = index.workspaces.findIndex((w) => w.id === id)
 
   if (idx === -1) {
-    throw new Error(`Agent 空间不存在: ${id}`)
+    throw new Error(`Agent 工作区不存在: ${id}`)
   }
 
   const existing = index.workspaces[idx]!
 
   const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
   if (duplicate) {
-    throw new Error(`空间名称「${updates.name}」已存在`)
+    throw new Error(`工作区名称「${updates.name}」已存在`)
   }
 
   const updated: AgentWorkspace = {
@@ -301,22 +301,22 @@ export function deleteAgentWorkspace(id: string): void {
   const idx = index.workspaces.findIndex((w) => w.id === id)
 
   if (idx === -1) {
-    throw new Error(`Agent 空间不存在: ${id}`)
+    throw new Error(`Agent 工作区不存在: ${id}`)
   }
 
   const target = index.workspaces[idx]!
   if (target.slug === 'default') {
-    throw new Error('默认空间不能删除')
+    throw new Error('默认工作区不能删除')
   }
   if (index.workspaces.length <= 1) {
-    throw new Error('至少需要保留一个空间')
+    throw new Error('至少需要保留一个工作区')
   }
 
   const workspacesRoot = resolve(getAgentWorkspacesDir())
   const workspaceDir = resolve(join(workspacesRoot, target.slug))
   const relativePath = relative(workspacesRoot, workspaceDir)
   if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
-    throw new Error(`空间目录路径异常，已跳过删除: ${workspaceDir}`)
+    throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
   }
 
   // 先移除索引条目并落盘，再删目录：
@@ -346,14 +346,14 @@ export function ensureDefaultWorkspace(): AgentWorkspace {
     const now = Date.now()
     defaultWs = {
       id: randomUUID(),
-      name: '默认空间',
+      name: '默认工作区',
       slug: 'default',
       createdAt: now,
       updatedAt: now,
     }
 
     getAgentWorkspacePath('default')
-    ensurePluginManifest('default', '默认空间')
+    ensurePluginManifest('default', '默认工作区')
     copyDefaultSkills('default')
 
     index.workspaces.push(defaultWs)
@@ -361,9 +361,17 @@ export function ensureDefaultWorkspace(): AgentWorkspace {
 
     console.log('[Agent 工作区] 已创建默认工作区')
   } else {
-    // 英文旧名迁移为简体中文产品文案（用户已改名则保留）
-    if (defaultWs.name === 'Default Space') {
-      defaultWs = { ...defaultWs, name: '默认空间', updatedAt: Date.now() }
+    // 历史默认名迁移为当前产品文案（用户已改名则保留）。
+    // 旧安装可能已经有另一个用户创建的“默认工作区”；冲突时保留历史名称，
+    // 避免绕过 create/update 的唯一性守卫产生两个同名工作区。
+    const hasDefaultNameConflict = index.workspaces.some(
+      (workspace) => workspace.id !== defaultWs!.id && workspace.name === '默认工作区',
+    )
+    if (
+      (defaultWs.name === 'Default Space' || defaultWs.name === '默认空间')
+      && !hasDefaultNameConflict
+    ) {
+      defaultWs = { ...defaultWs, name: '默认工作区', updatedAt: Date.now() }
       const idx = index.workspaces.findIndex((item) => item.id === defaultWs!.id)
       if (idx >= 0) index.workspaces[idx] = defaultWs
       writeIndex(index)
@@ -888,7 +896,7 @@ export async function importSkillFromWorkspace(
   const sourcePath = resolveSkillDir(sourceSlug, skillSlug)
 
   if (!sourcePath) {
-    throw new Error(`源空间中不存在 Skill: ${skillSlug}`)
+    throw new Error(`源工作区中不存在 Skill: ${skillSlug}`)
   }
 
   // P0 修复：复制前校验源 SKILL.md 存在，避免产生孤立目录
@@ -1000,20 +1008,20 @@ export function updateSkillFromSource(
       : null
 
   if (!targetPath) {
-    throw new Error(`当前空间中不存在 Skill: ${skillSlug}`)
+    throw new Error(`当前工作区中不存在 Skill: ${skillSlug}`)
   }
 
   const existingSource = readSkillImportSource(targetPath)
   if (!existingSource) {
-    throw new Error(`Skill ${skillSlug} 不是从其他空间导入的，无法从源更新`)
+    throw new Error(`Skill ${skillSlug} 不是从其他工作区导入的，无法从来源更新`)
   }
   if (!existingSource.sourceWorkspaceSlug) {
-    throw new Error(`Skill ${skillSlug} 不是从其他空间导入的，无法从源更新`)
+    throw new Error(`Skill ${skillSlug} 不是从其他工作区导入的，无法从来源更新`)
   }
 
   const sourcePath = resolveSkillDir(existingSource.sourceWorkspaceSlug, skillSlug)
   if (!sourcePath) {
-    throw new Error(`源空间中不再存在 Skill: ${skillSlug}（来源: ${existingSource.sourceWorkspaceName}）`)
+    throw new Error(`源工作区中不再存在 Skill: ${skillSlug}（来源: ${existingSource.sourceWorkspaceName}）`)
   }
 
   if (!existsSync(join(sourcePath, 'SKILL.md'))) {
@@ -2083,7 +2091,7 @@ export async function importSkillFromOrganization(
   const targetPath = join(getWorkspaceSkillsDir(targetSlug), skill.slug)
   const inactivePath = join(getInactiveSkillsDir(targetSlug), skill.slug)
   if (existsSync(targetPath) || existsSync(inactivePath)) {
-    throw new Error(`当前空间已存在同名 Skill: ${skill.slug}`)
+    throw new Error(`当前工作区已存在同名 Skill: ${skill.slug}`)
   }
   const zip = await orgDownloadSkill(conn, orgId, skill.slug)
   const files = await extractSkillZip(zip)
@@ -2129,7 +2137,7 @@ export async function updateSkillFromOrganizationSource(
       ? join(inactiveDir, skillSlug)
       : null
   if (!targetPath) {
-    throw new Error(`当前空间中不存在 Skill: ${skillSlug}`)
+    throw new Error(`当前工作区中不存在 Skill: ${skillSlug}`)
   }
   const existingSource = readSkillImportSource(targetPath)
   if (!existingSource || existingSource.sourceType !== 'organization') {

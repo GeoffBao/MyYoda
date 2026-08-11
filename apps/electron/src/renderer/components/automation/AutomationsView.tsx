@@ -4,13 +4,13 @@
  * 作为「Task 日历」的定时任务 tab 内容（tab 内升级），参考 MyYodacomp 的
  * AutomationsView 设计语言，适配 MyYoda 定时任务数据模型：
  * - 工具栏：状态筛选（全部/启用中/已暂停/已完成，带计数）+ 排序（下次运行/最近运行/创建时间/名称）
- * - 列表：表格化卡片行（状态点 / 名称 / 调度 / 上次运行 / 下次运行 / 模型·空间），
+ * - 列表：表格化卡片行（状态点 / 名称 / 调度 / 上次运行 / 下次运行 / 模型·工作区），
  *   hover 显示行操作（立即运行 / 删除），右侧固定暂停启用按钮，点击行进编辑表单
  * - 空状态：模板卡片网格（每日新闻摘要 / 代码审查提醒 / Bug 分类 / 每周进展 /
  *   依赖审计 / 文档一致性检查），点模板快速创建，另有「从空白创建」
  *
  * 复用 automationFormAtom → AutomationFormView 作为创建/编辑表单。
- * 外层 PlanningView 已提供页面 Header（标题/新建按钮/独立窗口）与空间范围切换，
+ * 外层 PlanningView 已提供页面 Header（标题/新建按钮/独立窗口）与工作区范围切换，
  * 本组件不再重复渲染这些元素。
  */
 
@@ -128,7 +128,7 @@ function runStatusDotClass(status: string | undefined): string {
   return 'bg-muted-foreground/40'
 }
 
-/** 任务是否具备运行 / 启用所需的最小完整度（模型 + 空间） */
+/** 任务是否具备运行 / 启用所需的最小完整度（模型 + 工作区） */
 function isRunnable(a: Automation): boolean {
   return !!a.channelId && !!a.workspaceId
 }
@@ -207,7 +207,7 @@ export function AutomationsView(): React.ReactElement {
   const [scope, setScope] = React.useState<AutomationScope>('all')
   const [sortField, setSortField] = React.useState<AutomationSortField>('nextRun')
 
-  // 空间范围切换后重新拉取（AutomationInitializer 只监听 workspace 切换，不监听 current/all）
+  // 工作区范围切换后重新拉取（AutomationInitializer 只监听 workspace 切换，不监听 current/all）
   const refreshList = React.useCallback(async () => {
     const list = await window.electronAPI.listAutomations(workspaceScope, currentWorkspaceId ?? undefined)
     setAutomations(list)
@@ -218,7 +218,7 @@ export function AutomationsView(): React.ReactElement {
     [channels],
   )
   const workspaceName = React.useCallback(
-    (id: string | undefined): string => workspaces.find((w) => w.id === id)?.name ?? '未配置空间',
+    (id: string | undefined): string => workspaces.find((w) => w.id === id)?.name ?? '未配置工作区',
     [workspaces],
   )
   const projectName = React.useCallback(
@@ -289,7 +289,7 @@ export function AutomationsView(): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 工具栏：状态筛选 + 排序（空间范围由外层 PlanningView 提供） */}
+      {/* 工具栏：状态筛选 + 排序（工作区范围由外层 PlanningView 提供） */}
       {counts.all > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <nav className="inline-flex rounded-xl bg-muted/60 p-1 shadow-inner" aria-label="定时任务状态筛选">
@@ -389,7 +389,7 @@ function AutomationRow({ automation: a, index, channelName, workspaceName, proje
   const handleRunNow = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
     if (!isRunnable(a)) {
-      toast.error('请先为该任务配置模型与空间')
+      toast.error('请先为该任务配置模型与工作区')
       onEdit()
       return
     }
@@ -408,7 +408,7 @@ function AutomationRow({ automation: a, index, channelName, workspaceName, proje
   const handleToggle = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
     if (!a.active && !isRunnable(a)) {
-      toast.error('请先为该任务配置模型与空间')
+      toast.error('请先为该任务配置模型与工作区')
       onEdit()
       return
     }
@@ -527,7 +527,7 @@ function AutomationRow({ automation: a, index, channelName, workspaceName, proje
         )}
       </div>
 
-      {/* 模型 · 挂载位置（项目名 + 空间名；未绑定项目则只显示空间名） */}
+      {/* 模型 · 挂载位置（项目名 + 工作区名；未绑定项目则只显示工作区名） */}
       <div className="hidden w-40 shrink-0 xl:block">
         <div className="truncate text-[12px] text-foreground/70" title={model}>{model}</div>
         <div className="mt-1 truncate text-[12px] text-foreground/45" title={locationLabel}>{locationLabel}</div>

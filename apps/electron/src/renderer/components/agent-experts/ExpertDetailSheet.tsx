@@ -242,7 +242,7 @@ function ExpertDetailBody({ expert, onOpenChange, onSaved }: ExpertDetailBodyPro
 
           <ExpertFieldSection
             title="Skill 引用"
-            description="勾选当前空间 Skills；跑 Kanban 任务时会与任务 skills 合并注入。完整内容仍由 Agent 技能模块管理。"
+            description="勾选当前工作区 Skills；跑 Kanban 任务时会与任务 skills 合并注入。完整内容仍由 Agent 技能模块管理。"
           >
             <SettingsCard divided={false}>
               {catalogLoading ? (
@@ -252,7 +252,7 @@ function ExpertDetailBody({ expert, onOpenChange, onSaved }: ExpertDetailBodyPro
                   options={skillOptions}
                   value={skillSlugs}
                   onChange={setSkillSlugs}
-                  emptyHint={workspaceSlug ? '当前空间暂无 Skill' : '请先选择空间后再绑定 Skill'}
+                  emptyHint={workspaceSlug ? '当前工作区暂无 Skill' : '请先选择工作区后再绑定 Skill'}
                 />
               )}
             </SettingsCard>
@@ -260,7 +260,7 @@ function ExpertDetailBody({ expert, onOpenChange, onSaved }: ExpertDetailBodyPro
 
           <ExpertFieldSection
             title="MCP 引用"
-            description="勾选当前空间 MCP；跑 Kanban 任务时经 mentionedMcpServers 注入（与 #mcp: 同路）。"
+            description="勾选当前工作区 MCP；跑 Kanban 任务时经 mentionedMcpServers 注入（与 #mcp: 同路）。"
           >
             <SettingsCard divided={false}>
               {catalogLoading ? (
@@ -270,7 +270,7 @@ function ExpertDetailBody({ expert, onOpenChange, onSaved }: ExpertDetailBodyPro
                   options={mcpOptions}
                   value={mcpIds}
                   onChange={setMcpIds}
-                  emptyHint={workspaceSlug ? '当前空间暂无 MCP' : '请先选择空间后再绑定 MCP'}
+                  emptyHint={workspaceSlug ? '当前工作区暂无 MCP' : '请先选择工作区后再绑定 MCP'}
                 />
               )}
             </SettingsCard>

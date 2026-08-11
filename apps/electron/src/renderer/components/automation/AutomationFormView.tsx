@@ -3,7 +3,7 @@
  *
  * 两栏布局：
  * - 左：大的自然语言任务描述输入框（主角）
- * - 右：配置栏（启用 / 状态信息 / 调度模式 / 模型 / 空间 / 运行历史）
+ * - 右：配置栏（启用 / 状态信息 / 调度模式 / 模型 / 工作区 / 运行历史）
  *
  * 表单打开时 AppShell 会隐藏右侧文件面板，中间区域扩展到全宽。
  */
@@ -102,7 +102,7 @@ function canPersistDraft(draft: AutomationDraft): boolean {
   return !!(draft.name.trim() && draft.prompt.trim())
 }
 
-/** 任务是否具备运行 / 启用所需的最小完整度（模型 + 空间） */
+/** 任务是否具备运行 / 启用所需的最小完整度（模型 + 工作区） */
 function isReadyToRun(draft: AutomationDraft): boolean {
   return canPersistDraft(draft) && !!draft.channelId && !!draft.workspaceId
 }
@@ -113,7 +113,7 @@ function listMissingFields(draft: AutomationDraft): string[] {
   if (!draft.name.trim()) missing.push('任务名称')
   if (!draft.prompt.trim()) missing.push('任务描述')
   if (!draft.channelId) missing.push('模型')
-  if (!draft.workspaceId) missing.push('空间')
+  if (!draft.workspaceId) missing.push('工作区')
   return missing
 }
 
@@ -221,14 +221,14 @@ function AutomationPromptEmptyGuide(): React.ReactElement {
         <div>
           <div className="text-[13px] font-semibold text-foreground">推荐：让 MyYoda Agent 创建</div>
           <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            在左侧会话里说清目标，并明确表示要求创建定时任务，MyYoda Agent 会生成任务描述，并补全周期、空间和模型等配置，手动编辑更适合微调任务描述。
+            在左侧会话里说清目标，并明确表示要求创建定时任务，MyYoda Agent 会生成任务描述，并补全周期、工作区和模型等配置，手动编辑更适合微调任务描述。
           </div>
         </div>
         <div className="h-px bg-border/50" />
         <div>
           <div className="text-[13px] font-medium text-foreground/85">手动编写时，只写任务本身</div>
           <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            例：检查 MyYoda 仓库新增 issue，主动回复问答类问题，不清楚的部分整理到空间目录下的 .context/issue-faq.md 文档；真正的 Bug 或请求罗列后发给我，不要记录任何重复的信息。
+            例：检查 MyYoda 仓库新增 issue，主动回复问答类问题，不清楚的部分整理到工作区目录下的 .context/issue-faq.md 文档；真正的 Bug 或请求罗列后发给我，不要记录任何重复的信息。
           </div>
         </div>
       </div>
@@ -347,8 +347,8 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
   }, [formState.open, formState.draft])
 
   // 新建模式下若 workspaceId 为空，按优先级填入默认值：
-  // 1. 当前 Agent 模式选中的空间（≈ 当前会话所在空间）
-  // 2. 第一个空间（fallback）
+  // 1. 当前 Agent 模式选中的工作区（≈ 当前会话所在工作区）
+  // 2. 第一个工作区（fallback）
   // 编辑模式不动；用户已显式选过的也不覆盖。
   React.useEffect(() => {
     if (!formState.open || !form || form.id || form.workspaceId) return
@@ -396,7 +396,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
         ? { ...latestDraft, id: latestDraft.id ?? previousId ?? draft.id }
         : { ...draft, id: draft.id ?? previousId ?? undefined }
 
-      // 不完整任务（缺模型 / 空间）强制不启用：避免无配置任务出现在「启用中」分组
+      // 不完整任务（缺模型 / 工作区）强制不启用：避免无配置任务出现在「启用中」分组
       const draftToSave: AutomationDraft = isReadyToRun(baseDraft)
         ? baseDraft
         : { ...baseDraft, active: false }
@@ -525,7 +525,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
   const handleRunNow = async (): Promise<void> => {
     const latest = latestFormRef.current
     if (!latest || !isReadyToRun(latest)) {
-      const missing = latest ? listMissingFields(latest) : ['任务名称', '任务描述', '模型', '空间']
+      const missing = latest ? listMissingFields(latest) : ['任务名称', '任务描述', '模型', '工作区']
       toast.error(`请先补全：${missing.join('、')}`)
       return
     }
@@ -743,7 +743,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-5">
-          {/* 启用开关（最上）：模型 / 空间缺失时禁用，避免 UI 状态与持久化结果不一致 */}
+          {/* 启用开关（最上）：模型 / 工作区缺失时禁用，避免 UI 状态与持久化结果不一致 */}
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-0.5">
               <Label htmlFor="auto-active">启用</Label>
@@ -994,13 +994,13 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
             />
           </div>
 
-          {/* 空间（必选，默认填入当前会话所在空间） */}
+          {/* 工作区（必选，默认填入当前会话所在工作区） */}
           <div className="flex flex-col gap-2">
-            <Label>空间</Label>
+            <Label>工作区</Label>
             {workspaces.length === 0 ? (
               <div className="flex items-center gap-2 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
                 <Settings size={14} className="shrink-0" />
-                <span>尚未创建任何空间</span>
+                <span>尚未创建任何工作区</span>
                 <button
                   type="button"
                   className="ml-auto text-xs underline underline-offset-2 hover:text-foreground transition-colors"
@@ -1016,7 +1016,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
               <Select
                 value={form.workspaceId ?? ''}
                 onValueChange={(v) => {
-                  // 切换空间时，若当前已选项目不属于新空间，则解除项目挂载
+                  // 切换工作区时，若当前已选项目不属于新工作区，则解除项目挂载
                   const currentProject = form.projectId
                     ? pickableProjects.find((p) => p.id === form.projectId)
                     : undefined
@@ -1028,7 +1028,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
                   })
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="选择空间" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="选择工作区" /></SelectTrigger>
                 <SelectContent>
                   {workspaces.map((ws) => (
                     <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
@@ -1100,7 +1100,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
           <div className="flex flex-col gap-2">
             <Label>项目（可选）</Label>
             {!form.workspaceId ? (
-              <div className="px-0.5 text-xs leading-relaxed text-foreground/35">请先选择空间</div>
+              <div className="px-0.5 text-xs leading-relaxed text-foreground/35">请先选择工作区</div>
             ) : (
               <Select
                 value={form.projectId ?? NO_PROJECT}

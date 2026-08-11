@@ -43,7 +43,7 @@ export function ProjectSessionsTab({ workspaceRoot: _workspaceRoot, project, onE
           </button>
         </div>
         {projectSessions.length === 0 ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">暂无工作区会话</p>
+          <p className="py-8 text-center text-xs text-muted-foreground">暂无项目会话</p>
         ) : (
           <div className="space-y-0.5">
             {projectSessions.map((session) => (

@@ -19,7 +19,7 @@ import {
 import { activeViewAtom } from '@/atoms/active-view'
 import type { AgentWorkspace } from '@myyoda/shared'
 import { SettingsSection, SettingsCard } from './primitives'
-import { useProjectActions } from '@/hooks/useProjectActions'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,9 +31,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
+import { WORKSPACE_TERMS } from '@/lib/workspace-project-terminology'
 
 export function WorkspaceSettings(): React.ReactElement {
-  const { workspaces, currentWorkspaceId, selectProject, createProject } = useProjectActions()
+  const { workspaces, currentWorkspaceId, selectWorkspace, createWorkspace } = useWorkspaceActions()
   const setWorkspaces = useSetAtom(agentWorkspacesAtom)
   const setCurrentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const setAgentSessions = useSetAtom(agentSessionsAtom)
@@ -55,12 +56,12 @@ export function WorkspaceSettings(): React.ReactElement {
     [workspaces.length],
   )
 
-  /** 新建工作区（复用 useProjectActions.createProject，自动切换） */
+  /** 新建工作区（复用 useWorkspaceActions.createWorkspace，自动切换） */
   const handleCreate = async (): Promise<void> => {
     if (creating) return
     setCreating(true)
     try {
-      await createProject(newName)
+      await createWorkspace(newName)
       setNewName('')
     } finally {
       setCreating(false)
@@ -78,7 +79,7 @@ export function WorkspaceSettings(): React.ReactElement {
     try {
       await window.electronAPI.updateAgentWorkspace(workspace.id, { name: trimmed })
       setWorkspaces((prev) => prev.map((w) => (w.id === workspace.id ? { ...w, name: trimmed } : w)))
-      toast.success('空间已重命名')
+      toast.success('工作区已重命名')
       setEditingId(null)
     } catch (error) {
       const msg = error instanceof Error ? error.message : '重命名失败'
@@ -104,7 +105,7 @@ export function WorkspaceSettings(): React.ReactElement {
         }
       }
       setActiveView('conversations')
-      toast.success(`已删除空间「${deleteTarget.name}」`)
+      toast.success(`已删除工作区「${deleteTarget.name}」`)
       setDeleteTarget(null)
     } catch (error) {
       const msg = error instanceof Error ? error.message : '删除失败'
@@ -117,8 +118,8 @@ export function WorkspaceSettings(): React.ReactElement {
   return (
     <div className="space-y-8">
       <SettingsSection
-        title="空间容器"
-        description="空间容器是会话、工作区、Skills 与 MCP 的隔离边界。当前默认单空间；如需多套环境隔离（如工作 / 私人、客户 A / 客户 B），可在此创建并切换。"
+        title={WORKSPACE_TERMS.management}
+        description="工作区是会话、Skills、MCP、工作区记忆、工作区文件与项目的隔离边界。大多数用户只需默认工作区；需要区分工作、私人或不同客户环境时，可在此创建并切换。"
       >
         <SettingsCard>
           {workspaces.map((workspace) => {
@@ -192,7 +193,7 @@ export function WorkspaceSettings(): React.ReactElement {
                       {!isCurrent && (
                         <button
                           type="button"
-                          onClick={() => selectProject(workspace.id)}
+                          onClick={() => selectWorkspace(workspace.id)}
                           className="rounded-md px-2 py-1 text-[12px] font-medium text-primary transition-colors hover:bg-primary/10"
                         >
                           切换
@@ -216,7 +217,7 @@ export function WorkspaceSettings(): React.ReactElement {
                             ? 'text-foreground/45 hover:bg-destructive/10 hover:text-destructive'
                             : 'cursor-not-allowed text-foreground/20',
                         )}
-                        aria-label={deletable ? `删除「${workspace.name}」` : '默认空间不可删除'}
+                        aria-label={deletable ? `删除工作区「${workspace.name}」` : '默认工作区不可删除'}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -233,7 +234,7 @@ export function WorkspaceSettings(): React.ReactElement {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate() }}
-            placeholder="新空间名称…"
+            placeholder="新工作区名称…"
             className="h-8 max-w-[280px] text-[13px]"
             maxLength={50}
           />
@@ -244,7 +245,7 @@ export function WorkspaceSettings(): React.ReactElement {
             className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={14} />
-            <span>{creating ? '创建中…' : '新建空间'}</span>
+            <span>{creating ? '创建中…' : WORKSPACE_TERMS.create}</span>
           </button>
         </div>
       </SettingsSection>
@@ -252,9 +253,9 @@ export function WorkspaceSettings(): React.ReactElement {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除空间「{deleteTarget?.name}」？</AlertDialogTitle>
+            <AlertDialogTitle>删除工作区「{deleteTarget?.name}」？</AlertDialogTitle>
             <AlertDialogDescription>
-              将同时删除该空间下的会话与工作区引用，且无法恢复。确定要删除吗？
+              将删除 MyYoda 托管的工作区数据、会话、自动任务与渠道绑定，且无法恢复；项目绑定的外部工作目录不会被删除。Todo 与日程记录不会被删除，但之后可能需要重新归类。确定要继续吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -730,7 +730,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
                 <div className="min-w-0 flex-1">
                   <h1 className="text-xl font-semibold tracking-normal text-foreground">草稿页</h1>
                   <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
-                    临时记录内容、整理 Todo、暂存剪贴板文本，稍后再导出到会话或空间。
+                    临时记录内容、整理 Todo、暂存剪贴板文本，稍后再导出到会话或工作区。
                   </p>
                 </div>
                 <Tooltip>
@@ -835,9 +835,9 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
               disabled={!currentWorkspace}
               className="flex flex-col items-start"
             >
-              <span className="text-xs">保存到空间目录</span>
+              <span className="text-xs">保存到工作区目录</span>
               <span className="text-[10px] text-muted-foreground">
-                {currentWorkspace?.name ?? '无当前空间'}
+                {currentWorkspace?.name ?? '无当前工作区'}
               </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

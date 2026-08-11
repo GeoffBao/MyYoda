@@ -85,7 +85,7 @@ export function TeambitionPicker({
 
   const loadTasks = async (): Promise<void> => {
     if (!resolvedLocalProjectId) {
-      toast.error('请先选择本地工作区')
+      toast.error('请先选择本地项目')
       return
     }
     if (!remoteProjectId.trim()) {
@@ -110,7 +110,7 @@ export function TeambitionPicker({
       userPicked: pickedProjectId.trim() ? pickedProjectId.trim() : null,
     })
     if (plan.kind === 'abort' || plan.kind === 'need_pick') {
-      toast.error('请先选择本地工作区')
+      toast.error('请先选择本地项目')
       return
     }
 

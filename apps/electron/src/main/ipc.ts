@@ -369,6 +369,7 @@ import {
   getWorkspaceDefaultWorkingDirectory,
   setWorkspaceDefaultWorkingDirectory,
 } from './lib/agent-workspace-manager'
+import { deleteWorkspaceCascade } from './lib/workspace-deletion-service'
 import {
   getOrganizationConnection,
   setOrganizationConnection,
@@ -2719,40 +2720,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_WORKSPACE,
     async (_, id: string): Promise<void> => {
-      const deletingWorkspace = getAgentWorkspace(id)
-      if (!deletingWorkspace) {
-        return deleteAgentWorkspace(id)
-      }
-
-      // 守卫前置：在删除任何会话/自动任务前就拦截不可删除的工作区，
-      // 否则会先把绑定数据删光、再由 deleteAgentWorkspace 抛错，造成数据丢失与状态不一致
-      if (deletingWorkspace.slug === 'default') {
-        throw new Error('默认空间不能删除')
-      }
-      if (listAgentWorkspaces().length <= 1) {
-        throw new Error('至少需要保留一个空间')
-      }
-
-      const affectedSessionIds = listAgentSessions()
-        .filter((session) => session.workspaceId === id)
-        .map((session) => session.id)
-      const affectedAutomationIds = listAutomations()
-        .filter((automation) => automation.workspaceId === id)
-        .map((automation) => automation.id)
-
-      for (const sessionId of affectedSessionIds) {
-        if (isAgentSessionActive(sessionId)) {
-          stopAgent(sessionId)
-        }
-        deleteAgentSession(sessionId)
-      }
-      for (const automationId of affectedAutomationIds) {
-        deleteAutomation(automationId)
-      }
-      if (affectedAutomationIds.length > 0) {
-        broadcastAutomationsChanged()
-      }
-      deleteAgentWorkspace(id)
+      deleteWorkspaceCascade(id, {
+        getWorkspace: getAgentWorkspace,
+        listWorkspaces: listAgentWorkspaces,
+        listSessions: listAgentSessions,
+        listAutomations,
+        isSessionActive: isAgentSessionActive,
+        stopSession: stopAgent,
+        deleteSession: deleteAgentSession,
+        deleteAutomation,
+        broadcastAutomationsChanged,
+        deleteWorkspace: deleteAgentWorkspace,
+      })
     }
   )
 

@@ -13,7 +13,7 @@ export interface DraftProjectPickerProps {
   projectId?: string
   isDraft: boolean
   className?: string
-  /** 挂载时自动展开一次「新建工作区」表单（整个工作区首次建会话的引导） */
+  /** 挂载时自动展开一次「新建项目」表单（整个工作区首次建会话的引导） */
   autoOpenCreate?: boolean
   onAutoOpenHandled?: () => void
 }

@@ -51,7 +51,7 @@ export function KanbanProjectFilter({
         {projects.filter((project) => !project.archivedAt).map((project) => (
           <option key={project.id} value={project.id}>{project.name}</option>
         ))}
-        {onCreateProject ? <option value={CREATE}>＋ 新建工作区…</option> : null}
+        {onCreateProject ? <option value={CREATE}>＋ 新建项目…</option> : null}
       </select>
     </label>
   )

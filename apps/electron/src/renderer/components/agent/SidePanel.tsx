@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { PROJECT_TERMS } from '@/lib/workspace-project-terminology'
 import { FileBrowser, FileDropZone, FileTypeIcon, FileSearchBar, computeRevealAncestors, isPathUnderRoot, computeTreeRowLayout, AncestorGuides, STICKY_ROW_BASE_CLASS, canBeSticky } from '@/components/file-browser'
 import { DiffPanelTabBar } from '@/components/diff/DiffPanelTabBar'
 import { DiffChangesList } from '@/components/diff/DiffChangesList'
@@ -546,6 +547,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                 sessionId={sessionId}
                 sessionPath={sessionPath}
                 workspaceFilesPath={projectFilesPath || undefined}
+                secondarySourceLabel={PROJECT_TERMS.files}
+                combinedSourceLabel={`会话+${PROJECT_TERMS.files}`}
                 extraPaths={fileAccessPathsMemo}
                 refreshVersion={diffRefreshVersion}
                 selectedFilePath={selectedFilePath}
@@ -571,6 +574,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                     workspaceAttachedDirs={wsAttachedDirs}
                     sourceFilter={fileSourceFilter}
                     showSessionBadge={false}
+                    secondarySourceLabel={PROJECT_TERMS.files}
                     placeholder="搜索文件..."
                     sessionId={sessionId}
                     onFilePreview={handleFilePreview}
@@ -607,7 +611,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       aria-selected={fileSourceFilter === 'project'}
                       onClick={() => setFileSourceFilter('project')}
                     >
-                      项目文件
+                      {PROJECT_TERMS.files}
                     </button>
                   </div>
                   <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pt-1">
@@ -660,7 +664,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                     )}
                     {showProjectFiles && projectFilesPath && (
                       <>
-                        <div className="text-[11px] font-medium text-muted-foreground mb-1 px-3 pt-2">项目文件</div>
+                        <div className="text-[11px] font-medium text-muted-foreground mb-1 px-3 pt-2">{PROJECT_TERMS.files}</div>
                         <FileBrowser rootPath={projectFilesPath} access={fileAccess} hideToolbar embedded hideEmpty={hasVisibleWorkspaceAttachedItems} onAddToChat={handleAddToChat} onFilePreview={handleFilePreview} />
                         <div className="mb-1 mt-2 rounded-md bg-amber-500/[0.04] px-1 pb-1">
                           <div className="px-2 pt-1.5 text-[11px] font-medium text-foreground/75">计划 · .context/plan</div>
@@ -696,7 +700,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                         <div className="flex items-start gap-1.5">
                           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                           <div className="min-w-0">
-                            <div>工作区目录不可用，可能已被移动或删除：</div>
+                            <div>项目工作目录不可用，可能已被移动或删除：</div>
                             <div className="mt-0.5 truncate font-mono text-[11px] opacity-80" title={projectUnavailablePath}>{projectUnavailablePath}</div>
                           </div>
                         </div>
@@ -707,13 +711,13 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                           className="mt-2 h-6 border-destructive/30 px-2 text-[11px] text-destructive hover:bg-destructive/10"
                           onClick={openProjectSettings}
                         >
-                          前往工作区设置重新关联
+                          前往项目设置重新关联
                         </Button>
                       </div>
                     )}
                     {showProjectFiles && !projectFilesPath && !projectUnavailablePath && (
                       <div className="mx-2 my-2 flex flex-col gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                        <div>当前会话尚未绑定可用工作区目录；可切回会话文件查看沙箱内容。</div>
+                        <div>当前会话尚未绑定可用项目工作目录；可切回会话文件查看沙箱内容。</div>
                         <Button
                           type="button"
                           variant="outline"

@@ -25,7 +25,7 @@ export function useOpenLocalFolder(): () => Promise<void> {
   return async (): Promise<void> => {
     const workspace = workspaces.find((candidate) => candidate.id === currentWorkspaceId) ?? workspaces[0]
     if (!workspace) {
-      toast.error('请先选择空间')
+      toast.error('请先选择工作区')
       return
     }
 

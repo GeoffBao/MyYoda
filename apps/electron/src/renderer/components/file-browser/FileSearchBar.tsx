@@ -1,8 +1,8 @@
 /**
  * FileSearchBar — 文件搜索栏
  *
- * 位于侧面板空间文件和会话文件之间，输入关键词搜索所有文件。
- * 分别搜索会话目录和空间文件目录，确保两边都使用相对路径。
+ * 位于侧面板工作区文件和会话文件之间，输入关键词搜索所有文件。
+ * 分别搜索会话目录和工作区文件目录，确保两边都使用相对路径。
  */
 
 import * as React from 'react'
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { FileTypeIcon } from './FileTypeIcon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fileBrowserAutoRevealAtom } from '@/atoms/agent-atoms'
+import { WORKSPACE_TERMS } from '@/lib/workspace-project-terminology'
 import type { FileIndexEntry } from '@myyoda/shared'
 
 interface FileSearchBarProps {
@@ -23,6 +24,8 @@ interface FileSearchBarProps {
   sourceFilter?: 'all' | 'session' | 'project'
   /** 混合来源时用 badge 标记会话文件。 */
   showSessionBadge?: boolean
+  /** `workspace` 是兼容保留的内部来源值；展示文案由调用方按实际根语义指定。 */
+  secondarySourceLabel?: string
   /** 显示在搜索框下方的控制区；搜索结果将自动避开该区域。 */
   children?: React.ReactNode
   placeholder?: string
@@ -54,6 +57,7 @@ export function FileSearchBar({
   workspaceAttachedDirs,
   sourceFilter = 'all',
   showSessionBadge = true,
+  secondarySourceLabel = WORKSPACE_TERMS.files,
   children,
   placeholder = '搜索文件...',
   sessionId,
@@ -122,7 +126,7 @@ export function FileSearchBar({
       try {
         const allResults: FileIndexEntry[] = []
 
-        // 分别搜索空间文件和会话文件，确保两边都用相对路径
+        // 分别搜索工作区文件和会话文件，确保两边都用相对路径
         const searches: Promise<FileIndexEntry[]>[] = []
 
         if (workspaceFilesPath && sourceFilter !== 'session') {
@@ -296,11 +300,11 @@ export function FileSearchBar({
               </>
             )}
 
-            {/* 空间文件分组 */}
+            {/* secondary source 分组；内部 workspace 值兼容旧 IPC，标签按实际文件根语义展示。 */}
             {workspaceResults.length > 0 && (
               <>
                 <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium text-muted-foreground bg-muted/30">
-                  <span>空间文件</span>
+                  <span>{secondarySourceLabel}</span>
                   <span className="text-muted-foreground/40">{workspaceResults.length}</span>
                 </div>
                 {workspaceResults.map((entry) => {
