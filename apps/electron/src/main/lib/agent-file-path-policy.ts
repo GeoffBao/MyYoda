@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, realpathSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 function isWithinRoot(candidate: string, root: string): boolean {
@@ -49,8 +49,7 @@ export function resolveSafeChildPath(root: string, filename: string): string {
   }
 
   if (existsSync(candidate)) {
-    const candidateStat = lstatSync(candidate)
-    const resolvedCandidate = candidateStat.isSymbolicLink() ? realpathSync(candidate) : realpathSync(candidate)
+    const resolvedCandidate = realpathSync(candidate)
     if (!isWithinRoot(resolvedCandidate, resolvedRoot)) {
       throw new Error('文件目标通过符号链接越出受管根目录')
     }
