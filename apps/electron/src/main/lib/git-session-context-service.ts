@@ -171,13 +171,27 @@ function getWorktreeInfoByPath(repoRoot: string, worktreePath: string): { branch
  * `git worktree remove` 失败时退化为物理删除 + `git worktree prune`，
  * 避免在 `.git/worktrees/` 留下"已注册但目录缺失"的孤儿元数据。
  */
-export function removeSessionWorktree(repoRoot: string, worktreePath: string): void {
+export function assertWorktreeClean(worktreePath: string): void {
+  if (!existsSync(worktreePath)) return
   try {
-    runGit(repoRoot, ['worktree', 'remove', '--force', worktreePath])
+    if (hasDirtyChanges(worktreePath)) {
+      throw new Error(`工作区存在未提交改动，已阻止删除 Worktree: ${worktreePath}`)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('已阻止删除 Worktree')) throw error
+    throw new Error(`无法确认 Worktree 是否干净，已阻止删除: ${worktreePath}`)
+  }
+}
+
+export function removeSessionWorktree(repoRoot: string, worktreePath: string): void {
+  assertWorktreeClean(worktreePath)
+  try {
+    runGit(repoRoot, ['worktree', 'remove', worktreePath])
     return
   } catch {
-    // fallthrough
+    // clean worktree but git remove failed; only then use the bounded fallback.
   }
+  assertWorktreeClean(worktreePath)
   try {
     rmSync(worktreePath, { recursive: true, force: true })
   } catch {
