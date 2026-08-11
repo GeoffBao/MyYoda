@@ -400,7 +400,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                   </MenuItem>
                   <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openProjectPage(project.id, 'settings')}>
                     <Pencil size={13} />
-                    工作区设置
+                    项目设置
                   </MenuItem>
                   <MenuSeparator className="my-0.5" />
                   <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => { void handleToggleArchive(project) }}>

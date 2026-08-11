@@ -40,7 +40,7 @@ export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }:
     try {
       const updated = await window.electronAPI.projects.update(workspaceRoot, project.slug, buildProjectUpdate(draft))
       onProjectChanged(updated)
-      toast.success('工作区设置已保存')
+      toast.success('项目设置已保存')
     } catch (cause) {
       toast.error('保存失败', { description: cause instanceof Error ? cause.message : String(cause) })
     } finally {
@@ -53,10 +53,10 @@ export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }:
       <section className="space-y-4 rounded-xl border border-border/40 bg-card p-4 shadow-sm">
         <div>
           <h2 className="text-sm font-semibold">基本信息</h2>
-          <p className="text-xs text-muted-foreground">工作区名称、描述和视觉标识。</p>
+          <p className="text-xs text-muted-foreground">项目名称、描述和视觉标识。</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <label className="space-y-1.5 text-xs font-medium">工作区名称<Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+          <label className="space-y-1.5 text-xs font-medium">项目名称<Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <div className="space-y-1.5 text-xs font-medium">强调色<AccentColorPicker value={draft.color} onChange={(color) => setDraft((current) => ({ ...current, color }))} /></div>
         </div>
         <label className="block space-y-1.5 text-xs font-medium">描述<Input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></label>
@@ -71,8 +71,8 @@ export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }:
             {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>
-        <label className="block space-y-1.5 text-xs font-medium">工作区说明
-          <Textarea rows={5} value={draft.details} onChange={(event) => setDraft((current) => ({ ...current, details: event.target.value }))} placeholder="注入 Agent 上下文的工作区背景；长期工程知识请写入“知识”。" />
+        <label className="block space-y-1.5 text-xs font-medium">项目说明
+          <Textarea rows={5} value={draft.details} onChange={(event) => setDraft((current) => ({ ...current, details: event.target.value }))} placeholder="注入 Agent 上下文的项目背景；长期工程知识请写入“知识”。" />
         </label>
       </section>
 

@@ -460,7 +460,7 @@ export function TaskEditor({
         <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(320px,0.9fr)_minmax(420px,1.4fr)]">
           <section className="space-y-4 overflow-y-auto rounded-2xl bg-card p-4 shadow-sm">
             <div className="space-y-3">
-              <div><h2 className="font-semibold">任务定义</h2><p className="text-xs text-muted-foreground">描述目标，并选择工作区与执行策略。</p></div>
+              <div><h2 className="font-semibold">任务定义</h2><p className="text-xs text-muted-foreground">描述目标，并选择项目与执行策略。</p></div>
               <div className="inline-flex w-fit rounded-lg bg-muted/70 p-1">
                 {(['manual', 'generate'] as TaskEditorMode[]).map((value) => (
                   <button
@@ -484,19 +484,19 @@ export function TaskEditor({
             <label className="block space-y-1.5 text-xs font-medium">验收标准<Textarea value={draft.acceptanceCriteria ?? ''} onChange={(event) => patchDraft({ acceptanceCriteria: event.target.value })} placeholder="可选：如何判断任务完成" rows={3} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1.5 text-xs font-medium">
-                工作区
+                项目
                 <select
                   value={draft.projectId}
                   disabled={Boolean(initialProjectId)}
                   onChange={(event) => patchDraft({ projectId: event.target.value })}
                   className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm disabled:opacity-70"
                 >
-                  <option value="">不绑定工作区（Workspace Task）</option>
+                  <option value="">不绑定项目（工作区级任务）</option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>{project.name}</option>
                   ))}
                 </select>
-                <span className="block text-[11px] font-normal leading-4 text-muted-foreground">绑定后使用工作区目录作为任务工作目录</span>
+                <span className="block text-[11px] font-normal leading-4 text-muted-foreground">绑定后优先使用项目工作目录；不绑定时回退到工作区默认目录</span>
               </label>
               <label className="space-y-1.5 text-xs font-medium">权限<select value={draft.permissionMode ?? 'allow-all'} onChange={(event) => patchDraft({ permissionMode: event.target.value as 'safe' | 'ask' | 'allow-all' })} className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm"><option value="allow-all">自动执行</option><option value="ask">需要确认</option><option value="safe">安全模式</option></select></label>
               <div className="space-y-1.5 text-xs font-medium">

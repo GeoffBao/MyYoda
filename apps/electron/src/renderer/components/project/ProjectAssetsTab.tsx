@@ -87,7 +87,7 @@ export function ProjectAssetsTab({ workspaceRoot, project, onError }: ProjectAss
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold">Project Assets</h2>
-            <p className="text-xs text-muted-foreground">工作区文档、图片、设计稿等附件。</p>
+            <p className="text-xs text-muted-foreground">项目文档、图片、设计稿等附件。</p>
           </div>
           <Button size="sm" disabled={busy} onClick={() => void handleUpload()}>
             <Upload className="mr-1 h-3.5 w-3.5" />

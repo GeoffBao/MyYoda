@@ -129,7 +129,7 @@ export function useCreateSession(): CreateSessionActions {
       workspaceId,
     })
 
-    // 整个工作区第一次建 Agent 会话（没有任何项目可默认绑定）时，弹一次「新建工作区」引导；
+    // 整个工作区第一次建 Agent 会话（没有任何项目可默认绑定）时，弹一次「新建项目」引导；
     // 立刻写 localStorage 标记，哪怕用户之后取消对话框也不会再弹第二次。
     let shouldPromptOnboarding = false
     if (!defaultProjectId && input.recallDraft && workspaceId) {
@@ -162,8 +162,8 @@ export function useCreateSession(): CreateSessionActions {
             projectId: defaultProjectId,
           })
         } catch (error) {
-          console.error('[创建会话] 新会话绑定工作区失败:', error)
-          toast.error('已创建会话，但绑定工作区失败')
+          console.error('[创建会话] 新会话绑定项目失败:', error)
+          toast.error('已创建会话，但绑定项目失败')
         }
       }
 

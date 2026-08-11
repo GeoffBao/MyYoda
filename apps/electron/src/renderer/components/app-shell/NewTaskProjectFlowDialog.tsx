@@ -1,5 +1,5 @@
 /**
- * NewTaskProjectFlowDialog — 新任务流第一步：选择 Project 或创建 Workspace Task
+ * NewTaskProjectFlowDialog — 新任务流第一步：选择 Craft Project
  */
 
 import * as React from 'react'
@@ -47,7 +47,7 @@ export function NewTaskProjectFlowDialog(): React.ReactElement {
         <DialogHeader>
           <DialogTitle>新建任务</DialogTitle>
           <DialogDescription>
-            可绑定工作区，也可直接创建 Workspace Task。
+            选择任务所属项目；项目由当前工作区统一管理。
           </DialogDescription>
         </DialogHeader>
         <ProjectContextPicker

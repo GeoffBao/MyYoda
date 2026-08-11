@@ -130,7 +130,7 @@ export function NewTaskComposer({
           onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value }))}
           className="h-9 max-w-[200px] rounded-md border border-border/60 bg-background px-2 text-xs font-medium"
         >
-          <option value="">不绑定工作区</option>
+          <option value="">不绑定项目（工作区级任务）</option>
           {projects.filter((project) => !project.archivedAt).map((project) => (
             <option key={project.id} value={project.id}>{project.name}</option>
           ))}

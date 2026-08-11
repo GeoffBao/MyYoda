@@ -19,8 +19,8 @@ export function useBindSessionProject(sessionId: string): (projectId: string | n
       })
       setAgentSessions((prev) => prev.map((session) => (session.id === updated.id ? updated : session)))
     } catch (error) {
-      console.error('[useBindSessionProject] 绑定工作区失败:', error)
-      toast.error('绑定工作区失败')
+      console.error('[useBindSessionProject] 绑定项目失败:', error)
+      toast.error('绑定项目失败')
     }
   }
 }

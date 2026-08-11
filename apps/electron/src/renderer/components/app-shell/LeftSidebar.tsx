@@ -653,7 +653,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const [dragProjectId, setDragProjectId] = React.useState<string | null>(null)
   const [projectDropIndicator, setProjectDropIndicator] = React.useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [automationGroupOrder, setAutomationGroupOrder] = useAtom(automationGroupOrderAtom)
-  /** 新建工作区输入状态（设置页工作区管理；此处仅保留弹窗 busy 标志） */
+  /** 新建项目输入状态；此处仅保留弹窗 busy 标志 */
   const [creatingProject, setCreatingProject] = React.useState(false)
   const [relativeTimeNow, setRelativeTimeNow] = React.useState(() => Date.now())
   const [userProfile, setUserProfile] = useAtom(userProfileAtom)
@@ -1343,12 +1343,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const updated = await window.electronAPI.sendSessionCommand(sessionId, { kind: 'set_project_id', projectId })
       setAgentSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
     } catch (error) {
-      console.error('[侧边栏] 移动到工作区失败:', error)
-      toast.error('移动到工作区失败')
+      console.error('[侧边栏] 移动到项目失败:', error)
+      toast.error('移动到项目失败')
     }
   }, [setAgentSessions])
 
-  /** 工作区模式下全局「+」新建工作区（KanbanProject，不是 Workspace） */
+  /** Project 分组模式下全局「+」新建项目（KanbanProject，不是 AgentWorkspace） */
   const handleCreateKanbanProject = React.useCallback(async (input: Parameters<typeof window.electronAPI.projects.create>[1]): Promise<void> => {
     if (!workspaceRoot) return
     setCreatingProject(true)
@@ -1356,13 +1356,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const project = await window.electronAPI.projects.create(workspaceRoot, input)
       setKanbanProjects((prev) => [project, ...prev.filter((existing) => existing.id !== project.id)])
       setCreateProjectOpen(false)
-      toast.success('工作区已创建')
+      toast.success('项目已创建')
       // 新建后进入唯一任务看板并按该 Project 筛选。
       setSelectedProjectId(project.id)
       setCodeMainView('tasks')
       setActiveView('conversations')
     } catch (cause) {
-      toast.error('创建工作区失败', { description: cause instanceof Error ? cause.message : String(cause) })
+      toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
     } finally {
       setCreatingProject(false)
     }
@@ -2562,9 +2562,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>确认删除空间</AlertDialogTitle>
+          <AlertDialogTitle>确认删除工作区</AlertDialogTitle>
           <AlertDialogDescription>
-            将删除「{pendingDeleteWorkspace?.name ?? '该空间'}」及其绑定的所有会话、自动任务、MCP、Skills、工作区文件和本地工作区目录。附加目录和附加文件只会移除引用，不会删除原始文件。删除后无法恢复。
+            将删除「{pendingDeleteWorkspace?.name ?? '该工作区'}」及其绑定的所有会话、自动任务、MCP、Skills、工作区文件和 MyYoda 托管目录。附加目录、附加文件和项目绑定的外部工作目录只会移除引用，不会删除原始文件。删除后无法恢复。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -2574,7 +2574,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             onClick={handleConfirmDeleteWorkspace}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {deletingWorkspaceId ? '删除中...' : '删除空间'}
+            {deletingWorkspaceId ? '删除中...' : '删除工作区'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -3479,11 +3479,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       {/* 会话列表筛选行：对标 Claude 的分组标题行（如「Today」右侧筛选图标），
           不再是孤立的图标，而是左边带标签、右边带筛选的全宽标题行；
-          工作区模式下额外包含「新建工作区 +」按钮 */}
+          项目分组模式下额外包含「新建项目 +」按钮 */}
       {mode === 'agent' && (
         <div className="flex items-center justify-between px-3 pt-1 pb-1 border-b border-border/50">
           <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">
-            {agentGroupBy === 'project' ? '工作区' : '会话'}
+            {agentGroupBy === 'project' ? '项目' : '会话'}
           </span>
           <span className="flex items-center gap-0.5">
             {agentGroupBy === 'project' && (
@@ -3491,14 +3491,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    aria-label="新建工作区"
+                    aria-label="新建项目"
                     onClick={() => setCreateProjectOpen(true)}
                     className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
                   >
                     <Plus size={14} />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">新建工作区</TooltipContent>
+                <TooltipContent side="bottom">新建项目</TooltipContent>
               </Tooltip>
             )}
             <SessionListFilterMenu />
@@ -3985,7 +3985,7 @@ interface ChildSessionItemProps {
   agentIndicatorMap: Map<string, SessionIndicatorStatus>
   relativeTimeNow: number
   workspaceName?: string
-  /** 当前工作区列表 + 移动回调；透传给会话行的「移动到工作区」子菜单 */
+  /** 当前项目列表 + 移动回调；透传给会话行的「移动到项目」子菜单 */
   projects?: KanbanProject[]
   onMoveToProject?: (sessionId: string, projectId?: string) => void | Promise<void>
   /** 当前工作区自定义分组 + 移动/新建回调；透传给会话行的「移动到分组」子菜单 */
