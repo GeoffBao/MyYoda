@@ -177,12 +177,17 @@ export class ProjectRepository {
     return requireLoadedProject(workspaceRoot, config.slug)
   }
 
-  deleteProjectAtRoot(workspaceRoot: string, projectSlug: string): void {
+  assertProjectDeletableAtRoot(workspaceRoot: string, projectSlug: string): string {
     const slug = this.parseProjectSlug(projectSlug)
     const existing = loadProject(workspaceRoot, slug)
     if (existing?.config.kind && existing.config.kind !== 'project') {
       throw new Error('隐藏容器 Project 不支持删除')
     }
+    return slug
+  }
+
+  deleteProjectAtRoot(workspaceRoot: string, projectSlug: string): void {
+    const slug = this.assertProjectDeletableAtRoot(workspaceRoot, projectSlug)
     deleteProjectInStorage(workspaceRoot, slug)
   }
 
