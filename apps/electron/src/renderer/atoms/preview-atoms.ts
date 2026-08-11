@@ -95,6 +95,12 @@ export interface QuotedSelection {
   startLine?: number
   /** 结束行号（1-based） */
   endLine?: number
+  /** Agent 历史消息内选区的起始字符偏移（0-based） */
+  selectionStart?: number
+  /** Agent 历史消息内选区的结束字符偏移（0-based、exclusive） */
+  selectionEnd?: number
+  /** Agent 历史中的所属轮次（1-based；用户消息和对应回复共用同一轮） */
+  turn?: number
   /** 捕获时间戳 */
   capturedAt: number
 }
