@@ -1,5 +1,5 @@
 /**
- * WorkspaceSwitcher — Code 侧栏顶层空间选择器
+ * WorkspaceSwitcher — Agent 侧栏顶层工作区选择器
  * 左侧 Layers 图标，右侧 Lucide ChevronDown（禁止 Unicode ▾）
  */
 
@@ -20,7 +20,7 @@ export interface WorkspaceSwitcherProps {
   currentWorkspaceId: string | null
   onSelect: (workspaceId: string) => void
   onCreate?: () => void
-  /** 删除指定空间（默认空间 / 最后一个不可删由 canDeleteWorkspace 控制） */
+  /** 删除指定工作区（默认工作区 / 最后一个不可删由 canDeleteWorkspace 控制） */
   onRequestDelete?: (workspaceId: string) => void
   canDeleteWorkspace?: (workspace: AgentWorkspace) => boolean
   className?: string
@@ -48,11 +48,11 @@ export function WorkspaceSwitcher({
             'text-foreground/80 sidebar-control-surface hover:text-foreground transition-colors titlebar-no-drag',
             className,
           )}
-          aria-label="切换空间"
+          aria-label="切换工作区"
         >
           <Layers size={14} className="shrink-0 text-foreground/45" />
           <span className="flex-1 min-w-0 truncate text-left">
-            {current?.name ?? '空间'}
+            {current?.name ?? '工作区'}
           </span>
           <ChevronDown size={14} className="shrink-0 text-foreground/35" />
         </button>
@@ -102,7 +102,7 @@ export function WorkspaceSwitcher({
             }}
           >
             <Plus size={14} className="mr-2" />
-            新建空间
+            新建工作区
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
