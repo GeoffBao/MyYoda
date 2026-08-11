@@ -15,6 +15,7 @@ const WORKSPACE_METADATA_DIRS = new Set([
   'skills-inactive',
   '.claude',
   '.claude-plugin',
+  '.recovery-trash',
   'excalidraw',
   /** agent-workspace-manager.ts:getWorkspaceAutoMemoryDir — Proma Workspace Memory 根目录 */
   'memory',
