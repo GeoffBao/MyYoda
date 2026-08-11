@@ -614,10 +614,23 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     id: workspace.id,
     root: getAgentWorkspacePath(workspace.slug),
   })))
-  const requireProjectWorkspaceRoot = (requestedRoot: unknown) => requireRegisteredProjectWorkspaceRoot(
-    requestedRoot,
-    getRegisteredWorkspaceRoots(),
-  )
+  const requireProjectWorkspaceRoot = (requestedRoot: unknown, requestedWorkspaceId?: string) => {
+    const context = requireRegisteredProjectWorkspaceRoot(requestedRoot, getRegisteredWorkspaceRoots())
+    if (requestedWorkspaceId !== undefined && requestedWorkspaceId !== context.workspaceId) {
+      throw new Error('Workspace root 与 workspaceId 不匹配')
+    }
+    return context
+  }
+  const requireWorkspaceSlug = (requestedSlug: unknown) => {
+    if (typeof requestedSlug !== 'string') throw new Error('Workspace slug 无效')
+    const workspace = listAgentWorkspaces().find((candidate) => candidate.slug === requestedSlug)
+    if (!workspace) throw new Error('Workspace slug 未注册')
+    return {
+      workspaceId: workspace.id,
+      workspaceRoot: getAgentWorkspacePath(workspace.slug),
+      workspaceSlug: workspace.slug,
+    }
+  }
   if (handlersRegistered) return
   handlersRegistered = true
 
@@ -767,6 +780,7 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     orchestratorSessionId?: string
     attachToExistingSessionId?: string
   }) => {
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
     const parsed = parseTaskYaml(request.yaml)
     if (!parsed.valid || !parsed.spec) {
       throw new Error(`task.yaml 验证失败: ${parsed.errors?.map((error) => error.message).join(', ')}`)
@@ -774,12 +788,12 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
 
     if (request.attachToExistingSessionId) {
       const sessionId = request.attachToExistingSessionId
-      const repository = new TaskRepository({ resolveWorkspaceRoot: () => workspaceRoot })
-      const existingTask = repository.getTaskAggregate(workspaceId, parsed.spec.id)
+      const repository = new TaskRepository({ resolveWorkspaceRoot: () => context.workspaceRoot })
+      const existingTask = repository.getTaskAggregate(context.workspaceId, parsed.spec.id)
       const existingSession = getAgentSessionMeta(sessionId)
       // TaskEditor 的“编辑”必须原地更新同一 Task，不能经 ensureUniqueTaskSlug 复制出第二个聚合根。
       if (existingTask && existingSession?.taskSlug === parsed.spec.id) {
-        repository.updateTaskSpec(workspaceId, existingTask.taskId, parsed.spec)
+        repository.updateTaskSpec(context.workspaceId, existingTask.taskId, parsed.spec)
         return {
           slug: existingTask.taskSlug,
           taskId: existingTask.taskId,
@@ -787,10 +801,10 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
           valid: true,
         }
       }
-      const seed = buildTaskSessionSeed(parsed.spec, workspaceRoot)
+      const seed = buildTaskSessionSeed(parsed.spec, context.workspaceRoot)
       const result = await materializeTaskTransaction({
-        workspaceRoot,
-        workspaceId,
+        workspaceRoot: context.workspaceRoot,
+        workspaceId: context.workspaceId,
         spec: parsed.spec,
         mode: {
           kind: 'attach',
@@ -808,19 +822,19 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
       const sessionId = request.orchestratorSessionId
       assertAdoptableTaskDraftSession(sessionId, parsed.spec)
       const result = await materializeTaskTransaction({
-        workspaceRoot,
-        workspaceId,
+        workspaceRoot: context.workspaceRoot,
+        workspaceId: context.workspaceId,
         spec: parsed.spec,
         mode: {
           kind: 'adopt',
           sessionId,
-          sessionPatch: buildAdoptedTaskSessionPatch(parsed.spec, workspaceRoot),
+          sessionPatch: buildAdoptedTaskSessionPatch(parsed.spec, context.workspaceRoot),
         },
       }, await taskMaterializationDependencies())
       return { ...result, valid: true }
     }
 
-    const result = await materializeTaskFromSpec(workspaceRoot, workspaceId, parsed.spec)
+    const result = await materializeTaskFromSpec(context.workspaceRoot, context.workspaceId, parsed.spec)
     return { ...result, valid: true }
   })
 
@@ -833,10 +847,11 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     llmConnection?: string
     permissionMode?: string
   }) => {
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
     const host = await getSessionHost()
     const workingDirectory = request.cwd?.trim()
-      || projectRepository.resolveWorkingDirectory(workspaceRoot, request.projectId)
-    const session = await host.createSession(workspaceId, {
+      || projectRepository.resolveWorkingDirectory(context.workspaceRoot, request.projectId)
+    const session = await host.createSession(context.workspaceId, {
       name: request.title ?? request.goal.slice(0, 60),
       projectId: request.projectId,
       taskDraft: true,
@@ -848,30 +863,35 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     })
     // 延后启动，确保 IPC ack 先回到 renderer 并设置 pendingSessionId，避免 GENERATED 竞态被忽略
     setImmediate(() => {
-      void generateTaskForSession(workspaceRoot, workspaceId, request, session.id)
+      void generateTaskForSession(context.workspaceRoot, context.workspaceId, request, session.id)
     })
     return { orchestratorSessionId: session.id }
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.RUN, async (_event, workspaceRoot: string, workspaceId: string, slug: string, options?: RunOptions) => {
-    return runTaskOrTeam(workspaceRoot, workspaceId, slug, options)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    return runTaskOrTeam(context.workspaceRoot, context.workspaceId, slug, options)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.PAUSE, async (_event, workspaceRoot: string, workspaceId: string, slug: string, runId: string) => {
-    await pauseTaskRun(getRunnerFor, workspaceRoot, workspaceId, slug, runId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    await pauseTaskRun(getRunnerFor, context.workspaceRoot, context.workspaceId, slug, runId)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.RESUME, async (_event, workspaceRoot: string, workspaceId: string, slug: string, runId: string) => {
-    ;(await getRunnerFor(workspaceRoot, workspaceId)).resume(slug, runId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    ;(await getRunnerFor(context.workspaceRoot, context.workspaceId)).resume(slug, runId)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.STOP, async (_event, workspaceRoot: string, workspaceId: string, slug: string, runId: string) => {
-    await stopTaskRun(getRunnerFor, workspaceRoot, workspaceId, slug, runId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    await stopTaskRun(getRunnerFor, context.workspaceRoot, context.workspaceId, slug, runId)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.REHYDRATE, async (_event, workspaceRoot: string, workspaceId: string) => {
-    const runner = await getRunnerFor(workspaceRoot, workspaceId)
-    const resumable = listResumableRuns(workspaceRoot)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const runner = await getRunnerFor(context.workspaceRoot, context.workspaceId)
+    const resumable = listResumableRuns(context.workspaceRoot)
     for (const { slug, runId } of resumable) {
       runner.resume(slug, runId)
     }
@@ -880,16 +900,19 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.GET, (_event, workspaceRoot: string, slug: string) => {
-    return loadTaskSpec(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return loadTaskSpec(context.workspaceRoot, slug)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.LIST, (_event, workspaceRoot: string) => {
-    return listTaskSlugs(workspaceRoot)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return listTaskSlugs(context.workspaceRoot)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.LIST_SUMMARIES, (_event, workspaceRoot: string, workspaceId: string) => {
-    const repository = new TaskRepository({ resolveWorkspaceRoot: () => workspaceRoot })
-    return repository.listTaskAggregateSummaries(workspaceId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const repository = new TaskRepository({ resolveWorkspaceRoot: () => context.workspaceRoot })
+    return repository.listTaskAggregateSummaries(context.workspaceId)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.UPDATE_WORKFLOW, (
@@ -900,8 +923,9 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     workflow: TaskWorkflow,
     expectedRevision?: number,
   ) => {
-    const repository = new TaskRepository({ resolveWorkspaceRoot: () => workspaceRoot })
-    return repository.updateTaskWorkflow(workspaceId, taskId, workflow, expectedRevision)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const repository = new TaskRepository({ resolveWorkspaceRoot: () => context.workspaceRoot })
+    return repository.updateTaskWorkflow(context.workspaceId, taskId, workflow, expectedRevision)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.UPDATE_METADATA, (
@@ -911,87 +935,101 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     taskId: string,
     patch: TaskMetadataPatch,
   ) => {
-    const repository = new TaskRepository({ resolveWorkspaceRoot: () => workspaceRoot })
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const repository = new TaskRepository({ resolveWorkspaceRoot: () => context.workspaceRoot })
     const validatedPatch = patch.labelIds === undefined
       ? patch
-      : { ...patch, labelIds: assertValidWorkspaceLabelIds(workspaceRoot, patch.labelIds) }
-    return repository.updateTaskMetadata(workspaceId, taskId, validatedPatch)
+      : { ...patch, labelIds: assertValidWorkspaceLabelIds(context.workspaceRoot, patch.labelIds) }
+    return repository.updateTaskMetadata(context.workspaceId, taskId, validatedPatch)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.ANALYZE_DELETE_IMPACT, (_event, workspaceRoot: string, slug: string) => {
-    const loaded = loadTaskSpec(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const loaded = loadTaskSpec(context.workspaceRoot, slug)
     if (!loaded?.spec) throw new Error(`Task 不存在: ${slug}`)
-    return analyzeTaskDeleteImpact(workspaceRoot, slug, listAgentSessions())
+    return analyzeTaskDeleteImpact(context.workspaceRoot, slug, listAgentSessions())
   })
 
-  ipcMain.handle(TASK_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, _workspaceId: string, slug: string) => {
-    const loaded = loadTaskSpec(workspaceRoot, slug)
+  ipcMain.handle(TASK_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, workspaceId: string, slug: string) => {
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const loaded = loadTaskSpec(context.workspaceRoot, slug)
     if (!loaded?.spec) throw new Error(`Task 不存在: ${slug}`)
     // 删除前重新验证影响分析
-    const impact = analyzeTaskDeleteImpact(workspaceRoot, slug, listAgentSessions())
+    const impact = analyzeTaskDeleteImpact(context.workspaceRoot, slug, listAgentSessions())
     if (impact.activeRunCount > 0) {
       throw new Error(`仍有 ${impact.activeRunCount} 个活跃 Run，请先停止运行`)
     }
-    deleteTaskSpec(workspaceRoot, slug)
+    deleteTaskSpec(context.workspaceRoot, slug)
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.GET_RESULTS, (_event, workspaceRoot: string, slug: string, runId?: string) => {
-    const selectedRunId = runId ?? getLatestRunId(workspaceRoot, slug)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    const selectedRunId = runId ?? getLatestRunId(context.workspaceRoot, slug)
     if (!selectedRunId) return null
     return {
-      spec: readRunSpecSnapshot(workspaceRoot, slug, selectedRunId),
-      log: readRunLog(workspaceRoot, slug, selectedRunId),
+      spec: readRunSpecSnapshot(context.workspaceRoot, slug, selectedRunId),
+      log: readRunLog(context.workspaceRoot, slug, selectedRunId),
       runId: selectedRunId,
     }
   })
 
   ipcMain.handle(SESSION_GROUP_IPC_CHANNELS.LIST, (_event, workspaceSlug: string) => {
-    return listSessionGroups(workspaceSlug)
+    const context = requireWorkspaceSlug(workspaceSlug)
+    return listSessionGroups(context.workspaceSlug)
   })
 
   ipcMain.handle(SESSION_GROUP_IPC_CHANNELS.CREATE, (_event, workspaceSlug: string, name: string) => {
-    return createSessionGroup(workspaceSlug, name)
+    const context = requireWorkspaceSlug(workspaceSlug)
+    return createSessionGroup(context.workspaceSlug, name)
   })
 
   ipcMain.handle(SESSION_GROUP_IPC_CHANNELS.RENAME, (_event, workspaceSlug: string, id: string, name: string) => {
-    return renameSessionGroup(workspaceSlug, id, name)
+    const context = requireWorkspaceSlug(workspaceSlug)
+    return renameSessionGroup(context.workspaceSlug, id, name)
   })
 
   ipcMain.handle(SESSION_GROUP_IPC_CHANNELS.DELETE, (_event, workspaceSlug: string, id: string) => {
-    deleteSessionGroup(workspaceSlug, id)
+    const context = requireWorkspaceSlug(workspaceSlug)
+    deleteSessionGroup(context.workspaceSlug, id)
   })
 
   // === Workspace Labels ===
 
   ipcMain.handle(LABEL_IPC_CHANNELS.LIST, (_event, workspaceRoot: string) => {
-    return new WorkspaceLabelService(workspaceRoot).list()
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return new WorkspaceLabelService(context.workspaceRoot).list()
   })
 
   ipcMain.handle(LABEL_IPC_CHANNELS.CREATE, (_event, workspaceRoot: string, input: { name: string; color?: string }) => {
-    return new WorkspaceLabelService(workspaceRoot).create(input)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return new WorkspaceLabelService(context.workspaceRoot).create(input)
   })
 
   ipcMain.handle(LABEL_IPC_CHANNELS.UPDATE, (_event, workspaceRoot: string, labelId: string, patch: { name?: string; color?: string | null; archived?: boolean }) => {
-    return new WorkspaceLabelService(workspaceRoot).update(labelId, patch)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return new WorkspaceLabelService(context.workspaceRoot).update(labelId, patch)
   })
 
   ipcMain.handle(LABEL_IPC_CHANNELS.ARCHIVE, (_event, workspaceRoot: string, labelId: string) => {
-    return new WorkspaceLabelService(workspaceRoot).archive(labelId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return new WorkspaceLabelService(context.workspaceRoot).archive(labelId)
   })
 
   ipcMain.handle(LABEL_IPC_CHANNELS.SET_SESSION_LABELS, (_event, workspaceRoot: string, sessionId: string, labelIds: string[]) => {
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
     const session = getAgentSessionMeta(sessionId)
     if (!session) throw new Error(`Agent 会话不存在: ${sessionId}`)
-    const validatedLabelIds = validateSessionLabelAssignment(workspaceRoot, session, labelIds)
+    const validatedLabelIds = validateSessionLabelAssignment(context.workspaceRoot, session, labelIds)
     return updateAgentSessionMeta(sessionId, { labelIds: validatedLabelIds })
   })
 
   ipcMain.handle(LABEL_IPC_CHANNELS.SET_TASK_LABELS, (_event, workspaceRoot: string, workspaceId: string, taskId: string, labelIds: string[]) => {
-    const validatedLabelIds = assertValidWorkspaceLabelIds(workspaceRoot, labelIds)
-    const repository = new TaskRepository({ resolveWorkspaceRoot: () => workspaceRoot })
-    const aggregate = repository.getTaskAggregateById(workspaceId, taskId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    const validatedLabelIds = assertValidWorkspaceLabelIds(context.workspaceRoot, labelIds)
+    const repository = new TaskRepository({ resolveWorkspaceRoot: () => context.workspaceRoot })
+    const aggregate = repository.getTaskAggregateById(context.workspaceId, taskId)
     if (!aggregate?.record) throw new Error(`Task ${taskId} 缺少稳定 TaskRecord，不能设置 labels`)
-    return repository.updateTaskMetadata(workspaceId, taskId, {
+    return repository.updateTaskMetadata(context.workspaceId, taskId, {
       labelIds: validatedLabelIds,
       expectedRevision: aggregate.record.revision,
     })
@@ -1036,39 +1074,48 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.CAPABILITIES, async (_event, workspaceRoot: string) => {
-    return (await getTeambitionService(workspaceRoot)).probeCapabilities()
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).probeCapabilities()
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.LIST_TASKS, async (_event, workspaceRoot: string, projectId: string) => {
-    return (await getTeambitionService(workspaceRoot)).listClaimableTasks(projectId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).listClaimableTasks(projectId)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.CLAIM_TASK, async (_event, workspaceRoot: string, input: ClaimTeambitionTaskInput) => {
-    return (await getTeambitionService(workspaceRoot)).claimTask(input)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).claimTask(input)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.BIND_PROJECT, async (_event, workspaceRoot: string, sessionId: string, task: TeambitionRemoteTask) => {
-    return (await getTeambitionService(workspaceRoot)).bindTask(sessionId, task)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).bindTask(sessionId, task)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.GET_BINDING, async (_event, workspaceRoot: string, sessionId: string) => {
-    return (await getTeambitionService(workspaceRoot)).getBinding(sessionId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).getBinding(sessionId)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.LIST_BINDINGS, async (_event, workspaceRoot: string) => {
-    return (await getTeambitionService(workspaceRoot)).listBindings()
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).listBindings()
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.UPDATE_STATUS, async (_event, workspaceRoot: string, bindingId: string, status: string) => {
-    return (await getTeambitionService(workspaceRoot)).syncStatus(bindingId, status)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).syncStatus(bindingId, status)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.SYNC_PROGRESS, async (_event, workspaceRoot: string, bindingId: string, progress: number) => {
-    return (await getTeambitionService(workspaceRoot)).syncProgress(bindingId, progress)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).syncProgress(bindingId, progress)
   })
 
   ipcMain.handle(TEAMBITION_IPC_CHANNELS.RETRY_SYNC, async (_event, workspaceRoot: string, bindingId: string) => {
-    return (await getTeambitionService(workspaceRoot)).retryPendingSync(bindingId)
+    const context = requireProjectWorkspaceRoot(workspaceRoot)
+    return (await getTeambitionService(context.workspaceRoot)).retryPendingSync(bindingId)
   })
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test'
+import { afterAll, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +17,11 @@ interface CapturedCreateSessionCall {
 }
 
 const capturedCreateSessionCalls: CapturedCreateSessionCall[] = []
+let registeredWorkspaceRoot: string | undefined
+
+afterAll(() => {
+  if (registeredWorkspaceRoot) rmSync(registeredWorkspaceRoot, { recursive: true, force: true })
+})
 
 mock.module('./conductor-session-host', () => ({
   createMyYodaConductorSessionHost: async () => ({
@@ -109,6 +114,7 @@ describe('task handler Kanban payloads', () => {
     if (typeof registerHandlers !== 'function') return
 
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-project-handler-'))
+    registeredWorkspaceRoot = workspaceRoot
     const windowStub = {
       isDestroyed: () => false,
       webContents: {
@@ -131,8 +137,7 @@ describe('task handler Kanban payloads', () => {
     expect(taskImpactHandler).toBeInstanceOf(Function)
     if (!createHandler || !updateHandler || !projectDeleteHandler || !projectImpactHandler || !taskImpactHandler) return
 
-    try {
-      expect(() => createHandler(undefined, join(workspaceRoot, '..', 'unregistered-root'), { name: '越权项目' })).toThrow(/未注册/)
+    expect(() => createHandler(undefined, join(workspaceRoot, '..', 'unregistered-root'), { name: '越权项目' })).toThrow(/未注册/)
 
       const created = createHandler(undefined, workspaceRoot, { name: '发布计划' })
       expect(created).toEqual(expect.objectContaining({
@@ -187,9 +192,6 @@ describe('task handler Kanban payloads', () => {
         runCount: 0,
         sessionCount: 0,
       }))
-    } finally {
-      rmSync(workspaceRoot, { recursive: true, force: true })
-    }
   })
 
   test('session label assignment rejects a workspace mismatch before persistence', () => {
@@ -224,12 +226,10 @@ describe('task handler Kanban payloads', () => {
     expect(taskHandler).toBeInstanceOf(Function)
     if (!taskHandler) return
 
-    const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-task-label-handler-'))
-    try {
-      expect(() => taskHandler(undefined, workspaceRoot, 'workspace-1', 'task-1', ['unknown'])).toThrow(/不存在/)
-    } finally {
-      rmSync(workspaceRoot, { recursive: true, force: true })
-    }
+    const workspaceRoot = registeredWorkspaceRoot
+    expect(workspaceRoot).toBeString()
+    if (!workspaceRoot) return
+    expect(() => taskHandler(undefined, workspaceRoot, 'workspace-test', 'task-1', ['unknown'])).toThrow(/不存在/)
   })
 
   test('set_kanban_column 返回更新后的 AgentSessionMeta', () => {

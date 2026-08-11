@@ -33,9 +33,11 @@ import { PiAgentAdapter, cleanupPiRuntimeResources } from './adapters/pi-agent-a
 import { AgentEventBus } from './agent-event-bus'
 import { AgentOrchestrator } from './agent-orchestrator'
 import { getAgentSessionWorkspacePath, getWorkspaceFilesDir } from './config-paths'
-import { getAgentSessionMeta, updateAgentSessionMeta } from './agent-session-manager'
+import { getAgentSessionMeta, listAgentSessions, updateAgentSessionMeta } from './agent-session-manager'
 import { setAgentStopper, setHeadlessAgentRunner } from './agent-headless-runner-registry'
 import { getHeadlessAgentRunTarget } from './agent-headless-run-target'
+import { assertRegisteredSessionUpload, resolveRegisteredUploadWorkspace } from './agent-upload-boundary-policy'
+import { listAgentWorkspaces } from './agent-workspace-manager'
 
 // ===== 实例创建 =====
 
@@ -485,7 +487,13 @@ export async function queueAgentMessage(
  * 将 base64 编码的文件写入 session 的 cwd，供 Agent 通过 Read 工具读取。
  */
 export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedFile[] {
-  const sessionDir = getAgentSessionWorkspacePath(input.workspaceSlug, input.sessionId)
+  const { workspace, session } = assertRegisteredSessionUpload(
+    input.workspaceSlug,
+    input.sessionId,
+    listAgentWorkspaces().map(({ id, slug }) => ({ id, slug })),
+    listAgentSessions().map(({ id, workspaceId }) => ({ id, workspaceId })),
+  )
+  const sessionDir = getAgentSessionWorkspacePath(workspace.slug, session.id)
   const results: AgentSavedFile[] = []
   const usedPaths = new Set<string>()
 
@@ -533,7 +541,12 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
  * 将 base64 编码的文件写入工作区 workspace-files/ 目录，所有会话均可访问。
  */
 export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): AgentSavedFile[] {
-  const wsFilesDir = getWorkspaceFilesDir(input.workspaceSlug)
+  const workspace = resolveRegisteredUploadWorkspace(
+    input.workspaceSlug,
+    listAgentWorkspaces().map(({ id, slug }) => ({ id, slug })),
+  )
+  if (!workspace) throw new Error('Workspace slug 未注册')
+  const wsFilesDir = getWorkspaceFilesDir(workspace.slug)
   const results: AgentSavedFile[] = []
   const usedPaths = new Set<string>()
 

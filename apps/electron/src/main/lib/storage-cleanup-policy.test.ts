@@ -45,9 +45,18 @@ describe('orphan cleanup index safety', () => {
   })
 
   test('Given a valid backup index When checking cleanup safety Then accepts the recoverable index', () => {
-    const fixture = createFixture('{ broken', JSON.stringify({ version: 1, sessions: [] }))
+    const fixture = createFixture('{ broken', JSON.stringify({ version: 1, sessions: [{ id: 'known-session' }] }))
 
     expect(assessOrphanCleanupIndex(fixture.indexPath, fixture.dataDir, 'sessions')).toEqual({ safe: true })
+  })
+
+  test('Given non-empty data and an empty index array When checking cleanup safety Then fails closed', () => {
+    const fixture = createFixture(JSON.stringify({ version: 1, sessions: [] }))
+
+    expect(assessOrphanCleanupIndex(fixture.indexPath, fixture.dataDir, 'sessions')).toEqual({
+      safe: false,
+      reason: 'index_invalid',
+    })
   })
 
   test('Given an empty data directory When the index is missing Then cleanup remains safe', () => {

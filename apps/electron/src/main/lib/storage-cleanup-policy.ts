@@ -24,8 +24,17 @@ function hasDataEntries(dataDir: string): boolean {
 
 function hasExpectedEntries(value: unknown, kind: OrphanCleanupIndexKind): boolean {
   if (!value || typeof value !== 'object') return false
-  const entries = (value as Record<string, unknown>)[kind]
-  return Array.isArray(entries)
+  const record = value as Record<string, unknown>
+  if (!Number.isInteger(record.version) || (record.version as number) < 1) return false
+
+  const entries = record[kind]
+  if (!Array.isArray(entries) || entries.length === 0) return false
+  return entries.every((entry) => {
+    if (!entry || typeof entry !== 'object') return false
+    const id = (entry as Record<string, unknown>).id
+    if (typeof id !== 'string' || id.length === 0) return false
+    return !id.includes('/') && !id.includes('\\') && id !== '.' && id !== '..'
+  })
 }
 
 /**

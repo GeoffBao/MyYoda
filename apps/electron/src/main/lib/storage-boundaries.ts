@@ -25,3 +25,7 @@ const WORKSPACE_METADATA_DIRS = new Set([
 export function isWorkspaceMetadataDir(entryName: string): boolean {
   return WORKSPACE_METADATA_DIRS.has(entryName)
 }
+
+export function getWorkspaceMetadataDirNames(): readonly string[] {
+  return [...WORKSPACE_METADATA_DIRS]
+}

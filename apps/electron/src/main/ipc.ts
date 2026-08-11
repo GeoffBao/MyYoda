@@ -440,6 +440,7 @@ import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
 import { normalizeFileAccessOptions } from './lib/file-access-policy'
 import { isSafeDeleteTarget } from './lib/destructive-file-policy'
+import { getWorkspaceMetadataDirNames } from './lib/storage-boundaries'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -3855,7 +3856,13 @@ export function registerIpcHandlers(): void {
 
       const protectedRoots = [
         ...getAuthorizedRoots(options),
-        ...listAgentWorkspaces().map((workspace) => getAgentWorkspacePath(workspace.slug)),
+        ...listAgentWorkspaces().flatMap((workspace) => {
+          const workspaceRoot = getAgentWorkspacePath(workspace.slug)
+          return [
+            workspaceRoot,
+            ...getWorkspaceMetadataDirNames().map((dirname) => join(workspaceRoot, dirname)),
+          ]
+        }),
       ]
       if (options?.sessionId) {
         const meta = getAgentSessionMeta(options.sessionId)
