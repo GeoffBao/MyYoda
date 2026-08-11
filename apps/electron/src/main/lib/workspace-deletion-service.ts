@@ -17,6 +17,8 @@ export interface WorkspaceDeletionDependencies {
   isSessionActive: (sessionId: string) => boolean
   /** 只读预检查；必须在停止会话或删除任何级联资源前完成。第二参数要求无条件检查共享 Worktree。 */
   assertSessionDeletionSafe: (sessionId: string, requireWorktreeClean?: boolean) => void
+  /** 工作区目录/recovery root 的只读预检查，必须早于所有 Session 副作用。 */
+  assertWorkspaceDeletionSafe: (workspaceId: string) => void
   stopSession: (sessionId: string) => void
   deleteSession: (sessionId: string) => void
   deleteAutomation: (automationId: string) => void
@@ -47,6 +49,7 @@ export function deleteWorkspaceCascade(
   if (dependencies.listWorkspaces().length <= 1) {
     throw new Error('至少需要保留一个工作区')
   }
+  dependencies.assertWorkspaceDeletionSafe(workspaceId)
 
   const sessionIds = dependencies.listSessions()
     .filter((session) => session.workspaceId === workspaceId)

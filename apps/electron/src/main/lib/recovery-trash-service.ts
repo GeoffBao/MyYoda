@@ -1,8 +1,8 @@
-import { appendFileSync, existsSync, lstatSync, mkdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, lstatSync, mkdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-export type RecoveryTrashKind = 'project' | 'task' | 'workspace'
+export type RecoveryTrashKind = 'project' | 'task' | 'workspace' | 'session'
 
 export interface RecoveryTrashRecord {
   id: string
@@ -12,6 +12,10 @@ export interface RecoveryTrashRecord {
   quarantinePath: string
   status: 'prepared' | 'quarantined'
   createdAt: string
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}${sep}`)
 }
 
 function assertNoSymlinkPath(root: string, candidate: string): void {
@@ -26,6 +30,68 @@ function assertNoSymlinkPath(root: string, candidate: string): void {
       throw new Error('恢复隔离目标路径不能包含符号链接')
     }
   }
+}
+
+function ensureRecoveryDirectory(path: string): void {
+  let entry
+  try {
+    // lstat 而不是 existsSync：dangling symlink 也必须被识别为已占用路径。
+    entry = lstatSync(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    mkdirSync(path)
+    entry = lstatSync(path)
+  }
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    throw new Error('恢复隔离区不是安全的本地目录')
+  }
+}
+
+function assertSafeJournalPath(path: string): void {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      throw new Error(`恢复 journal 路径不能包含符号链接: ${path}`)
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+/** 只读检查 recovery root；不存在时允许后续 quarantine 创建。 */
+export function assertRecoveryRootSafe(workspaceRoot: string): void {
+  const root = realpathSync(resolve(workspaceRoot))
+  const recoveryRoot = join(root, '.recovery-trash')
+  try {
+    lstatSync(recoveryRoot)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  ensureRecoveryDirectory(recoveryRoot)
+  const recoveryReal = realpathSync(recoveryRoot)
+  if (!isWithinRoot(root, recoveryReal)) {
+    throw new Error('恢复隔离区越出 Workspace 根目录')
+  }
+  assertSafeJournalPath(join(recoveryReal, 'journal.jsonl'))
+}
+
+/** 只读检查一个待隔离目标；目标不存在时允许调用方按原语义跳过物理清理。 */
+export function assertRecoveryTargetSafe(workspaceRoot: string, sourcePath: string): void {
+  const workspaceRootCandidate = resolve(workspaceRoot)
+  const root = realpathSync(workspaceRootCandidate)
+  const sourceCandidate = resolve(sourcePath)
+  try {
+    lstatSync(sourceCandidate)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  assertNoSymlinkPath(workspaceRootCandidate, sourceCandidate)
+  const source = realpathSync(sourceCandidate)
+  if (!isWithinRoot(root, source) || source.startsWith(`${join(root, '.recovery-trash')}${sep}`)) {
+    throw new Error('恢复隔离目标路径不安全')
+  }
+  assertRecoveryRootSafe(root)
 }
 
 /**
@@ -52,29 +118,33 @@ export function quarantineForRecovery(
   if (source.startsWith(`${join(root, '.recovery-trash')}${sep}`)) {
     throw new Error('恢复隔离目标不能位于 recovery trash 内')
   }
+  assertRecoveryRootSafe(root)
 
   const id = randomUUID()
   const recoveryRoot = join(root, '.recovery-trash')
-  if (existsSync(recoveryRoot)) {
-    const recoveryStat = lstatSync(recoveryRoot)
-    if (recoveryStat.isSymbolicLink() || !recoveryStat.isDirectory()) {
-      throw new Error('恢复隔离区不是安全的本地目录')
-    }
-  } else {
-    mkdirSync(recoveryRoot, { recursive: true })
-  }
+  ensureRecoveryDirectory(recoveryRoot)
   const recoveryReal = realpathSync(recoveryRoot)
-  if (!recoveryReal.startsWith(`${root}${sep}`)) {
+  if (!isWithinRoot(root, recoveryReal)) {
     throw new Error('恢复隔离区越出 Workspace 根目录')
   }
+  const recoveryJournalIndex = join(recoveryReal, 'journal.jsonl')
+  assertSafeJournalPath(recoveryJournalIndex)
 
   const operationRoot = join(recoveryReal, id)
-  mkdirSync(operationRoot, { recursive: true })
+  try {
+    // 不使用 recursive mkdir：若随机 ID 恰好已被占用或被预先放入 symlink，直接失败。
+    mkdirSync(operationRoot)
+  } catch (error) {
+    throw new Error('恢复操作目录创建失败，已保留源文件', { cause: error })
+  }
   const operationReal = realpathSync(operationRoot)
-  if (!operationReal.startsWith(`${root}${sep}`) || !statSync(operationReal).isDirectory()) {
+  if (!isWithinRoot(root, operationReal) || !statSync(operationReal).isDirectory()) {
     throw new Error('恢复操作目录不在 Workspace 根目录内')
   }
-  const safeQuarantinePath = join(operationReal, basename(source))
+  const sourceName = basename(source)
+  // journal.json 是 operation journal 的保留名；改名后再搬入，避免源文件覆盖自身的恢复记录。
+  const quarantineName = sourceName === 'journal.json' ? 'source-journal.json' : sourceName
+  const safeQuarantinePath = join(operationReal, quarantineName)
   const record: RecoveryTrashRecord = {
     id,
     kind,
@@ -111,5 +181,14 @@ export function quarantineForRecovery(
 }
 
 export function recoveryTrashPathExists(workspaceRoot: string, id: string): boolean {
-  return existsSync(join(resolve(workspaceRoot), '.recovery-trash', id))
+  try {
+    const root = realpathSync(resolve(workspaceRoot))
+    const candidate = resolve(root, '.recovery-trash', id)
+    if (!isWithinRoot(root, candidate)) return false
+    const entry = lstatSync(candidate)
+    if (entry.isSymbolicLink()) return false
+    return isWithinRoot(root, realpathSync(candidate))
+  } catch {
+    return false
+  }
 }

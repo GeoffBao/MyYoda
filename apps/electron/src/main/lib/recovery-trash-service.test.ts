@@ -24,6 +24,7 @@ describe('recovery-trash-service', () => {
     expect(existsSync(source)).toBe(false)
     expect(existsSync(record.quarantinePath)).toBe(true)
     expect(recoveryTrashPathExists(root, record.id)).toBe(true)
+    expect(recoveryTrashPathExists(root, '../outside')).toBe(false)
     expect(JSON.parse(readFileSync(join(root, '.recovery-trash', record.id, 'journal.json'), 'utf-8'))).toMatchObject({
       status: 'quarantined',
       kind: 'project',
@@ -43,6 +44,51 @@ describe('recovery-trash-service', () => {
     expect(() => quarantineForRecovery(root, source, 'task', 'secret')).toThrow('安全的本地目录')
     expect(existsSync(source)).toBe(true)
     expect(existsSync(join(outside, 'secret'))).toBe(false)
+  })
+
+  test('rejects a dangling recovery-root symlink before creating an escape path', () => {
+    const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
+    const outside = join(tmpdir(), `myyoda-recovery-missing-${Date.now()}`)
+    roots.push(root)
+    const source = join(root, 'tasks', 'secret')
+    mkdirSync(source, { recursive: true })
+    symlinkSync(outside, join(root, '.recovery-trash'), 'dir')
+
+    expect(() => quarantineForRecovery(root, source, 'task', 'secret')).toThrow('安全的本地目录')
+    expect(existsSync(source)).toBe(true)
+    expect(existsSync(outside)).toBe(false)
+  })
+
+  test('rejects a recovery journal index symlink before moving the source', () => {
+    const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
+    const outside = mkdtempSync(join(tmpdir(), 'myyoda-recovery-outside-'))
+    roots.push(root, outside)
+    const source = join(root, 'tasks', 'secret')
+    const recoveryRoot = join(root, '.recovery-trash')
+    mkdirSync(source, { recursive: true })
+    mkdirSync(recoveryRoot, { recursive: true })
+    symlinkSync(join(outside, 'journal.jsonl'), join(recoveryRoot, 'journal.jsonl'), 'file')
+
+    expect(() => quarantineForRecovery(root, source, 'task', 'secret')).toThrow('journal')
+    expect(existsSync(source)).toBe(true)
+    expect(existsSync(join(outside, 'journal.jsonl'))).toBe(false)
+  })
+
+  test('preserves a source named journal.json without overwriting its payload journal', () => {
+    const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
+    roots.push(root)
+    const source = join(root, 'tasks', 'journal.json')
+    mkdirSync(join(root, 'tasks'), { recursive: true })
+    writeFileSync(source, '{"payload":true}\n', 'utf-8')
+
+    const record = quarantineForRecovery(root, source, 'task', 'journal')
+
+    expect(record.quarantinePath.endsWith('/journal.json')).toBe(false)
+    expect(readFileSync(record.quarantinePath, 'utf-8')).toContain('payload')
+    expect(JSON.parse(readFileSync(join(root, '.recovery-trash', record.id, 'journal.json'), 'utf-8'))).toMatchObject({
+      status: 'quarantined',
+      sourcePath: record.sourcePath,
+    })
   })
 
   test('rejects a symlinked source path before moving the real target', () => {

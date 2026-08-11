@@ -32,7 +32,7 @@ import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
 import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
-import { quarantineForRecovery } from './recovery-trash-service'
+import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -296,6 +296,23 @@ export function updateAgentWorkspace(
   return updated
 }
 
+/** 只读预检查工作区删除路径，供 Workspace 级联在任何 Session 副作用前调用。 */
+export function assertAgentWorkspaceDeletionSafe(id: string): void {
+  const index = readIndex()
+  const target = index.workspaces.find((workspace) => workspace.id === id)
+  if (!target) throw new Error(`Agent 工作区不存在: ${id}`)
+  if (target.slug === 'default') throw new Error('默认工作区不能删除')
+  if (index.workspaces.length <= 1) throw new Error('至少需要保留一个工作区')
+
+  const workspacesRoot = resolve(getAgentWorkspacesDir())
+  const workspaceDir = resolve(join(workspacesRoot, target.slug))
+  const relativePath = relative(workspacesRoot, workspaceDir)
+  if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
+  }
+  assertRecoveryTargetSafe(workspacesRoot, workspaceDir)
+}
+
 /** 删除工作区索引条目及其本地目录 */
 export function deleteAgentWorkspace(id: string): void {
   const index = readIndex()
@@ -319,6 +336,7 @@ export function deleteAgentWorkspace(id: string): void {
   if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
     throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
   }
+  assertRecoveryTargetSafe(workspacesRoot, workspaceDir)
 
   // 先移除索引条目并落盘，再把目录移入同卷、带 journal 的恢复隔离区。
   // 隔离失败时恢复索引并向调用方抛错，避免 Renderer 把部分删除误报为成功。
