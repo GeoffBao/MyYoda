@@ -44,4 +44,21 @@ describe('Suggestion 请求竞态守卫', () => {
     const items = guard.attachResult(id, ['a'])
     expect(guard.isLatest(items)).toBe(true)
   })
+
+  test('未登记的初始数组（TipTap 异步 items 前调用的 onStart）：既非 latest 也非 stale，应放行', () => {
+    const guard = createLatestSuggestionRequestGuard<string>()
+    // items() 尚未异步返回，onStart 收到的是未登记的空数组
+    const initialItems: string[] = []
+    expect(guard.isLatest(initialItems)).toBe(false)
+    expect(guard.isStale(initialItems)).toBe(false)
+  })
+
+  test('已知旧请求的结果是 stale，应拒绝', () => {
+    const guard = createLatestSuggestionRequestGuard<string>()
+    const id1 = guard.startRequest()
+    const staleItems = guard.attachResult(id1, ['old'])
+    guard.startRequest()
+
+    expect(guard.isStale(staleItems)).toBe(true)
+  })
 })
