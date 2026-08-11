@@ -25,6 +25,7 @@ import type {
   SDKMessage,
   SDKUserMessageInput,
   TypedError,
+  SkillActivation,
 } from '@myyoda/shared'
 import {
   calculatePiAutoCompactionReserveTokens,
@@ -36,6 +37,9 @@ import {
   THINKING_SIGNATURE_ERROR_MESSAGE,
   THINKING_SIGNATURE_ERROR_TITLE,
   isThinkingSignatureError as matchesThinkingSignatureError,
+} from '@myyoda/shared'
+import {
+  createSkillActivationFromPath,
 } from '@myyoda/shared'
 import type { CanUseToolOptions, PermissionResult } from '../agent-permission-service'
 import { TRANSIENT_NETWORK_PATTERN, isMalformedResponseError } from '../error-patterns'
@@ -75,6 +79,7 @@ import {
 } from './pi-message-adapter'
 import { DEFAULT_CONTEXT_WINDOW, buildModel } from './pi-model-registry'
 import { createPartialMessageCoalescer, type PartialMessageCoalescer } from './pi-streaming-control'
+import { PendingPromptSkillActivationTracker } from './pi-skill-activation-tracker'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
 import { isClaudeSubscriptionLimitError } from './pi-subscription-limit'
 import {
@@ -136,6 +141,12 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   additionalSkillPaths?: string[]
   /** 当前用户输入显式引用的 Skill name（兼容历史 slug 已在编排层归一化） */
   skillMentions?: string[]
+  /** Persisted user-message UUID for turn-scoped Skill attribution. */
+  initialUserMessageUuid?: string
+  /** Workspace that owns `additionalSkillPaths`, used for relocatable Skill previews. */
+  skillWorkspaceSlug?: string
+  /** Skill 成功加载并注入 prompt 后回调。 */
+  onSkillActivated?: (activations: SkillActivation[], userMessageUuid: string) => void
   proxyUrl?: string
   /** Pi 模型请求传输策略：auto / sse / websocket / websocket-cached */
   transport?: PiAgentTransport
@@ -173,10 +184,14 @@ interface ActivePiSession {
   readySettled: boolean
   disposed: boolean
   runtimeGuard?: AgentRuntimeGuard
+  skillWorkspaceSlug?: string
+  pendingSkillActivations: PendingPromptSkillActivationTracker
+  onSkillActivated?: (activations: SkillActivation[], userMessageUuid: string) => void
 }
 
 interface PendingInterruptPrompt {
   content: string
+  skillActivationId?: number
   resolveAccepted: () => void
   rejectAccepted: (error: unknown) => void
 }
@@ -375,6 +390,7 @@ function createActivePiSession(): ActivePiSession {
     abortRequested: false,
     interrupting: false,
     pendingInterruptPrompts: [],
+    pendingSkillActivations: new PendingPromptSkillActivationTracker(),
     readySettled: false,
     disposed: false,
   }
@@ -401,6 +417,7 @@ function createAbortError(): Error {
 function rejectPendingInterruptPrompts(active: ActivePiSession, error: unknown): void {
   const pending = active.pendingInterruptPrompts.splice(0)
   for (const prompt of pending) {
+    active.pendingSkillActivations.discard(prompt.skillActivationId)
     prompt.rejectAccepted(error)
   }
 }
@@ -707,18 +724,25 @@ function formatSkillForPrompt(skill: Skill): string | undefined {
   }
 }
 
+interface PreparedPromptWithSkills {
+  content: string
+  activations: SkillActivation[]
+}
+
 async function preparePromptWithPromaSkills(
   resourceLoader: ResourceLoader,
   prompt: string,
   explicitSkillNames?: string[],
-): Promise<string> {
+  workspaceSlug?: string,
+): Promise<PreparedPromptWithSkills> {
   await resourceLoader.reload()
 
   const requestedNames = explicitSkillNames?.length ? explicitSkillNames : extractSkillCommandNames(prompt)
-  if (requestedNames.length === 0) return prompt
+  if (requestedNames.length === 0) return { content: prompt, activations: [] }
 
   const skillLookup = buildSkillLookup(resourceLoader.getSkills().skills)
   const blocks: string[] = []
+  const activations: SkillActivation[] = []
   const injectedSkillNames = new Set<string>()
 
   for (const requestedName of requestedNames) {
@@ -727,11 +751,47 @@ async function preparePromptWithPromaSkills(
     const block = formatSkillForPrompt(skill)
     if (!block) continue
     injectedSkillNames.add(skill.name)
+    const activation = createSkillActivationFromPath(
+      skill.filePath,
+      'explicit',
+      skill.name,
+      workspaceSlug,
+    )
+    if (activation) activations.push(activation)
     blocks.push(block)
   }
 
-  if (blocks.length === 0) return prompt
-  return `${blocks.join('\n\n')}\n\n${prompt}`
+  if (blocks.length === 0) return { content: prompt, activations: [] }
+  return {
+    content: `${blocks.join('\n\n')}\n\n${prompt}`,
+    activations,
+  }
+}
+
+function getPiUserMessageText(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object') return undefined
+  const userMessage = message as { role?: unknown; content?: unknown }
+  if (userMessage.role !== 'user' || !Array.isArray(userMessage.content)) return undefined
+  const text = userMessage.content
+    .filter((block): block is { type: 'text'; text: string } => (
+      Boolean(block)
+      && typeof block === 'object'
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string'
+    ))
+    .map((block) => block.text)
+    .join('')
+  return text || undefined
+}
+
+function registerPromptSkillActivations(
+  active: ActivePiSession,
+  prompt: string,
+  userMessageUuid: string | undefined,
+  activations: SkillActivation[],
+): number | undefined {
+  if (!userMessageUuid) return undefined
+  return active.pendingSkillActivations.register(prompt, userMessageUuid, activations)
 }
 
 function realpathIfExists(path: string): string | undefined {
@@ -1388,6 +1448,8 @@ export class PiAgentAdapter implements AgentProviderAdapter {
     // 同一 session 的新请求可能在旧 IPC 事件之后开始；所有 retry 生命周期均携带这一轮标识。
     const retryRunStartedAt = input.retryRunStartedAt ?? Date.now()
     active.runtimeGuard = runtimeGuard
+    active.skillWorkspaceSlug = input.skillWorkspaceSlug
+    active.onSkillActivated = input.onSkillActivated
     let unsubscribe: (() => void) | undefined
     let requestProxyDispatcher: Dispatcher | undefined
     let partialAssistantCoalescer: PartialMessageCoalescer<{ message: AssistantMessage; uuid: string }> | undefined
@@ -1401,6 +1463,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         if (!active.disposed) {
           active.disposed = true
           rejectPendingInterruptPrompts(active, createAbortError())
+          active.pendingSkillActivations.clear()
           active.session?.dispose()
         }
         if (this.activeSessions.get(input.sessionId) === active) {
@@ -1659,6 +1722,13 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       unsubscribe = session.subscribe((event: AgentSessionEvent) => {
         try {
           switch (event.type) {
+            case 'message_start': {
+              const prompt = getPiUserMessageText(event.message)
+              if (!prompt) break
+              const pending = active.pendingSkillActivations.consume(prompt)
+              if (pending) active.onSkillActivated?.(pending.activations, pending.userMessageUuid)
+              break
+            }
             case 'message_update': {
               if (!isAssistantPiMessage(event.message)) break
               lastPartialAssistant = event.message
@@ -1893,9 +1963,16 @@ export class PiAgentAdapter implements AgentProviderAdapter {
           .finally(cleanupActiveSession)
       } else {
         const runPromptChain = async (): Promise<void> => {
-          let nextPrompt: { content: string; skipSkillExpansion: boolean } | undefined = {
+          let nextPrompt: {
+            content: string
+            skipSkillExpansion: boolean
+            skillMentions?: string[]
+            userMessageUuid?: string
+          } | undefined = {
             content: appendOutputFormatInstruction(input.prompt, input.outputFormat),
             skipSkillExpansion: false,
+            skillMentions: input.skillMentions,
+            userMessageUuid: input.initialUserMessageUuid,
           }
           let nextInterrupt: PendingInterruptPrompt | undefined
           while (nextPrompt !== undefined) {
@@ -1907,18 +1984,31 @@ export class PiAgentAdapter implements AgentProviderAdapter {
               return
             }
             const promptInput = nextPrompt
-            let prompt: string
+            let preparedPrompt: PreparedPromptWithSkills
             try {
-              prompt = promptInput.skipSkillExpansion
-                ? promptInput.content
-                : await preparePromptWithPromaSkills(resourceLoader, promptInput.content, input.skillMentions)
+              preparedPrompt = promptInput.skipSkillExpansion
+                ? { content: promptInput.content, activations: [] }
+                : await preparePromptWithPromaSkills(
+                  resourceLoader,
+                  promptInput.content,
+                  promptInput.skillMentions,
+                  input.skillWorkspaceSlug,
+                )
             } catch (error) {
               currentInterrupt?.rejectAccepted(error)
               throw error
             }
+            const prompt = preparedPrompt.content
+            const skillActivationId = registerPromptSkillActivations(
+              active,
+              prompt,
+              promptInput.userMessageUuid,
+              preparedPrompt.activations,
+            )
             nextPrompt = undefined
             try {
               if (active.abortRequested) {
+                active.pendingSkillActivations.discard(skillActivationId)
                 currentInterrupt?.rejectAccepted(createAbortError())
                 rejectPendingInterruptPrompts(active, createAbortError())
                 return
@@ -1980,7 +2070,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
             const pendingInterrupt = active.pendingInterruptPrompts.shift()
             nextInterrupt = pendingInterrupt
             if (pendingInterrupt) {
-              nextPrompt = { content: pendingInterrupt.content, skipSkillExpansion: false }
+              nextPrompt = { content: pendingInterrupt.content, skipSkillExpansion: true }
             } else if (pendingCompactionContinuation) {
               nextPrompt = { content: pendingCompactionContinuation, skipSkillExpansion: true }
               pendingCompactionContinuation = undefined
@@ -2033,10 +2123,23 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       const stopOverride = active.runtimeGuard.getLimitResultOverride()
       throw new Error(stopOverride?.errors[0] ?? 'Agent 已达到运行限制，无法继续追加消息')
     }
-    const content = active.resourceLoader
-      ? await preparePromptWithPromaSkills(active.resourceLoader, message.message.content, options?.skillMentions)
-      : message.message.content
+    const preparedPrompt = active.resourceLoader
+      ? await preparePromptWithPromaSkills(
+        active.resourceLoader,
+        message.message.content,
+        options?.skillMentions,
+        active.skillWorkspaceSlug,
+      )
+      : { content: message.message.content, activations: [] }
+    const content = preparedPrompt.content
+    const skillActivationId = registerPromptSkillActivations(
+      active,
+      content,
+      message.uuid,
+      preparedPrompt.activations,
+    )
     if (active.runtimeGuard?.shouldStopBeforeNextTurn()) {
+      active.pendingSkillActivations.discard(skillActivationId)
       session.agent.clearAllQueues()
       const stopOverride = active.runtimeGuard.getLimitResultOverride()
       throw new Error(stopOverride?.errors[0] ?? 'Agent 已达到运行限制，无法继续追加消息')
@@ -2045,6 +2148,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       const accepted = new Promise<void>((resolve, reject) => {
         active.pendingInterruptPrompts.push({
           content,
+          skillActivationId,
           resolveAccepted: resolve,
           rejectAccepted: reject,
         })
@@ -2064,10 +2168,15 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       options.onAccepted?.()
       return
     }
-    if (message.priority === 'now') {
-      await session.steer(content)
-    } else {
-      await session.followUp(content)
+    try {
+      if (message.priority === 'now') {
+        await session.steer(content)
+      } else {
+        await session.followUp(content)
+      }
+    } catch (error) {
+      active.pendingSkillActivations.discard(skillActivationId)
+      throw error
     }
     options?.onAccepted?.()
   }
@@ -2085,6 +2194,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       if (!active.disposed) {
         active.disposed = true
         rejectPendingInterruptPrompts(active, createAbortError())
+        active.pendingSkillActivations.clear()
         active.session?.dispose()
       }
       rejectActiveReady(active, createAbortError())
