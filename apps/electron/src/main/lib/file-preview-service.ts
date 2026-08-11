@@ -5,7 +5,7 @@
  * 供 PreviewPanel 内联面板使用。
  */
 
-import { basename, join, dirname, extname, resolve, posix as pathPosix } from 'node:path'
+import { basename, join, dirname, extname, resolve, sep, posix as pathPosix } from 'node:path'
 import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { createRequire } from 'node:module'
@@ -649,6 +649,11 @@ export async function preparePdfPreview(filePath: string, basePaths?: string[]):
   return { resolvedPath: safePath, tmpHtmlUrl }
 }
 
+export function isResolvedHtmlPreviewResourcePath(candidate: string, directoryRoot: string, pathSeparator = sep): boolean {
+  const rootWithSeparator = directoryRoot.endsWith(pathSeparator) ? directoryRoot : `${directoryRoot}${pathSeparator}`
+  return candidate.startsWith(rootWithSeparator)
+}
+
 function collectHtmlPreviewResources(safePath: string): string[] {
   const resources = new Set<string>([basename(safePath)])
   let html: string
@@ -678,7 +683,7 @@ function collectHtmlPreviewResources(safePath: string): string[] {
     const relative = pathPosix.normalize(withoutQuery.replaceAll('\\', '/'))
     if (relative === '.' || relative === '..' || relative.startsWith('../')) continue
     const candidate = resolve(directory, relative)
-    if (!candidate.startsWith(`${directoryRoot}${pathPosix.sep}`) || !existsSync(candidate)) continue
+    if (!isResolvedHtmlPreviewResourcePath(candidate, directoryRoot) || !existsSync(candidate)) continue
     try {
       if (statSync(candidate).isFile()) resources.add(relative)
     } catch {
