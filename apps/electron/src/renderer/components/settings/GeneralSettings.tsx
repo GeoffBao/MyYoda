@@ -474,7 +474,7 @@ export function GeneralSettings(): React.ReactElement {
           </SettingsRow>
           <SettingsToggle
             label="编码优化模式"
-            description="一键开启 DeepSeek 编码优化全家桶：仓库代码地图（repo map）、模型专属编码规范、提前压缩阈值、外部能力分工指引、编码相关预置技能（code-review/ultraqa/deep-interview/ai-slop-cleaner）。未设置会话级思考时默认思考深度提升到 max。默认关闭，按需开启。"
+            description="一键开启编码优化：仓库代码地图（repo map）、模型专属编码规范（DeepSeek）、Chat 输出预算提升（64K）、未设会话级思考时默认思考深度 max、编码相关预置技能（code-review/ultraqa/deep-interview/ai-slop-cleaner）。默认关闭，按需开启。"
             checked={codingMode}
             onCheckedChange={(checked) => {
               // 乐观更新：先切 UI 再持久化，失败回滚（对齐 gitAttribution 开关模式）
