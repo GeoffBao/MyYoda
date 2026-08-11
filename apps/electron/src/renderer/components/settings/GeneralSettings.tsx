@@ -462,12 +462,15 @@ export function GeneralSettings(): React.ReactElement {
           />
           <SettingsRow
             label="新会话默认思考深度"
-            description="仅作为新建会话的初始值，可在输入栏按会话覆盖"
+            description={codingMode
+              ? "编码优化模式开启中：固定为 max（关闭开关后可调整）"
+              : "仅作为新建会话的初始值，可在输入栏按会话覆盖"}
           >
             <div className="w-56">
               <ThinkingLevelSlider
-                value={normalizeToUiIndex(defaultThinkingLevel)}
+                value={codingMode ? normalizeToUiIndex('max') : normalizeToUiIndex(defaultThinkingLevel)}
                 onValueChange={handleDefaultThinkingLevelIndexChange}
+                disabled={codingMode}
                 locale="cn"
               />
             </div>
