@@ -656,6 +656,17 @@ export function setSessionProjectId(id: string, projectId: string): AgentSession
 }
 
 /**
+ * 在任何工作区级级联副作用前，确认会话关联的 Worktree 可以安全删除。
+ */
+export function assertAgentSessionDeletionSafe(id: string): void {
+  const index = readIndex()
+  const candidate = index.sessions.find((session) => session.id === id)
+  if (!candidate?.gitWorktreePath || !candidate.gitRepoPath) return
+  const stillReferenced = index.sessions.some((session) => session.id !== id && session.gitWorktreePath === candidate.gitWorktreePath)
+  if (!stillReferenced) assertWorktreeClean(candidate.gitWorktreePath)
+}
+
+/**
  * 删除会话
  */
 export function deleteAgentSession(id: string): void {
@@ -667,11 +678,7 @@ export function deleteAgentSession(id: string): void {
     return
   }
 
-  const candidate = index.sessions[idx]!
-  if (candidate.gitWorktreePath && candidate.gitRepoPath) {
-    const stillReferenced = index.sessions.some((session) => session.id !== id && session.gitWorktreePath === candidate.gitWorktreePath)
-    if (!stillReferenced) assertWorktreeClean(candidate.gitWorktreePath)
-  }
+  assertAgentSessionDeletionSafe(id)
 
   const removed = index.sessions.splice(idx, 1)[0]!
   writeIndex(index)
