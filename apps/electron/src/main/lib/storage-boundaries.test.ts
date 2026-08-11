@@ -16,7 +16,7 @@ import { isWorkspaceMetadataDir } from './storage-boundaries'
  * 在 storage-boundaries.ts 里手动登记并在下面的 KNOWN_CROSS_PACKAGE_DIRS 里补一条，
  * 保证这条测试知道要去检查它。
  */
-const KNOWN_CROSS_PACKAGE_DIRS = ['projects']
+const KNOWN_CROSS_PACKAGE_DIRS = ['projects', 'tasks', 'labels', 'expert-bindings']
 
 function extractTopLevelWorkspaceDirLiterals(): string[] {
   const configPathsSource = readFileSync(

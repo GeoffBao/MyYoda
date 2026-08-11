@@ -20,6 +20,12 @@ const WORKSPACE_METADATA_DIRS = new Set([
   'memory',
   /** packages/shared/src/projects/storage.ts:getWorkspaceProjectsPath — 跨包定义，无法被反射测试自动发现 */
   'projects',
+  /** packages/shared/src/tasks/storage.ts — 跨包定义 */
+  'tasks',
+  /** workspace-label-service.ts:workspaceLabelsConfigPath — 跨包定义 */
+  'labels',
+  /** expert-binding-service.ts:workspaceExpertBindingsDir — 跨包定义 */
+  'expert-bindings',
 ])
 
 export function isWorkspaceMetadataDir(entryName: string): boolean {

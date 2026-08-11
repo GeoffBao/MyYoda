@@ -1,20 +1,38 @@
 import { describe, expect, test } from 'bun:test'
 import { isSafeDeleteTarget } from './destructive-file-policy'
 
+const WS = '/agent-workspaces/default'
+const MEM = `${WS}/memory`
+
 describe('destructive file policy', () => {
-  test('Given a capability root When deleting Then rejects the root itself', () => {
-    expect(isSafeDeleteTarget('/workspace/session', ['/workspace/session'])).toBe(false)
+  test('Given a forbidden root When deleting Then rejects the root itself', () => {
+    expect(isSafeDeleteTarget(`${WS}/session`, [`${WS}/session`], [`${WS}`])).toBe(false)
   })
 
-  test('Given a child file under a capability root When deleting Then allows the child', () => {
-    expect(isSafeDeleteTarget('/workspace/session/report.md', ['/workspace/session'])).toBe(true)
+  test('Given a child file under an allowed root When deleting Then allows the child', () => {
+    expect(isSafeDeleteTarget(`${WS}/session/report.md`, [], [`${WS}/session`])).toBe(true)
   })
 
   test('Given a sibling with a similar prefix When deleting Then rejects it', () => {
-    expect(isSafeDeleteTarget('/workspace/session-copy', ['/workspace/session'])).toBe(false)
+    expect(isSafeDeleteTarget(`${WS}/session-copy`, [], [`${WS}/session`])).toBe(false)
   })
 
-  test('Given no protected roots When deleting Then fails closed', () => {
-    expect(isSafeDeleteTarget('/workspace/session/report.md', [])).toBe(false)
+  test('Given no allowed roots When deleting Then fails closed', () => {
+    expect(isSafeDeleteTarget(`${WS}/session/report.md`, [], [])).toBe(false)
+  })
+
+  // ─── root guard bypass regression ──────────────────────────────────
+  test('Given workspace root in forbiddenRoots and a broader parent in allowedRoots When deleting Then rejects workspace root', () => {
+    // 复现先前单参数 some() 实现的绕过：workspace root 是 agent-workspaces/ 的子项，
+    // 会被父级根判定为 child 而允许递归删除。
+    expect(isSafeDeleteTarget(WS, [WS], ['/agent-workspaces'])).toBe(false)
+  })
+
+  test('Given memory dir in forbiddenRoots and workspace in allowedRoots When deleting Then rejects memory dir', () => {
+    expect(isSafeDeleteTarget(MEM, [MEM, WS], ['/agent-workspaces'])).toBe(false)
+  })
+
+  test('Given session dir in forbiddenRoots and workspace in allowedRoots When deleting Then rejects session dir', () => {
+    expect(isSafeDeleteTarget(`${WS}/abc-123`, [`${WS}/abc-123`], ['/agent-workspaces'])).toBe(false)
   })
 })

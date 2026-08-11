@@ -467,8 +467,10 @@ function realpathOrResolve(path: string): string {
 }
 
 function getAuthorizedRoots(options?: FileAccessOptions): string[] {
+  const hasSessionContext = !!(options?.sessionId || options?.workspaceSlug)
   const roots: string[] = [
-    getAgentWorkspacesDir(),
+    // 无会话上下文时保留全局根供文件面板浏览；有会话时只按具体工作区授权。
+    ...(hasSessionContext ? [] : [getAgentWorkspacesDir()]),
     join(tmpdir(), 'myyoda-preview'),
   ]
 
@@ -488,7 +490,11 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
     if (meta?.gitWorktreePath) roots.push(meta.gitWorktreePath)
     if (meta?.workspaceId) {
       const workspace = getAgentWorkspace(meta.workspaceId)
-      if (workspace?.slug) workspaceSlugs.add(workspace.slug)
+      if (workspace?.slug) {
+        workspaceSlugs.add(workspace.slug)
+        // 有会话归属时，当前工作区的 agent-workspaces/{slug}/ 也是合法根。
+        roots.push(getAgentWorkspacePath(workspace.slug))
+      }
       // 会话绑定的 Project（Git 项目）工作目录也要授权，否则新会话选择 Git 分支/创建
       // Worktree 时，ensurePathAllowedWithWorktree 永远无法通过校验——这里之前完全没有
       // 打通 sessionMeta.projectId → project.config.workingDirectory 这条链路，是
@@ -3854,24 +3860,26 @@ export function registerIpcHandlers(): void {
         throw new Error('访问路径超出当前会话的授权范围')
       }
 
-      const protectedRoots = [
-        ...getAuthorizedRoots(options),
-        ...listAgentWorkspaces().flatMap((workspace) => {
-          const workspaceRoot = getAgentWorkspacePath(workspace.slug)
-          return [
-            workspaceRoot,
-            ...getWorkspaceMetadataDirNames().map((dirname) => join(workspaceRoot, dirname)),
-          ]
-        }),
-      ]
+      const allowedRoots = getAuthorizedRoots(options)
+      const forbiddenRoots = listAgentWorkspaces().flatMap((workspace) => {
+        const workspaceRoot = getAgentWorkspacePath(workspace.slug)
+        return [
+          workspaceRoot,
+          ...getWorkspaceMetadataDirNames().map((dirname) => join(workspaceRoot, dirname)),
+        ]
+      })
       if (options?.sessionId) {
         const meta = getAgentSessionMeta(options.sessionId)
         const workspace = meta?.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
         if (workspace) {
-          protectedRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
+          forbiddenRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
         }
       }
-      if (!isSafeDeleteTarget(realpathOrResolve(safePath), protectedRoots.map(realpathOrResolve))) {
+      if (!isSafeDeleteTarget(
+        realpathOrResolve(safePath),
+        forbiddenRoots.map(realpathOrResolve),
+        allowedRoots.map(realpathOrResolve),
+      )) {
         throw new Error('不能删除 Workspace、Session 或其他受管访问根目录')
       }
 
