@@ -30,6 +30,8 @@ import {
   calculatePiAutoCompactionReserveTokens,
   inferReasoningTransport,
   isCodexFastModeSupportedModel,
+  isDeepSeekV4,
+  PI_EARLY_COMPACTION_THRESHOLD_RATIO,
   resolveReasoningProfile,
 } from '@myyoda/shared'
 import {
@@ -1421,8 +1423,11 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         ? sdk.SessionManager.open(sessionFile, input.piSessionDir, cwd)
         : sdk.SessionManager.create(cwd, input.piSessionDir)
       const { modelRuntime, model } = await buildModel(sdk, input)
+      // D2：DeepSeek v4 长上下文保持力较弱，提前到 70% 触发自动压缩，避免后段质量断崖
+      const earlyCompaction = isDeepSeekV4(model.id)
       const autoCompactionReserveTokens = calculatePiAutoCompactionReserveTokens(
         model.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+        earlyCompaction ? PI_EARLY_COMPACTION_THRESHOLD_RATIO : undefined,
       )
       let compactContextRequested = false
       let compactionNoopReported = false

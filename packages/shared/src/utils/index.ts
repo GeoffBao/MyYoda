@@ -60,6 +60,7 @@ export {
 } from './automation-schedule'
 export {
   PI_AUTO_COMPACTION_THRESHOLD_RATIO,
+  PI_EARLY_COMPACTION_THRESHOLD_RATIO,
   calculatePiAutoCompactionReserveTokens,
   calculatePiAutoCompactionThresholdTokens,
 } from './pi-compaction'

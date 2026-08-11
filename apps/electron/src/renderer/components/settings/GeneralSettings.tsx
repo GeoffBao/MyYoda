@@ -65,6 +65,7 @@ export function GeneralSettings(): React.ReactElement {
   const [sessionHoverPreviewEnabled, setSessionHoverPreviewEnabled] = useAtom(sessionHoverPreviewEnabledAtom)
   const [thinkingExpanded, setThinkingExpanded] = useAtom(thinkingExpandedAtom)
   const [defaultThinkingLevel, setDefaultThinkingLevel] = React.useState<AgentThinkingLevel>(DEFAULT_AGENT_THINKING_LEVEL)
+  const [codingMode, setCodingMode] = React.useState(false)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showAvatarPicker, setShowAvatarPicker] = React.useState(false)
@@ -80,6 +81,7 @@ export function GeneralSettings(): React.ReactElement {
     window.electronAPI.getSettings().then((settings) => {
       setArchiveAfterDays(settings.archiveAfterDays ?? 7)
       setDefaultThinkingLevel(settings.defaultThinkingLevel ?? DEFAULT_AGENT_THINKING_LEVEL)
+      setCodingMode(settings.codingMode ?? false)
       setGitAttributionEnabled(settings.gitAttributionEnabled ?? true)
       setCodeClawEnabled(settings.codeClaw?.enabled ?? false)
       setCodeClawThemeId(isCodeClawThemeId(settings.codeClaw?.themeId) ? settings.codeClaw.themeId : DEFAULT_CODECLAW_THEME_ID)
@@ -470,6 +472,16 @@ export function GeneralSettings(): React.ReactElement {
               />
             </div>
           </SettingsRow>
+          <SettingsToggle
+            label="Coding 模式"
+            description="编码任务更充分推理：未设置会话级思考时，新会话默认思考深度提升到 max（会话级设置优先）"
+            checked={codingMode}
+            onCheckedChange={(checked) => {
+              void window.electronAPI.updateSettings({ codingMode: checked }).catch((error) => {
+                console.error('[通用设置] 更新 Coding 模式失败:', error)
+              })
+            }}
+          />
         </SettingsCard>
       </SettingsSection>
     </div>

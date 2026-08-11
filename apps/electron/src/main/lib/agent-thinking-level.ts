@@ -7,7 +7,7 @@ import {
 } from '@myyoda/shared'
 import type { AppSettings } from '../../types'
 
-type ThinkingSettings = Pick<AppSettings, 'agentThinking' | 'agentEffort' | 'defaultThinkingLevel'>
+type ThinkingSettings = Pick<AppSettings, 'agentThinking' | 'agentEffort' | 'defaultThinkingLevel' | 'codingMode'>
 type ThinkingSessionMeta = Pick<AgentSessionMeta, 'thinkingLevel' | 'reasoningLevel' | 'openAIThinkingLevel'>
 
 /**
@@ -32,6 +32,7 @@ export function resolvePiThinkingLevel(
     ?? sessionMeta?.thinkingLevel
     ?? sessionMeta?.openAIThinkingLevel
   const configuredLevel = settings.agentThinking?.type === 'disabled' ? 'off'
+    : settings.codingMode ? 'max'  // A1 Coding 模式：未设会话级思考时默认 max
     : (settings.defaultThinkingLevel ?? settings.agentEffort)
   if (profile) return normalizeReasoningLevel(profile, persistedReasoningLevel ?? configuredLevel) ?? 'high'
   if (capability) return normalizeReasoningCapabilityLevel(capability, persistedReasoningLevel ?? configuredLevel) ?? capability.defaultLevel

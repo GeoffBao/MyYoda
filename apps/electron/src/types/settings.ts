@@ -427,6 +427,8 @@ export interface AppSettings {
   agentEffort?: AgentEffort
   /** 新会话默认思考深度（对齐 craft defaultThinkingLevel；会话内可覆盖） */
   defaultThinkingLevel?: AgentThinkingLevel
+  /** Coding 模式：开启后新会话默认思考深度提升到 max（编码任务更充分推理）；会话级设置优先 */
+  codingMode?: boolean
   /** Agent 最大预算（美元/次） */
   agentMaxBudgetUsd?: number
   /** Agent 最大轮次（0 或 undefined = SDK 默认） */

@@ -78,3 +78,32 @@ describe('Pi thinking level resolver', () => {
     )).toBe('off')
   })
 })
+
+describe('A1 Coding 模式', () => {
+  test('Given codingMode 开启且无会话级覆盖 When 解析 Then 默认 max', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, codingMode: true },
+      undefined,
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('max')
+  })
+
+  test('Given codingMode 开启但会话级设置存在 When 解析 Then 会话级优先', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, codingMode: true },
+      { thinkingLevel: 'off' },
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('off')
+  })
+
+  test('Given codingMode 关闭 When 解析 Then 走默认思考深度', () => {
+    expect(resolvePiThinkingLevel(
+      { agentThinking: { type: 'adaptive' }, codingMode: false, defaultThinkingLevel: 'high' },
+      undefined,
+      'deepseek',
+      'deepseek-v4-pro',
+    )).toBe('high')
+  })
+})
