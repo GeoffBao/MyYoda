@@ -1221,6 +1221,20 @@ export interface CommunitySkill {
   homepage?: string
   /** 仓库内 skill 目录相对路径 */
   path: string
+  /** 版本号（外部收录为 latest） */
+  version?: string
+  /** 下载计数（由统计服务维护，0 表示暂无数据） */
+  downloads?: number
+  /** 是否人工审核 */
+  verified?: boolean
+  /** 外部收录源（缺省表示本仓库托管） */
+  source?: {
+    repo: string
+    path: string
+    ref?: string
+  }
+  /** 是否外部收录 */
+  external?: boolean
 }
 
 /** 社区市场安装结果 */
