@@ -273,7 +273,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
     try {
       await window.electronAPI.projects.delete(workspaceRoot, deleteTarget.slug)
       setProjects((prev) => prev.filter((existing) => existing.id !== deleteTarget.id))
-      toast.success(`工作区「${deleteTarget.name}」已删除`)
+      toast.success(`项目「${deleteTarget.name}」已删除`)
     } catch (cause) {
       toast.error('删除失败', {
         description: cause instanceof Error ? cause.message : String(cause),
@@ -369,7 +369,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
         {!hasVisible ? (
           <div className="px-2 py-8 text-center text-[13px] text-foreground/35">
-            {hasProjects ? '没有匹配的工作区' : '暂无工作区'}
+            {hasProjects ? '没有匹配的项目' : '暂无项目'}
           </div>
         ) : (
           <div className="flex flex-col gap-0.5">
@@ -392,7 +392,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                   </MenuItem>
                   <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openProjectPage(project.id)}>
                     <BookOpen size={13} />
-                    工作区资料
+                    项目资料
                   </MenuItem>
                   <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openCreateTask(project.id)}>
                     <Plus size={13} />
@@ -476,8 +476,8 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                title="工作区操作"
-                                aria-label={`「${project.name}」工作区操作`}
+                                title="项目操作"
+                                aria-label={`「${project.name}」项目操作`}
                                 onClick={(event) => event.stopPropagation()}
                                 className="grid size-5 place-items-center rounded text-foreground/50 hover:bg-foreground/[0.08] hover:text-foreground/80 data-[state=open]:bg-foreground/[0.08] data-[state=open]:text-foreground/80"
                               >
@@ -552,7 +552,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>永久删除已归档工作区</AlertDialogTitle>
+            <AlertDialogTitle>永久删除已归档项目</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>永久删除「{deleteTarget?.name ?? ''}」不可撤销。Task、Run、会话引用和工作目录不会被静默忽略。</p>

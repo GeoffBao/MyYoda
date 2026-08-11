@@ -397,7 +397,7 @@ export function WorkspaceSelector(): React.ReactElement {
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除工作区</AlertDialogTitle>
             <AlertDialogDescription>
-              将删除 MyYoda 托管的工作区数据及相关绑定；项目绑定的外部工作目录不会被删除。确定要继续吗？
+              将删除 MyYoda 托管的工作区数据、会话、自动任务与渠道绑定；项目绑定的外部工作目录不会被删除。Todo 与日程记录不会被删除，但之后可能需要重新归类。确定要继续吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

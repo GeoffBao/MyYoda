@@ -27,7 +27,7 @@ const STATUS_OPTIONS: Array<{ value: SessionListStatusFilter; label: string }> =
 
 const GROUP_BY_OPTIONS: Array<{ value: SessionListGroupBy; label: string }> = [
   { value: 'date', label: '日期' },
-  { value: 'project', label: '工作区' },
+  { value: 'project', label: '项目' },
   { value: 'state', label: '状态' },
   { value: 'customGroup', label: '自定义分组' },
   { value: 'none', label: '不分组' },

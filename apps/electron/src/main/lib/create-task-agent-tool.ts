@@ -63,7 +63,7 @@ export async function injectCreateTaskMcpServer(
         'create_task',
         `在当前工作区创建一个 Craft 风格的看板任务——写 task.yaml 并创建其 orchestrator 会话。CREATION ONLY：任务落地后状态为 todo，不会自动运行；是否启动由用户或自动化决定。
 
-提供 title + description（description 会成为任务目标和首个节点的 prompt）。可选：acceptanceCriteria（验收标准）、sources / skills（工作区已注册的 slug）、llmConnection + model、workingDirectory、projectId（省略时继承当前会话所属工作区）。
+提供 title + description（description 会成为任务目标和首个节点的 prompt）。可选：acceptanceCriteria（验收标准）、sources / skills（工作区已注册的 slug）、llmConnection + model、workingDirectory、projectId（Craft Project ID；省略时继承当前会话所属项目）。
 
 返回 { slug, orchestratorSessionId, warnings }——未知的 source/skill slug 会作为 warning 返回，不会阻断创建。用户要求"记录/排队/建个任务"时用这个工具；要立即执行工作，用当前会话或委派子会话，不要用这个工具。`,
         {
@@ -75,7 +75,7 @@ export async function injectCreateTaskMcpServer(
           llmConnection: z.string().optional().describe('指定渠道 connection；不传则继承工作区默认'),
           model: z.string().optional().describe('指定模型；不传则继承工作区默认'),
           workingDirectory: z.string().optional().describe('任务工作目录；不传则回退到工作区默认'),
-          projectId: z.string().optional().describe('绑定的工作区 ID；不传则继承当前会话所属工作区'),
+          projectId: z.string().optional().describe('绑定的 Craft Project ID；不传则继承当前会话所属项目'),
         },
         async (args) => {
           const workspace = getAgentWorkspace(ctx.workspaceId)

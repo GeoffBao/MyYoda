@@ -578,9 +578,9 @@ export function KanbanBoardContainer({
             setProjects((current) => [project, ...current.filter((candidate) => candidate.id !== project.id)])
             setScope({ kind: 'project', projectId: project.id })
             setCreateProjectOpen(false)
-            toast.success(`已创建工作区「${project.name}」`)
+            toast.success(`已创建项目「${project.name}」`)
           }).catch((cause: unknown) => {
-            toast.error('创建工作区失败', { description: cause instanceof Error ? cause.message : String(cause) })
+            toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
           }).finally(() => setCreatingProject(false))
         }}
       />

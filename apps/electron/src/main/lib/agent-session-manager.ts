@@ -925,7 +925,7 @@ export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSe
       })
     : sourceMeta.modelId
 
-  // 2. 确定源会话的工作目录（SDK 需要从此项目目录读取 session 文件）
+  // 2. 确定源会话的会话沙箱目录（SDK 从这里读取 session state 文件，不是 Craft Project cwd）
   let sourceDir: string | undefined
   if (sourceMeta.workspaceId) {
     const ws = getAgentWorkspace(sourceMeta.workspaceId)

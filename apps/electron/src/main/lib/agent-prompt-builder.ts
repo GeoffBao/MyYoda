@@ -166,7 +166,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 
 - 工作区名称: ${ctx.workspaceName}
 - 工作区根目录: ${workspacePaths?.workspaceRoot}
-- 当前会话目录（cwd）: ${workspacePaths?.sessionDir}
+- 会话沙箱目录: ${workspacePaths?.sessionDir}
 - 工作区 AGENTS.md: ${workspacePaths?.agentsMd}
 - 工作区长期记忆目录: ${workspacePaths?.autoMemoryDir}
 - 工作区长期记忆索引: ${workspacePaths?.autoMemoryIndex}
@@ -177,7 +177,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 ### .context 目录层级
 
 存在多个 \`.context/\` 目录，用途不同：
-- **会话级** \`.context/\`（当前 cwd 下）：当前会话的临时工作台，存放本次任务的 todo.md、plan/、临时笔记等
+- **会话级** \`${join(workspacePaths.sessionDir, '.context')}\`（会话沙箱下）：当前会话的临时工作台，存放本次任务的 todo.md、plan/、临时笔记等
 - **工作区级** \`${workspacePaths?.workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、工作区级知识等
 - **项目级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：该 Project 自己的持久记忆，含 MEMORY.md（按日期+状态记录该 Project 的决策/踩坑）。**这和该目录下人写的 AGENTS.md（旧版为 CLAUDE.md）是两回事——AGENTS.md 可能同时被其他 CLI 等外部工具读取，只读不要自动创建或修改；Project 自动记忆一律按消息里的 \`<project_memory_path>\` 写入，不要写入指令文件。**
 
@@ -190,7 +190,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 
     sections.push(`## 文件归属与 Agent 产出
 
-- Session sandbox（当前会话目录）用于会话辅助文件、临时脚本和历史兼容内容。
+- Session sandbox（上面的会话沙箱目录）用于会话辅助文件、临时脚本和历史兼容内容；它不等同于动态 \`<working_directory>\` 所表示的实际执行 cwd。
 - 当前绑定 Project 时，代码、计划和项目 Markdown 默认写入实际的 Project effective cwd（当前执行目录），不要因为“当前会话目录”路径而误写到 sandbox。
 - 需要保存为会话级最终交付物时，写入本会话专属 Outbox：\`${workspacePaths.sessionOutbox}\`。Outbox 是 Workspace 级持久产出，删除 Session 或磁盘清理不会删除其中的文件。
 - Agent turn 会自动捕获 Outbox、Session sandbox 和 Project cwd 的新增/修改文件，写入\`${workspacePaths.outboxIndex}\`作为未来 Yoda 知识库的素材清单；不要把源码、密钥、node_modules 或构建缓存当作知识库素材。

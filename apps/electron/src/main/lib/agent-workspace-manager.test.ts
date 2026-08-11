@@ -178,6 +178,28 @@ describe('ensureDefaultWorkspace', () => {
   })
 })
 
+describe('Agent 工作区删除边界', () => {
+  test('删除工作区只删除 MyYoda 托管目录，不删除项目绑定的外部工作目录', () => {
+    manager.ensureDefaultWorkspace()
+    const workspace = manager.createAgentWorkspace('客户项目')
+    const externalDir = mkdtempSync(join(os.tmpdir(), 'myyoda-external-project-'))
+    const marker = join(externalDir, 'KEEP.txt')
+    writeFileSync(marker, 'keep', 'utf-8')
+
+    projectRepositoryModule.projectRepository.createProject(workspace.id, {
+      name: '外部仓库',
+      workingDirectory: externalDir,
+    })
+    const managedWorkspaceDir = configPaths.getAgentWorkspacePath(workspace.slug)
+
+    manager.deleteAgentWorkspace(workspace.id)
+
+    expect(existsSync(managedWorkspaceDir)).toBe(false)
+    expect(existsSync(marker)).toBe(true)
+    rmSync(externalDir, { recursive: true, force: true })
+  })
+})
+
 describe('Agent 工作区 Skill 扫描', () => {
   test('Given Skills 目录包含 broken symlink When 获取工作区 Skills Then 跳过坏条目并继续扫描后续 Skill', () => {
     const workspaceSlug = 'workspace-a'
