@@ -17,6 +17,7 @@ function createDependencies(overrides: Partial<WorkspaceDeletionDependencies> = 
     ],
     isSessionActive: (id) => id === 'session-active',
     assertSessionDeletionSafe: () => undefined,
+    assertWorkspaceDeletionSafe: () => undefined,
     stopSession: (id) => calls.push(`stop:${id}`),
     deleteSession: (id) => calls.push(`delete-session:${id}`),
     deleteAutomation: (id) => calls.push(`delete-automation:${id}`),
@@ -40,6 +41,17 @@ describe('deleteWorkspaceCascade', () => {
     })
     expect(() => deleteWorkspaceCascade('ws-1', lastCase.dependencies)).toThrow('至少需要保留一个工作区')
     expect(lastCase.calls).toEqual([])
+  })
+
+  test('工作区预检查失败时不产生任何级联副作用', () => {
+    const { calls, dependencies } = createDependencies({
+      assertWorkspaceDeletionSafe: () => {
+        throw new Error('recovery root unavailable')
+      },
+    })
+
+    expect(() => deleteWorkspaceCascade('ws-1', dependencies)).toThrow('recovery root unavailable')
+    expect(calls).toEqual([])
   })
 
   test('所有会话预检查通过后才执行停止、删除等级联副作用', () => {

@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import * as os from 'node:os'
 import { join } from 'node:path'
+import type { SDKMessage } from '@myyoda/shared'
 import { mockElectronModule } from './__tests__/electron-mock'
 
 type AgentSessionManager = typeof import('./agent-session-manager')
@@ -112,6 +114,86 @@ afterAll(() => {
 })
 
 describe('Agent 会话 JSONL 读取', () => {
+  test('Given Worktree 干净但 recovery 隔离不可用 When 删除会话 Then Worktree 与 Session 索引都保留', () => {
+    const sessionId = 'session-worktree-recovery'
+    const repo = join(tempHome, 'repo-for-delete')
+    const worktree = join(tempHome, 'worktree-for-delete')
+    mkdirSync(repo, { recursive: true })
+    execFileSync('git', ['init', '-q', repo])
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 'test@example.com'])
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 'Test'])
+    writeFileSync(join(repo, 'README.md'), 'safe\n', 'utf-8')
+    execFileSync('git', ['-C', repo, 'add', 'README.md'])
+    execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'init'])
+    execFileSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'delete-test', worktree])
+
+    writeAgentSessionJsonl(sessionId, ['{"type":"user"}'])
+    writeFileSync(join(tempHome, '.myyoda', 'agent-sessions.json'), JSON.stringify({
+      version: 1,
+      sessions: [{
+        id: sessionId,
+        title: 'Worktree 会话',
+        createdAt: 1,
+        updatedAt: 2,
+        gitRepoPath: repo,
+        gitWorktreePath: worktree,
+      }],
+    }), 'utf-8')
+    const recoveryRoot = join(tempHome, '.myyoda', 'agent-sessions', '.recovery-trash')
+    const outside = join(tempHome, 'outside-session-recovery')
+    mkdirSync(outside, { recursive: true })
+    symlinkSync(outside, recoveryRoot, 'dir')
+
+    try {
+      expect(() => manager.deleteAgentSession(sessionId)).toThrow('安全的本地目录')
+      expect(existsSync(worktree)).toBe(true)
+      expect(manager.getAgentSessionMeta(sessionId)?.gitWorktreePath).toBe(worktree)
+    } finally {
+      rmSync(recoveryRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('Given 会话 JSONL 与 session 工作目录存在 When 删除会话 Then 源数据移入恢复隔离区而不是被物理删除', () => {
+    const sessionId = 'session-recoverable'
+    writeAgentSessionsIndex([{
+      id: sessionId,
+      title: '可恢复会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 2,
+    }])
+    writeAgentWorkspacesIndex([{
+      id: 'workspace-a',
+      name: '工作区 A',
+      slug: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 2,
+    }])
+    writeAgentSessionJsonl(sessionId, ['{"type":"user"}'])
+    const sessionDir = join(tempHome, '.myyoda', 'agent-workspaces', 'workspace-a', sessionId)
+    mkdirSync(sessionDir, { recursive: true })
+    writeFileSync(join(sessionDir, 'draft.md'), '保留内容\n', 'utf-8')
+
+    manager.deleteAgentSession(sessionId)
+
+    const messagePath = join(tempHome, '.myyoda', 'agent-sessions', `${sessionId}.jsonl`)
+    expect(() => manager.appendSDKMessages(sessionId, [{ type: 'user' } as SDKMessage])).toThrow('不存在')
+    const recoveryRoot = join(tempHome, '.myyoda', 'agent-sessions', '.recovery-trash')
+    const workspaceRecoveryRoot = join(tempHome, '.myyoda', 'agent-workspaces', 'workspace-a', '.recovery-trash')
+    expect(existsSync(messagePath)).toBe(false)
+    expect(existsSync(sessionDir)).toBe(false)
+
+    const messageJournal = readFileSync(join(recoveryRoot, 'journal.jsonl'), 'utf-8')
+    const messageRecord = JSON.parse(messageJournal.trim()) as { quarantinePath: string }
+    expect(existsSync(messageRecord.quarantinePath)).toBe(true)
+    expect(readFileSync(messageRecord.quarantinePath, 'utf-8')).toContain('user')
+
+    const workspaceJournal = readFileSync(join(workspaceRecoveryRoot, 'journal.jsonl'), 'utf-8')
+    const workspaceRecord = JSON.parse(workspaceJournal.trim()) as { quarantinePath: string }
+    expect(existsSync(workspaceRecord.quarantinePath)).toBe(true)
+    expect(readFileSync(join(workspaceRecord.quarantinePath, 'draft.md'), 'utf-8')).toContain('保留内容')
+  })
+
   test('Given 会话 JSONL 混入损坏行 When 读取 SDKMessage Then 跳过坏行并保留其它消息', () => {
     writeAgentSessionJsonl('session-with-bad-line', [
       JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: '你好' }] }, parent_tool_use_id: null }),

@@ -173,6 +173,7 @@ import { formatSidebarModuleCount } from './sidebar-module-model'
 
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
 import { AgentSessionItem, SessionItemActions } from './AgentSessionItem'
+import { deleteAgentSessionChildren, shouldDeleteAgentParent } from './agent-deletion-model'
 
 function getSidebarUpdateLabel(status: string, version?: string): string {
   const versionText = version ? ` v${version}` : ''
@@ -1279,20 +1280,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       try {
         // 先删子后删父：若子会话删除中途失败，父会话仍在，UI 一致性更好。
         if (childIds.length > 0) {
-          const failedChildIds: string[] = []
-          const deletedChildIds: string[] = []
-          for (const childId of childIds) {
-            try {
-              await window.electronAPI.deleteAgentSession(childId)
-              deletedChildIds.push(childId)
-            } catch (error) {
-              console.error(`[侧边栏] 级联删除子会话失败 (${childId}):`, error)
-              failedChildIds.push(childId)
-            }
-          }
-          if (failedChildIds.length > 0) {
-            toast.error(`部分子会话删除失败（${failedChildIds.length} 个），请手动清理`)
-          }
+          const { deletedChildIds, failedChildIds } = await deleteAgentSessionChildren(
+            childIds,
+            (childId) => window.electronAPI.deleteAgentSession(childId),
+            (childId, error) => console.error(`[侧边栏] 级联删除子会话失败 (${childId}):`, error),
+          )
+          // 无论父会话是否继续删除，已经成功删除的子会话都必须先从 Renderer 收敛。
           closeArchivedAgentTabs(deletedChildIds)
           for (const childId of deletedChildIds) {
             setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, childId))
@@ -1303,12 +1296,27 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               return next
             })
           }
+          if (childIds.length > 0 && !shouldDeleteAgentParent({ deletedChildIds, failedChildIds })) {
+            toast.error(`部分子会话删除失败（${failedChildIds.length} 个），父会话保留，请手动清理`)
+            try {
+              setAgentSessions(await window.electronAPI.listAgentSessions())
+            } catch (refreshError) {
+              console.error('[侧边栏] 子会话部分删除后的列表刷新失败:', refreshError)
+            }
+            // 不继续删除父会话；否则失败子会话会留下指向已删除父会话的孤儿关系。
+            return
+          }
         }
         await window.electronAPI.deleteAgentSession(pendingDeleteId)
-        // 全量刷新确保与后端同步
-        const sessions = await window.electronAPI.listAgentSessions()
-        setAgentSessions(sessions)
+        // IPC 成功即代表后端已删除父会话；先收敛 Tab/缓存，再刷新列表。
+        // 列表刷新失败不能把已经成功删除的会话继续留在 UI 中。
         applyAgentDeletionUi()
+        try {
+          const sessions = await window.electronAPI.listAgentSessions()
+          setAgentSessions(sessions)
+        } catch (refreshError) {
+          console.error('[侧边栏] 删除成功后的会话列表刷新失败:', refreshError)
+        }
       } catch (error) {
         console.error('[侧边栏] 删除 Agent 会话失败:', error)
         // 后端可能因 dirty Worktree 等安全守卫拒绝删除；重新读取而不是
@@ -1590,13 +1598,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       setActiveTabId(nextActiveTabId)
       syncActiveTabSideEffects(nextActiveTabId ? nextTabs.find((tab) => tab.id === nextActiveTabId) ?? null : null)
 
-      const [remainingWorkspaces, sessions] = await Promise.all([
-        window.electronAPI.listAgentWorkspaces(),
-        window.electronAPI.listAgentSessions(),
-      ])
-
+      // 后端删除成功后先按快照收敛本地列表；远端刷新失败不能把已删除工作区重新留在 UI。
+      let remainingWorkspaces = workspaces.filter((item) => item.id !== workspaceId)
+      let sessions = agentSessions.filter((session) => !deletedSessionIds.has(session.id))
       setWorkspaces(remainingWorkspaces)
       setAgentSessions(sessions)
+      try {
+        const [refreshedWorkspaces, refreshedSessions] = await Promise.all([
+          window.electronAPI.listAgentWorkspaces(),
+          window.electronAPI.listAgentSessions(),
+        ])
+        remainingWorkspaces = refreshedWorkspaces
+        sessions = refreshedSessions
+        setWorkspaces(remainingWorkspaces)
+        setAgentSessions(sessions)
+      } catch (refreshError) {
+        console.error('[侧边栏] 删除成功后的工作区/会话列表刷新失败:', refreshError)
+      }
 
       setExpandedExtraCounts((prev) => { const next = new Map(prev); next.delete(workspaceId); return next })
 
