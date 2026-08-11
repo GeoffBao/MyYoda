@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { quarantineForRecovery, recoveryTrashPathExists } from './recovery-trash-service'
@@ -30,6 +30,19 @@ describe('recovery-trash-service', () => {
       target: 'alpha',
     })
     expect(readFileSync(join(root, '.recovery-trash', 'journal.jsonl'), 'utf-8')).toContain(record.id)
+  })
+
+  test('rejects a symlinked recovery root before moving anything', () => {
+    const root = mkdtempSync(join(tmpdir(), 'myyoda-recovery-'))
+    const outside = mkdtempSync(join(tmpdir(), 'myyoda-recovery-outside-'))
+    roots.push(root, outside)
+    const source = join(root, 'tasks', 'secret')
+    mkdirSync(source, { recursive: true })
+    symlinkSync(outside, join(root, '.recovery-trash'), 'dir')
+
+    expect(() => quarantineForRecovery(root, source, 'task', 'secret')).toThrow('安全的本地目录')
+    expect(existsSync(source)).toBe(true)
+    expect(existsSync(join(outside, 'secret'))).toBe(false)
   })
 
   test('rejects a target outside the workspace before moving anything', () => {

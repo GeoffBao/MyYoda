@@ -680,8 +680,29 @@ export function deleteAgentSession(id: string): void {
 
   assertAgentSessionDeletionSafe(id)
 
+  const originalSessions = [...index.sessions]
   const removed = index.sessions.splice(idx, 1)[0]!
   writeIndex(index)
+
+  // Worktree 删除失败时恢复 Session 索引并向调用方抛错；不能静默报告成功。
+  if (removed.gitWorktreePath && removed.gitRepoPath && existsSync(removed.gitWorktreePath)) {
+    const stillReferenced = originalSessions.some((session) => session.id !== id && session.gitWorktreePath === removed.gitWorktreePath)
+    if (!stillReferenced) {
+      try {
+        removeSessionWorktree(removed.gitRepoPath, removed.gitWorktreePath)
+        console.log(`[Agent 会话] 已清理 Git Worktree: ${removed.gitWorktreePath}`)
+      } catch (error) {
+        try {
+          const current = readIndex()
+          current.sessions = originalSessions
+          writeIndex(current)
+        } catch (restoreError) {
+          console.error(`[Agent 会话] 删除失败后恢复会话索引失败 (${id}):`, restoreError)
+        }
+        throw error
+      }
+    }
+  }
 
   // 删除消息文件
   const filePath = getAgentSessionMessagesPath(id)
@@ -705,20 +726,6 @@ export function deleteAgentSession(id: string): void {
         }
       } catch (error) {
         console.warn(`[Agent 会话] 清理 session 工作目录失败 (${id}):`, error)
-      }
-    }
-  }
-
-  // 清理 Git Worktree（若会话使用 Worktree 执行模式）；其他会话仍指向同一 worktree 时跳过，
-  // 避免误删还在被使用的工作目录（例如历史遗留的同名 worktree 复用场景）。
-  if (removed.gitWorktreePath && removed.gitRepoPath) {
-    const stillReferenced = index.sessions.some((s) => s.gitWorktreePath === removed.gitWorktreePath)
-    if (!stillReferenced) {
-      try {
-        removeSessionWorktree(removed.gitRepoPath, removed.gitWorktreePath)
-        console.log(`[Agent 会话] 已清理 Git Worktree: ${removed.gitWorktreePath}`)
-      } catch (error) {
-        console.warn(`[Agent 会话] 清理 Git Worktree 失败 (${id}):`, error)
       }
     }
   }
