@@ -16,6 +16,8 @@ const WORKSPACE_METADATA_DIRS = new Set([
   '.claude',
   '.claude-plugin',
   'excalidraw',
+  /** agent-workspace-manager.ts:getWorkspaceAutoMemoryDir — Proma Workspace Memory 根目录 */
+  'memory',
   /** packages/shared/src/projects/storage.ts:getWorkspaceProjectsPath — 跨包定义，无法被反射测试自动发现 */
   'projects',
 ])
