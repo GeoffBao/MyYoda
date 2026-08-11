@@ -99,7 +99,7 @@ export function getProjectAssetsPath(workspaceRootPath: string, projectSlug: str
 /** MEMORY.md 文件名（放在 config.json 同级，不在 assets/ 内） */
 export const MEMORY_FILENAME = 'MEMORY.md';
 
-/** 本地目录项目的项目级记忆目录名，与会话级/空间级 `.context/` 同名但物理位置在项目真实文件夹下 */
+/** 本地目录项目的项目级记忆目录名，与会话级/工作区级 `.context/` 同名但物理位置在项目真实文件夹下 */
 const PROJECT_CONTEXT_DIRNAME = '.context';
 
 /**

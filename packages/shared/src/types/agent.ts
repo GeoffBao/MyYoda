@@ -782,7 +782,7 @@ export interface AgentSessionMeta {
   attachedDirectories?: string[]
   /** 附加的外部文件路径列表（绝对路径，发送时以父目录作为 SDK additionalDirectories） */
   attachedFiles?: string[]
-  /** 分叉来源：源会话的 MyYoda 工作目录（SDK session 文件在此目录的项目空间中，首次 resume 后清除） */
+  /** 分叉来源：源会话的 MyYoda 工作目录（SDK session 文件在此项目目录中，首次 resume 后清除） */
   forkSourceDir?: string
   /** 分叉来源：源会话的 SDK session ID（用于 rewind 时读取源会话的 file-history-snapshot 和备份文件） */
   forkSourceSdkSessionId?: string

@@ -1355,8 +1355,8 @@ export class AgentOrchestrator {
           if ('unavailable' in cwdResolution) {
             reportPreflightError({
               code: 'project_directory_unavailable',
-              title: '工作区目录不可用',
-              message: `该会话绑定的工作区目录「${cwdResolution.displayPath ?? '未知路径'}」已不可访问，可能已被移动或删除。请在工作区设置里重新关联或恢复该目录后再继续。`,
+              title: '项目工作目录不可用',
+              message: `该会话绑定的项目工作目录「${cwdResolution.displayPath ?? '未知路径'}」已不可访问，可能已被移动或删除。请在项目设置里重新关联或恢复该目录后再继续。`,
               canRetry: false,
               actions: [],
             })

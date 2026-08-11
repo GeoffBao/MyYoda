@@ -224,7 +224,7 @@ export async function installCommunitySkill(
   // 目标路径冲突检查
   const targetPath = join(workspaceSkillsDir, skill.name)
   if (existsSync(targetPath)) {
-    throw new Error(`当前空间已存在同名 Skill: ${skill.name}`)
+    throw new Error(`当前工作区已存在同名 Skill: ${skill.name}`)
   }
 
   // 外部收录：从上游仓库下载；本仓库托管：从市场仓库下载

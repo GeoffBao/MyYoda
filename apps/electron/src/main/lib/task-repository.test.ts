@@ -42,7 +42,7 @@ function createRepository(workspaceRoots: Record<string, string>): TaskRepositor
     resolveWorkspaceRoot(workspaceId) {
       const root = workspaceRoots[workspaceId]
       if (!root) {
-        throw new Error(`未知空间: ${workspaceId}`)
+        throw new Error(`未知工作区: ${workspaceId}`)
       }
       return root
     },

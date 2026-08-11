@@ -14,7 +14,7 @@ describe('ReferenceMultiSelect helpers', () => {
     )
     expect(merged).toEqual([
       { id: 'pdf', label: 'PDF' },
-      { id: 'legacy', label: 'legacy', orphan: true, hint: '不在当前空间' },
+      { id: 'legacy', label: 'legacy', orphan: true, hint: '不在当前工作区' },
     ])
   })
 })

@@ -811,7 +811,7 @@ export function moveSessionToWorkspace(sessionId: string, targetWorkspaceId: str
 
   const targetWs = getAgentWorkspace(targetWorkspaceId)
   if (!targetWs) {
-    throw new Error(`目标空间不存在: ${targetWorkspaceId}`)
+    throw new Error(`目标工作区不存在: ${targetWorkspaceId}`)
   }
 
   const sessionTreeIds = collectSessionTreeIds(index.sessions, sessionId)
@@ -925,7 +925,7 @@ export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSe
       })
     : sourceMeta.modelId
 
-  // 2. 确定源会话的工作目录（SDK 需要从此目录的项目空间读取 session 文件）
+  // 2. 确定源会话的工作目录（SDK 需要从此项目目录读取 session 文件）
   let sourceDir: string | undefined
   if (sourceMeta.workspaceId) {
     const ws = getAgentWorkspace(sourceMeta.workspaceId)
@@ -1635,7 +1635,7 @@ export function resolveSafeRewindPath(
  * 2. 构建目标 user message 时的文件状态表
  * 3. 从 file-history 备份目录恢复文件
  *
- * 对于 fork 出的会话：resolveUserUuidFromSDK 已从源 SDK JSONL 解析出源空间的 user UUID，
+ * 对于 fork 出的会话：resolveUserUuidFromSDK 已从源 SDK JSONL 解析出源工作区的 user UUID，
  * 因此 userMessageUuid 可能在源 JSONL 中而非 forked JSONL 中。当在当前 JSONL 中找不到
  * 目标 UUID 时，自动 fallback 到源会话的 JSONL 和 file-history 备份。
  *

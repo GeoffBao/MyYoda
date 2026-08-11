@@ -76,7 +76,7 @@ export interface TaskValidationResult extends ValidationResult {
 function resolveWorkspaceRootFromManager(workspaceId: string): string {
   const workspace = getAgentWorkspace(workspaceId)
   if (!workspace) {
-    throw new Error(`空间不存在: ${workspaceId}`)
+    throw new Error(`工作区不存在: ${workspaceId}`)
   }
   return getAgentWorkspacePath(workspace.slug)
 }

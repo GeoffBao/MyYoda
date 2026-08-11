@@ -36,7 +36,7 @@ const GUIDE_FEATURES: GuideFeature[] = [
   { title: 'Agent / Code', description: '把复杂目标交给 Agent，读取文件、调用工具并完成可验证的工作。', image: agentPreview, icon: Sparkles },
   { title: 'Project 工作台', description: '用 Project 绑定目录，组织会话、Task、资料和长期项目上下文。', image: projectPreview, icon: FolderKanban },
   { title: 'Yoda 记忆', description: '把稳定规则、技术约定和项目经验沉淀为可复用的上下文。', image: memoryPreview, icon: BrainCircuit },
-  { title: 'Skills 与 MCP', description: '按空间组合 Skills、MCP 和专家，让 Agent 获得适合当前工作的能力。', image: skillsPreview, icon: Wrench },
+  { title: 'Skills 与 MCP', description: '按工作区组合 Skills、MCP 和专家，让 Agent 获得适合当前工作的能力。', image: skillsPreview, icon: Wrench },
   { title: '自动任务', description: '将重复工作安排为定时任务，并保留每次运行的状态和结果。', image: automationPreview, icon: Layers3 },
   { title: '用量统计', description: '查看会话、消息、Token、模型和活跃时间，了解工作投入。', image: usagePreview, icon: BarChart3 },
 ]
@@ -70,7 +70,7 @@ const GUIDE_SECTIONS = [
     title: '先选工作方式，再组合 Skills、MCP 和专家',
     summary: '能力越多不一定越好。根据任务选择最小的一组工具，结果通常更稳定、更容易复查。',
     steps: ['简单问答和阅读优先使用 Chat', '需要文件和命令执行时使用 Code', '重复流程沉淀为 Skill', '需要外部系统数据时再启用 MCP'],
-    example: '请用当前空间的“研究整理”专家，读取指定资料并生成一份带来源的报告；不要调用与本任务无关的工具。',
+    example: '请用当前工作区的“研究整理”专家，读取指定资料并生成一份带来源的报告；不要调用与本任务无关的工具。',
   },
   {
     id: 'troubleshooting',

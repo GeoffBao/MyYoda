@@ -6,7 +6,7 @@
  * - Share 分发（.myyoda-share）：自由选择组件，凭据自动剥离
  *
  * Share 模式支持多工作区导出：
- * - 默认：导出所有空间的 Skills + MCP
+ * - 默认：导出所有工作区的 Skills + MCP
  * - 自定义：按工作区逐个选择 Skills 和 MCP servers
  */
 
@@ -157,7 +157,7 @@ export function MigrationSettings(): React.ReactElement {
         }) as { success: boolean; filePath: string; warnings?: string[] }
         setExportResult({ success: true, filePath: result.filePath, warnings: result.warnings })
       } else {
-        // personal 模式：全量备份所有空间
+        // personal 模式：全量备份所有工作区
         const result = await window.electronAPI.migrationExportV2({
           mode: exportMode,
           components,
@@ -234,7 +234,7 @@ export function MigrationSettings(): React.ReactElement {
       {/* ── 导出区块 ──────────────────────────────── */}
       <SettingsSection
         title="导出备份"
-        description="将当前空间的数据导出为可移植的备份文件"
+        description="将当前工作区的数据导出为可移植的备份文件"
       >
         <div className="space-y-4">
           {/* 模式选择 */}
@@ -290,7 +290,7 @@ export function MigrationSettings(): React.ReactElement {
           {/* Share 模式：多工作区选择 */}
           {exportMode === 'share' && hasSkillsOrMcp && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">空间范围</label>
+              <label className="text-sm font-medium text-foreground">工作区范围</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setShareDetailMode('default')}
@@ -301,8 +301,8 @@ export function MigrationSettings(): React.ReactElement {
                       : 'border-border/50 hover:border-border hover:bg-muted/30'
                   )}
                 >
-                  <span className="font-medium text-foreground">所有空间</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">导出全部空间的 Skills 和 MCP</p>
+                  <span className="font-medium text-foreground">所有工作区</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">导出全部工作区的 Skills 和 MCP</p>
                 </button>
                 <button
                   onClick={() => setShareDetailMode('custom')}
@@ -314,7 +314,7 @@ export function MigrationSettings(): React.ReactElement {
                   )}
                 >
                   <span className="font-medium text-foreground">自定义选择</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">手动挑选要导出的空间</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">手动挑选要导出的工作区</p>
                 </button>
               </div>
 
@@ -394,7 +394,7 @@ export function MigrationSettings(): React.ReactElement {
                                   </>
                                 )}
                                 {((!shareComponents.has('skills') || ws.skills.length === 0) && (!shareComponents.has('mcp') || ws.mcpServers.length === 0)) && (
-                                  <p className="text-xs text-muted-foreground py-1">此空间没有可导出的 Skills/MCP</p>
+                                  <p className="text-xs text-muted-foreground py-1">此工作区没有可导出的 Skills/MCP</p>
                                 )}
                               </div>
                             )}
@@ -453,7 +453,7 @@ export function MigrationSettings(): React.ReactElement {
             <div className="flex items-start gap-2 rounded-md border border-amber-200/70 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
               <div className="min-w-0 space-y-1">
-                <p>导出已完成，但有 {exportResult.warnings.length} 个空间无法读取，已跳过。</p>
+                <p>导出已完成，但有 {exportResult.warnings.length} 个工作区无法读取，已跳过。</p>
                 <p className="break-all text-xs opacity-90" title={exportResult.warnings.join('\n')}>
                   {exportResult.warnings[0]}
                   {exportResult.warnings.length > 1 ? ' 等' : ''}

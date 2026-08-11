@@ -1,5 +1,5 @@
 /**
- * MoveSessionDialog - 迁移会话到另一个空间的对话框
+ * MoveSessionDialog - 迁移会话到另一个工作区的对话框
  */
 
 import * as React from 'react'
@@ -42,7 +42,7 @@ export function MoveSessionDialog({
   const [selectedWorkspaceId, setSelectedWorkspaceId] = React.useState<string>('')
   const [moving, setMoving] = React.useState(false)
 
-  // 过滤掉会话已属的空间
+  // 过滤掉会话已属的工作区
   const availableWorkspaces = React.useMemo(
     () => workspaces.filter((ws) => ws.id !== sourceWorkspaceId),
     [workspaces, sourceWorkspaceId]
@@ -66,7 +66,7 @@ export function MoveSessionDialog({
         sessionId,
         targetWorkspaceId: selectedWorkspaceId,
       })
-      await onMoved(updated, targetWs?.name ?? '未知空间')
+      await onMoved(updated, targetWs?.name ?? '未知工作区')
       onOpenChange(false)
     } catch (error) {
       console.error('[迁移会话] 迁移失败:', error)
@@ -80,20 +80,20 @@ export function MoveSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>迁移到其他空间</DialogTitle>
+          <DialogTitle>迁移到其他工作区</DialogTitle>
           <DialogDescription>
-            选择目标空间，会话将完整迁移过去。
+            选择目标工作区，会话将完整迁移过去。
           </DialogDescription>
         </DialogHeader>
 
         {availableWorkspaces.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
-            没有其他可用的空间，请先创建新的空间。
+            没有其他可用的工作区，请先创建新的工作区。
           </p>
         ) : (
           <Select value={selectedWorkspaceId} onValueChange={setSelectedWorkspaceId}>
             <SelectTrigger>
-              <SelectValue placeholder="选择目标空间" />
+              <SelectValue placeholder="选择目标工作区" />
             </SelectTrigger>
             <SelectContent>
               {availableWorkspaces.map((ws) => (

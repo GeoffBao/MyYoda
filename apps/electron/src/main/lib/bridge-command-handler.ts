@@ -56,7 +56,7 @@ export interface BridgeCommandHandlerConfig {
   platformName: string
   /** 平台适配器 */
   adapter: BridgePlatformAdapter
-  /** 获取默认空间 ID */
+  /** 获取默认工作区 ID */
   getDefaultWorkspaceId?: () => string | undefined
   /** 工作区切换后的回调 */
   onWorkspaceSwitched?: (workspaceId: string) => void
@@ -280,7 +280,7 @@ export class BridgeCommandHandler {
       '/list (/ls) — 列出所有会话',
       '/switch (/sw) <序号> — 切换到指定会话',
       '/stop (/s) — 停止当前 Agent',
-      '/workspace (/ws) [名称] — 查看或切换空间',
+      '/workspace (/ws) [名称] — 查看或切换工作区',
       '/model (/m) [渠道 [模型]] — 查看或切换渠道/模型',
       '/now — 查看当前状态',
     ]
@@ -366,7 +366,7 @@ export class BridgeCommandHandler {
 
     if (orphans.length > 0) {
       lines.push('')
-      lines.push('【未分配空间】')
+      lines.push('【未分配工作区】')
       for (const s of orphans) {
         const globalIdx = sessions.indexOf(s) + 1
         const marker = binding?.sessionId === s.id ? ' ← 当前' : ''
@@ -433,10 +433,10 @@ export class BridgeCommandHandler {
     // 无参数 → 列出
     if (!arg) {
       if (workspaces.length === 0) {
-        await this.send(chatId, '暂无空间。', contextData)
+        await this.send(chatId, '暂无工作区。', contextData)
         return
       }
-      const lines = ['📋 空间列表:']
+      const lines = ['📋 工作区列表:']
       workspaces.forEach((w, i) => {
         const marker = w.id === currentWorkspaceId ? ' ← 当前' : ''
         lines.push(`  ${i + 1}. ${w.name}${marker}`)
@@ -457,11 +457,11 @@ export class BridgeCommandHandler {
 
     if (!match) {
       const available = workspaces.map((w, i) => `${i + 1}. ${w.name}`).join(', ')
-      await this.send(chatId, `未找到空间 "${arg}"。可用: ${available}`, contextData)
+      await this.send(chatId, `未找到工作区 "${arg}"。可用: ${available}`, contextData)
       return
     }
 
-    // 清理旧绑定（切换空间后需要新建会话）
+    // 清理旧绑定（切换工作区后需要新建会话）
     if (binding) {
       this.sessionToChat.delete(binding.sessionId)
       this.chatBindings.delete(chatId)
@@ -477,7 +477,7 @@ export class BridgeCommandHandler {
       .filter((s) => s.workspaceId === match.id)
       .slice(0, 5)
 
-    const lines = [`✅ 已切换到空间: ${match.name}`]
+    const lines = [`✅ 已切换到工作区: ${match.name}`]
     if (recentSessions.length > 0) {
       lines.push('')
       lines.push('最近会话:')
@@ -488,7 +488,7 @@ export class BridgeCommandHandler {
       lines.push('')
       lines.push('使用 /switch <序号> 切换，或发送消息自动创建新会话')
     } else {
-      lines.push('该空间暂无会话，发送消息将自动创建。')
+      lines.push('该工作区暂无会话，发送消息将自动创建。')
     }
 
     await this.send(chatId, lines.join('\n'), contextData)
@@ -516,7 +516,7 @@ export class BridgeCommandHandler {
     const workspaceId = binding?.workspaceId
     const workspace = workspaceId ? getAgentWorkspace(workspaceId) : undefined
     if (workspace) {
-      lines.push(`空间: ${workspace.name} (${workspace.slug})`)
+      lines.push(`工作区: ${workspace.name} (${workspace.slug})`)
 
       // MCP Servers
       const capabilities = getWorkspaceCapabilities(workspace.slug)
@@ -570,7 +570,7 @@ export class BridgeCommandHandler {
         }
       }
     } else {
-      lines.push('空间: 未设置')
+      lines.push('工作区: 未设置')
     }
 
     await this.send(chatId, lines.join('\n'), contextData)

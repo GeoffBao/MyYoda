@@ -2726,10 +2726,10 @@ export function registerIpcHandlers(): void {
       // 守卫前置：在删除任何会话/自动任务前就拦截不可删除的工作区，
       // 否则会先把绑定数据删光、再由 deleteAgentWorkspace 抛错，造成数据丢失与状态不一致
       if (deletingWorkspace.slug === 'default') {
-        throw new Error('默认空间不能删除')
+        throw new Error('默认工作区不能删除')
       }
       if (listAgentWorkspaces().length <= 1) {
-        throw new Error('至少需要保留一个空间')
+        throw new Error('至少需要保留一个工作区')
       }
 
       const affectedSessionIds = listAgentSessions()

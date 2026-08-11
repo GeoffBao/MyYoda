@@ -58,7 +58,7 @@ export function NewTaskComposer({
   }, [initialProjectId, open])
 
   const scopeName = draft.projectId
-    ? projects.find((project) => project.id === draft.projectId)?.name ?? '所选工作区'
+    ? projects.find((project) => project.id === draft.projectId)?.name ?? '所选项目'
     : 'Workspace'
 
   const closeAndReset = (): void => {

@@ -1,7 +1,7 @@
 /**
  * BotDefaultSettings - 机器人用法与默认配置
  *
- * 跨平台共享的默认设置（如默认空间）和通用机器人命令说明。
+ * 跨平台共享的默认设置（如默认工作区）和通用机器人命令说明。
  */
 
 import * as React from 'react'
@@ -54,16 +54,16 @@ export function BotDefaultSettings(): React.ReactElement {
         <SettingsCard>
           {workspaceOptions.length > 0 ? (
             <SettingsSelect
-              label="默认空间"
-              description="通过机器人发起新会话时自动使用的空间"
+              label="默认工作区"
+              description="通过机器人发起新会话时自动使用的工作区"
               value={defaultWorkspaceId}
               onValueChange={setDefaultWorkspaceId}
               options={workspaceOptions}
-              placeholder="选择空间"
+              placeholder="选择工作区"
             />
           ) : (
             <div className="py-3 text-sm text-muted-foreground">
-              暂无空间。请先在「配置」中创建空间。
+              暂无工作区。请先在「配置」中创建工作区。
             </div>
           )}
         </SettingsCard>
@@ -95,11 +95,11 @@ export function BotDefaultSettings(): React.ReactElement {
               <code className="text-foreground/80 font-mono">/switch (/sw)</code>
               <span>切换到已有会话（序号）</span>
               <code className="text-foreground/80 font-mono">/workspace (/ws)</code>
-              <span>设置默认空间</span>
+              <span>设置默认工作区</span>
               <code className="text-foreground/80 font-mono">/model (/m)</code>
               <span>查看或切换渠道 / 模型</span>
               <code className="text-foreground/80 font-mono">/now</code>
-              <span>查看当前状态（空间、会话、模型、MCP、Skills）</span>
+              <span>查看当前状态（工作区、会话、模型、MCP、Skills）</span>
             </div>
             <p className="pt-2 text-xs">
               直接发送文本会自动创建新会话或发送到当前绑定的会话。

@@ -79,7 +79,7 @@ export async function injectCreateTaskMcpServer(
         },
         async (args) => {
           const workspace = getAgentWorkspace(ctx.workspaceId)
-          if (!workspace) throw new Error(`空间不存在: ${ctx.workspaceId}`)
+          if (!workspace) throw new Error(`工作区不存在: ${ctx.workspaceId}`)
           const workspaceRoot = getAgentWorkspacePath(workspace.slug)
 
           const projectId = args.projectId ?? getAgentSessionMeta(ctx.sessionId)?.projectId

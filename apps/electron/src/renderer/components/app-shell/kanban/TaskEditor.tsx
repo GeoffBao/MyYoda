@@ -269,7 +269,7 @@ export function TaskEditor({
     const nextDraft = taskSpecToEditorDraft(action.spec, target, defaultModel)
     setDraft((current) => ({
       ...(target.mode === 'create' ? { ...nextDraft, fixedId: action.slug } : nextDraft),
-      // Generator prompt 只负责拆 DAG；工作区、默认模型/权限来自用户在表单里的显式选择。
+      // Generator prompt 只负责拆 DAG；项目、默认模型/权限来自用户在表单里的显式选择。
       projectId: nextDraft.projectId || current.projectId,
       boundProjectId: nextDraft.boundProjectId ?? current.boundProjectId,
       cwd: nextDraft.cwd ?? current.cwd,

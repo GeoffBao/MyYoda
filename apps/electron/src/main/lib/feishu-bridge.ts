@@ -1083,7 +1083,7 @@ class FeishuBridge {
     }
 
     if (!workspaceId) {
-      await this.sendMessage(chatId, '请先在 MyYoda 设置中创建空间。')
+      await this.sendMessage(chatId, '请先在 MyYoda 设置中创建工作区。')
       return
     }
 
@@ -1261,7 +1261,7 @@ class FeishuBridge {
       }))
 
     if (orphanSessions.length > 0) {
-      wsItems.push({ id: '', name: '未分配空间', sessions: orphanSessions })
+      wsItems.push({ id: '', name: '未分配工作区', sessions: orphanSessions })
     }
 
     await this.sendCardMessage(chatId, buildSessionListCard(wsItems, currentWorkspaceId))
@@ -1351,11 +1351,11 @@ class FeishuBridge {
 
     if (!match) {
       const available = workspaces.map((w, i) => `${i + 1}. ${w.name}`).join(', ')
-      await this.sendMessage(chatId, `未找到空间 "${arg}"。可用: ${available}`)
+      await this.sendMessage(chatId, `未找到工作区 "${arg}"。可用: ${available}`)
       return
     }
 
-    // 清理旧绑定（切换空间后需要用户选择或新建会话）
+    // 清理旧绑定（切换工作区后需要用户选择或新建会话）
     if (binding) {
       this.sessionToChat.delete(binding.sessionId)
       this.chatBindings.delete(chatId)
@@ -1363,7 +1363,7 @@ class FeishuBridge {
       this.saveBindings()
     }
 
-    // 更新 Bot 配置的默认空间（下次自动创建会话时使用）
+    // 更新 Bot 配置的默认工作区（下次自动创建会话时使用）
     const { saveFeishuBotConfig } = await import('./feishu-config')
     saveFeishuBotConfig({
       id: this.botConfig.id,
@@ -1417,7 +1417,7 @@ class FeishuBridge {
     const workspaceId = binding?.workspaceId
     const workspace = workspaceId ? getAgentWorkspace(workspaceId) : undefined
     if (workspace) {
-      lines.push(`**空间**: ${workspace.name} (\`${workspace.slug}\`)`)
+      lines.push(`**工作区**: ${workspace.name} (\`${workspace.slug}\`)`)
 
       // MCP Servers
       const capabilities = getWorkspaceCapabilities(workspace.slug)
@@ -1479,7 +1479,7 @@ class FeishuBridge {
         }
       }
     } else {
-      lines.push('**空间**: 未设置')
+      lines.push('**工作区**: 未设置')
     }
 
     const card: Record<string, unknown> = {
@@ -1609,10 +1609,10 @@ class FeishuBridge {
     // 诊断：附件应保存但 workspace 为空时立即报错（用户能在 Console 看到）
     const hasAnyAttachment = imageAttachments.length > 0 || fileAttachments.length > 0
     if (hasAnyAttachment && !workspace) {
-      console.error(`[飞书 Bridge] 附件保存失败：binding.workspaceId=${binding.workspaceId} 找不到对应空间！图片数=${imageAttachments.length}, 文件数=${fileAttachments.length}`)
+      console.error(`[飞书 Bridge] 附件保存失败：binding.workspaceId=${binding.workspaceId} 找不到对应工作区！图片数=${imageAttachments.length}, 文件数=${fileAttachments.length}`)
     }
     if (hasAnyAttachment && workspace) {
-      console.log(`[飞书 Bridge] 准备保存附件：空间=${workspace.slug}, sessionId=${binding.sessionId.slice(-8)}, 图片数=${imageAttachments.length}, 文件数=${fileAttachments.length}`)
+      console.log(`[飞书 Bridge] 准备保存附件：工作区=${workspace.slug}, sessionId=${binding.sessionId.slice(-8)}, 图片数=${imageAttachments.length}, 文件数=${fileAttachments.length}`)
     }
 
     if (workspace) {
@@ -2428,7 +2428,7 @@ class FeishuBridge {
   }
 
   /**
-   * 解析消息上下文前缀：[空间名称]->[会话名称]：
+   * 解析消息上下文前缀：[工作区名称]->[会话名称]：
    *
    * 用于在每条回复的飞书消息开头标注来源，方便用户区分。
    */
@@ -2439,7 +2439,7 @@ class FeishuBridge {
     const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
     const session = getAgentSessionMeta(binding.sessionId)
 
-    const wsName = workspace?.name ?? '默认空间'
+    const wsName = workspace?.name ?? '默认工作区'
     const sessName = session?.title ?? binding.sessionId.slice(0, 8)
 
     return `[${wsName}]->[${sessName}]：`
@@ -2453,7 +2453,7 @@ class FeishuBridge {
     const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
     const session = getAgentSessionMeta(binding.sessionId)
 
-    const wsName = workspace?.name ?? '默认空间'
+    const wsName = workspace?.name ?? '默认工作区'
     const sessName = session?.title ?? binding.sessionId.slice(0, 8)
 
     return `${wsName} · ${sessName}`

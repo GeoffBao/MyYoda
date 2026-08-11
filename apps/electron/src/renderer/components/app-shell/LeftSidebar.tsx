@@ -886,7 +886,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   /**
    * 当前工作区的 craft Project 列表。
    * ProjectsInitializer 按 slug 加载，这里再按 workspaceId 过滤，
-   * 避免空间切换瞬间 atom 尚未清空时把旧工作区渲到新空间组（闪一帧空子分组）。
+   * 避免工作区切换瞬间 atom 尚未清空时把旧项目渲到新工作区组（闪一帧空子分组）。
    */
   const currentWorkspaceProjects = React.useMemo(() => {
     if (!currentWorkspaceSlug) return EMPTY_PROJECTS
@@ -1503,7 +1503,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     if (!workspaceId || !workspace) return
 
     if (!canDeleteWorkspace(workspace)) {
-      toast.error(workspace.slug === 'default' ? '默认空间不能删除' : '至少需要保留一个空间')
+      toast.error(workspace.slug === 'default' ? '默认工作区不能删除' : '至少需要保留一个工作区')
       setPendingDeleteWorkspaceId(null)
       return
     }
@@ -1583,12 +1583,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         }
       }
 
-      toast.success('空间已删除', {
+      toast.success('工作区已删除', {
         description: `已删除「${workspace.name}」及其绑定资源`,
       })
     } catch (error) {
-      console.error('[侧边栏] 删除空间失败:', error)
-      const msg = error instanceof Error ? error.message : '删除空间失败'
+      console.error('[侧边栏] 删除工作区失败:', error)
+      const msg = error instanceof Error ? error.message : '删除工作区失败'
       toast.error(msg)
     } finally {
       setDeletingWorkspaceId(null)
@@ -1746,9 +1746,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         .reorderAgentWorkspaces(newWorkspaceIds)
         .then(setWorkspaces)
         .catch((error) => {
-          console.error('[侧边栏] 空间排序失败:', error)
+          console.error('[侧边栏] 工作区排序失败:', error)
           setWorkspaces(workspaces)
-          toast.error('空间排序失败')
+          toast.error('工作区排序失败')
         })
     }
   }, [dragProjectId, projectDropIndicator, automationGroup, automationGroupOrder, setWorkspaces, workspaces])
@@ -1975,7 +1975,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const updated = await window.electronAPI.updateAgentWorkspace(workspaceId, { name: newName })
       setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
     } catch (error) {
-      console.error('[侧边栏] 重命名空间失败:', error)
+      console.error('[侧边栏] 重命名工作区失败:', error)
       const msg = error instanceof Error ? error.message : '重命名失败'
       toast.error(msg)
     }
@@ -2544,7 +2544,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     </AlertDialog>
   )
 
-  // 空间删除确认弹窗（会同时删除其下的会话与绑定资源）
+  // 工作区删除确认弹窗（会同时删除其下的会话与绑定资源）
   const projectDeleteDialog = (
     <AlertDialog
       open={pendingDeleteWorkspaceId !== null}
@@ -2644,7 +2644,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <CollapsedWorkspacePopover>
             <button
               type="button"
-              aria-label="切换到 Project 模式（悬停查看空间）"
+              aria-label="切换到 Project 模式（悬停查看工作区）"
               onClick={() => handleRailModeSwitch('agent')}
               className={cn(
                 'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag',
@@ -4428,7 +4428,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               onSelect={() => onRequestDeleteWorkspace(group.workspace.id)}
             >
               <Trash2 size={14} />
-              删除空间
+              删除工作区
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

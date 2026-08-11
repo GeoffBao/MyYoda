@@ -27,6 +27,9 @@ describe('formatProjectContextForPrompt', () => {
     expect(text).toContain('brief.md')
     expect(text).toContain('<project_memory>')
     expect(text).toContain('- 用 bun')
+    expect(text).toContain('当前会话已绑定到上述项目。')
+    expect(text).toContain('`<project_memory>` 是该项目的权威累积知识')
+    expect(text).not.toContain('绑定到上述工作区')
     expect(text).toContain('</project_context>')
   })
 
@@ -56,6 +59,7 @@ describe('formatProjectContextForPrompt', () => {
       workingDirectory: '/Users/dev/my-real-project',
     }))
 
+    expect(text).toContain('项目工程代码根目录')
     expect(text).toContain('不要在这里找代码')
   })
 })

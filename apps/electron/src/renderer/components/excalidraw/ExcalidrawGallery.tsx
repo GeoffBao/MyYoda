@@ -249,7 +249,7 @@ export function ExcalidrawGallery(): React.ReactElement {
   const handleCreate = React.useCallback(async () => {
     console.log('[ExcalidrawGallery] handleCreate, workspaceSlug:', workspaceSlug)
     if (!workspaceSlug) {
-      toast.warning('请先选择一个空间')
+      toast.warning('请先选择一个工作区')
       return
     }
     try {
@@ -356,7 +356,7 @@ export function ExcalidrawGallery(): React.ReactElement {
     return (
       <div className="flex flex-col items-center justify-center h-full text-foreground/40 gap-3">
         <PenTool size={40} strokeWidth={1} />
-        <p className="text-[14px]">请先选择一个空间</p>
+        <p className="text-[14px]">请先选择一个工作区</p>
       </div>
     )
   }
