@@ -49,7 +49,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
+import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -83,6 +83,7 @@ import { resolveOptimizedCodingEnabled, resolvePiThinkingLevel } from './agent-t
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
 import { generateCodexTitle } from './adapters/pi-codex-title-generator'
 import { buildRegenerateTitlePrompt, createFallbackTitle, extractAssistantMessageText, extractGenuineUserMessageText, sanitizeGeneratedTitle, selectSpreadMessages, shouldRegenerateTitleAtUserMessageCount, stripContextWrappersForTitle, TITLE_PROMPT } from './title-generation'
+import { browserController } from './browser-controller'
 
 // ===== 类型定义 =====
 
@@ -1163,10 +1164,17 @@ export class AgentOrchestrator {
       // （它仍用于 additionalDirectories / prompt）。
       const visionRelayAllowedRoots = appendVisionRelayAllowedRoot(allAdditionalDirectories, agentCwd, undefined, agentSandboxDir)
 
+      // 受管浏览器授权根：Agent 工作目录、项目文件目录与附加目录。
+      const browserAllowedRoots = [...new Set([
+        workspaceId ? agentCwd : undefined,
+        workspaceSlug ? getProjectFilesPath(workspaceSlug) : undefined,
+        ...allAdditionalDirectories,
+      ].filter((root): root is string => typeof root === 'string' && root.length > 0))]
+      const builtinToolAllowedRoots = [...new Set([...visionRelayAllowedRoots, ...browserAllowedRoots])]
+
       // 9.5 Pi runtime 不需要 .claude/settings.json（Claude runtime 已退役）。
 
       // 9.6 直接信任已保存的 sdkSessionId，跳过 listSessions 预验证
-      // 原因：listSessions({ dir }) 基于 cwd 路径哈希查找，但 session 级别的 cwd
       // （如 ~/.myyoda/agent-workspaces/workspace-xxx/sessionId）与 SDK 内部存储的路径哈希可能不匹配，
       // 导致 listSessions 始终返回 0 个会话，误杀有效的 resume。
       // SDK 本身会优雅处理无效的 resume ID（回退为新会话），无需预验证。
@@ -1207,9 +1215,11 @@ export class AgentOrchestrator {
               workspaceId,
               workspaceSlug,
               projectId: sessionMeta?.projectId,
-              allowedRoots: visionRelayAllowedRoots,
+              agentCwd,
+              allowedRoots: builtinToolAllowedRoots,
               permissionMode: permissionModeOverride ?? sessionMeta?.permissionMode ?? MYYODA_DEFAULT_PERMISSION_MODE,
               triggeredBy: input.triggeredBy,
+              windowsShellAvailable: process.platform !== 'win32' || runtimeEnv.shellKind != null,
             })
             piBuiltinTools = result.tools
             return { collaborationAvailable: result.collaborationAvailable }
@@ -1400,6 +1410,8 @@ export class AgentOrchestrator {
         'mcp__planning__list_groups', 'mcp__planning__list_tags',
         'mcp__planning__list_active_reminders',
       ])
+      // Pi-native 浏览器工具不是 MCP：必须显式分类，避免被通用 mcp__ 调研放行规则遗漏。
+      const PLAN_MODE_READ_ONLY_BROWSER_TOOLS = new Set(['BrowserObserve', 'BrowserScreenshot', 'BrowserListTabs', 'BrowserPreviewOpen'])
       const runTriggeredBy = input.triggeredBy
 
       /** Plan 模式是否已被 Agent 进入（初始 plan 模式时天然为 true，其他模式需 EnterPlanMode 触发） */
@@ -1528,6 +1540,17 @@ export class AgentOrchestrator {
             return { behavior: 'deny' as const, message: '计划模式下不能将本地图片发送给视觉模型，请在计划获批后执行。' }
           }
           return { behavior: 'allow' as const }
+        }
+
+        // 所有 Pi 会话均可使用受管浏览器。主进程仍隔离网页，并拒绝私网、下载、弹窗和网页权限；
+        // 页面内容始终视为不可信输入。计划模式仅允许只读浏览器操作。
+        if (toolName.startsWith('Browser')) {
+          if (currentMode === 'plan') {
+            return PLAN_MODE_READ_ONLY_BROWSER_TOOLS.has(toolName)
+              ? { behavior: 'allow' as const, updatedInput: input }
+              : { behavior: 'deny' as const, message: '计划模式下只能观察受管浏览器，请在计划获批后再进行网页交互。' }
+          }
+          return { behavior: 'allow' as const, updatedInput: input }
         }
 
         // 自动任务/协作子 Agent 没有可靠的本地确认界面，不能发起删除。
@@ -2526,6 +2549,7 @@ ${workContext}` : '')
     const runGeneration = this.activeSessions.get(sessionId)
     this.activeSessions.delete(sessionId)
     this.sessionPermissionModes.delete(sessionId)
+    browserController.cancelSession(sessionId)
     if (runGeneration != null) this.stoppedBySessions.set(sessionId, runGeneration)
     this.queuedMessageUuids.delete(sessionId)
     this.adapter.abort(sessionId)

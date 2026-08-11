@@ -2002,6 +2002,21 @@ export const AGENT_IPC_CHANNELS = {
   /** 查询当前会话的 cowork 子会话列表 */
   LIST_COWORK_SESSIONS: 'agent:list-cowork-sessions',
 
+  // Pi 受管浏览器（网页内容与 CDP 仅驻留主进程）
+  OPEN_BROWSER: 'agent:open-browser',
+  LIST_BROWSER_TABS: 'agent:list-browser-tabs',
+  CREATE_BROWSER_TAB: 'agent:create-browser-tab',
+  SELECT_BROWSER_TAB: 'agent:select-browser-tab',
+  CLOSE_BROWSER_TAB: 'agent:close-browser-tab',
+  GET_BROWSER_STATE: 'agent:get-browser-state',
+  SET_BROWSER_LAYOUT: 'agent:set-browser-layout',
+  NAVIGATE_BROWSER: 'agent:navigate-browser',
+  GO_BACK_BROWSER: 'agent:go-back-browser',
+  GO_FORWARD_BROWSER: 'agent:go-forward-browser',
+  RELOAD_BROWSER: 'agent:reload-browser',
+  CLOSE_BROWSER: 'agent:close-browser',
+  BROWSER_STATE_CHANGED: 'agent:browser-state-changed',
+
   // 后台任务管理
   /** 获取任务输出 */
   GET_TASK_OUTPUT: 'agent:get-task-output',
