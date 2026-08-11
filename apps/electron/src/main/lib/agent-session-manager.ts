@@ -34,6 +34,9 @@ import type {
   AgentSessionReferenceSearchInput,
   AgentSessionReferenceSearchResult,
   AgentRuntime,
+  AgentCwdMode,
+  AgentActiveWorktree,
+  SessionWorkbenchLayout,
 } from '@myyoda/shared'
 import {
   DEFAULT_AGENT_THINKING_LEVEL,
@@ -309,6 +312,64 @@ export function getAgentSessionMeta(id: string): AgentSessionMeta | undefined {
   return index.sessions.find((s) => s.id === id)
 }
 
+/** 缺少标记的存量会话必须保持升级前的私有 workbench cwd。 */
+export function getAgentCwdMode(meta?: Pick<AgentSessionMeta, 'agentCwdMode'>): AgentCwdMode {
+  return meta?.agentCwdMode ?? 'session'
+}
+
+/** 只接受仍存在的绝对目录；Git 归属校验由调用主进程在启动 Agent 前完成。 */
+export function getActiveWorktreePath(
+  meta?: Pick<AgentSessionMeta, 'activeWorktree'>,
+): string | undefined {
+  const activeWorktree = meta?.activeWorktree
+  if (!activeWorktree?.path || !isAbsolute(activeWorktree.path)) return undefined
+  try {
+    return statSync(activeWorktree.path).isDirectory() ? activeWorktree.path : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 缺少标记的历史会话继续使用 `.context/`，避免失效的计划和工具历史路径。 */
+export function getSessionWorkbenchLayout(
+  meta?: Pick<AgentSessionMeta, 'sessionWorkbenchLayout'>,
+): SessionWorkbenchLayout {
+  return meta?.sessionWorkbenchLayout ?? 'legacy-context'
+}
+
+/** 会话私有资料目录；新布局直接使用 workbench 根，旧布局保留 `.context/`。 */
+export function resolveSessionWorkbenchContextDir(
+  workspace: Pick<AgentWorkspace, 'slug'> | undefined,
+  sessionId: string,
+  layout?: SessionWorkbenchLayout,
+): string | undefined {
+  if (!workspace) return undefined
+  const sessionDir = getAgentSessionWorkspacePath(workspace.slug, sessionId)
+  return layout === 'root' ? sessionDir : join(sessionDir, '.context')
+}
+
+/** Agent 运行 cwd 与 Proma 会话 sidecar 工作台目录解析。 */
+export function resolveAgentCwd(
+  workspace: Pick<AgentWorkspace, 'slug'> | undefined,
+  sessionId: string,
+  agentCwdMode?: AgentCwdMode,
+  activeWorktree?: AgentActiveWorktree,
+): string | undefined {
+  if (!workspace) return undefined
+  const activeWorktreePath = getActiveWorktreePath({ activeWorktree })
+  if (activeWorktreePath) return activeWorktreePath
+  return getAgentCwdMode({ agentCwdMode }) === 'project'
+    ? getProjectFilesPath(workspace.slug)
+    : getAgentSessionWorkspacePath(workspace.slug, sessionId)
+}
+
+export function resolveAgentWorkbenchDir(
+  workspace: Pick<AgentWorkspace, 'slug' | 'projectRootPath'> | undefined,
+  sessionId: string,
+): string | undefined {
+  if (!workspace) return undefined
+  return getAgentSessionWorkspacePath(workspace.slug, sessionId)
+}
 /**
  * 创建新会话
  */
@@ -591,7 +652,7 @@ export function getRecentAgentSessionSDKMessages(
 /**
  * 更新会话元数据
  */
-export type AgentSessionMetaUpdates = Partial<Pick<AgentSessionMeta, 'title' | 'titleSource' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'thinkingLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'pinned' | 'starred' | 'archived' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'forkSourceSdkSessionId' | 'resumeAtMessageUuid' | 'stoppedByUser' | 'sessionStatus' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal' | 'projectId' | 'agentCwdMode' | 'customGroupId' | 'workingDirectory' | 'gitRepoPath' | 'gitBranch' | 'gitExecutionMode' | 'gitWorktreePath' | 'gitBaseRef' | 'kanbanColumn' | 'taskSlug' | 'taskRunId' | 'taskNodeId' | 'taskAttempt' | 'taskCorrelationKey' | 'taskNodeCount' | 'taskDraft' | 'labelIds'>>
+export type AgentSessionMetaUpdates = Partial<Pick<AgentSessionMeta, 'title' | 'titleSource' | 'channelId' | 'modelId' | 'sdkSessionId' | 'piSessionFile' | 'piEntryBindings' | 'codexFastMode' | 'reasoningLevel' | 'thinkingLevel' | 'openAIThinkingLevel' | 'workspaceId' | 'activeWorktree' | 'pinned' | 'starred' | 'archived' | 'attachedDirectories' | 'attachedFiles' | 'forkSourceDir' | 'forkSourceSdkSessionId' | 'resumeAtMessageUuid' | 'stoppedByUser' | 'sessionStatus' | 'permissionMode' | 'completedButUnconfirmed' | 'sourceAutomationId' | 'automationGraduated' | 'parentSessionId' | 'rootSessionId' | 'sourceDelegationId' | 'delegationRole' | 'delegationStatus' | 'delegationDepth' | 'delegationGoal' | 'projectId' | 'agentCwdMode' | 'activeWorktree' | 'customGroupId' | 'workingDirectory' | 'gitRepoPath' | 'gitBranch' | 'gitExecutionMode' | 'gitWorktreePath' | 'gitBaseRef' | 'kanbanColumn' | 'taskSlug' | 'taskRunId' | 'taskNodeId' | 'taskAttempt' | 'taskCorrelationKey' | 'taskNodeCount' | 'taskDraft' | 'labelIds'>>
 
 export function updateAgentSessionMeta(
   id: string,
@@ -857,7 +918,12 @@ export function moveSessionToWorkspace(sessionId: string, targetWorkspaceId: str
     const updated: AgentSessionMeta = {
       ...current,
       workspaceId: targetWorkspaceId,
-      sdkSessionId: undefined, // SDK 上下文与工作区 cwd 绑定，必须清空
+      // Pi artifact 与 entry bindings 都以原 cwd 为根；跨工作区复用会造成错误 resume/fork/rewind。
+      sdkSessionId: undefined,
+      piSessionFile: undefined,
+      piEntryBindings: undefined,
+      // 已切换到另一项目，不能沿用旧项目授权下选择的 worktree。
+      activeWorktree: undefined,
       updatedAt: now,
     }
     index.sessions[i] = updated
@@ -957,19 +1023,26 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
   const forkModelId = input.modelId !== undefined
     ? assertEnabledModelForChannel({ channelId: sourceMeta.channelId, modelId: input.modelId, purpose: '分叉 Pi Agent 会话' })
     : sourceMeta.modelId
-  const sourceDir = sourceMeta.workspaceId
-    ? getAgentWorkspace(sourceMeta.workspaceId)
-      ? getAgentSessionWorkspacePath(getAgentWorkspace(sourceMeta.workspaceId)!.slug, sourceMeta.id)
-      : undefined
-    : undefined
-  const newMeta = createAgentSession(`${sourceMeta.title} (fork)`, sourceMeta.channelId, sourceMeta.workspaceId, forkModelId)
+  const workspace = sourceMeta.workspaceId ? getAgentWorkspace(sourceMeta.workspaceId) : undefined
+  const sourceCwdMode = getAgentCwdMode(sourceMeta)
+  const sourceWorkbenchLayout = getSessionWorkbenchLayout(sourceMeta)
+  const sourceActiveWorktree = getActiveWorktreePath(sourceMeta) ? sourceMeta.activeWorktree : undefined
+  const sourceDir = resolveAgentCwd(workspace, sourceMeta.id, sourceCwdMode, sourceActiveWorktree)
+  const sourceWorkbenchDir = resolveAgentWorkbenchDir(workspace, sourceMeta.id)
+  const newMeta = createAgentSession(
+    `${sourceMeta.title} (fork)`,
+    sourceMeta.channelId,
+    sourceMeta.workspaceId,
+    forkModelId,
+    sourceCwdMode,
+    sourceWorkbenchLayout,
+  )
   const sourceThinking = getSessionThinkingLevel(sourceMeta)
   if (sourceThinking) {
     updateAgentSessionMeta(newMeta.id, sessionThinkingLevelPatch(sourceThinking))
   }
-  const destDir = sourceMeta.workspaceId && getAgentWorkspace(sourceMeta.workspaceId)
-    ? getAgentSessionWorkspacePath(getAgentWorkspace(sourceMeta.workspaceId)!.slug, newMeta.id)
-    : undefined
+  const destDir = resolveAgentCwd(workspace, newMeta.id, newMeta.agentCwdMode, sourceActiveWorktree)
+  const destWorkbenchDir = resolveAgentWorkbenchDir(workspace, newMeta.id)
 
   try {
     const sdk = await import('@earendil-works/pi-coding-agent')
@@ -986,7 +1059,8 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     updateAgentSessionMeta(newMeta.id, {
       sdkSessionId: forkedManager.getSessionId(),
       piSessionFile,
-      piEntryBindings: { ...(sourceMeta.piEntryBindings ?? {}) },
+      piEntryBindings: branchBindings,
+      activeWorktree: sourceActiveWorktree,
       forkSourceDir: sourceDir,
       // fork 继承源会话的 projectId，让新会话出现在左侧「项目」分组；
       // 同时固定 agentCwdMode='session'，保持 fork 独立沙箱目录语义。
@@ -995,7 +1069,8 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     })
     newMeta.sdkSessionId = forkedManager.getSessionId()
     newMeta.piSessionFile = piSessionFile
-    newMeta.piEntryBindings = { ...(sourceMeta.piEntryBindings ?? {}) }
+    newMeta.piEntryBindings = branchBindings
+    newMeta.activeWorktree = sourceActiveWorktree
     if (sourceMeta.projectId) newMeta.projectId = sourceMeta.projectId
     newMeta.agentCwdMode = 'session'
 
@@ -1022,9 +1097,8 @@ export async function rewindPiAgentSession(sessionId: string, assistantMessageUu
   const entryId = meta.piEntryBindings?.[assistantMessageUuid]
   if (!entryId) throw new Error('该 Pi 历史消息尚无 entry ID 映射，无法安全回退')
   if (!meta.piSessionFile || !existsSync(meta.piSessionFile)) throw new Error('未找到 Pi session artifact，无法安全回退')
-  const cwd = meta.workspaceId && getAgentWorkspace(meta.workspaceId)
-    ? getAgentSessionWorkspacePath(getAgentWorkspace(meta.workspaceId)!.slug, meta.id)
-    : process.cwd()
+  const workspace = meta.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
+  const cwd = resolveAgentCwd(workspace, meta.id, meta.agentCwdMode, meta.activeWorktree) ?? process.cwd()
   const sdk = await import('@earendil-works/pi-coding-agent')
   const manager = sdk.SessionManager.open(meta.piSessionFile, join(getSdkConfigDir(), 'sessions'), cwd)
   const branchFile = manager.createBranchedSession(entryId)

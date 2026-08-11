@@ -105,17 +105,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
 
   // 会话自身的 Git Worktree 执行上下文（Draft Composer 里选的 Worktree 模式）：
   // 有这个上下文时，Diff 面板应该默认对比"相对 gitBaseRef 的全部改动"而不是
-  // "相对磁盘 HEAD 的未提交改动"，否则用户在 worktree 里提交过的内容看不到。
-  const agentSessions = useAtomValue(agentSessionsAtom)
-  const currentSession = agentSessions.find((s) => s.id === sessionId)
-  const sessionWorktreeContext = React.useMemo(() => {
-    if (currentSession?.gitExecutionMode !== 'worktree' || !currentSession.gitWorktreePath) return undefined
-    return { path: currentSession.gitWorktreePath, baseBranch: currentSession.gitBaseRef || 'origin/main' }
-  }, [currentSession?.gitExecutionMode, currentSession?.gitWorktreePath, currentSession?.gitBaseRef])
-
-  const activeWorktreeBaseBranch = selectedWorktreePath
-    ? 'origin/main'
-    : sessionWorktreeContext?.baseBranch
+  const activeWorktreeBaseBranch = 'origin/main'
 
   const handleDiffFileClick = React.useCallback((filePath: string, _isUntracked: boolean, gitRoot?: string) => {
     openPreview(sessionId, {
@@ -555,7 +545,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                 onFileClick={handleDiffFileClick}
                 workspaceSlug={workspaceSlug || undefined}
                 worktreeRepoPaths={worktreeRepoPathsMemo}
-                sessionWorktreeContext={sessionWorktreeContext}
                 nonGitFileChanges={nonGitFileChanges}
                 currentFileChangeRunId={fileChangesCurrentRunId}
                 onPlainFileClick={handleFilePreview}

@@ -14,6 +14,7 @@ import {
   agentDiffUnseenFilesAtom,
   agentDiffDataAtom,
   agentSelectedWorktreeAtom,
+  agentSessionsAtom,
   workspaceGitDiffRefreshVersionAtom,
 } from '@/atoms/agent-atoms'
 import type { ChangedFileEntry, ChangedFileStatus, ChangeSource, UntrackedFileEntry, WorktreeInfo } from '@myyoda/shared'
@@ -30,9 +31,6 @@ interface GitFileEntry {
   source?: ChangeSource
   gitRoot: string
 }
-
-/** agentSelectedWorktreeAtom 里的哨兵值：显式选了"会话改动"退出 sessionWorktreeContext 自动默认 */
-const SESSION_DIFF_SENTINEL = '__session_diff__'
 
 /** 按目录分组后的数据结构 */
 interface FileGroup {
@@ -76,7 +74,6 @@ interface DiffChangesListProps {
    * gitWorktreePath / gitBaseRef）。未手动通过 WorktreeSelector 选择其他 worktree 时，
    * 默认对比这个——否则 worktree 会话里已提交的改动，在"未提交改动"视角下完全不可见。
    */
-  sessionWorktreeContext?: { path: string; baseBranch: string }
   /** 本会话在非 Git 目录中成功写入的文件 */
   nonGitFileChanges?: SessionFileChange[]
   /** 当前 Agent run ID，用于将文件变更划分为本轮和更早 */
@@ -106,15 +103,11 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   extraPaths,
   workspaceSlug,
   worktreeRepoPaths,
-  sessionWorktreeContext,
   nonGitFileChanges = [],
   currentFileChangeRunId,
   onPlainFileClick,
 }: DiffChangesListProps): React.ReactElement {
-  // Worktree 选择状态（内联 WorktreeSelector）——手动选择优先；用户没有手动选过时，
-  // 若会话本身就绑定了 Worktree 执行上下文，默认用它（见 sessionWorktreeContext 注释）。
-  // SESSION_DIFF_SENTINEL 用来区分"从没手动选过"（undefined，跟随自动默认）和
-  // "手动点了『会话改动』要退回纯磁盘 diff"（显式选择，不应该被自动默认盖回去）。
+  // Worktree 选择状态：手动选择优先；未选择时回退到会话持久化的 activeWorktree。
   const sourceConfig = React.useMemo<Record<string, { color: string; label: string }>>(() => ({
     session: { color: SOURCE_COLORS.session!, label: '会话文件' },
     workspace: { color: SOURCE_COLORS.workspace!, label: secondarySourceLabel },
@@ -124,31 +117,43 @@ export const DiffChangesList = React.memo(function DiffChangesList({
 
   const selectedWorktreeMap = useAtomValue(agentSelectedWorktreeAtom)
   const setSelectedWorktreeMap = useSetAtom(agentSelectedWorktreeAtom)
-  const rawSelectedWorktree = selectedWorktreeMap.get(sessionId)
-  const selectedWorktreePath = rawSelectedWorktree === SESSION_DIFF_SENTINEL
-    ? null
-    : rawSelectedWorktree ?? sessionWorktreeContext?.path ?? null
+  const sessions = useAtomValue(agentSessionsAtom)
+  const setSessions = useSetAtom(agentSessionsAtom)
+  const persistedWorktreePath = sessions.find((session) => session.id === sessionId)?.activeWorktree?.path ?? null
+  const selectedWorktreePath = selectedWorktreeMap.get(sessionId) ?? persistedWorktreePath
   const diffCacheKey = selectedWorktreePath ? `${sessionId}:worktree:${selectedWorktreePath}` : `${sessionId}:session`
-  const worktreeMode = React.useMemo(() => {
-    if (!selectedWorktreePath) return undefined
-    const baseBranch = selectedWorktreePath === sessionWorktreeContext?.path
-      ? sessionWorktreeContext.baseBranch
-      : 'origin/main'
-    return { path: selectedWorktreePath, baseBranch }
-  }, [selectedWorktreePath, sessionWorktreeContext])
-  const handleWorktreeSelect = React.useCallback((worktree: WorktreeInfo | null) => {
+  const worktreeMode = React.useMemo(
+    () => selectedWorktreePath ? { path: selectedWorktreePath, baseBranch: 'origin/main' } : undefined,
+    [selectedWorktreePath],
+  )
+
+  React.useEffect(() => {
     setSelectedWorktreeMap((prev) => {
-      const m = new Map(prev)
-      if (!worktree && sessionWorktreeContext) {
-        // 存在自动默认时，"会话改动"是一次显式退出选择，要用哨兵值记下来，
-        // 不能直接删 key（删了下次渲染又会被 sessionWorktreeContext 兜底盖回去）。
-        m.set(sessionId, SESSION_DIFF_SENTINEL)
-        return m
-      }
-      m.set(sessionId, worktree?.path ?? null)
-      return m
+      const previous = prev.get(sessionId) ?? null
+      if (previous === persistedWorktreePath) return prev
+      const next = new Map(prev)
+      next.set(sessionId, persistedWorktreePath)
+      return next
     })
-  }, [sessionId, setSelectedWorktreeMap, sessionWorktreeContext])
+  }, [persistedWorktreePath, sessionId, setSelectedWorktreeMap])
+
+  const handleWorktreeSelect = React.useCallback(async (worktree: WorktreeInfo | null) => {
+    try {
+      const updated = await window.electronAPI.setAgentSessionActiveWorktree({
+        sessionId,
+        worktreePath: worktree?.path ?? null,
+      })
+      setSessions((previous) => previous.map((session) => session.id === sessionId ? updated : session))
+      setSelectedWorktreeMap((prev) => {
+        const next = new Map(prev)
+        next.set(sessionId, updated.activeWorktree?.path ?? null)
+        return next
+      })
+    } catch (error) {
+      console.error('[DiffChangesList] 保存活动 worktree 失败:', error)
+      window.alert(`切换 worktree 失败：${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }, [sessionId, setSelectedWorktreeMap, setSessions])
 
   // Diff 数据缓存：mount 时若已有上次结果，立即用作初值，避免空数组闪 1s "没有代码改动"
   const diffDataMap = useAtomValue(agentDiffDataAtom)
