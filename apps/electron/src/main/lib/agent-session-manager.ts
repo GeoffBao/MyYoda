@@ -36,7 +36,6 @@ import type {
   AgentRuntime,
 } from '@myyoda/shared'
 import {
-  DEFAULT_AGENT_THINKING_LEVEL,
   getSessionThinkingLevel,
   migratePermissionMode,
   sessionThinkingLevelPatch,
@@ -47,7 +46,6 @@ import { convertLegacyMessage } from '@myyoda/session-core'
 import { clearNanoBananaAgentHistory } from './chat-tools/nano-banana-mcp'
 import { assertEnabledModelForChannel } from './agent-model-selection'
 import { copyForkWorkspaceFiles } from './agent-fork-workspace-copy'
-import { getSettings } from './settings-service'
 import { isGitAttributionEnabled } from './agent-git-attribution'
 
 /**
@@ -321,7 +319,6 @@ export function createAgentSession(
 ): AgentSessionMeta {
   const index = readIndex()
   const now = Date.now()
-  const defaultLevel = getSettings().defaultThinkingLevel ?? DEFAULT_AGENT_THINKING_LEVEL
 
   const meta: AgentSessionMeta = {
     id: randomUUID(),
@@ -331,8 +328,9 @@ export function createAgentSession(
     workspaceId,
     // 新会话遵循「优先使用绑定 Project 工作目录」语义；历史会话字段缺失按 'session' 解释。
     agentCwdMode: workspaceId ? agentCwdMode ?? 'project' : undefined,
-    // 思考深度从创建起归属于会话（对齐 craft sticky ThinkingLevel）
-    ...sessionThinkingLevelPatch(defaultLevel),
+    // 思考深度留空 = 未设置：由运行期解析链决定生效值（编码优化开关 → max，否则 defaultThinkingLevel）。
+    // 注意：历史实现曾在此写入默认档（high），导致所有会话都有 sticky 值、开关永远无法覆盖。
+    // 用户显式调整后仍会写入（updateAgentSessionMeta → sessionThinkingLevelPatch），会话级优先语义不变。
     createdAt: now,
     updatedAt: now,
   }
