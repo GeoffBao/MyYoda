@@ -1323,6 +1323,7 @@ export class AgentOrchestrator {
         agentCwd,
         ...(projectContext ? { projectContext } : {}),
         ...(workspaceDefaultWorkingDirectory ? { workspaceDefaultWorkingDirectory } : {}),
+        userBrowserContext: browserController.getUserContext(sessionId),
       })
 
       // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录），
@@ -2767,7 +2768,12 @@ ${workContext}` : '')
       ? getAgentWorkspace(meta.workspaceId)?.slug
       : undefined
 
-    let enrichedText = text
+    const userBrowserContext = browserController.getUserContext(sessionId)
+    // 运行中的 Agent 收到队列消息时也必须看到用户刚刚主动打开的页面。
+    // 未打开浏览器时保持既有消息形态，避免给每条插队消息重复注入无关环境块。
+    let enrichedText = userBrowserContext
+      ? `${buildDynamicContext({ userBrowserContext })}\n\n${text}`
+      : text
     const referencedSessionsBlock = buildReferencedSessionsPrompt(sessionId, mentionedSessionIds, workspaceSlug)
     if (referencedSessionsBlock) {
       enrichedText = `${referencedSessionsBlock}\n\n${enrichedText}`
