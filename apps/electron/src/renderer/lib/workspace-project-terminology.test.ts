@@ -10,6 +10,8 @@ describe('工作区与项目用户术语', () => {
       select: '选择工作区',
       rename: '重命名工作区',
       remove: '删除工作区',
+      files: '工作区文件',
+      memory: '工作区记忆',
     })
     expect(Object.values(WORKSPACE_TERMS).join('')).not.toContain('空间')
     expect(Object.values(WORKSPACE_TERMS).join('')).not.toContain('项目')
@@ -23,6 +25,8 @@ describe('工作区与项目用户术语', () => {
       selectOrCreate: '选择/新建项目',
       clear: '清除项目',
       workingDirectory: '项目工作目录',
+      files: '项目文件',
+      knowledge: '项目知识',
     })
     expect(Object.values(PROJECT_TERMS).join('')).not.toContain('工作区')
   })

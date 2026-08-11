@@ -49,9 +49,9 @@ function buildWorkspaceMemoryInitPrompt(historyRange: MemoryHistoryRange): strin
 
 目标：
 1. 读取当前工作区${rangeLabel}的 Agent 工作会话，优先关注最新、最有代表性、用户实际完成工作的会话。如果证据不足，请说明而不是编造。
-2. 同时检查当前 Workspace 下所有 Project 的 Project Knowledge（各项目 MEMORY.md）、项目 assets、项目级 plan/spec/design 文档，以及会话级 Context（各会话 cwd 下的 .context/）和工作区级 Context（workspace-files/.context/ 及相关本地文档）；必须保留来源 Project，区分项目专属事实、工作区内跨项目通用知识、当前任务临时产物与跨会话长期资料。
-3. 工作区记忆要吸收 Project Knowledge 中对整个 Workspace 有长期价值的稳定知识，而不是只总结 Workspace 根目录文件；项目专属事实仍保留在对应 Project Knowledge，并在汇总内容中注明来源，避免丢失上下文。
-4. 从这些会话、Project Knowledge、工作区资料和 Context 中提炼工作区级别的稳定知识，包括工作区结构、跨项目常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
+2. 同时检查当前工作区下所有项目的项目知识（Project Knowledge，各项目 MEMORY.md）、项目资产、项目级 plan/spec/design 文档，以及会话级 Context（各会话 cwd 下的 .context/）和工作区级 Context（workspace-files/.context/ 及相关本地文档）；必须保留来源项目，区分项目专属事实、工作区内跨项目通用知识、当前任务临时产物与跨会话长期资料。
+3. 工作区记忆要吸收项目知识中对整个工作区有长期价值的稳定知识，而不是只总结工作区根目录文件；项目专属事实仍保留在对应项目知识中，并在汇总内容中注明来源，避免丢失上下文。
+4. 从这些会话、项目知识、工作区资料和 Context 中提炼工作区级别的稳定知识，包括工作区结构、跨项目常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
 5. 更新工作区根目录的 AGENTS.md：只写稳定、跨会话有价值的工作区指令和工作方式，避免写临时过程和聊天流水账。
 6. 更新工作区 memory/MEMORY.md，必要时创建主题文件：MEMORY.md 只放主题索引和路由，详细内容拆到主题文件；只记录应该长期回忆的经验。
 7. 沉淀并持续迭代一份「用户画像」记忆，写入 memory/user-profile.md（并在 MEMORY.md 索引中登记）。这份画像用于让未来的 Agent 越来越懂用户，应包含：

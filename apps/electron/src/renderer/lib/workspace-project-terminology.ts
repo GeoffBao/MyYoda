@@ -6,6 +6,8 @@ export const WORKSPACE_TERMS = {
   select: '选择工作区',
   rename: '重命名工作区',
   remove: '删除工作区',
+  files: '工作区文件',
+  memory: '工作区记忆',
 } as const
 
 export const PROJECT_TERMS = {
@@ -15,4 +17,6 @@ export const PROJECT_TERMS = {
   selectOrCreate: '选择/新建项目',
   clear: '清除项目',
   workingDirectory: '项目工作目录',
+  files: '项目文件',
+  knowledge: '项目知识',
 } as const

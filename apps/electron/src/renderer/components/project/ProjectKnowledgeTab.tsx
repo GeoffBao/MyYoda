@@ -110,7 +110,7 @@ export function ProjectKnowledgeTab({ workspaceRoot, project, onError, onDirtyCh
       </div>
 
       <div className="text-xs text-muted-foreground space-y-1 px-1">
-        <p><strong>提示</strong>：该内容存储在 <code>projects/{slug}/MEMORY.md</code> 中，可在任意编辑器中直接编辑。</p>
+        <p><strong>提示</strong>：该内容存储在项目 MEMORY.md 中；本地目录项目可能位于 <code>&lt;项目工作目录&gt;/.context/MEMORY.md</code>，历史或托管项目沿用 MyYoda 托管目录。</p>
         <p><strong>工作区级、跨项目的规则与偏好</strong>请写入工作区记忆，不要写在这里。</p>
       </div>
     </div>
