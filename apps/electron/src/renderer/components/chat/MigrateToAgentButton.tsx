@@ -2,7 +2,7 @@
  * MigrateToAgentButton — 切换到 Project 模式按钮
  *
  * 常驻在助手消息 Action Bar 中，点击后：
- * 1. 创建 Agent 会话（绑定当前空间）
+ * 1. 创建 Agent 会话（绑定当前工作区）
  * 2. 迁移当前 Chat 对话历史到新 Agent 会话
  * 3. 打开 Agent 会话 Tab 并自动激活
  * 4. 通过 Sonner 通知用户已完成切换
@@ -46,7 +46,7 @@ export function MigrateToAgentButton({ conversationId }: MigrateToAgentButtonPro
     setMigrating(true)
     try {
       const workspaces = store.get(agentWorkspacesAtom)
-      // 优先使用用户当前所在的空间，避免迁移后跳去列表第一个空间（workspaces[0]）
+      // 优先使用用户当前所在的工作区，避免迁移后跳去列表第一个工作区（workspaces[0]）
       const targetWorkspaceId = store.get(currentAgentWorkspaceIdAtom) ?? workspaces[0]?.id ?? null
 
       // 1. 创建 Agent 会话
@@ -64,7 +64,7 @@ export function MigrateToAgentButton({ conversationId }: MigrateToAgentButtonPro
       const sessions = await window.electronAPI.listAgentSessions()
       store.set(agentSessionsAtom, sessions)
 
-      // 4. 切换到目标空间（保持用户当前所在空间）
+      // 4. 切换到目标工作区（保持用户当前所在工作区）
       if (targetWorkspaceId) {
         store.set(currentAgentWorkspaceIdAtom, targetWorkspaceId)
         window.electronAPI.updateSettings({

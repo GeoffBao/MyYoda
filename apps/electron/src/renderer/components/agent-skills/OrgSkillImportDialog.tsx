@@ -1,7 +1,7 @@
 /**
  * OrgSkillImportDialog — 从企业组织导入 Skill
  *
- * 列出当前组织的 Skills，选择后下载导入到当前空间。
+ * 列出当前组织的 Skills，选择后下载导入到当前工作区。
  * 未连接组织服务时提示先到设置页配置。
  */
 
@@ -97,7 +97,7 @@ export function OrgSkillImportDialog({ open, onOpenChange, workspaceSlug, instal
             从企业组织导入技能
           </DialogTitle>
           <DialogDescription>
-            选择组织中的 Skill 导入到当前空间。管理员发布的 Skill 会随组织版本更新同步。
+            选择组织中的 Skill 导入到当前工作区。管理员发布的 Skill 会随组织版本更新同步。
           </DialogDescription>
         </DialogHeader>
 

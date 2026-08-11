@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ExternalLink, FileText } from 'lucide-react'
 import type { WorkspaceMemoryFileChange } from '@myyoda/shared'
 import { Button } from '@/components/ui/button'
+import { WORKSPACE_TERMS } from '@/lib/workspace-project-terminology'
 
 interface MemoryFileListItem {
   relativePath: string
@@ -119,7 +120,7 @@ export function WorkspaceMemoryChangeShelf({ changes, memoryFiles, onOpen, onOpe
             <>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold text-foreground">项目记忆</div>
+                  <div className="text-xs font-semibold text-foreground">{WORKSPACE_TERMS.memory}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">{memoryFiles.length} 个文件 · 点击即可编辑</div>
                 </div>
                 <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => onOpen()}>打开编辑器 <ExternalLink size={12} className="ml-1" /></Button>
@@ -157,7 +158,7 @@ export function WorkspaceMemoryChangeShelf({ changes, memoryFiles, onOpen, onOpe
           onClick={() => onOpen(change)}
           className="flex h-10 w-full items-center gap-2 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
-          <span className="font-medium">{change ? '项目记忆已更新' : '项目记忆'}</span>
+          <span className="font-medium">{change ? `${WORKSPACE_TERMS.memory}已更新` : WORKSPACE_TERMS.memory}</span>
           {changes.length > 1 && <span className="text-[11px] tabular-nums text-muted-foreground">{changes.length}</span>}
           {change && <span className="ml-auto text-[11px] text-muted-foreground">悬浮查看变更</span>}
         </button>

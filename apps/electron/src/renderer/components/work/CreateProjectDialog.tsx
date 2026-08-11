@@ -25,8 +25,8 @@ const EMPTY: CreateProjectDraft = {
   color: '',
 }
 
-/** 从目录路径推导工作区名：取 basename，去掉尾部斜杠后取最后一段 */
-export function deriveWorkspaceNameFromPath(path: string): string {
+/** 从目录路径推导项目名：取 basename，去掉尾部斜杠后取最后一段 */
+export function deriveProjectNameFromPath(path: string): string {
   const trimmed = path.trim().replace(/[\\/]+$/, '')
   const segment = trimmed.split(/[\\/]/).filter(Boolean).pop() ?? ''
   return segment
@@ -52,9 +52,9 @@ export function CreateProjectDialog({
   const handleWorkingDirectoryChange = (path: string): void => {
     setDraft((current) => {
       const next: CreateProjectDraft = { ...current, workingDirectory: path }
-      // 选文件夹即建：目录路径变化时，工作区名自动取目录名（除非用户已手动改名）
+      // 选文件夹即建：目录路径变化时，项目名自动取目录名（除非用户已手动改名）
       if (!nameTouchedRef.current) {
-        const derived = deriveWorkspaceNameFromPath(path)
+        const derived = deriveProjectNameFromPath(path)
         if (derived) next.name = derived
       }
       return next
@@ -67,7 +67,7 @@ export function CreateProjectDialog({
   }
 
   // 两种交互都支持（对齐 WorkBuddy）：
-  // 1. 纯命名新建：只填名称，不选本地文件夹（工作区可作为会话分组容器）
+  // 1. 纯命名新建：只填名称，不选本地文件夹（项目可作为工作区内的会话/任务分组）
   // 2. 打开本地文件夹：选择文件夹后名称自动取目录名，可改
   const canSubmit = draft.name.trim().length > 0 && !busy
 
@@ -76,11 +76,11 @@ export function CreateProjectDialog({
       <DialogContent className="sm:max-w-md" aria-busy={busy}>
         <form onSubmit={(event) => { event.preventDefault(); if (canSubmit) onSubmit(buildCreateProjectInput(draft)) }}>
           <DialogHeader>
-            <DialogTitle>新建工作区</DialogTitle>
+            <DialogTitle>新建项目</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <label className="block space-y-1.5 text-xs font-medium">
-              工作区名称
+              项目名称
               <Input
                 autoFocus
                 value={draft.name}
@@ -89,13 +89,13 @@ export function CreateProjectDialog({
               />
             </label>
             <div className="space-y-1.5 text-xs font-medium">
-              <span>工作目录（可选）</span>
+              <span>项目工作目录（可选）</span>
               <WorkingDirectoryField
                 value={draft.workingDirectory}
                 onChange={handleWorkingDirectoryChange}
               />
               <p className="text-[11px] font-normal text-muted-foreground">
-                选择本地文件夹会绑定为工作目录，名称自动取文件夹名；也可以留空仅创建一个工作区
+                选择本地文件夹会绑定为项目工作目录，名称自动取文件夹名；也可以留空仅创建项目分组
               </p>
             </div>
           </div>

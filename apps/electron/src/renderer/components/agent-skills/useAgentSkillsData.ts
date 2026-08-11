@@ -1,7 +1,7 @@
 /**
  * useAgentSkillsData — Agent 技能视图的数据层
  *
- * 封装当前空间 Skills / MCP 的加载与增删改逻辑（IPC 调用），
+ * 封装当前工作区 Skills / MCP 的加载与增删改逻辑（IPC 调用），
  * 供「Agent 技能」全屏视图复用。所有写操作后会 bump
  * workspaceCapabilitiesVersionAtom，通知侧边栏等订阅方刷新。
  */
@@ -17,7 +17,7 @@ import {
 import type { BuiltinMcpServerSummary, SkillMeta, WorkspaceCapabilities, WorkspaceMcpConfig } from '@myyoda/shared'
 
 export interface AgentSkillsData {
-  /** 当前空间（未选中时为 null） */
+  /** 当前工作区（未选中时为 null） */
   workspaceSlug: string
   workspaceName: string
   hasWorkspace: boolean
@@ -79,7 +79,7 @@ export function useAgentSkillsData(): AgentSkillsData {
       setCapabilities(capabilities)
       setBuiltinMcpServers(capabilities.builtinMcpServers)
     } catch (error) {
-      console.error('[Agent 技能] 加载空间配置失败:', error)
+      console.error('[Agent 技能] 加载工作区配置失败:', error)
     } finally {
       setLoading(false)
     }

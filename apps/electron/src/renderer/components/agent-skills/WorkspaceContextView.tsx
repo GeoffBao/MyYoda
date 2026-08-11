@@ -54,7 +54,7 @@ export function WorkspaceContextView({ embedded = false }: { embedded?: boolean 
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索 Workspace 记忆..."
+            placeholder="搜索工作区记忆..."
             className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
           />
         </div>
@@ -68,8 +68,8 @@ export function WorkspaceContextView({ embedded = false }: { embedded?: boolean 
           ) : (
             <EmptyState
               icon={<Brain className="size-8 text-foreground/30" />}
-              title="未选择空间"
-              hint="请先选择或创建一个空间，再来管理它的 Yoda 记忆（AGENTS.md 与 workspace 长期记忆）。"
+              title="未选择工作区"
+              hint="请先选择或创建一个工作区，再来管理它的 Yoda 记忆（AGENTS.md 与工作区长期记忆）。"
             />
           )}
         </div>

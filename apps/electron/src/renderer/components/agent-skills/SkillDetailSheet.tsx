@@ -130,7 +130,7 @@ function SkillDetailBody({
     ? '系统内置'
     : skill.importSource
       ? `从 ${skill.importSource.sourceWorkspaceName} 导入`
-      : '当前空间'
+      : '当前工作区'
 
   return (
     <div className="flex h-full flex-col min-h-0">

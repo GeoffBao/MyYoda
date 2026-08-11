@@ -1,5 +1,5 @@
 /**
- * 多选引用列表：从当前空间目录勾选，保留不在目录中的已选项（orphan）。
+ * 多选引用列表：从当前工作区目录勾选，保留不在目录中的已选项（orphan）。
  */
 
 import * as React from 'react'
@@ -20,7 +20,7 @@ export function mergeReferenceOptions(
   const out: Array<ReferenceOption & { orphan?: boolean }> = catalog.map((item) => ({ ...item }))
   for (const id of selected) {
     if (byId.has(id)) continue
-    out.push({ id, label: id, orphan: true, hint: '不在当前空间' })
+    out.push({ id, label: id, orphan: true, hint: '不在当前工作区' })
   }
   return out
 }
@@ -74,7 +74,7 @@ export function ReferenceMultiSelect({
             <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{option.label}</span>
             {(option.hint || option.orphan) && (
               <span className="shrink-0 text-[11px] text-muted-foreground">
-                {option.hint ?? '不在当前空间'}
+                {option.hint ?? '不在当前工作区'}
               </span>
             )}
           </label>

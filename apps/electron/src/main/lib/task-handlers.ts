@@ -631,13 +631,13 @@ export function registerTaskHandlers(window: BrowserWindow): void {
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, slug: string) => {
     const project = projectRepository.getProjectAtRoot(workspaceRoot, slug)
-    if (!project) throw new Error(`工作区不存在: ${slug}`)
-    if (!project.config.archivedAt) throw new Error('永久删除前必须先归档工作区')
+    if (!project) throw new Error(`项目不存在: ${slug}`)
+    if (!project.config.archivedAt) throw new Error('永久删除前必须先归档项目')
 
     // 在执行删除的同一主进程 command 内重新分析，不能信任 Renderer 中可能过期的预览。
     const impact = analyzeProjectDeleteImpact(workspaceRoot, project.config, listAgentSessions())
     if (!impact.canPurge) {
-      throw new Error(`工作区仍有关联数据，不能永久删除：${impact.blockers.join('；')}`)
+      throw new Error(`项目仍有关联数据，不能永久删除：${impact.blockers.join('；')}`)
     }
 
     projectRepository.deleteProjectAtRoot(workspaceRoot, slug)
@@ -646,7 +646,7 @@ export function registerTaskHandlers(window: BrowserWindow): void {
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.ANALYZE_DELETE_IMPACT, (_event, workspaceRoot: string, idOrSlug: string) => {
     const project = projectRepository.getProjectAtRoot(workspaceRoot, idOrSlug)
-    if (!project) throw new Error(`工作区不存在: ${idOrSlug}`)
+    if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
     return analyzeProjectDeleteImpact(workspaceRoot, project.config, listAgentSessions())
   })
 
@@ -682,7 +682,7 @@ export function registerTaskHandlers(window: BrowserWindow): void {
         broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
       }
       const loaded = projectRepository.getProjectAtRoot(workspaceRoot, result.project.slug)
-      if (!loaded) throw new Error(`工作区创建或复用后无法加载: ${result.project.slug}`)
+      if (!loaded) throw new Error(`项目创建或复用后无法加载: ${result.project.slug}`)
       return { project: loaded, created: result.created }
     },
   )
@@ -691,7 +691,7 @@ export function registerTaskHandlers(window: BrowserWindow): void {
     PROJECT_IPC_CHANNELS.RESOLVE_EFFECTIVE_CWD,
     (_event, workspaceRoot: string, projectSlug: string) => {
       const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
-      if (!loaded) throw new Error(`工作区不存在: ${projectSlug}`)
+      if (!loaded) throw new Error(`项目不存在: ${projectSlug}`)
       return resolveEffectiveCwd(workspaceRoot, loaded.config)
     },
   )
@@ -701,7 +701,7 @@ export function registerTaskHandlers(window: BrowserWindow): void {
     (_event, workspaceRoot: string, projectSlug: string, newPath: string) => {
       relocateProjectWorkingDirectory(workspaceRoot, projectSlug, newPath)
       const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
-      if (!loaded) throw new Error(`重新定位后无法加载工作区: ${projectSlug}`)
+      if (!loaded) throw new Error(`重新定位后无法加载项目: ${projectSlug}`)
       broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
       return loaded
     },
@@ -712,7 +712,7 @@ export function registerTaskHandlers(window: BrowserWindow): void {
     (_event, workspaceRoot: string, projectSlug: string) => {
       restoreProjectWorkingDirectory(workspaceRoot, projectSlug)
       const loaded = projectRepository.getProjectAtRoot(workspaceRoot, projectSlug)
-      if (!loaded) throw new Error(`恢复目录后无法加载工作区: ${projectSlug}`)
+      if (!loaded) throw new Error(`恢复目录后无法加载项目: ${projectSlug}`)
       broadcastProjectsChanged(workspaceRoot, workspaceIdFor(workspaceRoot))
       return loaded
     },

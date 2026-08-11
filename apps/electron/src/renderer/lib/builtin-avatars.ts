@@ -58,7 +58,7 @@ export const BUILTIN_AVATARS: BuiltinAvatar[] = [
   { id: 'builtin:todo-list', label: '待办事项', src: TodoListAvatar },
   { id: 'builtin:travel', label: '旅行', src: TravelAvatar },
   { id: 'builtin:universe', label: '拥抱宇宙', src: UniverseAvatar },
-  { id: 'builtin:workspace', label: '空间', src: WorkspaceAvatar },
+  { id: 'builtin:workspace', label: '工作区', src: WorkspaceAvatar },
 ]
 
 export function getBuiltinAvatarSrc(avatar: string): string | undefined {

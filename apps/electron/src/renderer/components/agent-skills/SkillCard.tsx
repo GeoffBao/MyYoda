@@ -78,7 +78,7 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
           </span>
         ) : (
           <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            本空间
+            本工作区
           </span>
         )}
 

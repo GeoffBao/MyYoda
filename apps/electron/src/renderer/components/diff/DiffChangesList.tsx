@@ -20,6 +20,7 @@ import type { ChangedFileEntry, ChangedFileStatus, ChangeSource, UntrackedFileEn
 import { WorktreeSelector } from './WorktreeSelector'
 import { groupSessionFileChanges } from '@/lib/session-file-changes'
 import type { SessionFileChange } from '@/lib/session-file-changes'
+import { WORKSPACE_TERMS } from '@/lib/workspace-project-terminology'
 
 interface GitFileEntry {
   filePath: string
@@ -52,8 +53,12 @@ interface DiffChangesListProps {
   sessionId: string
   /** 会话工作目录（用于 badge 计算） */
   sessionPath?: string
-  /** 空间共享文件目录（用于 badge 计算） */
+  /** 第二文件根（内部字段名为 workspace 以兼容既有 diff source contract）。 */
   workspaceFilesPath?: string
+  /** 第二文件根的展示标签；Project-bound 场景应传“项目文件”。 */
+  secondarySourceLabel?: string
+  /** 同时命中会话与第二文件根时的展示标签。 */
+  combinedSourceLabel?: string
   /** 点击文件回调 */
   onFileClick: (filePath: string, isUntracked: boolean, gitRoot?: string) => void
   /** 自动刷新信号（版本号递增触发） */
@@ -62,7 +67,7 @@ interface DiffChangesListProps {
   selectedFilePath?: string
   /** 额外的候选目录（附加目录等） */
   extraPaths?: string[]
-  /** 空间 slug，用于 WorktreeSelector 拉取 worktree 列表 */
+  /** 工作区 slug，用于 WorktreeSelector 拉取 worktree 列表 */
   workspaceSlug?: string
   /** 用于自动发现 worktree 的仓库候选路径 */
   worktreeRepoPaths?: string[]
@@ -80,12 +85,12 @@ interface DiffChangesListProps {
   onPlainFileClick?: (filePath: string) => void
 }
 
-/** 文件来源 badge 的颜色和文案 */
-const SOURCE_CONFIG: Record<string, { color: string; label: string }> = {
-  session: { color: 'bg-blue-500/10 text-blue-500', label: '会话文件' },
-  workspace: { color: 'bg-purple-500/10 text-purple-500', label: '空间' },
-  both: { color: 'bg-cyan-500/10 text-cyan-500', label: '会话+空间文件' },
-  none: { color: 'bg-muted text-muted-foreground', label: '附加目录文件' },
+/** 文件来源 badge 的颜色；文案按当前第二文件根的真实语义在组件内生成。 */
+const SOURCE_COLORS: Record<string, string> = {
+  session: 'bg-blue-500/10 text-blue-500',
+  workspace: 'bg-purple-500/10 text-purple-500',
+  both: 'bg-cyan-500/10 text-cyan-500',
+  none: 'bg-muted text-muted-foreground',
 }
 
 export const DiffChangesList = React.memo(function DiffChangesList({
@@ -93,6 +98,8 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   sessionPath,
   sessionId,
   workspaceFilesPath,
+  secondarySourceLabel = WORKSPACE_TERMS.files,
+  combinedSourceLabel = `会话+${WORKSPACE_TERMS.files}`,
   onFileClick,
   refreshVersion,
   selectedFilePath,
@@ -108,6 +115,13 @@ export const DiffChangesList = React.memo(function DiffChangesList({
   // 若会话本身就绑定了 Worktree 执行上下文，默认用它（见 sessionWorktreeContext 注释）。
   // SESSION_DIFF_SENTINEL 用来区分"从没手动选过"（undefined，跟随自动默认）和
   // "手动点了『会话改动』要退回纯磁盘 diff"（显式选择，不应该被自动默认盖回去）。
+  const sourceConfig = React.useMemo<Record<string, { color: string; label: string }>>(() => ({
+    session: { color: SOURCE_COLORS.session!, label: '会话文件' },
+    workspace: { color: SOURCE_COLORS.workspace!, label: secondarySourceLabel },
+    both: { color: SOURCE_COLORS.both!, label: combinedSourceLabel },
+    none: { color: SOURCE_COLORS.none!, label: '附加目录文件' },
+  }), [combinedSourceLabel, secondarySourceLabel])
+
   const selectedWorktreeMap = useAtomValue(agentSelectedWorktreeAtom)
   const setSelectedWorktreeMap = useSetAtom(agentSelectedWorktreeAtom)
   const rawSelectedWorktree = selectedWorktreeMap.get(sessionId)
@@ -358,7 +372,7 @@ export const DiffChangesList = React.memo(function DiffChangesList({
                   <span className="truncate">{group.dirName}</span>
                   {/* 文件夹层级的来源 badges */}
                   {group.sources.map((src) => {
-                    const cfg = SOURCE_CONFIG[src] ?? SOURCE_CONFIG.none!
+                    const cfg = sourceConfig[src] ?? sourceConfig.none!
                     return (
                       <span key={src} className={cn('rounded px-1 py-0.5 text-[12px] leading-none shrink-0', cfg.color)}>
                         {cfg.label}

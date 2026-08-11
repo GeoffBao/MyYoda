@@ -785,7 +785,7 @@ export interface AgentSessionMeta {
   attachedDirectories?: string[]
   /** 附加的外部文件路径列表（绝对路径，发送时以父目录作为 SDK additionalDirectories） */
   attachedFiles?: string[]
-  /** 分叉来源：源会话的 MyYoda 工作目录（SDK session 文件在此目录的项目空间中，首次 resume 后清除） */
+  /** 分叉来源：源会话的 MyYoda 会话沙箱目录（SDK session state 位于此处，首次 resume 后清除；不是 Craft Project cwd） */
   forkSourceDir?: string
   /** 分叉来源：源会话的 SDK session ID（用于 rewind 时读取源会话的 file-history-snapshot 和备份文件） */
   forkSourceSdkSessionId?: string
@@ -1224,6 +1224,20 @@ export interface CommunitySkill {
   homepage?: string
   /** 仓库内 skill 目录相对路径 */
   path: string
+  /** 版本号（外部收录为 latest） */
+  version?: string
+  /** 下载计数（由统计服务维护，0 表示暂无数据） */
+  downloads?: number
+  /** 是否人工审核 */
+  verified?: boolean
+  /** 外部收录源（缺省表示本仓库托管） */
+  source?: {
+    repo: string
+    path: string
+    ref?: string
+  }
+  /** 是否外部收录 */
+  external?: boolean
 }
 
 /** 社区市场安装结果 */

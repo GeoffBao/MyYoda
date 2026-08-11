@@ -7,9 +7,9 @@
  *
  * 迁移流程：
  * 1. 清除推荐状态（先清再切换，避免 ChatView 副作用）
- * 2. 创建 Agent 会话（绑定当前空间）
+ * 2. 创建 Agent 会话（绑定当前工作区）
  * 3. 将 Chat 对话历史复制到新 Agent 会话
- * 4. 切换到当前空间 + Agent 模式
+ * 4. 切换到当前工作区 + Agent 模式
  * 5. 在 Agent 输入区显示建议提示（prompt suggestion）
  */
 
@@ -59,7 +59,7 @@ export function AgentRecommendBanner(): React.ReactElement | null {
     setMigrating(true)
     try {
       const workspaces = store.get(agentWorkspacesAtom)
-      // 优先使用用户当前所在的空间，避免迁移后跳去列表第一个空间（workspaces[0]）
+      // 优先使用用户当前所在的工作区，避免迁移后跳去列表第一个工作区（workspaces[0]）
       const targetWorkspaceId = store.get(currentAgentWorkspaceIdAtom) ?? workspaces[0]?.id ?? null
 
       // 1. 创建 Agent 会话
@@ -77,7 +77,7 @@ export function AgentRecommendBanner(): React.ReactElement | null {
       const sessions = await window.electronAPI.listAgentSessions()
       store.set(agentSessionsAtom, sessions)
 
-      // 4. 切换到目标空间（保持用户当前所在空间）
+      // 4. 切换到目标工作区（保持用户当前所在工作区）
       if (targetWorkspaceId) {
         store.set(currentAgentWorkspaceIdAtom, targetWorkspaceId)
         window.electronAPI.updateSettings({

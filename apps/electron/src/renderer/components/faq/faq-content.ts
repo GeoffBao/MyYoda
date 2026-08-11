@@ -67,7 +67,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'Agent 可以调用哪些工具？',
-        answer: '工具由当前空间的 MCP、Skills 和内置能力共同决定。会话执行时会显示工具活动；遇到需要确认的操作，MyYoda 会先请求你的授权。',
+        answer: '工具由当前工作区的 MCP、Skills 和内置能力共同决定。会话执行时会显示工具活动；遇到需要确认的操作，MyYoda 会先请求你的授权。',
         keywords: ['MCP', '权限', '技能'],
       },
       {
@@ -197,7 +197,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '为什么 Agent 没有直接执行某个操作？',
-        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再检查空间设置中的 MCP 与 Skills。',
+        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再检查工作区设置中的 MCP 与 Skills。',
         keywords: ['MCP', '权限模式', '工具'],
       },
     ],

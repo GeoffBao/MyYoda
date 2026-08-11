@@ -80,12 +80,12 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
   }
 
   lines.push('');
-  lines.push('当前会话已绑定到上述工作区。');
+  lines.push('当前会话已绑定到上述项目。');
   if (ctx.workingDirectory?.trim()) {
     lines.push(
       ctx.isWorktree
         ? '`<project_working_directory>` 当前指向本会话绑定的 Git Worktree 隔离目录（与 `<working_directory>` 一致）；改动只会落在这个独立分支/工作树里，不影响项目主目录或其他会话。需要读代码、改代码、跑命令时，直接以该目录为基准，不要跳转到项目原始目录。'
-        : '`<project_working_directory>` 是用户指定的工作区工程代码根目录；会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准，不要猜测或搜索其他路径。',
+        : '`<project_working_directory>` 是用户指定的项目工程代码根目录；会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准，不要猜测或搜索其他路径。',
     );
     lines.push('如果 `<project_working_directory>` 下存在 AGENTS.md（旧版为 CLAUDE.md），那是人写指令（可能同时被其他 CLI 等外部工具读取），只读不要自动创建或修改；这个项目的自动记忆一律通过 `<project_memory_path>` 写入 MEMORY.md，不要写入指令文件。');
   }
@@ -93,7 +93,7 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
     lines.push('`<project_assets>` 列出用户提供的参考文件；仅在相关时按绝对路径按需读取，不必全部读完。');
   }
   lines.push('`<project_assets_path>` 是项目资产库：可作为项目参考文件读取；不要把下载/生成产物写进去（该目录保留给用户提供的项目资产，会话级交付物写入当前会话的 Outbox，项目内文件写入 `<project_working_directory>` 对应目录）。');
-  lines.push('`<project_memory>` 是该工作区的权威累积知识；学到持久决策、约定或偏好时，用 Write/Edit 写入 MEMORY.md（最新/重要优先，约 5000 token 内）。');
+  lines.push('`<project_memory>` 是该项目的权威累积知识；学到项目专属的持久决策、约定或经验时，用 Write/Edit 写入 MEMORY.md（最新/重要优先，约 5000 token 内）。');
   lines.push('</project_context>');
   return lines.join('\n');
 }

@@ -74,7 +74,7 @@ export function TutorialBanner(): React.ReactElement | null {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">MyYoda 使用指南</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">了解 Chat / Project 模式、空间管理、任务编排等核心功能</p>
+            <p className="text-xs text-muted-foreground mt-0.5">了解 Chat / Project 模式、工作区管理、任务编排等核心功能</p>
           </div>
         </div>
 

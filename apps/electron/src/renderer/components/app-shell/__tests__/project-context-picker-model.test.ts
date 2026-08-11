@@ -37,6 +37,22 @@ describe('project-context-picker-model', () => {
     expect(task.actions.map((a) => a.id)).not.toContain('workspace-task')
   })
 
+  test('项目选择器动作使用项目术语，不把 Craft Project 称为工作区', () => {
+    const sections = buildPickerSections({
+      mode: 'session',
+      projects,
+      recentProjectIds: [],
+      selectedProjectId: 'p1',
+    })
+
+    expect(sections.actions).toEqual([
+      { id: 'create', label: '新建项目…' },
+      { id: 'browse', label: '使用现有项目文件夹…' },
+      { id: 'skip', label: '清除项目' },
+    ])
+    expect(sections.actions.map((action) => action.label).join('')).not.toContain('工作区')
+  })
+
   test('projects：最近使用的排前面，不与其余项目重复', () => {
     const sections = buildPickerSections({
       mode: 'session',

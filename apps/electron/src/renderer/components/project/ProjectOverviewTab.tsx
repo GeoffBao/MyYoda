@@ -36,7 +36,7 @@ export function ProjectOverviewTab({ project, onOpenTasks }: ProjectOverviewTabP
               <span className="h-3 w-3 rounded-full" style={{ backgroundColor: project.color ?? 'hsl(var(--muted-foreground))' }} />
               <h2 className="truncate text-xl font-semibold">{project.name}</h2>
             </div>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{project.description || '尚未添加工作区描述。'}</p>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{project.description || '尚未添加项目描述。'}</p>
           </div>
           <Button size="sm" onClick={onOpenTasks}>查看任务<ArrowRight className="ml-1 h-4 w-4" /></Button>
         </div>

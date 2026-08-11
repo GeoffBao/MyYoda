@@ -145,7 +145,7 @@ export function PlanningView({ standalone = false }: { standalone?: boolean } = 
         <nav className="inline-flex rounded-xl bg-muted/60 p-1 shadow-inner" aria-label="任务日程视图">
           {TABS.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn('min-h-9 rounded-lg px-3 text-sm transition-colors', tab === item.id ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{item.label}</button>)}
         </nav>
-        <nav className="inline-flex rounded-xl bg-muted/60 p-1 shadow-inner" aria-label="空间范围">
+        <nav className="inline-flex rounded-xl bg-muted/60 p-1 shadow-inner" aria-label="工作区范围">
           {(['current', 'all'] as const).map((scope) => (
             <button
               key={scope}
@@ -153,7 +153,7 @@ export function PlanningView({ standalone = false }: { standalone?: boolean } = 
               onClick={() => setWorkspaceScope(scope)}
               className={cn('min-h-9 rounded-lg px-3 text-sm transition-colors', workspaceScope === scope ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
             >
-              {scope === 'current' ? '当前空间' : '全部空间'}
+              {scope === 'current' ? '当前工作区' : '全部工作区'}
             </button>
           ))}
         </nav>
@@ -558,7 +558,7 @@ function TodoWorkspace({ standalone = false }: { standalone?: boolean } = {}): R
     }
     const workspace = agentWorkspaces.find((item) => item.id === workspaceId)
     if (!workspace) {
-      toast.error('所选空间已不可用，请重新选择')
+      toast.error('所选工作区已不可用，请重新选择')
       return
     }
 

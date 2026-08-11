@@ -1,8 +1,8 @@
 /**
- * ImportSkillDialog — 从其他空间批量导入 Skill
+ * ImportSkillDialog — 从其他工作区批量导入 Skill
  *
- * 列出其他空间可用的 Skill（自动过滤已安装的同名项），
- * 勾选多个后一键批量导入到当前空间。导入完成后通过 toast 反馈结果。
+ * 列出其他工作区可用的 Skill（自动过滤已安装的同名项），
+ * 勾选多个后一键批量导入到当前工作区。导入完成后通过 toast 反馈结果。
  */
 
 import * as React from 'react'
@@ -79,7 +79,7 @@ export function ImportSkillDialog({
         if (requestIdRef.current !== requestId) return
         console.error('[Agent 技能] 加载其他工作区 Skill 失败:', error)
         setOtherWorkspaces([])
-        toast.error('加载其他空间 Skill 失败', {
+        toast.error('加载其他工作区 Skill 失败', {
           description: error instanceof Error ? error.message : '未知错误',
         })
       } finally {
@@ -103,7 +103,7 @@ export function ImportSkillDialog({
     [otherWorkspaces, installedSlugs],
   )
 
-  // 来源空间下拉默认选中第一个可用空间（保持当前值仍有效时不切换）
+  // 来源工作区下拉默认选中第一个可用工作区（保持当前值仍有效时不切换）
   React.useEffect(() => {
     if (!open || loadingWorkspaces || availableWorkspaces.length === 0) {
       if (!loadingWorkspaces) setSelectedWorkspaceSlug('')
@@ -206,9 +206,9 @@ export function ImportSkillDialog({
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
         <DialogHeader className="px-6 pb-4 pt-6">
-          <DialogTitle>从其他空间批量导入 Skill</DialogTitle>
+          <DialogTitle>从其他工作区批量导入 Skill</DialogTitle>
           <DialogDescription>
-            从其他空间勾选多个 Skill 导入到当前空间。已安装的同名 Skill 会自动过滤。
+            从其他工作区勾选多个 Skill 导入到当前工作区。已安装的同名 Skill 会自动过滤。
           </DialogDescription>
         </DialogHeader>
 
@@ -216,20 +216,20 @@ export function ImportSkillDialog({
           {loadingWorkspaces ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <Loader2 size={15} className="animate-spin" />
-              正在加载其他空间 Skill...
+              正在加载其他工作区 Skill...
             </div>
           ) : availableWorkspaces.length === 0 ? (
             <SettingsCard divided={false}>
               <div className="py-10 text-center text-sm text-muted-foreground">
-                没有可导入的 Skill。其他空间暂无 Skill，或者它们都已经安装到当前空间了。
+                没有可导入的 Skill。其他工作区暂无 Skill，或者它们都已经安装到当前工作区了。
               </div>
             </SettingsCard>
           ) : (
             <div className="space-y-2">
-              <div className="text-sm font-medium text-foreground">选择来源空间</div>
+              <div className="text-sm font-medium text-foreground">选择来源工作区</div>
               <Select value={selectedWorkspaceSlug} onValueChange={handleWorkspaceChange} disabled={loadingWorkspaces || importing}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择来源空间" />
+                  <SelectValue placeholder="选择来源工作区" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableWorkspaces.map((w) => (
@@ -306,7 +306,7 @@ export function ImportSkillDialog({
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-6 py-4">
           <span className="text-xs text-muted-foreground">
             {loadingWorkspaces
-              ? '正在加载其他空间 Skill...'
+              ? '正在加载其他工作区 Skill...'
               : '勾选要导入的 Skill，已安装的同名 Skill 会自动过滤'}
           </span>
           <Button size="sm" onClick={() => void handleImport()} disabled={loadingWorkspaces || importing || selectedCount === 0}>

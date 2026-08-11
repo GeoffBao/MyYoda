@@ -374,7 +374,7 @@ function RetryAttemptItem({
               <div>运行时: {attempt.environment.runtime}</div>
               <div>平台: {attempt.environment.platform}</div>
               <div>模型: {attempt.environment.model}</div>
-              {attempt.environment.workspace && <div>空间: {attempt.environment.workspace}</div>}
+              {attempt.environment.workspace && <div>工作区: {attempt.environment.workspace}</div>}
             </div>
           )}
 

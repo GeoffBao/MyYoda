@@ -47,7 +47,7 @@ export interface ProjectContextPickerProps {
   variant?: 'chip' | 'inline'
   /** 未选中时的触发器文案；不传沿用各 variant 的默认值 */
   placeholderLabel?: string
-  /** 挂载时自动展开一次「新建工作区」表单（整个工作区首次建会话的引导），处理后应调用 onAutoOpenHandled 避免重复触发 */
+  /** 挂载时自动展开一次「新建项目」表单（整个工作区首次建会话的引导），处理后应调用 onAutoOpenHandled 避免重复触发 */
   autoOpenCreate?: boolean
   onAutoOpenHandled?: () => void
 }
@@ -188,7 +188,7 @@ export function ProjectContextPicker({
       await onSelect(kanban.id)
       setOpen(false)
       if (result.created) {
-        toast.success(`已创建工作区「${kanban.name}」`)
+        toast.success(`已创建项目「${kanban.name}」`)
       }
     } catch (error) {
       console.error('[ProjectContextPicker] 打开路径失败:', error)
@@ -238,10 +238,10 @@ export function ProjectContextPicker({
       setCreateOpen(false)
       await onSelect(kanban.id)
       setOpen(false)
-      toast.success(`已创建工作区「${kanban.name}」`)
+      toast.success(`已创建项目「${kanban.name}」`)
     } catch (error) {
-      console.error('[ProjectContextPicker] 新建工作区失败:', error)
-      toast.error('创建工作区失败', {
+      console.error('[ProjectContextPicker] 新建项目失败:', error)
+      toast.error('创建项目失败', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -268,7 +268,7 @@ export function ProjectContextPicker({
         defaultOpen ? 'w-full' : 'w-[280px]',
       )}
       role="listbox"
-      aria-label="选择工作区上下文"
+      aria-label="选择项目上下文"
     >
       {/* 项目多起来后才出现的筛选框，项目少的常见场景下不占地方 */}
       {showSearch && (
@@ -279,7 +279,7 @@ export function ProjectContextPicker({
               autoFocus
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="筛选工作区…"
+              placeholder="筛选项目…"
               className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-foreground/35"
             />
           </div>
@@ -287,12 +287,12 @@ export function ProjectContextPicker({
       )}
 
       {/* 列表：只显示项目名，完整路径进 title（对齐 Cursor/Codex）。
-          最近使用的工作区排前面，同一工作区只出现一次。 */}
+          最近使用的项目排前面，同一项目只出现一次。 */}
       <div className="max-h-[220px] space-y-2 overflow-y-auto p-1.5">
         <Section title="最近">
           {visibleProjects.length === 0 ? (
             <p className="px-2 py-1.5 text-[11px] text-foreground/40">
-              {sections.projects.length === 0 ? '暂无工作区' : '没有匹配的工作区'}
+              {sections.projects.length === 0 ? '暂无项目' : '没有匹配的项目'}
             </p>
           ) : (
             visibleProjects.map((project) => (
@@ -313,14 +313,14 @@ export function ProjectContextPicker({
       <div className="shrink-0 space-y-0.5 border-t border-border/40 bg-background/90 p-1.5">
         <ActionRow
           icon={FolderPlus}
-          label="新建工作区…"
+          label="新建项目…"
           disabled={busy}
           onClick={() => setCreateOpen(true)}
         />
         {sections.actions.some((action) => action.id === 'skip') ? (
           <ActionRow
             icon={FolderKanban}
-            label="清除工作区"
+            label="清除项目"
             disabled={busy}
             onClick={() => { void handlePick(null) }}
           />
@@ -347,7 +347,7 @@ export function ProjectContextPicker({
     )
   }
 
-  const defaultPlaceholder = variant === 'inline' ? '选择工作区' : '选择/新建工作区'
+  const defaultPlaceholder = variant === 'inline' ? '选择项目' : '选择/新建项目'
   const triggerLabel = selectedName ?? placeholderLabel ?? defaultPlaceholder
   // chip 贴在 composer 底部，面板向上展开；inline 嵌在页面中部的问候语里，向下展开更自然
   // （Radix 会在首选方向空间不够时自动翻转，这里只是首选方向）
@@ -366,8 +366,8 @@ export function ProjectContextPicker({
               className={cn(
                 'underline decoration-dotted decoration-1 underline-offset-4 outline-none transition-opacity hover:opacity-70 disabled:opacity-60',
               )}
-              aria-label="选择/新建工作区"
-              title={selectedName ?? '选择或新建工作区'}
+              aria-label="选择/新建项目"
+              title={selectedName ?? '选择或新建项目'}
             >
               {triggerLabel}
             </button>
@@ -379,8 +379,8 @@ export function ProjectContextPicker({
                 'inline-flex h-7 max-w-[200px] items-center gap-1 rounded-md px-1.5 text-[12px] text-foreground/70 outline-none hover:bg-foreground/[0.05] hover:text-foreground',
                 busy && 'opacity-60',
               )}
-              aria-label="选择/新建工作区"
-              title={selectedName ?? '选择或新建工作区'}
+              aria-label="选择/新建项目"
+              title={selectedName ?? '选择或新建项目'}
             >
               <FolderKanban size={12} className="shrink-0 text-foreground/40" />
               <span className="truncate">{triggerLabel}</span>

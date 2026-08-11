@@ -1,7 +1,7 @@
 /**
- * ProjectSettingsDialog — 工作区设置弹窗
+ * ProjectSettingsDialog — 项目设置弹窗
  *
- * 从侧栏工作区菜单触发，编辑工作区元信息和默认专家。Project Knowledge 只在工作区页面维护。
+ * 从侧栏项目菜单触发，编辑项目元信息和默认专家。Project Knowledge 只在项目页面维护。
  */
 
 import * as React from 'react'
@@ -86,7 +86,7 @@ export function ProjectSettingsDialog({
 
   const saveSettings = async (): Promise<void> => {
     if (!slug || !settingsDraft.name.trim()) {
-      toast.error('工作区名称不能为空')
+      toast.error('项目名称不能为空')
       return
     }
     setBusy(true)
@@ -97,7 +97,7 @@ export function ProjectSettingsDialog({
         buildProjectUpdate(settingsDraft),
       )
       onProjectChanged(updated)
-      toast.success('工作区设置已保存')
+      toast.success('项目设置已保存')
       onOpenChange(false)
     } catch (cause) {
       toast.error('保存失败', {
@@ -112,14 +112,14 @@ export function ProjectSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>工作区设置</DialogTitle>
+          <DialogTitle>项目设置</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <SettingsCard title="基本信息">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <label className="space-y-1.5 text-xs font-medium">
-                工作区名称
+                项目名称
                 <Input
                   value={settingsDraft.name}
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, name: e.target.value }))}
@@ -169,7 +169,7 @@ export function ProjectSettingsDialog({
             </label>
           </SettingsCard>
 
-          <SettingsCard title="工作区说明" hint="注入系统提示词的自由文本，帮助 Agent 理解工作区背景">
+          <SettingsCard title="项目说明" hint="注入系统提示词的自由文本，帮助 Agent 理解项目背景">
             <Textarea
               value={settingsDraft.details}
               onChange={(e) => setSettingsDraft((d) => ({ ...d, details: e.target.value }))}

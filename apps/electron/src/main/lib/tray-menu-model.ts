@@ -16,9 +16,9 @@ export interface TrayMenuModel {
 }
 
 function getWorkspaceLabel(session: AgentSessionMeta, workspacesById: Map<string, AgentWorkspace>): string {
-  if (!session.workspaceId) return '未选择空间'
+  if (!session.workspaceId) return '未选择工作区'
   const workspace = workspacesById.get(session.workspaceId)
-  return workspace?.name ?? '未知空间'
+  return workspace?.name ?? '未知工作区'
 }
 
 function toRecentSessionItem(

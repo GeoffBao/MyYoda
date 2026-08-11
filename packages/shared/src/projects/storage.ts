@@ -99,7 +99,7 @@ export function getProjectAssetsPath(workspaceRootPath: string, projectSlug: str
 /** MEMORY.md 文件名（放在 config.json 同级，不在 assets/ 内） */
 export const MEMORY_FILENAME = 'MEMORY.md';
 
-/** 本地目录项目的项目级记忆目录名，与会话级/空间级 `.context/` 同名但物理位置在项目真实文件夹下 */
+/** 本地目录项目的项目级记忆目录名，与会话级/工作区级 `.context/` 同名但物理位置在项目真实文件夹下 */
 const PROJECT_CONTEXT_DIRNAME = '.context';
 
 /**
@@ -301,7 +301,7 @@ export function updateProject(
   patch: UpdateProjectInput,
 ): ProjectConfig {
   const existing = loadProjectConfig(workspaceRootPath, projectSlug);
-  if (!existing) throw new Error(`工作区不存在: ${projectSlug}`);
+  if (!existing) throw new Error(`项目不存在: ${projectSlug}`);
 
   const updated: ProjectConfig = {
     ...existing,
@@ -361,10 +361,10 @@ export function readProjectMemory(workspaceRootPath: string, projectSlug: string
   }
 }
 
-/** 原子覆盖项目 MEMORY.md；工作区不存在时拒绝创建游离目录。 */
+/** 原子覆盖项目 MEMORY.md；项目不存在时拒绝创建游离目录。 */
 export function writeProjectMemory(workspaceRootPath: string, projectSlug: string, content: string): void {
   if (!projectExists(workspaceRootPath, projectSlug)) {
-    throw new Error(`工作区不存在: ${projectSlug}`);
+    throw new Error(`项目不存在: ${projectSlug}`);
   }
   const memoryPath = getProjectMemoryPath(workspaceRootPath, projectSlug);
   const memoryDir = dirname(memoryPath);
@@ -408,7 +408,7 @@ export function uploadProjectAsset(
   input: UploadProjectAssetInput,
 ): ProjectAsset {
   if (!projectExists(workspaceRootPath, projectSlug)) {
-    throw new Error(`工作区不存在: ${projectSlug}`);
+    throw new Error(`项目不存在: ${projectSlug}`);
   }
 
   ensureProjectAssetsDir(workspaceRootPath, projectSlug);

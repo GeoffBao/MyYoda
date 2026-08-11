@@ -116,7 +116,7 @@ export function WelcomeEmptyState({ sessionId, projectId }: WelcomeEmptyStatePro
             />
           </div>
 
-          {/* 问候语：Agent 模式绑定当前草稿会话的项目，项目名（或「选择工作区」占位）可点击直接切换，
+          {/* 问候语：Agent 模式绑定当前草稿会话的项目，项目名（或「选择项目」占位）可点击直接切换，
               与 composer 里的项目 chip（DraftProjectPicker）共用同一套选择面板与绑定逻辑。
               Chat 模式不涉及项目，保留原有的个性化时段问候。 */}
           {uiMode === 'agent' && sessionId ? (

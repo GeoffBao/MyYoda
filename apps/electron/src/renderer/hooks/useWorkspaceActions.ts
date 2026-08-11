@@ -1,8 +1,7 @@
 /**
- * useProjectActions — 项目切换与创建的共享逻辑
+ * useWorkspaceActions — AgentWorkspace 切换与创建的共享逻辑。
  *
- * UI 层把 AgentWorkspace 展示为“项目”。底层类型和 IPC 仍沿用 workspace
- * 命名，这里只把对展示组件暴露的动作语义收敛到 project。
+ * 用户界面统一称为“工作区”；底层类型、IPC 和持久化字段继续沿用 workspace 命名。
  */
 
 import * as React from 'react'
@@ -15,22 +14,22 @@ import {
 import { activeViewAtom } from '@/atoms/active-view'
 import type { AgentWorkspace } from '@myyoda/shared'
 
-interface UseProjectActionsResult {
+interface UseWorkspaceActionsResult {
   workspaces: AgentWorkspace[]
   currentWorkspaceId: string | null
-  /** 切换到指定项目；已是当前项目时无副作用。默认切回对话视图，resetView:false 可保持当前视图（如停留在 Agent 技能） */
-  selectProject: (workspaceId: string, opts?: { resetView?: boolean }) => void
-  /** 创建并切到新项目；成功返回新项目，失败已 toast 并返回 null */
-  createProject: (name: string) => Promise<AgentWorkspace | null>
+  /** 切换到指定工作区；已是当前工作区时无副作用。默认切回对话视图，resetView:false 可保持当前视图（如停留在 Agent 技能） */
+  selectWorkspace: (workspaceId: string, opts?: { resetView?: boolean }) => void
+  /** 创建并切到新工作区；成功返回新工作区，失败已 toast 并返回 null */
+  createWorkspace: (name: string) => Promise<AgentWorkspace | null>
 }
 
-export function useProjectActions(): UseProjectActionsResult {
+export function useWorkspaceActions(): UseWorkspaceActionsResult {
   const [workspaces, setWorkspaces] = useAtom(agentWorkspacesAtom)
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const createInFlightRef = React.useRef(false)
 
-  const selectProject = React.useCallback(
+  const selectWorkspace = React.useCallback(
     (workspaceId: string, opts?: { resetView?: boolean }): void => {
       if (workspaceId === currentWorkspaceId) return
       setCurrentWorkspaceId(workspaceId)
@@ -40,7 +39,7 @@ export function useProjectActions(): UseProjectActionsResult {
     [currentWorkspaceId, setCurrentWorkspaceId, setActiveView],
   )
 
-  const createProject = React.useCallback(
+  const createWorkspace = React.useCallback(
     async (name: string): Promise<AgentWorkspace | null> => {
       const trimmed = name.trim()
       if (!trimmed) return null
@@ -65,5 +64,5 @@ export function useProjectActions(): UseProjectActionsResult {
     [setWorkspaces, setCurrentWorkspaceId, setActiveView],
   )
 
-  return { workspaces, currentWorkspaceId, selectProject, createProject }
+  return { workspaces, currentWorkspaceId, selectWorkspace, createWorkspace }
 }

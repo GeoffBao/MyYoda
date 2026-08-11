@@ -109,7 +109,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "连接与数据",
     tabs: [
-      { id: "workspace", label: "空间容器", icon: <Layers size={16} /> },
+      { id: "workspace", label: "工作区", icon: <Layers size={16} /> },
       { id: "bots", label: "远程连接", icon: <Bot size={16} /> },
       { id: "migration", label: "数据迁移", icon: <HardDriveDownload size={16} /> },
       { id: "storage", label: "磁盘管理", icon: <HardDrive size={16} /> },
