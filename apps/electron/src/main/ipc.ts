@@ -5,7 +5,7 @@
  */
 
 import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nativeImage } from 'electron'
-import { join, resolve, sep, dirname } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -319,7 +319,7 @@ import { spawnExpertCowork } from './lib/agent-cowork'
 import { permissionService } from './lib/agent-permission-service'
 import { askUserService } from './lib/agent-ask-user-service'
 import { exitPlanService } from './lib/agent-exit-plan-service'
-import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getWorkspaceSkillsDir, getWorkspaceFilesDir, getScratchPadPath, getExcalidrawDir, getExpertsDir, getDefaultExpertTemplatesDir } from './lib/config-paths'
+import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir, getWorkspaceFilesDir, getScratchPadPath, getExcalidrawDir, getExpertsDir, getDefaultExpertTemplatesDir } from './lib/config-paths'
 import { resolveAgentSessionFileRoots } from './lib/agent-file-roots'
 import { listSessionOutputs } from './lib/agent-output-capture'
 import { getAgentWorkspacePath } from './lib/config-paths'
@@ -5278,14 +5278,6 @@ export function registerIpcHandlers(): void {
     return getAgentUsageStats(range ?? 'all')
   })
 
-  // 迁移取消时清理临时解压目录
-  ipcMain.handle('migration:cancelImport', async (_, tempDir: string) => {
-    if (tempDir && existsSync(tempDir) && tempDir.includes('myyoda-import-')) {
-      rmSync(tempDir, { recursive: true, force: true })
-      console.log(`[迁移] 已清理临时目录: ${tempDir}`)
-    }
-  })
-
   // 启动时自动清理临时文件
   const runStartupCleanup = async (): Promise<void> => {
     try {
@@ -5531,61 +5523,10 @@ export function registerIpcHandlers(): void {
 
   // ===== 数据迁移 =====
 
-  ipcMain.handle('migration:getExportPreview', async (_, workspaceId: string) => {
-    const { getExportPreview } = await import('./lib/migration-service')
-    return getExportPreview(workspaceId)
-  })
-
-  ipcMain.handle('migration:getShareExportPreview', async () => {
-    const { getShareExportPreview } = await import('./lib/migration-service')
-    return getShareExportPreview()
-  })
-
-  ipcMain.handle('migration:export', async (_, options) => {
-    const { exportData } = await import('./lib/migration-service')
-    return exportData(options)
-  })
-
-  ipcMain.handle('migration:exportV2', async (_, options) => {
-    const { exportDataV2 } = await import('./lib/migration-service')
-    return exportDataV2(options)
-  })
-
-  ipcMain.handle('migration:parseImportFile', async (_, filePath: string) => {
-    const { parseImportFile } = await import('./lib/migration-service')
-    return parseImportFile(filePath)
-  })
-
-  ipcMain.handle('migration:confirmImport', async (_, options) => {
-    const { confirmImport } = await import('./lib/migration-service')
-    return confirmImport(options)
-  })
-
-  ipcMain.handle('migration:openFileDialog', async () => {
-    const { dialog } = await import('electron')
-    const result = await dialog.showOpenDialog({
-      title: '选择迁移文件',
-      filters: [
-        { name: 'MyYoda 迁移文件', extensions: ['myyoda-backup', 'myyoda-share'] },
-        { name: '所有文件', extensions: ['*'] },
-      ],
-      properties: ['openFile'],
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-
-  ipcMain.handle('migration:saveFileDialog', async (_, mode: string) => {
-    const { dialog } = await import('electron')
-    const ext = mode === 'personal' ? 'myyoda-backup' : 'myyoda-share'
-    const defaultName = `myyoda-migration-${new Date().toISOString().slice(0, 10)}.${ext}`
-    const result = await dialog.showSaveDialog({
-      title: '保存迁移文件',
-      defaultPath: defaultName,
-      filters: [
-        { name: mode === 'personal' ? 'MyYoda 个人备份' : 'MyYoda 分享包', extensions: [ext] },
-      ],
-    })
-    return result.canceled ? null : result.filePath
+  ipcMain.handle('migration:open-data-folder', async (): Promise<void> => {
+    const dataDir = getConfigDir()
+    const error = await shell.openPath(dataDir)
+    if (error) throw new Error(`无法打开 MyYoda 数据文件夹：${error}`)
   })
 
   // ===== 窗口控制（Windows 自定义标题栏按钮）=====

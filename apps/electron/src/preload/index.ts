@@ -1440,24 +1440,8 @@ export interface ElectronAPI {
 
   // ===== 数据迁移 =====
 
-  /** 获取工作区导出预览信息 */
-  migrationGetExportPreview: (workspaceId: string) => Promise<unknown>
-  /** 获取所有工作区的 Skills/MCP 预览（团队分发模式） */
-  migrationGetShareExportPreview: () => Promise<unknown>
-  /** 执行导出 */
-  migrationExport: (options: unknown) => Promise<MigrationExportResult>
-  /** 执行 v2 多工作区导出 */
-  migrationExportV2: (options: unknown) => Promise<MigrationExportResult>
-  /** 解析导入文件，返回预览信息 */
-  migrationParseImportFile: (filePath: string) => Promise<unknown>
-  /** 确认导入 */
-  migrationConfirmImport: (options: unknown) => Promise<{ success: boolean }>
-  /** 打开文件选择对话框（选择 .myyoda-backup 或 .myyoda-share） */
-  migrationOpenFileDialog: () => Promise<string | null>
-  /** 打开文件保存对话框（选择导出路径） */
-  migrationSaveFileDialog: (mode: string) => Promise<string | null>
-  /** 订阅双击迁移文件触发的导入事件 */
-  onMigrationOpenImportFile: (callback: (data: { filePath: string }) => void) => () => void
+  /** 在系统文件管理器中打开 MyYoda 数据文件夹 */
+  openMigrationDataFolder: () => Promise<void>
 
   // ===== 存储管理 =====
 
@@ -1472,8 +1456,6 @@ export interface ElectronAPI {
 
   /** 获取跨会话用量聚合统计（range: all | 30d | 7d） */
   getUsageStats: (range: unknown) => Promise<unknown>
-  /** 取消迁移导入（清理临时解压目录） */
-  migrationCancelImport: (tempDir: string) => Promise<void>
 
   // ===== 定时任务（Automation）=====
   /** 获取定时任务；scope 默认 'current' 按当前 Workspace 过滤，'all' 不过滤；workspaceId 显式指定时优先使用 */
@@ -1688,12 +1670,6 @@ export interface ElectronAPI {
     /** 弹出桌宠右键菜单 */
     openContextMenu: () => Promise<void>
   }
-}
-
-interface MigrationExportResult {
-  success: boolean
-  filePath: string
-  warnings?: string[]
 }
 
 /**
@@ -3301,43 +3277,7 @@ const electronAPI: ElectronAPI = {
     return () => { ipcRenderer.removeListener(TRAY_IPC_CHANNELS.CREATE_SESSION, listener) }
   },
 
-  migrationGetExportPreview: (workspaceId: string) => {
-    return ipcRenderer.invoke('migration:getExportPreview', workspaceId)
-  },
-
-  migrationGetShareExportPreview: () => {
-    return ipcRenderer.invoke('migration:getShareExportPreview')
-  },
-
-  migrationExport: (options: unknown) => {
-    return ipcRenderer.invoke('migration:export', options)
-  },
-
-  migrationExportV2: (options: unknown) => {
-    return ipcRenderer.invoke('migration:exportV2', options)
-  },
-
-  migrationParseImportFile: (filePath: string) => {
-    return ipcRenderer.invoke('migration:parseImportFile', filePath)
-  },
-
-  migrationConfirmImport: (options: unknown) => {
-    return ipcRenderer.invoke('migration:confirmImport', options)
-  },
-
-  migrationOpenFileDialog: () => {
-    return ipcRenderer.invoke('migration:openFileDialog')
-  },
-
-  migrationSaveFileDialog: (mode: string) => {
-    return ipcRenderer.invoke('migration:saveFileDialog', mode)
-  },
-
-  onMigrationOpenImportFile: (callback: (data: { filePath: string }) => void) => {
-    const listener = (_: unknown, data: { filePath: string }): void => callback(data)
-    ipcRenderer.on('migration:open-import-file', listener)
-    return () => { ipcRenderer.removeListener('migration:open-import-file', listener) }
-  },
+  openMigrationDataFolder: () => ipcRenderer.invoke('migration:open-data-folder'),
 
   // ===== 存储管理 =====
 
@@ -3359,8 +3299,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(USAGE_IPC_CHANNELS.GET_STATS, range)
   },
 
-  migrationCancelImport: (tempDir: string) => {
-    return ipcRenderer.invoke('migration:cancelImport', tempDir)
+  openMigrationDataFolder: () => {
+    return ipcRenderer.invoke('migration:open-data-folder')
   },
 
   // ===== 定时任务（Automation）=====

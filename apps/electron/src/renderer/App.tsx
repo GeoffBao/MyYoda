@@ -4,7 +4,6 @@ import { AppShell } from './components/app-shell/AppShell'
 import { OnboardingView, type OnboardingCompleteAction } from './components/onboarding/OnboardingView'
 import { TutorialBanner } from './components/tutorial/TutorialBanner'
 import { EnvironmentCheckDialog } from './components/environment/EnvironmentCheckDialog'
-import { MigrationImportDialog } from './components/migration/MigrationImportDialog'
 import { TooltipProvider } from './components/ui/tooltip'
 import { WindowControls } from './components/WindowControls'
 import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from './lib/platform'
@@ -106,7 +105,6 @@ export default function App(): React.ReactElement {
           />
           <WindowControls />
           <OnboardingView onComplete={handleOnboardingComplete} />
-          <MigrationImportDialog />
         </div>
       </TooltipProvider>
     )
@@ -121,7 +119,6 @@ export default function App(): React.ReactElement {
       <AppShell contextValue={contextValue} />
       <TutorialBanner />
       <GlobalEnvironmentCheckDialog />
-      <MigrationImportDialog />
     </TooltipProvider>
   )
 }

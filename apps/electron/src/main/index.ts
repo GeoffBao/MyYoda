@@ -42,29 +42,18 @@ function registerProtocolsAndHandlers(): void {
     app.commandLine.appendSwitch('disable-lcd-text')
   }
 
-  // macOS 文件关联：在 app ready 之前注册 open-file 事件
-  app.on('open-file', (event, filePath) => {
-    event.preventDefault()
-    handleMigrationFileOpen(filePath)
-  })
-
-  // Windows 文件关联：当用户双击文件时，新实例的参数会通过 second-instance 传给已有实例
+  // Windows 等平台通过 second-instance 唤起已有主窗口。
   app.on('second-instance', (_event, argv) => {
     if (hasOpenPlanningArgument(argv)) {
       showPlanningWindow()
       return
     }
     showAndFocusMainWindow()
-    const fileArg = argv.find((arg) => arg.endsWith('.myyoda-backup') || arg.endsWith('.myyoda-share'))
-    if (fileArg) {
-      handleMigrationFileOpen(fileArg)
-    }
   })
 }
 
 
 
-import { migrateDataDirIfNeeded } from './lib/migration-service'
 import { getSettings, updateSettings } from './lib/settings-service'
 import { handlePromaFileRequest } from './lib/local-file-protocol'
 
@@ -140,19 +129,10 @@ import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/glob
 import { setAppVersion } from '@myyoda/core'
 import { TRAY_IPC_CHANNELS } from '../types'
 
-const MIGRATION_IPC_OPEN = 'migration:open-import-file'
-
 function startCodeClawSurface(): void {
   // 不再启动时预创建桌宠窗口：CodeClaw 是可选企业桌面助手，默认关闭。
   // 开启后由 codeclaw-service 在推送可见状态时按需创建窗口。
   publishCodeClawNow()
-}
-
-/** 检查文件路径是否为迁移文件，如果是则通知渲染进程打开导入流程 */
-function handleMigrationFileOpen(filePath: string): void {
-  if (filePath.endsWith('.myyoda-backup') || filePath.endsWith('.myyoda-share')) {
-    sendToMainWindow(MIGRATION_IPC_OPEN, { filePath })
-  }
 }
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
@@ -606,8 +586,6 @@ app.whenReady().then(bootstrap).catch(handleBootstrapFailure)
  * 单点失败不应阻止窗口和托盘的创建（用户至少要能看到界面）。
  */
 async function bootstrap(): Promise<void> {
-  migrateDataDirIfNeeded()
-
   // 初始化 MyYoda 版本号（供 User-Agent 等全局标识使用）
   setAppVersion(app.getVersion())
 
