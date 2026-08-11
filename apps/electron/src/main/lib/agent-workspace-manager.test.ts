@@ -176,6 +176,19 @@ describe('ensureDefaultWorkspace', () => {
     expect(again.id).toBe(created.id)
     expect(again.name).toBe('我的实验室')
   })
+
+  test('已有其他工作区占用默认工作区名称时保留默认项的历史名称，避免迁移产生重名', () => {
+    const defaultWorkspace = manager.ensureDefaultWorkspace()
+    manager.updateAgentWorkspace(defaultWorkspace.id, { name: '默认空间' })
+    const existingNamedWorkspace = manager.createAgentWorkspace('默认工作区')
+
+    const migrated = manager.ensureDefaultWorkspace()
+    const workspaces = manager.listAgentWorkspaces()
+
+    expect(migrated.name).toBe('默认空间')
+    expect(workspaces.find((workspace) => workspace.id === existingNamedWorkspace.id)?.name).toBe('默认工作区')
+    expect(workspaces.filter((workspace) => workspace.name === '默认工作区')).toHaveLength(1)
+  })
 })
 
 describe('Agent 工作区删除边界', () => {

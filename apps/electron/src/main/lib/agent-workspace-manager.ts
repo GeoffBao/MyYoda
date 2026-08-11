@@ -361,8 +361,16 @@ export function ensureDefaultWorkspace(): AgentWorkspace {
 
     console.log('[Agent 工作区] 已创建默认工作区')
   } else {
-    // 历史默认名迁移为当前产品文案（用户已改名则保留）
-    if (defaultWs.name === 'Default Space' || defaultWs.name === '默认空间') {
+    // 历史默认名迁移为当前产品文案（用户已改名则保留）。
+    // 旧安装可能已经有另一个用户创建的“默认工作区”；冲突时保留历史名称，
+    // 避免绕过 create/update 的唯一性守卫产生两个同名工作区。
+    const hasDefaultNameConflict = index.workspaces.some(
+      (workspace) => workspace.id !== defaultWs!.id && workspace.name === '默认工作区',
+    )
+    if (
+      (defaultWs.name === 'Default Space' || defaultWs.name === '默认空间')
+      && !hasDefaultNameConflict
+    ) {
       defaultWs = { ...defaultWs, name: '默认工作区', updatedAt: Date.now() }
       const idx = index.workspaces.findIndex((item) => item.id === defaultWs!.id)
       if (idx >= 0) index.workspaces[idx] = defaultWs
