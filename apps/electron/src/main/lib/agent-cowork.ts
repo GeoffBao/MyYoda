@@ -59,7 +59,6 @@ function resolveParentContext(parent: AgentSessionMeta): CoworkParentContext {
     modelId: parent.modelId,
     workspaceId: parent.workspaceId,
     permissionMode: parent.permissionMode,
-    
     projectId: parent.projectId,
     workingDirectory: parent.workingDirectory,
     rootSessionId: parent.rootSessionId ?? parent.id,
