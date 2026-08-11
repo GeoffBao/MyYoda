@@ -23,7 +23,7 @@ import {
   getSdkConfigDir,
 } from './config-paths'
 import { getAgentWorkspace, getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspace-manager'
-import { removeSessionWorktree } from './git-session-context-service'
+import { assertWorktreeClean, removeSessionWorktree } from './git-session-context-service'
 
 import type {
   AgentSessionMeta,
@@ -49,6 +49,7 @@ import { assertEnabledModelForChannel } from './agent-model-selection'
 import { copyForkWorkspaceFiles } from './agent-fork-workspace-copy'
 import { getSettings } from './settings-service'
 import { isGitAttributionEnabled } from './agent-git-attribution'
+import { assertRecoveryRootSafe, quarantineForRecovery, type RecoveryTrashRecord } from './recovery-trash-service'
 
 /**
  * 会话索引文件格式
@@ -444,6 +445,12 @@ const TRUNCATED_PREVIEW_LENGTH = 2000
 export function appendSDKMessages(id: string, messages: SDKMessage[]): void {
   if (messages.length === 0) return
 
+  // 删除/级联删除后的迟到流事件不得重新创建孤儿 JSONL；先确认会话仍在索引中。
+  const sessionExists = readIndex().sessions.some((session) => session.id === id)
+  if (!sessionExists) {
+    throw new Error(`Agent 会话不存在，禁止追加消息: ${id}`)
+  }
+
   const filePath = getAgentSessionMessagesPath(id)
 
   try {
@@ -656,8 +663,51 @@ export function setSessionProjectId(id: string, projectId: string): AgentSession
 }
 
 /**
+ * 在任何工作区级级联副作用前，确认会话关联的 Worktree 可以安全删除。
+ */
+export function assertAgentSessionDeletionSafe(id: string, requireWorktreeClean = false): void {
+  const index = readIndex()
+  const candidate = index.sessions.find((session) => session.id === id)
+  if (!candidate) return
+
+  // 先检查所有会话级 recovery roots，Workspace cascade 才能在任何 Session 副作用前 fail closed。
+  assertRecoveryRootSafe(getAgentSessionsDir())
+  if (candidate.workspaceId) {
+    const workspace = getAgentWorkspace(candidate.workspaceId)
+    if (workspace) assertRecoveryRootSafe(getAgentWorkspacePath(workspace.slug))
+  }
+  const sdkSessionIds = [candidate.sdkSessionId, candidate.forkSourceSdkSessionId].filter(Boolean)
+  if (sdkSessionIds.length > 0) assertRecoveryRootSafe(getSdkConfigDir())
+
+  if (!candidate.gitWorktreePath || !candidate.gitRepoPath) return
+  const stillReferenced = index.sessions.some((session) => session.id !== id && session.gitWorktreePath === candidate.gitWorktreePath)
+  if (requireWorktreeClean || !stillReferenced) assertWorktreeClean(candidate.gitWorktreePath)
+}
+
+/**
  * 删除会话
  */
+function restoreQuarantinedSessionArtifacts(records: RecoveryTrashRecord[]): Error[] {
+  const errors: Error[] = []
+  for (const record of records.slice().reverse()) {
+    if (existsSync(record.sourcePath) || !existsSync(record.quarantinePath)) continue
+    try {
+      renameWithRetry(record.quarantinePath, record.sourcePath)
+    } catch (error) {
+      const restoreError = error instanceof Error ? error : new Error(String(error))
+      errors.push(restoreError)
+      console.error(`[Agent 会话] 恢复隔离文件失败 (${record.sourcePath}):`, restoreError)
+    }
+  }
+  return errors
+}
+
+function restoreDeletedSessionIndex(originalSessions: AgentSessionMeta[]): void {
+  const current = readIndex()
+  current.sessions = originalSessions
+  writeIndex(current)
+}
+
 export function deleteAgentSession(id: string): void {
   const index = readIndex()
   const idx = index.sessions.findIndex((s) => s.id === id)
@@ -667,95 +717,96 @@ export function deleteAgentSession(id: string): void {
     return
   }
 
+  assertAgentSessionDeletionSafe(id)
+
+  const originalSessions = [...index.sessions]
   const removed = index.sessions.splice(idx, 1)[0]!
   writeIndex(index)
 
-  // 删除消息文件
-  const filePath = getAgentSessionMessagesPath(id)
-  if (existsSync(filePath)) {
-    try {
-      unlinkSync(filePath)
-    } catch (error) {
-      console.warn(`[Agent 会话] 删除消息文件失败 (${id}):`, error)
+  // Session 的消息、工作目录和 SDK 关联数据都进入同卷 recovery journal；任何一步失败都
+  // 保留源文件并恢复索引，避免 Renderer 把部分删除误报为成功。
+  const recoveryRecords: RecoveryTrashRecord[] = []
+  const rollbackSessionDeletion = (error: unknown): never => {
+    const restoreErrors = restoreQuarantinedSessionArtifacts(recoveryRecords)
+    if (restoreErrors.length > 0) {
+      // 恢复不完整时不要恢复索引，否则会制造“索引存在但源文件缺失”的假成功状态；
+      // 隔离目录和 operation journal 仍保留，后续可人工恢复。
+      throw new Error(`会话删除失败且恢复未完成，已保留 recovery 隔离记录: ${id}`, {
+        cause: restoreErrors[0] ?? error,
+      })
     }
+    try {
+      restoreDeletedSessionIndex(originalSessions)
+    } catch (restoreError) {
+      console.error(`[Agent 会话] 删除失败后恢复会话索引失败 (${id}):`, restoreError)
+    }
+    throw error
   }
 
-  // 清理 session 工作目录
-  if (removed.workspaceId) {
-    const ws = getAgentWorkspace(removed.workspaceId)
-    if (ws) {
-      try {
-        const sessionDir = getAgentSessionWorkspacePath(ws.slug, id)
+  try {
+    const filePath = getAgentSessionMessagesPath(id)
+    if (existsSync(filePath)) {
+      recoveryRecords.push(quarantineForRecovery(getAgentSessionsDir(), filePath, 'session', id))
+    }
+
+    if (removed.workspaceId) {
+      const ws = getAgentWorkspace(removed.workspaceId)
+      if (ws) {
+        // 不调用 getAgentSessionWorkspacePath：该 helper 会为缺失目录创建目录，删除流程不应
+        // 因读取而产生新的用户文件。
+        const sessionDir = join(getAgentWorkspacePath(ws.slug), id)
         if (existsSync(sessionDir)) {
-          rmSyncWithRetry(sessionDir, { recursive: true, force: true })
-          console.log(`[Agent 会话] 已清理 session 工作目录: ${sessionDir}`)
+          recoveryRecords.push(quarantineForRecovery(getAgentWorkspacePath(ws.slug), sessionDir, 'session', id))
         }
-      } catch (error) {
-        console.warn(`[Agent 会话] 清理 session 工作目录失败 (${id}):`, error)
       }
     }
+
+    const sdkSessionIds = [removed.sdkSessionId, removed.forkSourceSdkSessionId].filter(Boolean) as string[]
+    if (sdkSessionIds.length > 0) {
+      const sdkConfigDir = getSdkConfigDir()
+      const fileHistoryDir = join(sdkConfigDir, 'file-history')
+      for (const sid of sdkSessionIds) {
+        const histDir = join(fileHistoryDir, sid)
+        if (existsSync(histDir)) {
+          recoveryRecords.push(quarantineForRecovery(sdkConfigDir, histDir, 'session', id))
+        }
+      }
+
+      const projectsDir = join(sdkConfigDir, 'projects')
+      if (existsSync(projectsDir)) {
+        for (const hashDir of readdirSync(projectsDir)) {
+          const projPath = join(projectsDir, hashDir)
+          for (const sid of sdkSessionIds) {
+            const sessionFile = join(projPath, `${sid}.jsonl`)
+            if (existsSync(sessionFile)) {
+              recoveryRecords.push(quarantineForRecovery(sdkConfigDir, sessionFile, 'session', id))
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    rollbackSessionDeletion(error)
   }
 
-  // 清理 Git Worktree（若会话使用 Worktree 执行模式）；其他会话仍指向同一 worktree 时跳过，
-  // 避免误删还在被使用的工作目录（例如历史遗留的同名 worktree 复用场景）。
-  if (removed.gitWorktreePath && removed.gitRepoPath) {
-    const stillReferenced = index.sessions.some((s) => s.gitWorktreePath === removed.gitWorktreePath)
+  // Worktree 是最后一个破坏性步骤：只有所有可恢复文件都已成功 quarantine 后才调用 Git
+  // 删除。若 Git 删除失败，rollback 会把已隔离文件移回原位并恢复 Session 索引。
+  if (removed.gitWorktreePath && removed.gitRepoPath && existsSync(removed.gitWorktreePath)) {
+    const stillReferenced = originalSessions.some((session) => session.id !== id && session.gitWorktreePath === removed.gitWorktreePath)
     if (!stillReferenced) {
       try {
         removeSessionWorktree(removed.gitRepoPath, removed.gitWorktreePath)
         console.log(`[Agent 会话] 已清理 Git Worktree: ${removed.gitWorktreePath}`)
       } catch (error) {
-        console.warn(`[Agent 会话] 清理 Git Worktree 失败 (${id}):`, error)
+        rollbackSessionDeletion(error)
       }
     }
   }
 
   console.log(`[Agent 会话] 已删除会话: ${removed.title} (${removed.id})`)
 
-  // 清理 Nano Banana 生图历史
+  // 清理 Nano Banana 生图历史（仅内存缓存，不是用户源文件）。
   clearNanoBananaAgentHistory(id)
-
-  // 清理 SDK 关联数据（file-history 和 projects 下的 session JSONL）
-  const sdkSessionIds = [removed.sdkSessionId, removed.forkSourceSdkSessionId].filter(Boolean) as string[]
-  if (sdkSessionIds.length > 0) {
-    const sdkConfigDir = getSdkConfigDir()
-
-    const fileHistoryDir = join(sdkConfigDir, 'file-history')
-    for (const sid of sdkSessionIds) {
-      const histDir = join(fileHistoryDir, sid)
-      if (existsSync(histDir)) {
-        try {
-          rmSyncWithRetry(histDir, { recursive: true, force: true })
-          console.log(`[Agent 会话] 已清理 file-history: ${sid}`)
-        } catch (e) {
-          console.warn(`[Agent 会话] 清理 file-history 失败 (${sid}):`, e)
-        }
-      }
-    }
-
-    const projectsDir = join(sdkConfigDir, 'projects')
-    if (existsSync(projectsDir)) {
-      try {
-        for (const hashDir of readdirSync(projectsDir)) {
-          const projPath = join(projectsDir, hashDir)
-          for (const sid of sdkSessionIds) {
-            const sessionFile = join(projPath, `${sid}.jsonl`)
-            if (existsSync(sessionFile)) {
-              try {
-                unlinkSync(sessionFile)
-                console.log(`[Agent 会话] 已清理 SDK session 文件: ${sessionFile}`)
-              } catch (e) {
-                console.warn('[Agent 会话] 清理 SDK session 文件失败:', e)
-              }
-            }
-          }
-          try {
-            if (readdirSync(projPath).length === 0) rmSyncWithRetry(projPath, { recursive: true })
-          } catch { /* ignore */ }
-        }
-      } catch { /* ignore */ }
-    }
-  }
 }
 
 /**

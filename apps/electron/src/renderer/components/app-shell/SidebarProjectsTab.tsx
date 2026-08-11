@@ -271,7 +271,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
     if (!workspaceRoot || !deleteTarget?.slug || !deleteTarget.archivedAt || !deleteImpact?.canPurge) return
     setDeleting(true)
     try {
-      await window.electronAPI.projects.delete(workspaceRoot, deleteTarget.slug)
+      await window.electronAPI.projects.delete(workspaceRoot, deleteTarget.slug, deleteImpact.confirmationToken)
       setProjects((prev) => prev.filter((existing) => existing.id !== deleteTarget.id))
       toast.success(`项目「${deleteTarget.name}」已删除`)
     } catch (cause) {

@@ -342,7 +342,7 @@ export function KanbanBoardContainer({
     if (pendingDeleteItem.task && !pendingDeleteItem.task.legacyIdentity) {
       if (!workspaceRoot || !workspace) return
       const taskSlug = pendingDeleteItem.task.taskSlug
-      void window.electronAPI.tasks.delete(workspaceRoot, workspace.id, taskSlug)
+      void window.electronAPI.tasks.delete(workspaceRoot, workspace.id, taskSlug, deleteImpact?.confirmationToken)
         .then(() => {
           setTaskSummaries((tasks) => tasks?.filter((t) => t.taskId !== pendingDeleteItem?.task?.taskId))
           toast.success('Task 已永久删除')

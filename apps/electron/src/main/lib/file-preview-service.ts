@@ -5,7 +5,7 @@
  * 供 PreviewPanel 内联面板使用。
  */
 
-import { basename, join, dirname, extname, resolve, posix as pathPosix } from 'node:path'
+import { basename, join, dirname, extname, resolve, sep, posix as pathPosix } from 'node:path'
 import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { createRequire } from 'node:module'
@@ -649,7 +649,51 @@ export async function preparePdfPreview(filePath: string, basePaths?: string[]):
   return { resolvedPath: safePath, tmpHtmlUrl }
 }
 
-/** 为内联 HTML 预览注册文件所在目录的 myyoda-file:// URL（相对路径资源自动解析） */
+export function isResolvedHtmlPreviewResourcePath(candidate: string, directoryRoot: string, pathSeparator = sep): boolean {
+  const rootWithSeparator = directoryRoot.endsWith(pathSeparator) ? directoryRoot : `${directoryRoot}${pathSeparator}`
+  return candidate.startsWith(rootWithSeparator)
+}
+
+function collectHtmlPreviewResources(safePath: string): string[] {
+  const resources = new Set<string>([basename(safePath)])
+  let html: string
+  try {
+    html = readFileSync(safePath, 'utf-8')
+  } catch {
+    return [...resources]
+  }
+
+  // HTML is rendered in an empty sandbox, but allow only resources explicitly
+  // referenced by the document rather than exposing every sibling file.
+  const references = new Set<string>()
+  const attributePattern = /(?:src|href)\s*=\s*["']([^"']+)["']/gi
+  const cssUrlPattern = /url\(\s*["']?([^"')]+)["']?\s*\)/gi
+  for (const pattern of [attributePattern, cssUrlPattern]) {
+    for (const match of html.matchAll(pattern)) {
+      if (match[1]) references.add(match[1].trim())
+    }
+  }
+
+  const directory = dirname(safePath)
+  const directoryRoot = resolve(directory)
+  for (const reference of references) {
+    const withoutQuery = reference.split(/[?#]/, 1)[0] ?? ''
+    if (!withoutQuery || withoutQuery.startsWith('/') || withoutQuery.startsWith('#')) continue
+    if (/^(?:[a-z][a-z0-9+.-]*:|\\)/i.test(withoutQuery)) continue
+    const relative = pathPosix.normalize(withoutQuery.replaceAll('\\', '/'))
+    if (relative === '.' || relative === '..' || relative.startsWith('../')) continue
+    const candidate = resolve(directory, relative)
+    if (!isResolvedHtmlPreviewResourcePath(candidate, directoryRoot) || !existsSync(candidate)) continue
+    try {
+      if (statSync(candidate).isFile()) resources.add(relative)
+    } catch {
+      // A concurrently removed or inaccessible asset is simply not allowlisted.
+    }
+  }
+  return [...resources]
+}
+
+/** 为内联 HTML 预览注册文件所在目录的 myyoda-file:// URL，并仅授权文档引用的资源。 */
 export async function prepareHtmlPreview(filePath: string, basePaths?: string[]): Promise<{ resolvedPath: string; tmpUrl: string } | null> {
   const safePath = resolveTargetPath(filePath, basePaths)
   if (!existsSync(safePath)) return null
@@ -658,9 +702,9 @@ export async function prepareHtmlPreview(filePath: string, basePaths?: string[])
 
   try {
     const { registerPromaDirectoryPath } = await import('./local-file-protocol')
-    const dirUrl = registerPromaDirectoryPath(dirname(safePath))
+    const dirUrl = registerPromaDirectoryPath(dirname(safePath), collectHtmlPreviewResources(safePath))
     // 目录 URL 形如 myyoda-file://{token}，拼接文件名后 iframe 可直接加载；
-    // 页面内相对路径资源（css/js/img）会走协议目录解析，自动补齐。
+    // 页面内明确引用的 css/img 等资源可加载，未引用的 sibling 文件被拒绝。
     const tmpUrl = `${dirUrl}/${encodeURIComponent(basename(safePath))}`
     return { resolvedPath: safePath, tmpUrl }
   } catch (err) {

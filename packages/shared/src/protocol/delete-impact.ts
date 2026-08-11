@@ -12,6 +12,8 @@ export interface ProjectDeleteImpact {
   hasManagedWorkdir: boolean
   blockers: string[]
   canPurge: boolean
+  /** 主进程签发的短时、单次确认凭证；影响快照变化后失效。 */
+  confirmationToken?: string
 }
 
 export interface TaskDeleteImpact {
@@ -20,4 +22,6 @@ export interface TaskDeleteImpact {
   sessionCount: number
   canPurge: boolean
   blockers: string[]
+  /** 主进程签发的短时、单次确认凭证；影响快照变化后失效。 */
+  confirmationToken?: string
 }
