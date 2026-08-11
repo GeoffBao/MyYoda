@@ -10,12 +10,13 @@
  * - 文件选择对话框：Electron dialog → 小文件读取为 base64，大文件返回本地路径引用
  */
 
-import { readFileSync, writeFileSync, unlinkSync, existsSync, rmSync, statSync } from 'node:fs'
-import { extname, basename, join, isAbsolute, normalize } from 'node:path'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, rmSync, statSync, realpathSync } from 'node:fs'
+import { extname, basename, join, isAbsolute, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { dialog, BrowserWindow } from 'electron'
 import {
   getConfigDir,
+  getAttachmentsDir,
   getConversationAttachmentsDir,
   resolveAttachmentPath,
 } from './config-paths'
@@ -31,6 +32,7 @@ import type {
   FileOrFolderDialogResult,
 } from '@myyoda/shared'
 import { MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
+import { resolveSafeAttachmentPath } from './attachment-path-policy'
 
 /** 支持的图片 MIME 类型 */
 const IMAGE_MIME_TYPES = new Set([
@@ -184,9 +186,9 @@ export function readAttachmentAsBase64(localPath: string): string {
 
   if (isAbsolute(localPath)) {
     // 绝对路径：验证在 ~/.myyoda/ 目录下，防止路径穿越
-    const configDir = getConfigDir()
-    const normalized = normalize(localPath)
-    if (!normalized.startsWith(configDir)) {
+    const configDir = realpathSync(getConfigDir())
+    const normalized = realpathSync(resolve(localPath))
+    if (normalized !== configDir && !normalized.startsWith(configDir + sep)) {
       throw new Error(`附件路径不在安全目录内: ${localPath}`)
     }
     fullPath = normalized
@@ -228,7 +230,7 @@ export function deleteAttachment(localPath: string): void {
  * @param conversationId 对话 ID
  */
 export function deleteConversationAttachments(conversationId: string): void {
-  const dir = join(resolveAttachmentPath(''), conversationId)
+  const dir = resolveSafeAttachmentPath(getAttachmentsDir(), conversationId)
 
   if (existsSync(dir)) {
     try {

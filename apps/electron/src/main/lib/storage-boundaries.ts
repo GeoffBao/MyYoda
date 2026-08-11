@@ -16,10 +16,22 @@ const WORKSPACE_METADATA_DIRS = new Set([
   '.claude',
   '.claude-plugin',
   'excalidraw',
+  /** agent-workspace-manager.ts:getWorkspaceAutoMemoryDir — Proma Workspace Memory 根目录 */
+  'memory',
   /** packages/shared/src/projects/storage.ts:getWorkspaceProjectsPath — 跨包定义，无法被反射测试自动发现 */
   'projects',
+  /** packages/shared/src/tasks/storage.ts — 跨包定义 */
+  'tasks',
+  /** workspace-label-service.ts:workspaceLabelsConfigPath — 跨包定义 */
+  'labels',
+  /** expert-binding-service.ts:workspaceExpertBindingsDir — 跨包定义 */
+  'expert-bindings',
 ])
 
 export function isWorkspaceMetadataDir(entryName: string): boolean {
   return WORKSPACE_METADATA_DIRS.has(entryName)
+}
+
+export function getWorkspaceMetadataDirNames(): readonly string[] {
+  return [...WORKSPACE_METADATA_DIRS]
 }
