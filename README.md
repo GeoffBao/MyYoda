@@ -230,7 +230,6 @@ MyYoda 基于开源社区持续演进，并受益于以下项目和生态：
 
 - [Proma](https://github.com/proma-ai/Proma)：MyYoda 的早期开源基础；
 - [Pi Agent](https://github.com/badlogic/pi-mono)：Agent Runtime 生态；
-- [Claude Agent SDK](https://docs.anthropic.com/)：Claude 订阅兼容运行能力；
 - [Model Context Protocol](https://modelcontextprotocol.io/)：Agent 工具扩展标准；
 - [Shiki](https://shiki.style/)、[Mermaid](https://mermaid.js.org/) 和其他优秀开源项目。
 

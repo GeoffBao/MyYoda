@@ -139,7 +139,6 @@ export class BridgeCommandHandler {
       channelId,
       workspaceId || undefined,
       undefined,
-      settings.agentRuntime ?? 'pi',
     )
 
     const binding: BridgeChatBinding = {
@@ -303,7 +302,6 @@ export class BridgeCommandHandler {
       channelId,
       workspaceId || undefined,
       undefined,
-      settings.agentRuntime ?? 'pi',
     )
 
     // 清理旧绑定

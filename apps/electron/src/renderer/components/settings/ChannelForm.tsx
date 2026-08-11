@@ -32,7 +32,6 @@ import { Input } from '@/components/ui/input'
 import {
   PROVIDER_DEFAULT_URLS,
   PROVIDER_LABELS,
-  isAgentCompatibleProvider,
   parseZhipuTeamCredentials,
   parseCodexCredentials,
   parseClaudeOAuthCredentials,
@@ -202,7 +201,8 @@ function buildZhipuTeamSecret(secret: ZhipuTeamSecretForm): string {
 const AUTO_SAVE_DELAY = 600
 
 function isAgentEligibleChannel(channel: Pick<Channel, 'provider' | 'enabled'>): boolean {
-  return channel.enabled && isAgentCompatibleProvider(channel.provider)
+  // Pi-only：Claude runtime 已退役，所有协议兼容的渠道只要启用即可用于 Agent。
+  return channel.enabled
 }
 
 export function ChannelForm({ channel, onSaved, onAgentEligibilityChange, onCancel }: ChannelFormProps): React.ReactElement {

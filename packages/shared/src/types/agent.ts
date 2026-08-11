@@ -755,8 +755,11 @@ export interface AgentSessionMeta {
   piSessionFile?: string
   /** Proma assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
   piEntryBindings?: Record<string, string>
-  /** 当前会话使用的 Agent runtime；历史会话缺省为 claude */
-  agentRuntime?: import('./agent-provider').AgentRuntime
+  /** 已退役 Claude runtime 的只读 transcript；必须新建 Pi 会话才能继续。 */
+  legacyTranscript?: {
+    sourceRuntime: 'claude'
+    continuationRequired: true
+  }
   /** ChatGPT Codex Fast Mode 开关；仅 Pi + ChatGPT OAuth 的受支持模型实际生效。 */
   codexFastMode?: boolean
   /**
@@ -1389,8 +1392,6 @@ export interface AgentSendInput {
   channelId: string
   /** 模型 ID */
   modelId?: string
-  /** 本轮请求使用的 Agent runtime（用于输入区快速切换后的兜底同步） */
-  agentRuntime?: import('./agent-provider').AgentRuntime
   /** 工作区 ID（用于确定 cwd） */
   workspaceId?: string
   /** 附加的外部目录（绝对路径，传递给 SDK additionalDirectories） */

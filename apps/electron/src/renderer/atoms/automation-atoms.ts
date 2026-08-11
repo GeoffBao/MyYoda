@@ -39,7 +39,6 @@ export interface AutomationDraft {
   scheduledAt?: number
   /** 最大运行次数上限（实际执行次数）；undefined = 不限次 */
   maxRuns?: number
-  agentRuntime: AgentRuntime
   channelId: string
   modelId?: string
   workspaceId?: string
@@ -75,7 +74,6 @@ export function createEmptyDraft(): AutomationDraft {
     timeOfDay: '09:00',
     dayOfWeek: 1,
     dayOfMonth: 1,
-    agentRuntime: 'pi',
     channelId: '',
     executionMode: AUTOMATION_DEFAULT_EXECUTION_MODE,
     permissionMode: AUTOMATION_DEFAULT_PERMISSION_MODE,
@@ -100,7 +98,6 @@ export function automationToDraft(a: Automation): AutomationDraft {
     dayOfMonth: a.dayOfMonth,
     scheduledAt: a.scheduledAt,
     maxRuns: a.maxRuns,
-    agentRuntime: a.agentRuntime ?? 'pi',
     channelId: a.channelId,
     modelId: a.modelId,
     workspaceId: a.workspaceId,

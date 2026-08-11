@@ -28,17 +28,8 @@ export const MYYODA_COMMIT_TRAILER_KEY = 'Co-Authored-By'
 const MYYODA_COMMIT_TRAILER_SUFFIX = 'in MyYoda'
 
 /** 未知模型时的兜底展示名 */
-const FALLBACK_MODEL_LABEL = 'MyYoda Agent'
-
 /**
  * 生成 commit trailer：`Co-Authored-By: <模型名> in MyYoda`
- * @param modelLabel 模型展示名或 modelId；缺省时退化为通用标签
- */
-export function buildMyYodaCommitTrailer(modelLabel?: string): string {
-  const label = modelLabel?.trim() || FALLBACK_MODEL_LABEL
-  return `${MYYODA_COMMIT_TRAILER_KEY}: ${label} ${MYYODA_COMMIT_TRAILER_SUFFIX}`
-}
-
 /**
  * PR / MR 描述底部标识。
  * 含开源仓库完整链接，便于推广与引流。
@@ -58,45 +49,6 @@ export function isGitAttributionEnabled(config?: GitAttributionConfig | boolean 
     return config.enabled
   }
   return DEFAULT_GIT_ATTRIBUTION_ENABLED
-}
-
-/**
- * Claude Code settings.json 的 attribution 字段。
- * 空字符串会禁用 SDK 内置 Co-Authored-By / Generated with 归因。
- * @param modelLabel 当前会话选定的模型（modelId 或展示名），用于填入 trailer
- * @see https://code.claude.com/docs/en/settings#attribution-settings
- */
-export function buildClaudeSdkAttribution(enabled: boolean, modelLabel?: string): { commit: string; pr: string } {
-  if (!enabled) {
-    return { commit: '', pr: '' }
-  }
-  return {
-    commit: buildMyYodaCommitTrailer(modelLabel),
-    pr: MYYODA_PR_ATTRIBUTION,
-  }
-}
-
-/**
- * 将 MyYoda attribution 合并进 Claude session 的 settings 对象。
- * @returns 是否发生了变更（调用方可据此决定是否写盘）
- */
-export function applyClaudeSdkAttributionSettings(
-  sdkSettings: Record<string, unknown>,
-  enabled: boolean,
-  modelLabel?: string,
-): boolean {
-  const next = buildClaudeSdkAttribution(enabled, modelLabel)
-  const prev = sdkSettings.attribution
-  const prevObj = prev && typeof prev === 'object' && !Array.isArray(prev)
-    ? (prev as Record<string, unknown>)
-    : null
-
-  if (prevObj?.commit === next.commit && prevObj?.pr === next.pr) {
-    return false
-  }
-
-  sdkSettings.attribution = next
-  return true
 }
 
 /** 注入到 buildSystemPrompt 的 Git/PR 标识规范 */
