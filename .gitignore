@@ -48,6 +48,9 @@ what_are_humans_thinking
 
 # vendor binaries
 vendor
+# repo-map vendor（tree-sitter-utils 移植源码，必须进 git，豁免全局 vendor 规则——必须放在 vendor 规则之后）
+!apps/electron/src/main/lib/repo-map/vendor/
+!apps/electron/src/main/lib/repo-map/vendor/**
 
 # git worktrees (managed by proma-worktree skill)
 .worktrees
