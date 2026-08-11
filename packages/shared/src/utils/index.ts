@@ -42,6 +42,7 @@ export {
   normalizeThinkingSignatureError,
 } from './thinking-signature-error'
 export { normalizePathForCompare } from './normalize-path'
+export { isDeepSeekV4 } from './model-matcher'
 export {
   displayProjectPath,
   normalizeProjectPathForCompare,

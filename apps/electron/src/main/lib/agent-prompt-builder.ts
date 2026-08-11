@@ -10,6 +10,7 @@
  */
 
 import type { AgentRuntime, MyYodaPermissionMode } from '@myyoda/shared'
+import { isDeepSeekV4 } from '@myyoda/shared/utils'
 import type { ProjectPromptContext } from '@myyoda/shared/projects'
 import { formatProjectContextForPrompt } from '@myyoda/shared/projects'
 import { homedir } from 'node:os'
@@ -133,7 +134,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
 
   // DeepSeek 模型专属编码规范（B1）：补偿 deepseek-v4 系列在工具调用纪律/验证闭环/陌生仓库定位上的短板。
   // 参考 Aider model-settings（use_repo_map/examples_as_sys_msg/小步验证）与社区 DeepSeek 适配实践。
-  if (currentModelId && /^deepseek-v4/i.test(currentModelId)) {
+  if (isDeepSeekV4(currentModelId)) {
     sections.push(`## 模型专属编码规范（DeepSeek runtime）
 
 当前模型为 deepseek-v4 系列，与 Claude/GPT 在编码行为上存在差异，请严格遵守以下约束：
