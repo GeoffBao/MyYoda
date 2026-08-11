@@ -1173,6 +1173,19 @@ export class AgentOrchestrator {
           } as unknown as Record<string, unknown>
         }
       }
+      // code-review-graph 代码库知识图谱（stdio）：默认关闭；依赖用户已安装 code-review-graph 命令。
+      // 用户手动配置的同名 server（如绝对路径 exe）优先，内置注入仅在无同名条目时生效。
+      if (!toolsDisabled && isBuiltinMcpUserEnabled('code-review-graph')) {
+        const serverName = getBuiltinMcpName('code-review-graph')
+        if (!mcpServers[serverName]) {
+          mcpServers[serverName] = {
+            type: 'stdio',
+            command: 'code-review-graph',
+            args: ['serve'],
+            required: false,
+          } as unknown as Record<string, unknown>
+        }
+      }
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const builtinMcpResult = toolsDisabled

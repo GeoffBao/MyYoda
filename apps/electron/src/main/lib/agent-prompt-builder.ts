@@ -132,6 +132,17 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // 工具使用指南（复用常量）
   sections.push(TOOL_USAGE_GUIDELINES)
 
+  // 外部能力分工指引：让模型（尤其 DeepSeek 等弱模型）知道什么场景用哪个工具，避免乱选
+  sections.push(`## 外部能力分工
+
+- **定位代码 / 查看热点符号** → 优先参考每轮已注入的 <repo_map> 代码地图；细节用 Read / Grep / Glob 确认
+- **查函数调用链 / 依赖关系 / 改动影响面** → 优先用 code_review_graph（code_review_graph_query_graph / code_review_graph_get_impact_radius / code_review_graph_get_minimal_context）
+- **代码审查** → 用 code_review_graph（code_review_graph_detect_changes / code_review_graph_get_review_context）
+- **第三方库 / 框架 API 用法不确定** → 用 context7（context7_search_docs / context7_get_library_docs）
+- **以上工具不可用/未启用时** → 回退 Grep / 浏览器 / 通用搜索
+
+外部能力未启用时不强制调用；拿不准就用最直接的工具（Grep/Read）避免绕路。`)
+
   // DeepSeek 模型专属编码规范（B1）：补偿 deepseek-v4 系列在工具调用纪律/验证闭环/陌生仓库定位上的短板。
   // 参考 Aider model-settings（use_repo_map/examples_as_sys_msg/小步验证）与社区 DeepSeek 适配实践。
   if (isDeepSeekV4(currentModelId)) {
