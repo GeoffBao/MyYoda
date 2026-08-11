@@ -34,6 +34,44 @@ export const COMMUNITY_MARKET = {
 /** 可选远端下载统计服务（未配置时仅本地计数） */
 export const COMMUNITY_STATS_ENDPOINT = process.env.MYYODA_SKILL_STATS_URL ?? ''
 
+/** 本地下载计数文件（~/.myyoda/community-market-stats.json，dev 模式 ~/.myyoda-dev/） */
+export function getCommunityStatsPath(): string {
+  // 环境变量覆盖（测试/自定义场景），与 COMMUNITY_STATS_ENDPOINT 一致的可配置模式
+  if (process.env.MYYODA_SKILL_STATS_LOCAL_PATH) {
+    return process.env.MYYODA_SKILL_STATS_LOCAL_PATH
+  }
+  const { getConfigDir } = require('./config-paths')
+  return join(getConfigDir(), 'community-market-stats.json')
+}
+
+/** 读取本地下载计数（{ skill: count }），文件不存在或损坏时返回空对象。导出供测试与合并逻辑复用。 */
+export function readLocalStats(): Record<string, number> {
+  try {
+    const path = getCommunityStatsPath()
+    if (!existsSync(path)) return {}
+    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>
+    const out: Record<string, number> = {}
+    for (const [k, v] of Object.entries(parsed)) {
+      const n = typeof v === 'number' ? v : Number(v)
+      if (typeof n === 'number' && Number.isFinite(n) && n > 0) out[k] = Math.floor(n)
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** 本地下载计数 +1 并落盘 */
+function bumpLocalStats(name: string): void {
+  try {
+    const stats = readLocalStats()
+    stats[name] = (stats[name] ?? 0) + 1
+    writeFileSync(getCommunityStatsPath(), JSON.stringify(stats, null, 2), 'utf-8')
+  } catch {
+    // 静默
+  }
+}
+
 /** 市场 skill 条目（来自 sources.yaml） */
 export interface CommunitySkill extends SharedCommunitySkill {
   /** 仓库内 skill 目录相对路径（target.path） */
@@ -98,10 +136,13 @@ export async function fetchCommunityManifest(): Promise<CommunitySkill[]> {
   }
   const text = await res.text()
   const skills = parseSourcesYaml(text)
-  // 补充 category（从 path 推断）+ 合并远端统计（可选）
+  // 补充 category（从 path 推断）+ 合并本地计数（始终生效）+ 合并远端统计（可选）
+  const localStats = readLocalStats()
   const merged = skills.map((s) => ({
     ...s,
     category: s.category ?? inferCategory(s.path),
+    // 本地安装计数为真实发生在本机的下载，覆盖静态 sources.yaml 值（保证离线/自托管也有数据）
+    downloads: Math.max(s.downloads ?? 0, localStats[s.name] ?? 0),
   }))
   if (COMMUNITY_STATS_ENDPOINT) {
     try {
@@ -109,11 +150,11 @@ export async function fetchCommunityManifest(): Promise<CommunitySkill[]> {
       if (statsRes.ok) {
         const stats = (await statsRes.json()) as Record<string, number>
         for (const s of merged) {
-          if (stats[s.name] != null) s.downloads = stats[s.name] ?? s.downloads ?? 0
+          if (stats[s.name] != null) s.downloads = Math.max(s.downloads ?? 0, stats[s.name] ?? 0)
         }
       }
     } catch {
-      // 远端统计不可用则保留 sources.yaml 静态值
+      // 远端统计不可用则保留本地/静态值
     }
   }
   return merged
@@ -154,20 +195,22 @@ async function downloadAndExtractRepo(repo: string, branch: string): Promise<str
   return repoRoot
 }
 
-/** 上报下载统计（远端 + 本地落盘），失败静默 */
-async function reportDownload(name: string): Promise<void> {
+/** 上报下载统计（远端可选 + 本地始终落盘），失败静默。导出供测试与潜在外部调用。 */
+export async function reportDownload(name: string): Promise<void> {
+  // 本地计数始终落盘（离线/自托管场景也能展示本机安装次数）
+  bumpLocalStats(name)
   // 远端统计服务（可选）
-    try {
-      if (COMMUNITY_STATS_ENDPOINT) {
-        await fetch(`${COMMUNITY_STATS_ENDPOINT}/download`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skill: name }),
-        }).catch(() => {})
-      }
-    } catch {
-      // 静默
+  try {
+    if (COMMUNITY_STATS_ENDPOINT) {
+      await fetch(`${COMMUNITY_STATS_ENDPOINT}/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill: name }),
+      }).catch(() => {})
     }
+  } catch {
+    // 静默
+  }
 }
 
 /**

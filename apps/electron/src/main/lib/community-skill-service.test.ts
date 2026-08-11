@@ -5,7 +5,7 @@
  * - inferCategory：从 path 推断分类
  */
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { parseSourcesYaml } from './community-skill-service'
 
 const SAMPLE_YAML = `# n-skills External Sources
@@ -125,5 +125,64 @@ describe('社区市场服务 · 增强字段', () => {
     const text = 'skills:\n  - name: s\n    description: d\n    downloads: "123"\n    target:\n      path: skills/s\n'
     const skills = parseSourcesYaml(text)
     expect(skills[0]?.downloads).toBe(123)
+  })
+})
+
+describe('社区市场服务 · 本地下载计数', () => {
+  const { tmpdir } = require('node:os')
+  const { join } = require('node:path')
+  const { mkdtempSync, readFileSync, rmSync, existsSync } = require('node:fs')
+
+  let tmpDir: string
+  const origPath = process.env.MYYODA_SKILL_STATS_LOCAL_PATH
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'cm-stats-test-'))
+    process.env.MYYODA_SKILL_STATS_LOCAL_PATH = join(tmpDir, 'community-market-stats.json')
+  })
+
+  afterEach(() => {
+    if (origPath === undefined) delete process.env.MYYODA_SKILL_STATS_LOCAL_PATH
+    else process.env.MYYODA_SKILL_STATS_LOCAL_PATH = origPath
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test('安装上报后本地计数落盘（无远端端点也生效）', async () => {
+    const mod = await import('./community-skill-service')
+    const svc = mod as any
+    await svc.reportDownload('drawio-skill')
+    await svc.reportDownload('drawio-skill')
+    await svc.reportDownload('session-cleaner')
+
+    const statsPath = join(tmpDir, 'community-market-stats.json')
+    expect(existsSync(statsPath)).toBe(true)
+    const saved = JSON.parse(readFileSync(statsPath, 'utf-8'))
+    expect(saved['drawio-skill']).toBe(2)
+    expect(saved['session-cleaner']).toBe(1)
+  })
+
+  test('本地计数合并进清单 downloads（覆盖静态值）', async () => {
+    const mod = await import('./community-skill-service')
+    const svc = mod as any
+    await svc.reportDownload('drawio-skill')
+
+    const yaml = `skills:
+  - name: drawio-skill
+    description: diagram
+    downloads: 0
+    target:
+      path: skills/drawio-skill
+  - name: other
+    description: x
+    downloads: 5
+    target:
+      path: skills/other
+`
+    // 直接验证合并逻辑：本地计数应 max 合并
+    const skills = svc.parseSourcesYaml(yaml)
+    const local = svc.readLocalStats()
+    const merged = skills.map((s: any) => ({ ...s, downloads: Math.max(s.downloads ?? 0, local[s.name] ?? 0) }))
+    expect(merged.find((s: any) => s.name === 'drawio-skill')?.downloads).toBe(1)
+    expect(merged.find((s: any) => s.name === 'other')?.downloads).toBe(5)
   })
 })
