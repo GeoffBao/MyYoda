@@ -39,6 +39,7 @@ import {
 } from '@myyoda/shared'
 import type { CanUseToolOptions, PermissionResult } from '../agent-permission-service'
 import { TRANSIENT_NETWORK_PATTERN, isMalformedResponseError } from '../error-patterns'
+import { OPTIMIZED_CODING_GATED_SKILLS } from '../agent-workspace-manager'
 
 import type {
   AgentSession,
@@ -100,6 +101,8 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   apiKey: string
   baseUrl?: string
   provider: ProviderType
+  /** 编码优化总开关：控制 D2（DeepSeek 提前压缩阈值差异化）等参数 */
+  optimizedCoding?: boolean
   /** OAuth credential coordination key; equals the selected Proma channel id. */
   channelId?: string
   channelName?: string
@@ -633,11 +636,22 @@ function isPromaSkillPath(path: string | undefined, allowedRoots: string[]): boo
   return allowedRoots.some((root) => isPathWithinRoot(guardedPath, root))
 }
 
-function createPromaSkillsOverride(additionalSkillPaths: string[] | undefined): (base: SkillLoadResult) => SkillLoadResult {
+export function createPromaSkillsOverride(
+  additionalSkillPaths: string[] | undefined,
+  gatedSkillSlugs: readonly string[] = [],
+): (base: SkillLoadResult) => SkillLoadResult {
   const allowedRoots = buildAllowedSkillRoots(additionalSkillPaths)
   return (base) => ({
-    skills: base.skills.filter((skill) =>
-      isPromaSkillPath(skill.filePath, allowedRoots) || isPromaSkillPath(skill.baseDir, allowedRoots)),
+    skills: base.skills.filter((skill) => {
+      const inWorkspace = isPromaSkillPath(skill.filePath, allowedRoots) || isPromaSkillPath(skill.baseDir, allowedRoots)
+      if (!inWorkspace) return false
+      // 编码优化总开关关闭时，屏蔽跟随开关的预置 skill（预置但默认不可见）
+      if (gatedSkillSlugs.length > 0) {
+        const slug = skill.name ?? basename(skill.baseDir) ?? basename(dirname(skill.filePath ?? ''))
+        if (gatedSkillSlugs.includes(String(slug))) return false
+      }
+      return true
+    }),
     diagnostics: base.diagnostics.filter((diagnostic) => isPromaSkillPath(diagnostic.path, allowedRoots)),
   })
 }
@@ -1421,6 +1435,8 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         ? sdk.SessionManager.open(sessionFile, input.piSessionDir, cwd)
         : sdk.SessionManager.create(cwd, input.piSessionDir)
       const { modelRuntime, model } = await buildModel(sdk, input)
+      // D2 收敛：提前压缩阈值（0.7）无实测收益证据且提前丢上下文，统一回退默认 0.8；
+      // thresholdRatio 参数机制保留（calculatePiAutoCompactionReserveTokens）供后续实验。
       const autoCompactionReserveTokens = calculatePiAutoCompactionReserveTokens(
         model.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       )
@@ -1506,7 +1522,11 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         settingsManager,
         noSkills: true,
         additionalSkillPaths: input.additionalSkillPaths ?? [],
-        skillsOverride: createPromaSkillsOverride(input.additionalSkillPaths),
+        skillsOverride: createPromaSkillsOverride(
+          input.additionalSkillPaths,
+          // 编码优化总开关关闭时屏蔽 gated 预置 skill；开启时放行
+          input.optimizedCoding ? [] : OPTIMIZED_CODING_GATED_SKILLS,
+        ),
         agentsFilesOverride: createPromaAgentsFilesOverride(),
         ...(model.reasoning && extensionFactories.length > 0 && { extensionFactories }),
         systemPromptOverride: () => input.systemPrompt,

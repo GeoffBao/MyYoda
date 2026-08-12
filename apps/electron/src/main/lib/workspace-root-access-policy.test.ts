@@ -6,6 +6,19 @@ import { resolveRegisteredWorkspaceRoot } from './workspace-root-access-policy'
 
 const tempRoots: string[] = []
 
+// Windows 无管理员权限时创建 symlink 会 EPERM：跳过 symlink 用例（与既有基线修复一致）
+const noSymlinkPermission = (() => {
+  if (process.platform !== 'win32') return false
+  try {
+    const probe = mkdtempSync(join(tmpdir(), 'myyoda-symlink-probe-'))
+    symlinkSync(probe, join(probe, 'probe'))
+    rmSync(probe, { recursive: true, force: true })
+    return false
+  } catch {
+    return true
+  }
+})()
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
@@ -36,7 +49,7 @@ describe('registered workspace root policy', () => {
     expect(resolveRegisteredWorkspaceRoot(join(root, '..'), [{ id: 'workspace-1', root }])).toBeNull()
   })
 
-  test('Given a path through a symlink to a registered root When resolving Then accepts only the same canonical root', () => {
+  test.skipIf(noSymlinkPermission)('Given a path through a symlink to a registered root When resolving Then accepts only the same canonical root', () => {
     const root = createWorkspace('workspace')
     const parent = createWorkspace('parent')
     const linked = join(parent, 'linked')

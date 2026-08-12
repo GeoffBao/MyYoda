@@ -804,7 +804,10 @@ export function getExcalidrawDir(workspaceSlug: string): string {
  * 不根据 bundle 中缺失的目录自动删除，避免误删用户自行安装的 Skills；
  * 后续退役某个内置 Skill 时，显式把它的 slug 加到这里。
  */
-export const RETIRED_DEFAULT_SKILL_SLUGS: readonly string[] = []
+export const RETIRED_DEFAULT_SKILL_SLUGS: readonly string[] = [
+  // 已从 default-skills 移除：改为内置 MCP 安装检测引导（catalog.ts），不再需要独立 skill
+  'install-code-review-graph',
+]
 
 const RETIRED_DEFAULT_SKILL_SLUG_SET = new Set(RETIRED_DEFAULT_SKILL_SLUGS)
 

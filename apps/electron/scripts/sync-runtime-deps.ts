@@ -49,6 +49,8 @@ export const EXTERNAL_RUNTIME_PACKAGES: readonly string[] = [
   '@earendil-works/pi-ai',
   'pdfjs-dist',
   'sharp',
+  // Repo Map 引擎（build:main 标为 external，运行时 require；同步失败 → 打包版找不到模块）
+  'web-tree-sitter',
 ]
 
 const appDir = resolve(import.meta.dir, '..')

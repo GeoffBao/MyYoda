@@ -3,13 +3,19 @@ import { describe, expect, test } from 'bun:test'
 const globalsCssPath = `${import.meta.dir}/../styles/globals.css`
 const appShellPath = `${import.meta.dir}/../components/app-shell/AppShell.tsx`
 
+/** 读取 globals.css 并归一化换行（Windows CRLF → LF），保证换行敏感的断言跨平台稳定 */
+async function readGlobalsCss(): Promise<string> {
+  const text = await Bun.file(globalsCssPath).text()
+  return text.replace(/\r\n/g, '\n')
+}
+
 /**
  * Scenic 背景层只能托住内容，不能覆盖设置页 overlay 自身的定位。
  * 这个契约防止 shell 的通用子元素规则把 absolute overlay 改成 relative。
  */
 describe('ThemePack Scenic layout CSS', () => {
   test('不会用通用直接子元素规则覆盖设置 overlay 的 absolute 定位', async () => {
-    const css = await Bun.file(globalsCssPath).text()
+    const css = await readGlobalsCss()
 
     expect(css).not.toContain('html.theme-custom .shell-bg > *')
     expect(css).toContain('html.theme-custom.theme-scenic .shell-bg')
@@ -26,7 +32,7 @@ describe('ThemePack Scenic layout CSS', () => {
   })
 
   test('composer 容器提升 stacking context，scenic 毛玻璃不能把内部弹层困在消息区内容之下', async () => {
-    const css = await Bun.file(globalsCssPath).text()
+    const css = await readGlobalsCss()
 
     // Haze/Scenic 给 composer 注入 backdrop-filter（创建 stacking context，z-index:0），
     // 会把内部上弹面板（如项目选择器 z-50）困在 z-0，被消息区空状态内容区（z-10）盖住，
@@ -37,7 +43,7 @@ describe('ThemePack Scenic layout CSS', () => {
 
   test('主题材质不会改变原有工作台外层几何', async () => {
     const [css, appShell] = await Promise.all([
-      Bun.file(globalsCssPath).text(),
+      readGlobalsCss(),
       Bun.file(appShellPath).text(),
     ])
 
@@ -53,7 +59,7 @@ describe('ThemePack Scenic layout CSS', () => {
   })
 
   test('Haze/ThemePack 的玻璃面板只作用现代界面，经典界面保留自己的材质', async () => {
-    const css = await Bun.file(globalsCssPath).text()
+    const css = await readGlobalsCss()
 
     expect(css).toContain(':root.ui-modern.theme-custom .refined-sidebar')
     expect(css).toContain(':root.ui-modern.theme-custom .refined-content')

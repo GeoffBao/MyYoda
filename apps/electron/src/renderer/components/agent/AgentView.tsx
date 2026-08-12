@@ -574,6 +574,24 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     ? resolveReasoningProfile({ modelId: agentModelId ?? undefined, transport: inferReasoningTransport(agentChannelProvider) })
     : undefined
   const reasoningCapabilityKey = `${sessionAgentRuntime}:${agentChannelId ?? ''}:${agentModelId ?? ''}`
+  // 通用设置（默认思考深度 / 编码优化开关）：会话框显示值与实际生效链保持一致
+  const [appThinkingSettings, setAppThinkingSettings] = React.useState<{
+    optimizedCoding?: boolean
+    codingMode?: boolean
+    defaultThinkingLevel?: AgentThinkingLevel
+  } | null>(null)
+  React.useEffect(() => {
+    let cancelled = false
+    window.electronAPI.getSettings().then((s) => {
+      if (cancelled) return
+      setAppThinkingSettings({
+        optimizedCoding: s.optimizedCoding,
+        codingMode: s.codingMode,
+        defaultThinkingLevel: s.defaultThinkingLevel,
+      })
+    }).catch((error) => { console.warn('[AgentView] 读取应用设置失败:', error) })
+    return () => { cancelled = true }
+  }, [])
   const [piReasoningCapability, setPiReasoningCapability] = React.useState<{ key: string; capability: ReasoningCapability | undefined }>({ key: '', capability: undefined })
   React.useEffect(() => {
     if (!isSessionThinkingAvailable || !agentChannelId || !agentModelId) {
@@ -595,7 +613,10 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       .filter((item): item is (typeof UI_THINKING_LEVELS)[number] => item !== undefined)
     : (isOpenAIReasoningMaxSupportedModel(agentModelId ?? undefined) ? UI_THINKING_LEVELS : STANDARD_UI_THINKING_LEVELS)
   const persistedReasoningLevel = sessionMeta?.reasoningLevel ?? getSessionThinkingLevel(sessionMeta)
-  const rawSessionThinkingLevel: AgentThinkingLevel = persistedReasoningLevel ?? DEFAULT_AGENT_THINKING_LEVEL
+  // 无会话级设置时：跟随应用设置链（与 resolvePiThinkingLevel 一致：编码优化 → max，否则 defaultThinkingLevel）
+  const optimizedCodingOn = appThinkingSettings?.optimizedCoding ?? appThinkingSettings?.codingMode ?? false
+  const rawSessionThinkingLevel: AgentThinkingLevel = persistedReasoningLevel
+    ?? (optimizedCodingOn ? 'max' : (appThinkingSettings?.defaultThinkingLevel ?? DEFAULT_AGENT_THINKING_LEVEL))
   const sessionThinkingLevel = reasoningProfile
     ? normalizeReasoningLevel(reasoningProfile, rawSessionThinkingLevel) ?? 'high'
     : normalizeReasoningCapabilityLevel(effectiveReasoningCapability, rawSessionThinkingLevel) ?? rawSessionThinkingLevel

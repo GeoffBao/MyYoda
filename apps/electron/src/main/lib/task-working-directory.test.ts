@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
+import { resolve } from 'node:path'
 import {
   resolveTaskWorkingDirectory,
   type TaskWorkingDirectoryFs,
 } from './task-working-directory'
+
+const R = (p: string) => resolve(p)
 
 function fakeFs(paths: Record<string, { directory?: boolean; writable?: boolean; realpath?: string }>): TaskWorkingDirectoryFs {
   return {
@@ -19,10 +22,10 @@ describe('resolveTaskWorkingDirectory', () => {
       explicitCwd: '/task-link',
       projectId: 'project-a',
       workspaceDefaultCwd: '/workspace',
-      resolveProjectCwd: () => ({ status: 'resolved', cwd: '/project' }),
+      resolveProjectCwd: () => ({ status: 'resolved', cwd: R('/project') }),
       fs: fakeFs({
-        '/task-link': { directory: true, writable: true, realpath: '/task-real' },
-        '/task-real': { directory: true, writable: true },
+        [R('/task-link')]: { directory: true, writable: true, realpath: '/task-real' },
+        [R('/task-real')]: { directory: true, writable: true },
       }),
     })
 
@@ -34,10 +37,10 @@ describe('resolveTaskWorkingDirectory', () => {
       explicitCwd: '/missing-task',
       projectId: 'project-a',
       workspaceDefaultCwd: '/workspace',
-      resolveProjectCwd: () => ({ status: 'resolved', cwd: '/project' }),
+      resolveProjectCwd: () => ({ status: 'resolved', cwd: R('/project') }),
       fs: fakeFs({
-        '/project': { directory: true, writable: true },
-        '/workspace': { directory: true, writable: true },
+        [R('/project')]: { directory: true, writable: true },
+        [R('/workspace')]: { directory: true, writable: true },
       }),
     })
 
@@ -52,14 +55,14 @@ describe('resolveTaskWorkingDirectory', () => {
     const result = resolveTaskWorkingDirectory({
       projectId: 'project-a',
       workspaceDefaultCwd: '/workspace',
-      resolveProjectCwd: () => ({ status: 'resolved', cwd: '/project' }),
+      resolveProjectCwd: () => ({ status: 'resolved', cwd: R('/project') }),
       fs: fakeFs({
-        '/project': { directory: true, writable: true },
-        '/workspace': { directory: true, writable: true },
+        [R('/project')]: { directory: true, writable: true },
+        [R('/workspace')]: { directory: true, writable: true },
       }),
     })
 
-    expect(result).toEqual({ status: 'resolved', cwd: '/project', source: 'project' })
+    expect(result).toEqual({ status: 'resolved', cwd: R('/project'), source: 'project' })
   })
 
   test('Project 缺失或 cwd 不可用时阻止运行，不降级到 Workspace default', () => {
@@ -67,13 +70,13 @@ describe('resolveTaskWorkingDirectory', () => {
       projectId: 'missing-project',
       workspaceDefaultCwd: '/workspace',
       resolveProjectCwd: () => null,
-      fs: fakeFs({ '/workspace': { directory: true, writable: true } }),
+      fs: fakeFs({ [R('/workspace')]: { directory: true, writable: true } }),
     })
     const unavailableProject = resolveTaskWorkingDirectory({
       projectId: 'project-a',
       workspaceDefaultCwd: '/workspace',
       resolveProjectCwd: () => ({ status: 'unavailable', attemptedPath: '/missing-project' }),
-      fs: fakeFs({ '/workspace': { directory: true, writable: true } }),
+      fs: fakeFs({ [R('/workspace')]: { directory: true, writable: true } }),
     })
 
     expect(missingProject).toEqual({ status: 'blocked', reason: 'missing-project' })
@@ -87,10 +90,10 @@ describe('resolveTaskWorkingDirectory', () => {
   test('Workspace Task 回退 Workspace default cwd', () => {
     const result = resolveTaskWorkingDirectory({
       workspaceDefaultCwd: '/workspace',
-      fs: fakeFs({ '/workspace': { directory: true, writable: true } }),
+      fs: fakeFs({ [R('/workspace')]: { directory: true, writable: true } }),
     })
 
-    expect(result).toEqual({ status: 'resolved', cwd: '/workspace', source: 'workspace' })
+    expect(result).toEqual({ status: 'resolved', cwd: R('/workspace'), source: 'workspace' })
   })
 
   test('无任何 cwd 时返回 blocked:missing-cwd', () => {
@@ -103,7 +106,7 @@ describe('resolveTaskWorkingDirectory', () => {
   test('目录无读写权限时按来源返回不可运行原因', () => {
     expect(resolveTaskWorkingDirectory({
       workspaceDefaultCwd: '/readonly',
-      fs: fakeFs({ '/readonly': { directory: true, writable: false } }),
+      fs: fakeFs({ [R('/readonly')]: { directory: true, writable: false } }),
     })).toEqual({
       status: 'blocked',
       reason: 'invalid-workspace-cwd',

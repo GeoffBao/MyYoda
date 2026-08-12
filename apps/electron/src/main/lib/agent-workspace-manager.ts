@@ -555,6 +555,22 @@ const SKILL_COPY_BLOCKLIST = new Set([
   '__pycache__',
 ])
 
+/**
+ * 跟随「编码优化模式」总开关（AppSettings.optimizedCoding）的预置 Skill。
+ * 预置（复制到工作区 skills/ 目录）但默认对 Agent 不可见；
+ * 总开关开启后由 orchestrator 的 skillsOverride 放行。
+ */
+export const OPTIMIZED_CODING_GATED_SKILLS: readonly string[] = [
+  'code-review',
+  'ultraqa',
+  'deep-interview',
+  'ai-slop-cleaner',
+]
+
+export function isOptimizedCodingGatedSkill(slug: string): boolean {
+  return OPTIMIZED_CODING_GATED_SKILLS.includes(slug)
+}
+
 export function skillCopyFilter(src: string): boolean {
   return !SKILL_COPY_BLOCKLIST.has(basename(src))
 }

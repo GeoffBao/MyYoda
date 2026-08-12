@@ -7,8 +7,18 @@ import {
 } from '@myyoda/shared'
 import type { AppSettings } from '../../types'
 
-type ThinkingSettings = Pick<AppSettings, 'agentThinking' | 'agentEffort' | 'defaultThinkingLevel'>
+type ThinkingSettings = Pick<AppSettings, 'agentThinking' | 'agentEffort' | 'defaultThinkingLevel' | 'codingMode' | 'optimizedCoding'>
 type ThinkingSessionMeta = Pick<AgentSessionMeta, 'thinkingLevel' | 'reasoningLevel' | 'openAIThinkingLevel'>
+
+/**
+ * 编码优化总开关：optimizedCoding 优先，兼容旧 codingMode 字段（老用户已开启时保持开启）。
+ * 默认关闭——PR37 的优化功能（repo map/B1/D2/分工指引/gated skill）在开启前不生效。
+ */
+export function resolveOptimizedCodingEnabled(
+  settings: Pick<AppSettings, 'optimizedCoding' | 'codingMode'>,
+): boolean {
+  return settings.optimizedCoding ?? settings.codingMode ?? false
+}
 
 /**
  * 解析 Pi 会话本轮思考深度。
@@ -32,6 +42,7 @@ export function resolvePiThinkingLevel(
     ?? sessionMeta?.thinkingLevel
     ?? sessionMeta?.openAIThinkingLevel
   const configuredLevel = settings.agentThinking?.type === 'disabled' ? 'off'
+    : resolveOptimizedCodingEnabled(settings) ? 'max'  // 编码优化模式（总开关，兼容旧 codingMode）：未设会话级思考时默认 max
     : (settings.defaultThinkingLevel ?? settings.agentEffort)
   if (profile) return normalizeReasoningLevel(profile, persistedReasoningLevel ?? configuredLevel) ?? 'high'
   if (capability) return normalizeReasoningCapabilityLevel(capability, persistedReasoningLevel ?? configuredLevel) ?? capability.defaultLevel

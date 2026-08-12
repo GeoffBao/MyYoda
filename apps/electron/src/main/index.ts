@@ -123,7 +123,7 @@ import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getDingTalkMultiBotConfig } from './lib/dingtalk-config'
 import { wechatBridge } from './lib/wechat-bridge'
 import { getWeChatConfig } from './lib/wechat-config'
-import { createQuickTaskWindow, toggleQuickTaskWindow, destroyQuickTaskWindow } from './lib/quick-task-window'
+import { toggleQuickTaskWindow, destroyQuickTaskWindow } from './lib/quick-task-window'
 import { destroyPlanningWindow, showPlanningWindow } from './lib/planning-window'
 import { configurePlanningQuickEntries } from './lib/planning-quick-entry'
 import { hasOpenPlanningArgument } from './lib/planning-quick-entry-model'
@@ -693,8 +693,8 @@ async function bootstrap(): Promise<void> {
     safeRun('initAutoUpdater', () => initAutoUpdater(mainWindow!))
   }
 
-  // 预创建快速任务窗口（隐藏状态，首次唤起秒开）
-  safeRun('createQuickTaskWindow', createQuickTaskWindow)
+  // 快速任务窗口改为懒创建：首次按全局快捷键（Alt+Space）唤起时才创建（toggleQuickTaskWindow 内部自带
+  // 幂等懒创建），避免启动时预创建导致“多窗口”困惑；按需创建的开销远小于多一个隐藏窗口的副作用。
   if (getSettings().voiceDictation?.enabled === true) {
     safeRun('createVoiceDictationWindow', createVoiceDictationWindow)
   }

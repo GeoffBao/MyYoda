@@ -59,6 +59,7 @@ import { resolveAgentSessionFileRoots } from './agent-file-roots'
 import { captureAgentTurnOutputs, buildOutputCaptureRoots, snapshotOutputFiles } from './agent-output-capture'
 import { getRuntimeStatus } from './runtime-init'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
+import { repoMapService, extractMentionContext } from './repo-map/repo-map-service'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
 import { MAX_CONTEXT_MESSAGES, buildContextPrompt, buildRecoveryPrompt, buildReferencedSessionsPrompt } from './agent-session-context-prompt'
 import { buildReferencedPlanningPrompt } from './planning-reference-context'
@@ -72,12 +73,13 @@ import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
+import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import type { AgentRuntimeEnv } from './agent-runtime-env'
 import { selectWindowsShell } from './windows-shell-selection'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
-import { resolvePiThinkingLevel } from './agent-thinking-level'
+import { resolveOptimizedCodingEnabled, resolvePiThinkingLevel } from './agent-thinking-level'
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
 import { generateCodexTitle } from './adapters/pi-codex-title-generator'
 import { buildRegenerateTitlePrompt, createFallbackTitle, extractAssistantMessageText, extractGenuineUserMessageText, sanitizeGeneratedTitle, selectSpreadMessages, shouldRegenerateTitleAtUserMessageCount, stripContextWrappersForTitle, TITLE_PROMPT } from './title-generation'
@@ -1178,6 +1180,19 @@ export class AgentOrchestrator {
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
+      // code-review-graph 代码库知识图谱（stdio）：默认关闭；依赖用户已安装 code-review-graph 命令。
+      // 用户手动配置的同名 server（如绝对路径 exe）优先，内置注入仅在无同名条目时生效。
+      if (!toolsDisabled && isBuiltinMcpUserEnabled('code-review-graph')) {
+        const serverName = getBuiltinMcpName('code-review-graph')
+        if (!mcpServers[serverName]) {
+          mcpServers[serverName] = {
+            type: 'stdio',
+            command: 'code-review-graph',
+            args: ['serve'],
+            required: false,
+          } as unknown as Record<string, unknown>
+        }
+      }
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const builtinMcpResult = toolsDisabled
@@ -1236,6 +1251,21 @@ export class AgentOrchestrator {
         ...(workspaceDefaultWorkingDirectory ? { workspaceDefaultWorkingDirectory } : {}),
       })
 
+      // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录），
+      // 且编码优化总开关开启时注入。服务层按 cwd + git HEAD 缓存：同一 worktree 内多会话共享；
+      // 首条消息最多等 2s，超时后台继续生成。
+      const optimizedCodingEnabled = resolveOptimizedCodingEnabled(appSettings)
+      let repoMapBlock: string | undefined
+      if (projectContext && agentCwd && optimizedCodingEnabled) {
+        repoMapBlock = await repoMapService.getRepoMapForPrompt(
+          agentCwd,
+          extractMentionContext(userMessage, agentCwd),
+        )
+      }
+      const finalDynamicCtx = repoMapBlock
+        ? `${dynamicCtx}\n\n<repo_map>\n当前仓库代码地图（按符号重要度排序，用于快速定位；地图可能不完整，动手前仍需 Read/Grep 确认）：\n${repoMapBlock}\n</repo_map>`
+        : dynamicCtx
+
       // 11.5 注入 mention 引用指令（Skill/MCP/会话）— 仅影响 prompt，不影响持久化
       let enrichedMessage = userMessage
       const referencedSessionsBlock = buildReferencedSessionsPrompt(sessionId, mentionedSessionIds, workspaceSlug)
@@ -1267,7 +1297,7 @@ export class AgentOrchestrator {
         console.log(`[Agent 编排] 注入 referenced_planning: ${mentionedTodoIds?.length ?? 0} todos, ${mentionedCalendarEventIds?.length ?? 0} calendar events`)
       }
 
-      const contextualMessage = `${dynamicCtx}\n\n${enrichedMessage}`
+      const contextualMessage = `${finalDynamicCtx}\n\n${enrichedMessage}`
 
       const isCompactCommand = userMessage.trim() === '/compact'
       const finalPrompt = isCompactCommand
@@ -1587,6 +1617,7 @@ export class AgentOrchestrator {
         permissionMode: initialPermissionMode,
         collaborationAvailable,
         currentModelId: selectedModelId,
+        optimizedCoding: optimizedCodingEnabled,
         projectKnowledgeMaintenanceApproved: workspaceSlug
           ? isWorkspaceProjectKnowledgeMaintenanceApproved(workspaceSlug)
           : false,
@@ -1678,6 +1709,7 @@ ${workContext}` : '')
         piSessionDir: join(getSdkConfigDir(), 'sessions'),
         ...(allAdditionalDirectories.length > 0 && { additionalDirectories: allAdditionalDirectories }),
         ...(workspaceSlug ? { additionalSkillPaths: [getWorkspaceSkillsDir(workspaceSlug)] } : {}),
+        ...(optimizedCodingEnabled ? { optimizedCoding: true } : {}),
         ...(mentionedSkills?.length ? { skillMentions: mentionedSkills } : {}),
         ...(isCompactCommand ? { compactRequest: true } : {}),
         ...(sessionMeta?.codexFastMode && channel.provider === 'openai-codex' ? { codexFastMode: true } : {}),

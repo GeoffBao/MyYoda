@@ -10,6 +10,7 @@
  */
 
 import type { AgentRuntime, MyYodaPermissionMode } from '@myyoda/shared'
+import { isDeepSeekV4 } from '@myyoda/shared/utils'
 import type { ProjectPromptContext } from '@myyoda/shared/projects'
 import { formatProjectContextForPrompt } from '@myyoda/shared/projects'
 import { homedir } from 'node:os'
@@ -43,6 +44,8 @@ interface SystemPromptContext {
   collaborationAvailable?: boolean
   /** 当前 Agent 实际运行的模型；Pi 用它在委派时显式透传默认模型 */
   currentModelId?: string
+  /** 编码优化模式总开关：控制模型专属编码规范（B1）与 repo map 注入的联动 */
+  optimizedCoding?: boolean
   /** 用户是否已授权 Agent 主动维护工作区/项目 AGENTS.md 知识 */
   projectKnowledgeMaintenanceApproved?: boolean
   /** 工作区记忆运行期引导（协作画像是否已建立等） */
@@ -130,6 +133,22 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
 
   // 工具使用指南（复用常量）
   sections.push(TOOL_USAGE_GUIDELINES)
+
+  // DeepSeek 模型专属编码规范（B1）：补偿 deepseek-v4 系列在工具调用纪律/验证闭环/陌生仓库定位上的短板。
+  // 参考 Aider model-settings（use_repo_map/examples_as_sys_msg/小步验证）与社区 DeepSeek 适配实践。
+  if (isDeepSeekV4(currentModelId) && ctx.optimizedCoding) {
+    sections.push(`## 模型专属编码规范（DeepSeek runtime）
+
+当前模型为 deepseek-v4 系列，与 Claude/GPT 在编码行为上存在差异，请严格遵守以下约束：
+
+- **工具调用纪律**：工具参数必须输出合法 JSON 且与 schema 严格一致；一次只调用一个工具，收到结果并确认后再继续；不要批量并行调用多个修改类工具
+- **先读后改**：修改任何文件前，先用 Read / Grep / Glob 定位真实代码与调用方，禁止凭记忆假设文件内容或行号
+- **小步验证**：大文件改动拆成小步——先 Read 相关段落 → Edit 精确替换 → 检查结果；每次工具调用后确认无误再进入下一步
+- **改后必验证**：完成代码改动后，主动运行 build / typecheck / test 验证，不依赖"看起来对"；若验证失败，阅读真实报错原文并修复
+- **禁止编造 API**：拿不准第三方库或框架 API 用法时，优先 Grep 仓库内既有用法；有文档查询类工具（如 context7）时先查文档，禁止凭记忆编造参数或签名
+- **影响面清单**：涉及多处修改时，先列出影响面（改动文件 × 依赖关系 × 调用方），再动手；改动后检查所有受影响位置
+- **谨慎提交**：提交代码前自查 diff，确认无调试残留、无无关改动`)
+  }
 
   sections.push(`## 子 Agent 委派策略
 

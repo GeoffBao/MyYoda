@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 import type { ProjectConfig } from '@myyoda/shared/projects';
 import * as projectContracts from '@myyoda/shared/projects';
 import * as projectStorage from '../storage.ts';
@@ -228,7 +228,7 @@ describe('workspace project storage', () => {
       filename: '设计说明.md',
       text: 'safe asset',
     });
-    expect(asset.absolutePath).toContain(`/projects/${project.slug}/assets/`);
+    expect(asset.absolutePath).toContain(join('projects', project.slug, 'assets'));
     expect(existsSync(asset.absolutePath)).toBe(true);
 
     expect(() =>
@@ -276,8 +276,8 @@ describe('workspace project storage', () => {
     const workdir = projectStorage.getProjectWorkdirPath(workspaceRoot, project.slug);
     const assets = projectStorage.getProjectAssetsPath(workspaceRoot, project.slug);
     expect(existsSync(workdir)).toBe(true);
-    expect(workdir.endsWith(`${project.slug}/workdir`)).toBe(true);
-    expect(assets.includes('/assets')).toBe(true);
+    expect(workdir.endsWith(join(project.slug, 'workdir'))).toBe(true);
+    expect(assets.includes(`${project.slug}${sep}assets`)).toBe(true);
     expect(workdir).not.toBe(assets);
   });
 

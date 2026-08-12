@@ -242,7 +242,7 @@ describe('Agent 会话 JSONL 读取', () => {
 })
 
 describe('Agent 会话 runtime 元数据', () => {
-  test('Given 新安装用户将默认思考设为 off When 连续新建并读取会话 Then 不被旧版迁移改回 high', () => {
+  test('Given 新安装用户将默认思考设为 off When 连续新建并读取会话 Then 默认值不固化到会话（运行期解析）', () => {
     const settingsPath = join(tempHome, '.myyoda', 'settings.json')
     const indexPath = join(tempHome, '.myyoda', 'agent-sessions.json')
     const indexBackupPath = `${indexPath}.bak`
@@ -255,16 +255,10 @@ describe('Agent 会话 runtime 元数据', () => {
       const firstSession = manager.createAgentSession('关闭思考会话一')
       const secondSession = manager.createAgentSession('关闭思考会话二')
 
-      expect(firstSession.thinkingLevel).toBe('off')
-      expect(secondSession.thinkingLevel).toBe('off')
-      expect(manager.getAgentSessionMeta(firstSession.id)).toMatchObject({
-        thinkingLevel: 'off',
-        openAIThinkingLevel: 'off',
-      })
-      expect(manager.getAgentSessionMeta(secondSession.id)).toMatchObject({
-        thinkingLevel: 'off',
-        openAIThinkingLevel: 'off',
-      })
+      // 默认档不再固化到会话 meta（留空=未设置）；生效值由运行期解析链决定（编码优化→max / defaultThinkingLevel）
+      expect(firstSession.thinkingLevel).toBeUndefined()
+      expect(secondSession.thinkingLevel).toBeUndefined()
+      expect(manager.getAgentSessionMeta(firstSession.id)).toMatchObject({})
     } finally {
       rmSync(settingsPath, { force: true })
       rmSync(indexPath, { force: true })
@@ -304,8 +298,9 @@ describe('Agent 会话 runtime 元数据', () => {
     const defaultRuntimeSession = manager.createAgentSession('默认内核会话')
 
     // Claude runtime 已退役，所有会话统一 Pi。
-    expect(defaultRuntimeSession.openAIThinkingLevel).toBe('high')
-    expect(defaultRuntimeSession.thinkingLevel).toBe('high')
+    // 思考深度不再在创建时固化（留空=未设置，由运行期解析链决定：编码优化→max / defaultThinkingLevel）。
+    expect(defaultRuntimeSession.thinkingLevel).toBeUndefined()
+    expect(defaultRuntimeSession.reasoningLevel).toBeUndefined()
   })
 
   test('Given session thinking level When updating Then dual-writes thinkingLevel and legacy openAIThinkingLevel', () => {

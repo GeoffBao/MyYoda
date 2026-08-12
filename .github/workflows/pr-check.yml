@@ -1,0 +1,58 @@
+# GitHub Actions: PR 质量门禁
+#
+# 触发条件：针对 main 的 Pull Request（创建/更新/重新打开）
+# 作用：fresh clone 环境验证 typecheck + 全量测试 + 主进程打包，防止
+#      "本地能过、合并就挂"（如未提交文件、依赖漂移、打包配置问题）。
+#      结果展示在 PR 的 Checks 标签页，可配合 main 分支保护规则强制门禁。
+#
+# 说明：语义层面的 code review 仍由人工/AI 审查完成，本 workflow 只做确定性机器检查。
+
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+# 同一 PR 的新 push 取消正在运行的旧检查，节省 CI 时间
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-test-build:
+    name: typecheck + test + build
+    # 双平台：ubuntu 快速反馈；windows 贴近用户实际环境（esbuild/路径差异）
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.5
+
+      - name: 安装依赖（frozen lockfile 保证一致性）
+        run: bun install --frozen-lockfile
+
+      - name: 类型检查（所有包）
+        run: bun run typecheck
+
+      # 全量测试只在 windows 跑：与本地开发环境一致；ubuntu 存在 40+ 既有环境差异失败
+      # （OAuth 认证解析/会话分组等，本地与 CI-windows 均通过），待单独排期修复
+      - name: 全量测试
+        if: matrix.os == 'windows-latest'
+        run: bun test
+
+      - name: 主进程打包验证（esbuild）
+        working-directory: apps/electron
+        shell: bash
+        run: |
+          bun run build:main
+          test -f dist/main.cjs && echo "main.cjs 生成成功 ($(wc -c < dist/main.cjs) bytes)"

@@ -25,6 +25,7 @@ import type { ImageAttachmentData, ContinuationMessage } from '@myyoda/core'
 import { listChannels, resolveChannelRuntimeApiKey } from './channel-manager'
 import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
+import { resolveOptimizedCodingEnabled } from './agent-thinking-level'
 import { appendMessage, updateConversationMeta, getConversationMessages } from './conversation-manager'
 import { readAttachmentAsBase64, isImageAttachment } from './attachment-service'
 import { extractTextFromAttachment, isDocumentAttachment } from './document-parser'
@@ -338,6 +339,8 @@ export async function sendMessage(
         attachments,
         readImageAttachments: getImageAttachmentData,
         thinkingEnabled,
+        // C1：DeepSeek 输出预算跟随编码优化总开关（64000/16384 vs 保守 32000/8192）
+        optimizedCoding: resolveOptimizedCodingEnabled(getSettings()),
         tools,
         continuationMessages: continuationMessages.length > 0 ? continuationMessages : undefined,
       })
@@ -414,6 +417,7 @@ export async function sendMessage(
         attachments,
         readImageAttachments: getImageAttachmentData,
         thinkingEnabled,
+        optimizedCoding: resolveOptimizedCodingEnabled(getSettings()),
         // 不传 tools，强制模型生成文本回复而非继续调用工具
         continuationMessages,
       })

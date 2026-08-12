@@ -427,6 +427,10 @@ export interface AppSettings {
   agentEffort?: AgentEffort
   /** 新会话默认思考深度（对齐 craft defaultThinkingLevel；会话内可覆盖） */
   defaultThinkingLevel?: AgentThinkingLevel
+  /** 编码优化模式（总开关）：开启后启用 PR37 的 DeepSeek 编码优化全家桶（repo map/B1 编码规范/D2 提前压缩/分工指引/新预置 skill）。默认关闭。 */
+  optimizedCoding?: boolean
+  /** Coding 模式（遗留字段，兼容读取：optimizedCoding 未设置时回退到此值） */
+  codingMode?: boolean
   /** Agent 最大预算（美元/次） */
   agentMaxBudgetUsd?: number
   /** Agent 最大轮次（0 或 undefined = SDK 默认） */

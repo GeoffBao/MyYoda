@@ -65,6 +65,7 @@ export function GeneralSettings(): React.ReactElement {
   const [sessionHoverPreviewEnabled, setSessionHoverPreviewEnabled] = useAtom(sessionHoverPreviewEnabledAtom)
   const [thinkingExpanded, setThinkingExpanded] = useAtom(thinkingExpandedAtom)
   const [defaultThinkingLevel, setDefaultThinkingLevel] = React.useState<AgentThinkingLevel>(DEFAULT_AGENT_THINKING_LEVEL)
+  const [codingMode, setCodingMode] = React.useState(false)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showAvatarPicker, setShowAvatarPicker] = React.useState(false)
@@ -80,6 +81,7 @@ export function GeneralSettings(): React.ReactElement {
     window.electronAPI.getSettings().then((settings) => {
       setArchiveAfterDays(settings.archiveAfterDays ?? 7)
       setDefaultThinkingLevel(settings.defaultThinkingLevel ?? DEFAULT_AGENT_THINKING_LEVEL)
+      setCodingMode(settings.optimizedCoding ?? settings.codingMode ?? false)
       setGitAttributionEnabled(settings.gitAttributionEnabled ?? true)
       setCodeClawEnabled(settings.codeClaw?.enabled ?? false)
       setCodeClawThemeId(isCodeClawThemeId(settings.codeClaw?.themeId) ? settings.codeClaw.themeId : DEFAULT_CODECLAW_THEME_ID)
@@ -460,16 +462,32 @@ export function GeneralSettings(): React.ReactElement {
           />
           <SettingsRow
             label="新会话默认思考深度"
-            description="仅作为新建会话的初始值，可在输入栏按会话覆盖"
+            description={codingMode
+              ? "编码优化模式开启中：固定为 max（关闭开关后可调整）"
+              : "仅作为新建会话的初始值，可在输入栏按会话覆盖"}
           >
             <div className="w-56">
               <ThinkingLevelSlider
-                value={normalizeToUiIndex(defaultThinkingLevel)}
+                value={codingMode ? normalizeToUiIndex('max') : normalizeToUiIndex(defaultThinkingLevel)}
                 onValueChange={handleDefaultThinkingLevelIndexChange}
+                disabled={codingMode}
                 locale="cn"
               />
             </div>
           </SettingsRow>
+          <SettingsToggle
+            label="编码优化模式"
+            description="一键开启编码优化：仓库代码地图（repo map）、模型专属编码规范（DeepSeek）、Chat 输出预算提升（64K）、未设会话级思考时默认思考深度 max、编码相关预置技能（code-review/ultraqa/deep-interview/ai-slop-cleaner）。默认关闭，按需开启。"
+            checked={codingMode}
+            onCheckedChange={(checked) => {
+              // 乐观更新：先切 UI 再持久化，失败回滚（对齐 gitAttribution 开关模式）
+              setCodingMode(checked)
+              void window.electronAPI.updateSettings({ optimizedCoding: checked }).catch((error) => {
+                console.error('[通用设置] 更新编码优化模式失败:', error)
+                setCodingMode(!checked)
+              })
+            }}
+          />
         </SettingsCard>
       </SettingsSection>
     </div>

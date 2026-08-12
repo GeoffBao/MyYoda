@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { normalizePathForCompare } from '@myyoda/shared/utils'
 import type { AgentSessionMeta } from '@myyoda/shared'
 import { assertWorktreeClean, listGitBranchesForSession, prepareSessionGitContext, removeSessionWorktree } from './git-session-context-service'
 
@@ -108,8 +109,10 @@ describe('git-session-context-service', () => {
     const repoRoot = sh(repo, ['rev-parse', '--show-toplevel'])
     const expectedWorktree = join(repoRoot, '.worktrees', 'session-one')
     expect(result.createdWorktree).toBe(true)
+    // git 输出的 repoRoot 是正斜杠（MSYS），实现存的是原始输入（Windows 反斜杠）——
+    // 用 normalizePathForCompare 归一化后比较，跨平台稳定
+    expect(normalizePathForCompare(result.context.repoPath)).toBe(normalizePathForCompare(repoRoot))
     expect(result.context).toMatchObject({
-      repoPath: repoRoot,
       branch: 'main',
       executionMode: 'worktree',
       workingDirectory: expectedWorktree,
@@ -118,9 +121,9 @@ describe('git-session-context-service', () => {
     })
     expect(existsSync(expectedWorktree)).toBe(true)
     expect(sh(expectedWorktree, ['branch', '--show-current'])).toBe('')
+    expect(normalizePathForCompare(updates.at(-1)?.gitRepoPath ?? '')).toBe(normalizePathForCompare(repoRoot))
     expect(updates.at(-1)).toMatchObject({
       workingDirectory: expectedWorktree,
-      gitRepoPath: repoRoot,
       gitBranch: 'main',
       gitExecutionMode: 'worktree',
       gitWorktreePath: expectedWorktree,
@@ -137,7 +140,10 @@ describe('git-session-context-service', () => {
     expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
     expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
     expect(existsSync(join(worktree, 'uncommitted.txt'))).toBe(true)
-    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+    // git 输出正斜杠且可能是长路径名；realpathSync 在 CI 上可能返回 8.3 短名（RUNNER~1）——
+    // 只断言 porcelain 输出的 worktree 行以 .worktrees/<name> 结尾，避免路径名形态差异
+    const porcelain = sh(repo, ['worktree', 'list', '--porcelain'])
+    expect(porcelain.split('\n').some((l) => l.startsWith('worktree ') && l.endsWith('.worktrees/dirty'))).toBe(true)
   })
 
   test('Given an ignored user file in a Worktree When removing it Then blocks deletion and preserves the file', () => {
@@ -149,7 +155,10 @@ describe('git-session-context-service', () => {
     expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
     expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
     expect(existsSync(join(worktree, 'credentials.secret'))).toBe(true)
-    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+    // git 输出正斜杠且可能是长路径名；realpathSync 在 CI 上可能返回 8.3 短名（RUNNER~1）——
+    // 只断言 porcelain 输出的 worktree 行以 .worktrees/<name> 结尾，避免路径名形态差异
+    const porcelain = sh(repo, ['worktree', 'list', '--porcelain'])
+    expect(porcelain.split('\n').some((l) => l.startsWith('worktree ') && l.endsWith('.worktrees/ignored'))).toBe(true)
   })
 
   test('Given a clean Worktree When removing it Then removes the Worktree registration and directory', () => {
