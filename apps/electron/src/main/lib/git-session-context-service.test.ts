@@ -140,7 +140,10 @@ describe('git-session-context-service', () => {
     expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
     expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
     expect(existsSync(join(worktree, 'uncommitted.txt'))).toBe(true)
-    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+    // git 输出正斜杠且可能是长路径名；realpathSync 在 CI 上可能返回 8.3 短名（RUNNER~1）——
+    // 只断言 porcelain 输出的 worktree 行以 .worktrees/<name> 结尾，避免路径名形态差异
+    const porcelain = sh(repo, ['worktree', 'list', '--porcelain'])
+    expect(porcelain.split('\n').some((l) => l.startsWith('worktree ') && l.endsWith('.worktrees/dirty'))).toBe(true)
   })
 
   test('Given an ignored user file in a Worktree When removing it Then blocks deletion and preserves the file', () => {
@@ -152,7 +155,10 @@ describe('git-session-context-service', () => {
     expect(() => assertWorktreeClean(worktree)).toThrow('已阻止删除 Worktree')
     expect(() => removeSessionWorktree(repo, worktree)).toThrow('已阻止删除 Worktree')
     expect(existsSync(join(worktree, 'credentials.secret'))).toBe(true)
-    expect(sh(repo, ['worktree', 'list', '--porcelain'])).toContain(`worktree ${realpathSync(worktree)}`)
+    // git 输出正斜杠且可能是长路径名；realpathSync 在 CI 上可能返回 8.3 短名（RUNNER~1）——
+    // 只断言 porcelain 输出的 worktree 行以 .worktrees/<name> 结尾，避免路径名形态差异
+    const porcelain = sh(repo, ['worktree', 'list', '--porcelain'])
+    expect(porcelain.split('\n').some((l) => l.startsWith('worktree ') && l.endsWith('.worktrees/ignored'))).toBe(true)
   })
 
   test('Given a clean Worktree When removing it Then removes the Worktree registration and directory', () => {
