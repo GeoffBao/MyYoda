@@ -4,6 +4,7 @@
  * 这里是 Electron 主进程与本地文件存储、TaskRunner、Agent 编排器之间的薄桥接层。
  */
 import { BrowserWindow, ipcMain } from 'electron'
+import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import {
   LABEL_IPC_CHANNELS,
@@ -22,6 +23,8 @@ import type {
   TaskGeneratedEventPayload,
   UpdateProjectInput,
   UploadProjectAssetInput,
+  ProjectDeleteImpact,
+  TaskDeleteImpact,
 } from '@myyoda/shared'
 import type { TaskSpec } from '@myyoda/shared/tasks/schema'
 import type { TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks/task-record'
@@ -31,11 +34,14 @@ import {
   extractYaml,
 } from '@myyoda/shared/tasks'
 import {
+  getProjectPath,
+} from '@myyoda/shared/projects/storage'
+import {
+  taskDir,
   getLatestRunId,
   listResumableRuns,
   listTaskSlugs,
   loadTaskSpec,
-  deleteTaskSpec,
   parseTaskYaml,
   readRunLog,
   readRunSpecSnapshot,
@@ -60,8 +66,13 @@ import { validateTeamSquad, type TeamMemberResolver } from '@myyoda/shared/exper
 import type { RunSnapshot } from './task-runner'
 import { loadExpertWorkspaceBinding } from './expert-binding-service'
 import { projectRepository } from './project-repository'
+import { quarantineForRecovery } from './recovery-trash-service'
 import { resolveRegisteredWorkspaceRoot, type WorkspaceRootRegistration } from './workspace-root-access-policy'
 import { analyzeProjectDeleteImpact, analyzeTaskDeleteImpact } from './project-impact-service'
+import {
+  consumeDestructiveOperationToken,
+  issueDestructiveOperationToken,
+} from './destructive-operation-token'
 import {
   openOrCreateProjectForPath,
   relocateProjectWorkingDirectory,
@@ -234,6 +245,52 @@ export function validateSessionLabelAssignment(
 function sendToMainWindow(channel: string, payload: unknown): void {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
   mainWindow.webContents.send(channel, payload)
+}
+
+function deleteImpactFingerprint(impact: ProjectDeleteImpact | TaskDeleteImpact): string {
+  const { confirmationToken: _confirmationToken, ...snapshot } = impact
+  return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')
+}
+
+function issueProjectDeleteConfirmation(
+  workspaceRoot: string,
+  projectSlug: string,
+  impact: ProjectDeleteImpact,
+): ProjectDeleteImpact {
+  return {
+    ...impact,
+    confirmationToken: issueDestructiveOperationToken(
+      'project-purge',
+      `${workspaceRoot}/projects/${projectSlug}`,
+      deleteImpactFingerprint(impact),
+    ),
+  }
+}
+
+function issueTaskDeleteConfirmation(
+  workspaceRoot: string,
+  taskSlug: string,
+  impact: TaskDeleteImpact,
+): TaskDeleteImpact {
+  return {
+    ...impact,
+    confirmationToken: issueDestructiveOperationToken(
+      'task-purge',
+      `${workspaceRoot}/tasks/${taskSlug}`,
+      deleteImpactFingerprint(impact),
+    ),
+  }
+}
+
+function requireDeleteConfirmation(
+  token: unknown,
+  kind: 'project-purge' | 'task-purge',
+  scope: string,
+  impact: ProjectDeleteImpact | TaskDeleteImpact,
+): void {
+  if (!consumeDestructiveOperationToken(token, kind, scope, deleteImpactFingerprint(impact))) {
+    throw new Error('删除确认已过期、已使用或目标状态已变化，请重新打开影响分析')
+  }
 }
 
 function broadcastProjectsChanged(workspaceRoot: string, workspaceId: string): void {
@@ -671,7 +728,7 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     return project
   })
 
-  ipcMain.handle(PROJECT_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, slug: string) => {
+  ipcMain.handle(PROJECT_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, slug: string, confirmationToken?: string) => {
     const context = requireProjectWorkspaceRoot(workspaceRoot)
     const project = projectRepository.getProjectAtRoot(context.workspaceRoot, slug)
     if (!project) throw new Error(`项目不存在: ${slug}`)
@@ -682,8 +739,20 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     if (!impact.canPurge) {
       throw new Error(`项目仍有关联数据，不能永久删除：${impact.blockers.join('；')}`)
     }
+    requireDeleteConfirmation(
+      confirmationToken,
+      'project-purge',
+      `${context.workspaceRoot}/projects/${slug}`,
+      impact,
+    )
 
-    projectRepository.deleteProjectAtRoot(context.workspaceRoot, slug)
+    const deletableSlug = projectRepository.assertProjectDeletableAtRoot(context.workspaceRoot, slug)
+    quarantineForRecovery(
+      context.workspaceRoot,
+      getProjectPath(context.workspaceRoot, deletableSlug),
+      'project',
+      deletableSlug,
+    )
     broadcastProjectsChanged(context.workspaceRoot, context.workspaceId)
   })
 
@@ -691,7 +760,8 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     const context = requireProjectWorkspaceRoot(workspaceRoot)
     const project = projectRepository.getProjectAtRoot(context.workspaceRoot, idOrSlug)
     if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
-    return analyzeProjectDeleteImpact(context.workspaceRoot, project.config, listAgentSessions())
+    const impact = analyzeProjectDeleteImpact(context.workspaceRoot, project.config, listAgentSessions())
+    return issueProjectDeleteConfirmation(context.workspaceRoot, project.config.slug, impact)
   })
 
   ipcMain.handle(PROJECT_IPC_CHANNELS.LIST_ASSETS, (_event, workspaceRoot: string, slug: string) => {
@@ -947,10 +1017,11 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     const context = requireProjectWorkspaceRoot(workspaceRoot)
     const loaded = loadTaskSpec(context.workspaceRoot, slug)
     if (!loaded?.spec) throw new Error(`Task 不存在: ${slug}`)
-    return analyzeTaskDeleteImpact(context.workspaceRoot, slug, listAgentSessions())
+    const impact = analyzeTaskDeleteImpact(context.workspaceRoot, slug, listAgentSessions())
+    return issueTaskDeleteConfirmation(context.workspaceRoot, slug, impact)
   })
 
-  ipcMain.handle(TASK_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, workspaceId: string, slug: string) => {
+  ipcMain.handle(TASK_IPC_CHANNELS.DELETE, (_event, workspaceRoot: string, workspaceId: string, slug: string, confirmationToken?: string) => {
     const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
     const loaded = loadTaskSpec(context.workspaceRoot, slug)
     if (!loaded?.spec) throw new Error(`Task 不存在: ${slug}`)
@@ -959,7 +1030,18 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     if (impact.activeRunCount > 0) {
       throw new Error(`仍有 ${impact.activeRunCount} 个活跃 Run，请先停止运行`)
     }
-    deleteTaskSpec(context.workspaceRoot, slug)
+    requireDeleteConfirmation(
+      confirmationToken,
+      'task-purge',
+      `${context.workspaceRoot}/tasks/${slug}`,
+      impact,
+    )
+    quarantineForRecovery(
+      context.workspaceRoot,
+      taskDir(context.workspaceRoot, slug),
+      'task',
+      slug,
+    )
   })
 
   ipcMain.handle(TASK_IPC_CHANNELS.GET_RESULTS, (_event, workspaceRoot: string, slug: string, runId?: string) => {

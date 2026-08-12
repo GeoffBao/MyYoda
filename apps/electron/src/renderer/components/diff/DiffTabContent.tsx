@@ -1763,9 +1763,9 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
                   src={htmlUrl}
                   className="w-full h-full border-0"
                   title={filePath.split('/').pop() || 'HTML'}
-                  // 允许脚本运行（现代页面需要），但禁止 top-navigation/下载等，
-                  // 防止页面把主应用导航走；myyoda-file:// 目录越界仍被协议拒绝。
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
+                  // HTML 文件默认按不可信内容预览：不授予脚本、same-origin、表单或弹窗能力。
+                  // 资源仍由主进程签发的 myyoda-file:// token 提供，目录越界由协议拒绝。
+                  sandbox=""
                 />
               ) : null
             ) : isMarkdown ? (
