@@ -536,6 +536,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       return map
     })
   }, [sessionId, setDraftHtmlMap])
+
   const sessionPathMap = useAtomValue(agentSessionPathMapAtom)
   const setSessionPathMap = useSetAtom(agentSessionPathMapAtom)
   const sessionPath = sessionPathMap.get(sessionId) ?? null
@@ -2891,8 +2892,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           stoppedByUser={stoppedByUser}
           onRetry={handleRetry}
           onRetryInNewSession={handleRetryInNewSession}
-          onFork={handleFork}
-          onRewind={handleRewindRequest}
+          onFork={isLegacyTranscript ? undefined : handleFork}
+          onRewind={isLegacyTranscript ? undefined : handleRewindRequest}
           onCompact={handleCompact}
         />
 

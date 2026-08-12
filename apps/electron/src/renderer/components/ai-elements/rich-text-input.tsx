@@ -216,8 +216,8 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false)
   // 跟踪 isExpanded 最新值（对比后再 setState，避免每键无谓 setState 触发重渲染）
   const isExpandedRef = useRef(false)
-  // 行数检查的 rAF 调度句柄（用 rAF 节流，一帧最多检查一次）
-  const lineCheckHandleRef = useRef<number | null>(null)
+  // 行数检查会遍历整篇 ProseMirror 文档；在输入停顿后再计算，避免长草稿每帧重复扫描。
+  const lineCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 跟踪编辑器自己设置的值，用于区分外部设置和内部更新
   const lastEditorValueRef = useRef<string>('')
   // 记录尚未由 props 确认的本地草稿。长文本连续编辑时，React 可能先提交较旧的
@@ -722,19 +722,18 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
         onChange(markdown)
         onHtmlChangeRef.current?.(html)
 
-        // 行数检查用 rAF 节流：每键 doc.descendants 全文遍历 + setState 重渲染会让
-        // 输入热路径变重；延后到下一帧合并连续按键，对 UX 无影响。
-        if (lineCheckHandleRef.current !== null) {
-          cancelAnimationFrame(lineCheckHandleRef.current)
+        // 行数检查会遍历整篇 ProseMirror 文档；在输入停顿后再计算，避免长草稿每帧重复扫描。
+        if (lineCheckTimerRef.current !== null) {
+          clearTimeout(lineCheckTimerRef.current)
         }
-        lineCheckHandleRef.current = requestAnimationFrame(() => {
-          lineCheckHandleRef.current = null
+        lineCheckTimerRef.current = setTimeout(() => {
+          lineCheckTimerRef.current = null
           const nextExpanded = countEditorLines(ed) > 5
           if (nextExpanded !== isExpandedRef.current) {
             isExpandedRef.current = nextExpanded
             setIsExpanded(nextExpanded)
           }
-        })
+        }, 150)
       }
     },
   }, [richTextEnabled])
@@ -742,9 +741,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
   // 卸载时取消未触发的 rAF 行数检查，避免泄漏 / 在卸载组件上 setState
   useEffect(() => {
     return () => {
-      if (lineCheckHandleRef.current !== null) {
-        cancelAnimationFrame(lineCheckHandleRef.current)
-        lineCheckHandleRef.current = null
+      if (lineCheckTimerRef.current !== null) {
+        clearTimeout(lineCheckTimerRef.current)
+        lineCheckTimerRef.current = null
       }
     }
   }, [])
@@ -830,14 +829,23 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
     }
   }, [editor, placeholder])
 
-  // 自动聚焦：组件挂载时 + autoFocusTrigger 变化时
+  // 自动聚焦仅属于「切换到另一会话」：同一输入框因 loading/streaming 等状态重建 editor
+  // 时，不应在 100ms 后把用户刚移走的焦点抢回来。
+  const lastAutoFocusTriggerRef = useRef<string | null | undefined>(undefined)
   useEffect(() => {
-    if (editor && !disabled) {
-      const timer = setTimeout(() => {
-        editor.commands.focus()
-      }, 100)
-      return () => clearTimeout(timer)
-    }
+    if (!editor || disabled) return
+
+    const triggerChanged = lastAutoFocusTriggerRef.current !== autoFocusTrigger
+    lastAutoFocusTriggerRef.current = autoFocusTrigger
+    if (!triggerChanged) return
+
+    const timer = setTimeout(() => {
+      // 延迟期间用户可能已点击另一个控件；只在页面尚未有可编辑目标时自动聚焦。
+      const activeElement = document.activeElement as HTMLElement | null
+      const activeEditable = activeElement?.matches('input, textarea, [contenteditable="true"]')
+      if (!activeEditable) editor.commands.focus()
+    }, 100)
+    return () => clearTimeout(timer)
   }, [editor, disabled, autoFocusTrigger])
 
   // 对外暴露命令接口：右侧文件面板拖入时，在光标处插入 @file 引用 mention。
