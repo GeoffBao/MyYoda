@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
+import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
 import { ProcessBlockGroup, buildAssistantTurnRenderItems, buildCompletedToolResultIds } from './ProcessBlockGroup'
 import { extractToolResultText, TASK_TOOL_NAMES } from './task-progress'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
@@ -587,9 +588,15 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
         )}
         </TurnFileMapProvider>
       </MessageContent>
-      {/* 文件改动汇总：流式结束后展示本轮所有 Edit/Write/MultiEdit/NotebookEdit 文件 */}
+      {/* 完成态汇总：Skill 使用记录与文件改动 chip */}
       {!isStreaming && (
-        <TurnFileChangesSummary turnMessages={turn.turnMessages} basePath={basePath} />
+        <>
+          <TurnSkillUsageSummary
+            inputMessage={turn.inputMessage}
+            turnMessages={turn.turnMessages}
+          />
+          <TurnFileChangesSummary turnMessages={turn.turnMessages} basePath={basePath} />
+        </>
       )}
       {/* 操作栏：流式输出完成后显示操作按钮 */}
       {!isStreaming && (() => {

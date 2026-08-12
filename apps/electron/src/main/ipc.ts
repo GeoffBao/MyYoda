@@ -5,7 +5,7 @@
  */
 
 import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nativeImage } from 'electron'
-import { join, resolve, sep, dirname } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -159,10 +159,17 @@ import type {
   ResolvePlanningNativeSyncConflictInput,
   PlanningSyncProfile,
   SavePlanningSyncProfileInput,
+  BrowserViewState,
+  BrowserViewLayout,
+  BrowserNavigateInput,
+  BrowserTabInput,
+  BrowserCreateTabInput,
 } from '@myyoda/shared'
 import type { ExpertManifest, ExpertPackage } from '@myyoda/shared/experts'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
+import { browserController } from './lib/browser-controller'
+import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
 import {
   getUnstagedChanges,
   invalidateGitDiffCache,
@@ -175,7 +182,7 @@ import {
   getMainRepoRoot,
 } from './lib/git-diff-service'
 import { listGitBranchesForSession, prepareSessionGitContext } from './lib/git-session-context-service'
-import { registerPromaFilePath } from './lib/local-file-protocol'
+import { registerMyYodaDirectoryPath, registerMyYodaFilePath } from './lib/local-file-protocol'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
 import {
   listChannels,
@@ -312,7 +319,7 @@ import { spawnExpertCowork } from './lib/agent-cowork'
 import { permissionService } from './lib/agent-permission-service'
 import { askUserService } from './lib/agent-ask-user-service'
 import { exitPlanService } from './lib/agent-exit-plan-service'
-import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getWorkspaceSkillsDir, getWorkspaceFilesDir, getScratchPadPath, getExcalidrawDir, getExpertsDir, getDefaultExpertTemplatesDir } from './lib/config-paths'
+import { getAgentSessionWorkspacePath, getAgentWorkspacesDir, getConfigDir, getWorkspaceSkillsDir, getWorkspaceFilesDir, getScratchPadPath, getExcalidrawDir, getExpertsDir, getDefaultExpertTemplatesDir } from './lib/config-paths'
 import { resolveAgentSessionFileRoots } from './lib/agent-file-roots'
 import { listSessionOutputs } from './lib/agent-output-capture'
 import { getAgentWorkspacePath } from './lib/config-paths'
@@ -559,9 +566,45 @@ function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
   return Array.from(workspaceSlugs)
 }
 
+function getManagedSkillBasePath(options?: FileAccessOptions): string | undefined {
+  const workspaceSlug = options?.workspaceSkillSlug
+  if (!workspaceSlug || !getWorkspaceSlugsForAccess(options).includes(workspaceSlug)) return undefined
+  const workspace = listAgentWorkspaces().find((item) => item.slug === workspaceSlug)
+  return workspace ? getWorkspaceSkillsDir(workspace.slug) : undefined
+}
+
 function getAllowedCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
-  const allowed = options?.candidateBasePaths?.filter((p) => isPathAllowed(p, options)) ?? []
+  const allowed = (getPreviewCandidateBasePaths(options) ?? []).filter((p) => isPathAllowed(p, options))
   return allowed.length > 0 ? allowed : undefined
+}
+
+function getLegacySkillBasePath(options?: FileAccessOptions): string | undefined {
+  const legacyFilePath = options?.legacySkillFilePath
+  if (!legacyFilePath) return undefined
+  const normalized = legacyFilePath.replace(/\\/g, '/')
+  return normalized.match(/^(.*\/skills)\/[^/]+\/SKILL\.md$/i)?.[1]
+}
+
+function getPreviewCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
+  const bases = options?.candidateBasePaths?.filter((p) => typeof p === 'string' && p.length > 0) ?? []
+  const managedSkillBasePath = getManagedSkillBasePath(options)
+  if (managedSkillBasePath && !bases.includes(managedSkillBasePath)) {
+    bases.unshift(managedSkillBasePath)
+  }
+  const legacySkillBasePath = getLegacySkillBasePath(options)
+  if (legacySkillBasePath && !bases.includes(legacySkillBasePath)) {
+    bases.push(legacySkillBasePath)
+  }
+  return bases.length > 0 ? bases : undefined
+}
+
+/** Resolve preview-only relative paths before handing them to OS-level file actions. */
+async function resolveFileAccessPath(filePath: string, options?: FileAccessOptions): Promise<string> {
+  const [{ resolve }, { resolveFilePath }] = await Promise.all([
+    import('node:path'),
+    import('./lib/file-preview-service'),
+  ])
+  return resolveFilePath(filePath, getPreviewCandidateBasePaths(options)) ?? resolve(filePath)
 }
 
 async function getAccessRootMainRepo(root: string): Promise<string | null> {
@@ -903,10 +946,9 @@ async function getWindowsDefaultAppInfo(filePath: string): Promise<{ appPath: st
 
 async function getDefaultAppInfoForFile(
   filePath: string,
-  _options?: FileAccessOptions,
+  options?: FileAccessOptions,
 ): Promise<import('@myyoda/shared').DefaultAppInfo | null> {
-  const { resolve } = await import('node:path')
-  const absPath = resolve(filePath)
+  const absPath = await resolveFileAccessPath(filePath, options)
 
   const cacheKey = `${process.platform}:${extOf(filePath) || filePath}`
   const cachedInfo = defaultAppCache.get(cacheKey) ?? getCachedDefaultAppInfo(cacheKey)
@@ -1323,9 +1365,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.SYSTEM_OPEN_FILE,
     async (_, filePath: string, appName?: string, access?: FileAccessOptions | string[]): Promise<void> => {
-      const { resolve } = await import('node:path')
-      const absPath = resolve(filePath)
       const options = normalizeFileAccessOptions(access)
+      const absPath = await resolveFileAccessPath(filePath, options)
       if (!isPathAllowed(absPath, options)) {
         console.warn('[IPC] shell:system-open-file 拒绝越界路径:', absPath)
         return
@@ -1376,12 +1417,13 @@ export function registerIpcHandlers(): void {
       if (!filePath || typeof filePath !== 'string') return null
       try {
         const options = normalizeFileAccessOptions(access)
-        if (options && !isPathAllowed(filePath, options)) {
-          console.warn('[IPC] shell:get-default-app-for-file 拒绝越界路径:', filePath)
+        const resolvedPath = await resolveFileAccessPath(filePath, options)
+        if (options && !isPathAllowed(resolvedPath, options)) {
+          console.warn('[IPC] shell:get-default-app-for-file 拒绝越界路径:', resolvedPath)
           return null
         }
-        console.log('[IPC] get-default-app-for-file 收到请求:', filePath)
-        const result = await getDefaultAppInfoForFile(filePath, options)
+        console.log('[IPC] get-default-app-for-file 收到请求:', resolvedPath)
+        const result = await getDefaultAppInfoForFile(resolvedPath, options)
         console.log('[IPC] get-default-app-for-file 返回:', result ? `name=${result.name} appPath=${result.appPath} iconLen=${result.iconDataUrl?.length}` : 'null')
         return result
       } catch (err) {
@@ -2505,6 +2547,90 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 受管浏览器：renderer 只能投影状态和更新 slot 布局，不能取得 WebContents/CDP。
+  const assertMainRenderer = async (senderId: number): Promise<void> => {
+    const { getMainWindow } = await import('./index')
+    const mainWindow = getMainWindow()
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.id !== senderId) {
+      throw new Error('仅主窗口可以操作受管浏览器。')
+    }
+  }
+  const assertBrowserSessionAccess = async (senderId: number, sessionId: string): Promise<void> => {
+    await assertMainRenderer(senderId)
+    const session = getAgentSessionMeta(sessionId)
+    if (!session) throw new Error('Agent 会话不存在。')
+    // 自动任务与协作子会话同样可以使用受管浏览器；仅校验会话仍存在。
+    browserController.configureSession(sessionId, {
+      profileKey: resolveBrowserProfileKey(session.workspaceId, sessionId),
+      executionSource: session.sourceDelegationId ? 'delegation' : session.sourceAutomationId ? 'automation' : 'user',
+    })
+  }
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.OPEN_BROWSER,
+    async (event, sessionId: string): Promise<BrowserViewState> => {
+      await assertBrowserSessionAccess(event.sender.id, sessionId)
+      return browserController.open(sessionId)
+    },
+  )
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_BROWSER_STATE,
+    async (event, sessionId: string): Promise<BrowserViewState | null> => {
+      await assertBrowserSessionAccess(event.sender.id, sessionId)
+      return browserController.getState(sessionId)
+    },
+  )
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SET_BROWSER_LAYOUT,
+    async (event, layout: BrowserViewLayout): Promise<void> => {
+      if (!layout || typeof layout.sessionId !== 'string' || !layout.bounds || !Number.isSafeInteger(layout.revision)) throw new Error('无效的浏览器布局。')
+      await assertBrowserSessionAccess(event.sender.id, layout.sessionId)
+      browserController.setLayout(layout)
+    },
+  )
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.NAVIGATE_BROWSER,
+    async (event, input: BrowserNavigateInput): Promise<BrowserViewState> => {
+      await assertBrowserSessionAccess(event.sender.id, input.sessionId)
+      return browserController.navigateDisplay(input.sessionId, input.url, input.tabId)
+    },
+  )
+  ipcMain.handle(AGENT_IPC_CHANNELS.GO_BACK_BROWSER, async (event, sessionId: string) => {
+    await assertBrowserSessionAccess(event.sender.id, sessionId)
+    return browserController.goBackDisplay(sessionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.GO_FORWARD_BROWSER, async (event, sessionId: string) => {
+    await assertBrowserSessionAccess(event.sender.id, sessionId)
+    return browserController.goForwardDisplay(sessionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.RELOAD_BROWSER, async (event, sessionId: string) => {
+    await assertBrowserSessionAccess(event.sender.id, sessionId)
+    return browserController.reloadDisplay(sessionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.CLOSE_BROWSER, async (event, sessionId: string): Promise<void> => {
+    await assertBrowserSessionAccess(event.sender.id, sessionId)
+    await browserController.close(sessionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.LIST_BROWSER_TABS, async (event, sessionId: string): Promise<BrowserViewState> => {
+    await assertBrowserSessionAccess(event.sender.id, sessionId)
+    return browserController.listTabs(sessionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.CREATE_BROWSER_TAB, async (event, input: BrowserCreateTabInput): Promise<BrowserViewState> => {
+    await assertBrowserSessionAccess(event.sender.id, input.sessionId)
+    return browserController.createDisplayTab(input.sessionId, input.url)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.SELECT_BROWSER_TAB, async (event, input: BrowserTabInput): Promise<BrowserViewState> => {
+    await assertBrowserSessionAccess(event.sender.id, input.sessionId)
+    if (!input.tabId) throw new Error('tabId 必填。')
+    return browserController.selectTab(input.sessionId, input.tabId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.CLOSE_BROWSER_TAB, async (event, input: BrowserTabInput): Promise<BrowserViewState | null> => {
+    await assertBrowserSessionAccess(event.sender.id, input.sessionId)
+    if (!input.tabId) throw new Error('tabId 必填。')
+    return browserController.closeTab(input.sessionId, input.tabId)
+  })
+
+
   // 获取 Agent 会话 SDKMessage（Phase 4 新格式）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.GET_SDK_MESSAGES,
@@ -2594,6 +2720,8 @@ export function registerIpcHandlers(): void {
         askUserService.clearSessionPending(sessionId)
         // 清理 ExitPlanMode 服务中的待处理请求
         exitPlanService.clearSessionPending(sessionId)
+        // 清理受管浏览器会话
+        await browserController.close(sessionId)
         deleteAgentSession(sessionId)
       }
     }
@@ -4060,7 +4188,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 仅解析文件路径（供 PDF/图片等用 file:// 加载）
+  // 仅解析文件路径（供 PDF/图片等用 myyoda-file:// 加载）
   ipcMain.handle(
     'file:resolve-path',
     async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
@@ -4072,12 +4200,31 @@ export function registerIpcHandlers(): void {
         return null
       }
       if (!result) return null
-      // registerPromaFilePath 对目录路径会抛「不是文件」。渲染端（如悬浮预览解析 markdown
+      // registerMyYodaFilePath 对目录路径会抛「不是文件」。渲染端（如悬浮预览解析 markdown
       // 链接）可能传入目录路径，此处优雅降级为 null，而不是让异常冒泡成未捕获的 handler 错误。
       try {
-        return { url: registerPromaFilePath(result) }
+        return { url: registerMyYodaFilePath(result) }
       } catch (err) {
         console.warn('[IPC] file:resolve-path 无法注册为文件，跳过:', result, err instanceof Error ? err.message : err)
+        return null
+      }
+    }
+  )
+
+  // 为 HTML 预览注册所在目录，使相对 CSS、脚本和图片资源保持可加载。
+  // 返回的仍是 token-gated myyoda-file URL，不向渲染进程泄露本机绝对路径。
+  ipcMain.handle(
+    'file:resolve-html-preview-path',
+    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
+      const { resolveFilePath } = await import('./lib/file-preview-service')
+      const options = normalizeFileAccessOptions(access)
+      const result = resolveFilePath(filePath, getPreviewCandidateBasePaths(options))
+      if (!result) return null
+      try {
+        const directoryUrl = registerMyYodaDirectoryPath(dirname(result))
+        return { url: `${directoryUrl}/${encodeURIComponent(basename(result))}` }
+      } catch (err) {
+        console.warn('[IPC] file:resolve-html-preview-path 无法注册预览目录，跳过:', result, err instanceof Error ? err.message : err)
         return null
       }
     }
@@ -5136,14 +5283,6 @@ export function registerIpcHandlers(): void {
     return getAgentUsageStats(range ?? 'all')
   })
 
-  // 迁移取消时清理临时解压目录
-  ipcMain.handle('migration:cancelImport', async (_, tempDir: string) => {
-    if (tempDir && existsSync(tempDir) && tempDir.includes('myyoda-import-')) {
-      rmSync(tempDir, { recursive: true, force: true })
-      console.log(`[迁移] 已清理临时目录: ${tempDir}`)
-    }
-  })
-
   // 启动时自动清理临时文件
   const runStartupCleanup = async (): Promise<void> => {
     try {
@@ -5389,61 +5528,10 @@ export function registerIpcHandlers(): void {
 
   // ===== 数据迁移 =====
 
-  ipcMain.handle('migration:getExportPreview', async (_, workspaceId: string) => {
-    const { getExportPreview } = await import('./lib/migration-service')
-    return getExportPreview(workspaceId)
-  })
-
-  ipcMain.handle('migration:getShareExportPreview', async () => {
-    const { getShareExportPreview } = await import('./lib/migration-service')
-    return getShareExportPreview()
-  })
-
-  ipcMain.handle('migration:export', async (_, options) => {
-    const { exportData } = await import('./lib/migration-service')
-    return exportData(options)
-  })
-
-  ipcMain.handle('migration:exportV2', async (_, options) => {
-    const { exportDataV2 } = await import('./lib/migration-service')
-    return exportDataV2(options)
-  })
-
-  ipcMain.handle('migration:parseImportFile', async (_, filePath: string) => {
-    const { parseImportFile } = await import('./lib/migration-service')
-    return parseImportFile(filePath)
-  })
-
-  ipcMain.handle('migration:confirmImport', async (_, options) => {
-    const { confirmImport } = await import('./lib/migration-service')
-    return confirmImport(options)
-  })
-
-  ipcMain.handle('migration:openFileDialog', async () => {
-    const { dialog } = await import('electron')
-    const result = await dialog.showOpenDialog({
-      title: '选择迁移文件',
-      filters: [
-        { name: 'MyYoda 迁移文件', extensions: ['myyoda-backup', 'myyoda-share'] },
-        { name: '所有文件', extensions: ['*'] },
-      ],
-      properties: ['openFile'],
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-
-  ipcMain.handle('migration:saveFileDialog', async (_, mode: string) => {
-    const { dialog } = await import('electron')
-    const ext = mode === 'personal' ? 'myyoda-backup' : 'myyoda-share'
-    const defaultName = `myyoda-migration-${new Date().toISOString().slice(0, 10)}.${ext}`
-    const result = await dialog.showSaveDialog({
-      title: '保存迁移文件',
-      defaultPath: defaultName,
-      filters: [
-        { name: mode === 'personal' ? 'MyYoda 个人备份' : 'MyYoda 分享包', extensions: [ext] },
-      ],
-    })
-    return result.canceled ? null : result.filePath
+  ipcMain.handle('migration:open-data-folder', async (): Promise<void> => {
+    const dataDir = getConfigDir()
+    const error = await shell.openPath(dataDir)
+    if (error) throw new Error(`无法打开 MyYoda 数据文件夹：${error}`)
   })
 
   // ===== 窗口控制（Windows 自定义标题栏按钮）=====
@@ -5698,7 +5786,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(PLANNING_IPC_CHANNELS.LIST_NATIVE_SYNC_CONFLICTS, async (): Promise<PlanningNativeSyncConflict[]> => listPlanningNativeSyncConflicts())
   ipcMain.handle(PLANNING_IPC_CHANNELS.RESOLVE_NATIVE_SYNC_CONFLICT, async (_, input: ResolvePlanningNativeSyncConflictInput): Promise<boolean> => {
-    if (!input || typeof input.id !== 'string' || !['keep_proma', 'keep_system'].includes(input.resolution)) throw new Error('冲突解决参数非法')
+    if (!input || typeof input.id !== 'string' || !['keep_myyoda', 'keep_system'].includes(input.resolution)) throw new Error('冲突解决参数非法')
     const resolved = resolvePlanningNativeSyncConflict(input)
     if (resolved) { broadcastPlanningChanged(['todos', 'calendar_events']); void runPlanningNativeSync(true) }
     return resolved

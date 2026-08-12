@@ -32,11 +32,11 @@ const CASE_INSENSITIVE_MERGE_KEYS = new Set([
   'https_proxy',
   'all_proxy',
   'no_proxy',
-  'proma_cli',
+  'myyoda_cli',
   'claude_code_shell',
   'shell',
-  'proma_windows_shell',
-  'proma_wsl_distro',
+  'myyoda_windows_shell',
+  'myyoda_wsl_distro',
 ])
 
 function getCaseInsensitiveEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -127,10 +127,10 @@ function collectWindowsShellEnv(
 
   if (shellKind === 'wsl' && shellStatus?.wsl.available) {
     const wslCommand = getWslCommandPath(processEnv, pathExists)
-    env.PROMA_WINDOWS_SHELL = 'wsl'
+    env.MYYODA_WINDOWS_SHELL = 'wsl'
     env.SHELL = wslCommand
     if (shellStatus.wsl.defaultDistro) {
-      env.PROMA_WSL_DISTRO = shellStatus.wsl.defaultDistro
+      env.MYYODA_WSL_DISTRO = shellStatus.wsl.defaultDistro
     }
     return {
       env,
@@ -142,7 +142,7 @@ function collectWindowsShellEnv(
 
   if (shellKind === 'git-bash' && shellStatus?.gitBash.path) {
     const shellPath = shellStatus.gitBash.path
-    env.PROMA_WINDOWS_SHELL = 'git-bash'
+    env.MYYODA_WINDOWS_SHELL = 'git-bash'
     env.SHELL = shellPath
     return {
       env,
@@ -189,7 +189,7 @@ export function buildAgentRuntimeEnv(options: BuildAgentRuntimeEnvOptions = {}):
   const env: Record<string, string> = {}
 
   if (bundledCliPath) {
-    env.PROMA_CLI = bundledCliPath
+    env.MYYODA_CLI = bundledCliPath
   }
 
   const pathKey = getPathKey(processEnv)

@@ -9,7 +9,7 @@ interface AgentsFilesResult {
 // 过渡期保留旧 CLAUDE.md 过滤以兼容尚未迁移完成的老工作区。
 const FILTERED_AGENT_CONTEXT_FILE_NAMES = new Set(['AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD'])
 
-export function createPromaAgentsFilesOverride(): (base: AgentsFilesResult) => AgentsFilesResult {
+export function createMyYodaAgentsFilesOverride(): (base: AgentsFilesResult) => AgentsFilesResult {
   return (base) => ({
     agentsFiles: base.agentsFiles.filter((file) => !FILTERED_AGENT_CONTEXT_FILE_NAMES.has(basename(file.path))),
   })

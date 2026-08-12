@@ -868,82 +868,90 @@ export async function getMainRepoRoot(somePath: string): Promise<string | null> 
 }
 
 /**
- * 列出指定仓库的所有 Git Worktree
+ * 列出指定路径下所有 Git 仓库的 Worktree。
+ *
+ * 会话目录可能是包含多个仓库的父目录。不能只使用第一个发现的仓库，否则前面的
+ * 普通仓库会遮蔽后面真正拥有 linked worktree 的仓库。
  */
 export async function listWorktrees(repoPath: string): Promise<import('@myyoda/shared').WorktreeInfo[]> {
-  const root = await findGitRoot(repoPath)
-  if (!root) return []
-  const output = await runGitCommand(['worktree', 'list', '--porcelain'], root, { quiet: true })
-  if (!output) return []
-  const mainRepoRoot = await getMainRepoRoot(root)
-  const normalizedMainRoot = mainRepoRoot ? normalizeGitRoot(mainRepoRoot) : normalizeGitRoot(root)
+  const roots = await findAllGitRoots(repoPath)
+  const worktreesByPath = new Map<string, import('@myyoda/shared').WorktreeInfo>()
 
-  const worktrees: import('@myyoda/shared').WorktreeInfo[] = []
-  // 解析时保留完整 HEAD hash，稍后批量查 commit subject（一次性 git log --no-walk）
-  const pendingHeads: { fullHead: string; target: import('@myyoda/shared').WorktreeInfo }[] = []
-  const blocks = output.split('\n\n').filter(Boolean)
+  for (const root of roots) {
+    const output = await runGitCommand(['worktree', 'list', '--porcelain'], root, { quiet: true })
+    if (!output) continue
 
-  for (const block of blocks) {
-    const lines = block.split('\n')
-    let path = ''
-    let head = ''
-    let fullHead = ''
-    let branch = ''
-    let prunable = false
+    const mainRepoRoot = await getMainRepoRoot(root)
+    const normalizedMainRoot = mainRepoRoot ? normalizeGitRoot(mainRepoRoot) : normalizeGitRoot(root)
+    const blocks = output.split('\n\n').filter(Boolean)
 
-    for (const line of lines) {
-      if (line.startsWith('worktree ')) {
-        path = line.slice('worktree '.length)
-      } else if (line.startsWith('HEAD ')) {
-        fullHead = line.slice('HEAD '.length)
-        head = fullHead.slice(0, 7)
-      } else if (line.startsWith('branch refs/heads/')) {
-        branch = line.slice('branch refs/heads/'.length)
-      } else if (line === 'detached') {
-        branch = '(detached)'
-      } else if (line.startsWith('prunable')) {
-        prunable = true
+    // 解析时保留完整 HEAD hash，稍后批量查 commit subject（一次性 git log --no-walk）
+    const pendingHeads: { fullHead: string; target: import('@myyoda/shared').WorktreeInfo }[] = []
+
+    for (const block of blocks) {
+      const lines = block.split('\n')
+      let path = ''
+      let head = ''
+      let fullHead = ''
+      let branch = ''
+      let prunable = false
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          path = line.slice('worktree '.length)
+        } else if (line.startsWith('HEAD ')) {
+          fullHead = line.slice('HEAD '.length)
+          head = fullHead.slice(0, 7)
+        } else if (line.startsWith('branch refs/heads/')) {
+          branch = line.slice('branch refs/heads/'.length)
+        } else if (line === 'detached') {
+          branch = '(detached)'
+        } else if (line.startsWith('prunable')) {
+          prunable = true
+        }
       }
-    }
 
-    if (path && !prunable && existsSync(path)) {
-      const isMain = normalizeGitRoot(path) === normalizedMainRoot
+      if (!path || prunable || !existsSync(path)) continue
+
+      const key = normalizeGitRoot(path)
+      if (worktreesByPath.has(key)) continue
+
       const info: import('@myyoda/shared').WorktreeInfo = {
         path,
         branch: branch || 'unknown',
         head,
-        isMain,
+        isMain: key === normalizedMainRoot,
         name: basename(path),
       }
-      worktrees.push(info)
+      worktreesByPath.set(key, info)
       if (fullHead) pendingHeads.push({ fullHead, target: info })
     }
-  }
 
-  // 批量补 HEAD commit subject：对 detached / 用户不熟悉的 worktree，subject 比哈希直观得多
-  if (pendingHeads.length > 0) {
-    try {
-      const logOutput = await runGitCommand(
-        ['log', '--no-walk', '--format=%H%x00%s', ...pendingHeads.map((p) => p.fullHead)],
-        root,
-        { quiet: true },
-      )
-      if (logOutput) {
-        const subjectByHash = new Map<string, string>()
-        for (const line of logOutput.split('\n')) {
-          const sep = line.indexOf('\0')
-          if (sep > 0) subjectByHash.set(line.slice(0, sep), line.slice(sep + 1))
+    // 批量补 HEAD commit subject：对 detached / 用户不熟悉的 worktree，subject 比哈希直观得多
+    if (pendingHeads.length > 0) {
+      try {
+        const logOutput = await runGitCommand(
+          ['log', '--no-walk', '--format=%H%x00%s', ...pendingHeads.map((p) => p.fullHead)],
+          root,
+          { quiet: true },
+        )
+        if (logOutput) {
+          const subjectByHash = new Map<string, string>()
+          for (const line of logOutput.split('\n')) {
+            const sep = line.indexOf('\0')
+            if (sep > 0) subjectByHash.set(line.slice(0, sep), line.slice(sep + 1))
+          }
+          for (const p of pendingHeads) {
+            p.target.commitSubject = subjectByHash.get(p.fullHead) ?? undefined
+          }
         }
-        for (const p of pendingHeads) {
-          p.target.commitSubject = subjectByHash.get(p.fullHead) ?? undefined
-        }
+      } catch {
+        // subject 是锦上添花，失败不影响 worktree 列表
       }
-    } catch {
-      // subject 是锦上添花，失败不影响 worktree 列表
     }
   }
 
-  return worktrees
+  return Array.from(worktreesByPath.values())
 }
 
 /**

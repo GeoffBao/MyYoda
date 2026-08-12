@@ -29,6 +29,8 @@ import { assertWorktreeClean, removeSessionWorktree } from './git-session-contex
 import type {
   AgentSessionMeta,
   AgentMessage,
+  SDKUserMessage,
+  SkillActivation,
   AgentWorkspace,
   SDKMessage,
   ForkSessionInput,
@@ -43,6 +45,7 @@ import type {
 import {
   getSessionThinkingLevel,
   migratePermissionMode,
+  mergeSkillActivations,
   sessionThinkingLevelPatch,
 } from '@myyoda/shared'
 import { getConversationMessages } from './conversation-manager'
@@ -349,7 +352,7 @@ export function resolveSessionWorkbenchContextDir(
   return layout === 'root' ? sessionDir : join(sessionDir, '.context')
 }
 
-/** Agent 运行 cwd 与 Proma 会话 sidecar 工作台目录解析。 */
+/** Agent 运行 cwd 与 MyYoda 会话 sidecar 工作台目录解析。 */
 export function resolveAgentCwd(
   workspace: Pick<AgentWorkspace, 'slug'> | undefined,
   sessionId: string,
@@ -1807,6 +1810,40 @@ export function rewindFilesFromSnapshot(
   } catch (err) {
     return { canRewind: false, error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/**
+ * Persist successful Skill loading on the human input that Pi actually consumed.
+ * This is intentionally a targeted JSONL rewrite: native Pi queues can produce
+ * several logical user turns before a single terminal result arrives.
+ */
+export function updateSDKUserMessageSkillActivations(
+  id: string,
+  userMessageUuid: string,
+  activations: SkillActivation[],
+): boolean {
+  if (activations.length === 0) return false
+  const filePath = getAgentSessionMessagesPath(id)
+  if (!existsSync(filePath)) return false
+
+  const raw = readFileSync(filePath, 'utf-8')
+  const lines = raw.split('\n').filter((line) => line.trim())
+  const messages = parseJsonlStrict<unknown>(lines, `更新用户 Skill metadata (${id})`)
+    .map(normalizePersistedSDKMessage)
+  const targetIndex = messages.findIndex((message) => (
+    message.type === 'user'
+    && (message as SDKUserMessage).uuid === userMessageUuid
+  ))
+  if (targetIndex < 0) return false
+
+  const target = messages[targetIndex] as SDKUserMessage
+  const merged = mergeSkillActivations(target.skill_activations ?? [], activations)
+  if (JSON.stringify(merged) === JSON.stringify(target.skill_activations ?? [])) return true
+
+  messages[targetIndex] = { ...target, skill_activations: merged }
+  const content = messages.map((message) => JSON.stringify(message)).join('\n') + '\n'
+  writeTextFileAtomic(filePath, content)
+  return true
 }
 
 /**

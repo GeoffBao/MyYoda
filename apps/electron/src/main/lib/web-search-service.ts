@@ -2,7 +2,7 @@
  * Web search/fetch service shared by Chat tools and Agent tools.
  *
  * Tavily provides both search (`/search`) and page extraction (`/extract`).
- * Proma keeps these as app-hosted tools so Agent runtimes can use a stable,
+ * MyYoda keeps these as app-hosted tools so Agent runtimes can use a stable,
  * provider-agnostic WebSearch/WebFetch surface even when the selected model does
  * not support native hosted web-search tools.
  */

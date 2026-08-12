@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { OPTIMIZED_CODING_GATED_SKILLS, isOptimizedCodingGatedSkill } from './agent-workspace-manager'
-import { createPromaSkillsOverride } from './adapters/pi-agent-adapter'
+import { createMyYodaSkillsOverride } from './adapters/pi-agent-adapter'
 
 function fakeSkill(name: string, baseDir = `/ws/skills/${name}`) {
   return { name, baseDir, filePath: `${baseDir}/SKILL.md`, description: 'test', version: '1.0.0' }
@@ -19,7 +19,7 @@ describe('OPTIMIZED_CODING_GATED_SKILLS', () => {
   })
 })
 
-describe('createPromaSkillsOverride 开关联动', () => {
+describe('createMyYodaSkillsOverride 开关联动', () => {
   const workspaceRoot = '/ws/skills'
   const skills = [
     fakeSkill('pdf', `${workspaceRoot}/pdf`),
@@ -29,20 +29,20 @@ describe('createPromaSkillsOverride 开关联动', () => {
   ]
 
   test('开关关闭（默认）：gated skill 被过滤，普通 skill 保留', () => {
-    const override = createPromaSkillsOverride([workspaceRoot], OPTIMIZED_CODING_GATED_SKILLS)
+    const override = createMyYodaSkillsOverride([workspaceRoot], OPTIMIZED_CODING_GATED_SKILLS)
     const result = override({ skills, diagnostics: [] } as never)
     const names = result.skills.map((s) => s.name).sort()
     expect(names).toEqual(['docx', 'pdf'])
   })
 
   test('开关开启：gated skill 放行', () => {
-    const override = createPromaSkillsOverride([workspaceRoot], [])
+    const override = createMyYodaSkillsOverride([workspaceRoot], [])
     const result = override({ skills, diagnostics: [] } as never)
     expect(result.skills.length).toBe(4)
   })
 
   test('非工作区 skill（SDK 内置）始终不暴露', () => {
-    const override = createPromaSkillsOverride([workspaceRoot], [])
+    const override = createMyYodaSkillsOverride([workspaceRoot], [])
     const result = override({ skills: [...skills, fakeSkill('builtin', '/agent-dir/skills/builtin')], diagnostics: [] } as never)
     expect(result.skills.some((s) => s.name === 'builtin')).toBe(false)
   })

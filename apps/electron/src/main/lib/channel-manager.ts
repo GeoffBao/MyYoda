@@ -446,7 +446,7 @@ export function decryptApiKey(channelId: string): string {
  */
 const inflightCodexRefresh = new Map<string, Promise<CodexOAuthCredentials>>()
 
-/** 保存 Pi 或 Proma 刷新后的完整 Codex OAuth 凭据。 */
+/** 保存 Pi 或 MyYoda 刷新后的完整 Codex OAuth 凭据。 */
 export function persistCodexOAuthCredentials(channelId: string, credentials: CodexOAuthCredentials): void {
   const channel = getChannelById(channelId)
   if (!channel || channel.provider !== 'openai-codex') {
@@ -507,7 +507,7 @@ export async function resolveCodexAccessToken(channelId: string): Promise<string
   return (await resolveCodexOAuthCredentials(channelId)).access
 }
 
-/** 保存 Pi 或 Proma 刷新后的完整 xAI OAuth 凭据。 */
+/** 保存 Pi 或 MyYoda 刷新后的完整 xAI OAuth 凭据。 */
 export function persistXaiOAuthCredentials(channelId: string, credentials: XaiOAuthCredentials): void {
   const channel = getChannelById(channelId)
   if (!channel || channel.provider !== 'xai') {

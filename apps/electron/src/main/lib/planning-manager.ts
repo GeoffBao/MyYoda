@@ -70,20 +70,20 @@ type ReminderRow = {
 }
 type TodoSessionLinkRow = { todo_id: string; session_id: string; first_touched_at: number; last_touched_at: number }
 type SyncProfileRow = { id: string; entity: 'calendar' | 'reminder'; target_id: string; target_title: string; source_title: string; enabled: number; created_at: number; updated_at: number }
-type SyncOutboxRow = { id: string; profile_id: string; target_id: string | null; operation: 'upsert' | 'delete'; proma_entity_id: string; native_start_at: number | null; attempts: number; next_attempt_at: number; last_error: string | null; revision: number; created_at: number; updated_at: number }
-type SyncBindingRow = { profile_id: string; target_id: string | null; proma_entity_id: string; calendar_item_identifier: string | null; calendar_item_external_identifier: string | null; last_synced_hash: string | null; last_synced_at: number | null }
-type SyncProfileConflictRow = { id: string; profile_id: string; proma_entity_id: string; kind: 'changed' | 'deleted'; native_item_json: string | null; detected_at: number }
-type SyncCleanupRow = { id: string; entity: 'calendar' | 'reminder'; target_id: string; proma_entity_id: string; calendar_item_identifier: string | null; native_start_at: number | null; attempts: number; next_attempt_at: number; last_error: string | null; created_at: number; updated_at: number }
+type SyncOutboxRow = { id: string; profile_id: string; target_id: string | null; operation: 'upsert' | 'delete'; myyoda_entity_id: string; native_start_at: number | null; attempts: number; next_attempt_at: number; last_error: string | null; revision: number; created_at: number; updated_at: number }
+type SyncBindingRow = { profile_id: string; target_id: string | null; myyoda_entity_id: string; calendar_item_identifier: string | null; calendar_item_external_identifier: string | null; last_synced_hash: string | null; last_synced_at: number | null }
+type SyncProfileConflictRow = { id: string; profile_id: string; myyoda_entity_id: string; kind: 'changed' | 'deleted'; native_item_json: string | null; detected_at: number }
+type SyncCleanupRow = { id: string; entity: 'calendar' | 'reminder'; target_id: string; myyoda_entity_id: string; calendar_item_identifier: string | null; native_start_at: number | null; attempts: number; next_attempt_at: number; last_error: string | null; created_at: number; updated_at: number }
 type NativeConnectionRow = { id: string; entity: 'calendar' | 'reminder'; target_id: string; target_title: string; source_title: string; source_type: PlanningNativeConnection['sourceType']; can_write: number; connected_at: number; updated_at: number }
-type NativeBindingRow = { connection_id: string; proma_entity_id: string; calendar_item_identifier: string; due_date_only: number; recreate_pending: number; last_native_hash: string | null; last_synced_at: number | null }
-type NativeOutboxRow = { id: string; connection_id: string; operation: 'upsert' | 'hide'; proma_entity_id: string; attempts: number; next_attempt_at: number; revision: number }
-type NativeConflictRow = { id: string; connection_id: string; entity: 'calendar' | 'reminder'; proma_entity_id: string; kind: 'changed' | 'deleted'; native_item_json: string | null; detected_at: number; resolved_at: number | null }
+type NativeBindingRow = { connection_id: string; myyoda_entity_id: string; calendar_item_identifier: string; due_date_only: number; recreate_pending: number; last_native_hash: string | null; last_synced_at: number | null }
+type NativeOutboxRow = { id: string; connection_id: string; operation: 'upsert' | 'hide'; myyoda_entity_id: string; attempts: number; next_attempt_at: number; revision: number }
+type NativeConflictRow = { id: string; connection_id: string; entity: 'calendar' | 'reminder'; myyoda_entity_id: string; kind: 'changed' | 'deleted'; native_item_json: string | null; detected_at: number; resolved_at: number | null }
 
 export interface PlanningSyncOutboxItem {
   id: string
   profile: PlanningSyncProfile
   operation: 'upsert' | 'delete'
-  promaEntityId: string
+  myyodaEntityId: string
   attempts: number
   /** 防止执行中的旧操作确认/重试覆盖随后写入的本地变更。 */
   revision: number
@@ -96,7 +96,7 @@ export interface PlanningNativeExternalItem {
   calendarItemIdentifier: string
   calendarItemExternalIdentifier?: string
   /** 仅由 addon 从 MyYoda 自己写入的 URL marker 解析，绝不透出任意用户 URL。 */
-  promaIdentity?: string
+  myyodaIdentity?: string
   title: string
   notes?: string
   startAt?: number
@@ -115,7 +115,7 @@ export interface PlanningNativeOutboxItem {
   id: string
   connection: PlanningNativeConnection
   operation: 'upsert' | 'hide'
-  promaEntityId: string
+  myyodaEntityId: string
   calendarItemIdentifier: string
   dueDateOnly?: boolean
   recreatePending?: boolean
@@ -127,7 +127,7 @@ export interface PlanningSyncCleanupItem {
   id: string
   entity: 'calendar' | 'reminder'
   targetId: string
-  promaEntityId: string
+  myyodaEntityId: string
   calendarItemIdentifier?: string
   nativeStartAt?: number
   attempts: number
@@ -148,7 +148,7 @@ function withPlanningTransaction<T>(work: () => T): T {
   }
 }
 
-const PLANNING_SCHEMA_VERSION = 9
+const PLANNING_SCHEMA_VERSION = 10
 
 /** EventKit 的内部 locator、marker 与 lastModifiedDate 不属于用户可编辑内容，不能参与双向基线。 */
 export function planningNativeCalendarHash(item: Pick<PlanningNativeExternalItem, 'title' | 'notes' | 'startAt' | 'endAt' | 'allDay'>): string {
@@ -250,24 +250,24 @@ function migrateDatabase(db: SqliteDatabase): void {
         );
         CREATE TABLE IF NOT EXISTS planning_sync_bindings (
           profile_id TEXT NOT NULL REFERENCES planning_sync_profiles(id) ON DELETE CASCADE,
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           calendar_item_identifier TEXT,
           calendar_item_external_identifier TEXT,
           last_synced_hash TEXT,
           last_synced_at INTEGER,
-          PRIMARY KEY(profile_id, proma_entity_id)
+          PRIMARY KEY(profile_id, myyoda_entity_id)
         );
         CREATE TABLE IF NOT EXISTS planning_sync_outbox (
           id TEXT PRIMARY KEY,
           profile_id TEXT NOT NULL REFERENCES planning_sync_profiles(id) ON DELETE CASCADE,
           operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           attempts INTEGER NOT NULL DEFAULT 0,
           next_attempt_at INTEGER NOT NULL,
           last_error TEXT,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          UNIQUE(profile_id, proma_entity_id)
+          UNIQUE(profile_id, myyoda_entity_id)
         );
         CREATE INDEX IF NOT EXISTS planning_sync_outbox_due_idx ON planning_sync_outbox(profile_id, next_attempt_at, created_at);
       `)
@@ -290,7 +290,7 @@ function migrateDatabase(db: SqliteDatabase): void {
           id TEXT PRIMARY KEY,
           entity TEXT NOT NULL CHECK(entity IN ('calendar', 'reminder')),
           target_id TEXT NOT NULL,
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           calendar_item_identifier TEXT,
           native_start_at INTEGER,
           attempts INTEGER NOT NULL DEFAULT 0,
@@ -298,7 +298,7 @@ function migrateDatabase(db: SqliteDatabase): void {
           last_error TEXT,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          UNIQUE(entity, target_id, proma_entity_id)
+          UNIQUE(entity, target_id, myyoda_entity_id)
         );
         CREATE INDEX IF NOT EXISTS planning_sync_cleanup_due_idx ON planning_sync_cleanup(next_attempt_at, created_at);
       `)
@@ -327,25 +327,25 @@ function migrateDatabase(db: SqliteDatabase): void {
         );
         CREATE TABLE IF NOT EXISTS planning_native_bindings (
           connection_id TEXT NOT NULL REFERENCES planning_native_connections(id) ON DELETE CASCADE,
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           calendar_item_identifier TEXT NOT NULL,
           last_native_hash TEXT,
           last_synced_at INTEGER,
-          PRIMARY KEY(connection_id, proma_entity_id),
+          PRIMARY KEY(connection_id, myyoda_entity_id),
           UNIQUE(connection_id, calendar_item_identifier)
         );
         CREATE TABLE IF NOT EXISTS planning_native_outbox (
           id TEXT PRIMARY KEY,
           connection_id TEXT NOT NULL REFERENCES planning_native_connections(id) ON DELETE CASCADE,
           operation TEXT NOT NULL CHECK(operation IN ('upsert', 'hide')),
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           attempts INTEGER NOT NULL DEFAULT 0,
           next_attempt_at INTEGER NOT NULL,
           revision INTEGER NOT NULL DEFAULT 1,
           last_error TEXT,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          UNIQUE(connection_id, proma_entity_id)
+          UNIQUE(connection_id, myyoda_entity_id)
         );
         CREATE INDEX IF NOT EXISTS planning_native_outbox_due_idx ON planning_native_outbox(next_attempt_at, created_at);
         CREATE INDEX IF NOT EXISTS todos_native_connection_idx ON todos(native_connection_id);
@@ -364,12 +364,12 @@ function migrateDatabase(db: SqliteDatabase): void {
           id TEXT PRIMARY KEY,
           connection_id TEXT NOT NULL REFERENCES planning_native_connections(id) ON DELETE CASCADE,
           entity TEXT NOT NULL CHECK(entity IN ('calendar', 'reminder')),
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           kind TEXT NOT NULL CHECK(kind IN ('changed', 'deleted')),
           native_item_json TEXT,
           detected_at INTEGER NOT NULL,
           resolved_at INTEGER,
-          UNIQUE(connection_id, proma_entity_id)
+          UNIQUE(connection_id, myyoda_entity_id)
         );
         CREATE INDEX IF NOT EXISTS planning_native_sync_conflicts_open_idx ON planning_native_sync_conflicts(resolved_at, detected_at);
         PRAGMA user_version = 7;
@@ -386,17 +386,41 @@ function migrateDatabase(db: SqliteDatabase): void {
         CREATE TABLE IF NOT EXISTS planning_sync_profile_conflicts (
           id TEXT PRIMARY KEY,
           profile_id TEXT NOT NULL REFERENCES planning_sync_profiles(id) ON DELETE CASCADE,
-          proma_entity_id TEXT NOT NULL,
+          myyoda_entity_id TEXT NOT NULL,
           kind TEXT NOT NULL CHECK(kind IN ('changed', 'deleted')),
           native_item_json TEXT,
           detected_at INTEGER NOT NULL,
-          UNIQUE(profile_id, proma_entity_id)
+          UNIQUE(profile_id, myyoda_entity_id)
         );
         CREATE INDEX IF NOT EXISTS planning_sync_profile_conflicts_open_idx
           ON planning_sync_profile_conflicts(profile_id, detected_at);
         PRAGMA user_version = 9;
       `)
       version = 9
+    }
+    if (version < 10) {
+      // 品牌重命名：proma_entity_id → myyoda_entity_id
+      // SQLite 3.25+ 支持 ALTER TABLE RENAME COLUMN；旧库（user_version<10）可能仍有 proma_entity_id 列。
+      // CREATE TABLE IF NOT EXISTS 不会重建已存在的表，因此需要显式 RENAME。
+      const renameColumns = (table: string): void => {
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+        if (cols.some((c) => c.name === 'proma_entity_id')) {
+          db.exec(`ALTER TABLE ${table} RENAME COLUMN proma_entity_id TO myyoda_entity_id`)
+        }
+      }
+      for (const table of [
+        'planning_sync_bindings',
+        'planning_sync_outbox',
+        'planning_sync_profile_conflicts',
+        'planning_sync_cleanup',
+        'planning_native_bindings',
+        'planning_native_outbox',
+        'planning_native_sync_conflicts',
+      ]) {
+        renameColumns(table)
+      }
+      db.exec('PRAGMA user_version = 10')
+      version = 10
     }
     db.exec('COMMIT')
   } catch (error) {
@@ -693,14 +717,14 @@ export function connectPlanningNativeConnection(input: ConnectPlanningNativeConn
 function nativeConflictFromRow(row: NativeConflictRow): PlanningNativeSyncConflict {
   const connection = getDatabase().prepare('SELECT * FROM planning_native_connections WHERE id=:id').get({ id: row.connection_id }) as NativeConnectionRow | undefined
   const table = row.entity === 'reminder' ? 'todos' : 'calendar_events'
-  const local = getDatabase().prepare(`SELECT title FROM ${table} WHERE id=:id`).get({ id: row.proma_entity_id }) as { title?: string } | undefined
-  return { id: row.id, connectionId: row.connection_id, entity: row.entity, promaEntityId: row.proma_entity_id, title: local?.title ?? connection?.target_title ?? '系统事项', kind: row.kind, detectedAt: row.detected_at }
+  const local = getDatabase().prepare(`SELECT title FROM ${table} WHERE id=:id`).get({ id: row.myyoda_entity_id }) as { title?: string } | undefined
+  return { id: row.id, connectionId: row.connection_id, entity: row.entity, myyodaEntityId: row.myyoda_entity_id, title: local?.title ?? connection?.target_title ?? '系统事项', kind: row.kind, detectedAt: row.detected_at }
 }
 
 function managedProfileConflictFromRow(row: SyncProfileConflictRow): PlanningNativeSyncConflict {
   const profile = getDatabase().prepare('SELECT * FROM planning_sync_profiles WHERE id=:id').get({ id: row.profile_id }) as SyncProfileRow | undefined
-  const local = getDatabase().prepare('SELECT title FROM calendar_events WHERE id=:id').get({ id: row.proma_entity_id }) as { title?: string } | undefined
-  return { id: row.id, profileId: row.profile_id, entity: 'calendar', promaEntityId: row.proma_entity_id, title: local?.title ?? profile?.target_title ?? 'MyYoda 日程', kind: row.kind, detectedAt: row.detected_at }
+  const local = getDatabase().prepare('SELECT title FROM calendar_events WHERE id=:id').get({ id: row.myyoda_entity_id }) as { title?: string } | undefined
+  return { id: row.id, profileId: row.profile_id, entity: 'calendar', myyodaEntityId: row.myyoda_entity_id, title: local?.title ?? profile?.target_title ?? 'MyYoda 日程', kind: row.kind, detectedAt: row.detected_at }
 }
 
 export function listPlanningNativeSyncConflicts(): PlanningNativeSyncConflict[] {
@@ -716,21 +740,21 @@ export function resolvePlanningNativeSyncConflict(input: ResolvePlanningNativeSy
   const connection = getDatabase().prepare('SELECT * FROM planning_native_connections WHERE id=:id').get({ id: conflict.connection_id }) as NativeConnectionRow | undefined
   if (!connection) return false
   withPlanningTransaction(() => {
-    if (input.resolution === 'keep_proma') {
+    if (input.resolution === 'keep_myyoda') {
       if (conflict.kind === 'changed' && conflict.native_item_json) {
         // 记录用户已看过的系统版本，强制 reconcile 不会在 outbox 写回前马上重新创建同一冲突。
-        getDatabase().prepare('UPDATE planning_native_bindings SET last_native_hash=:hash,last_synced_at=:now WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ hash: conflict.native_item_json, now: Date.now(), connectionId: conflict.connection_id, promaEntityId: conflict.proma_entity_id })
+        getDatabase().prepare('UPDATE planning_native_bindings SET last_native_hash=:hash,last_synced_at=:now WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ hash: conflict.native_item_json, now: Date.now(), connectionId: conflict.connection_id, myyodaEntityId: conflict.myyoda_entity_id })
       } else if (conflict.kind === 'deleted') {
         // locator 已失效但仍须保留 binding 供 outbox 取目标；写回成功后会原子更新为新 locator。
-        getDatabase().prepare('UPDATE planning_native_bindings SET recreate_pending=1 WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId: conflict.connection_id, promaEntityId: conflict.proma_entity_id })
+        getDatabase().prepare('UPDATE planning_native_bindings SET recreate_pending=1 WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId: conflict.connection_id, myyodaEntityId: conflict.myyoda_entity_id })
       }
     }
     if (input.resolution === 'keep_system') {
-      getDatabase().prepare('DELETE FROM planning_native_outbox WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId: conflict.connection_id, promaEntityId: conflict.proma_entity_id })
+      getDatabase().prepare('DELETE FROM planning_native_outbox WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId: conflict.connection_id, myyodaEntityId: conflict.myyoda_entity_id })
       if (conflict.kind === 'deleted') {
         const table = connection.entity === 'reminder' ? 'todos' : 'calendar_events'
-        getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: conflict.proma_entity_id, connectionId: conflict.connection_id })
-        getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId: conflict.connection_id, promaEntityId: conflict.proma_entity_id })
+        getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: conflict.myyoda_entity_id, connectionId: conflict.connection_id })
+        getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId: conflict.connection_id, myyodaEntityId: conflict.myyoda_entity_id })
       }
     }
     getDatabase().prepare('DELETE FROM planning_native_sync_conflicts WHERE id=:id').run({ id: conflict.id })
@@ -747,33 +771,33 @@ function resolveManagedCalendarProfileConflict(input: ResolvePlanningNativeSyncC
   const profile = getDatabase().prepare("SELECT * FROM planning_sync_profiles WHERE id=:id AND entity='calendar'").get({ id: conflict.profile_id }) as SyncProfileRow | undefined
   if (!profile) return false
   withPlanningTransaction(() => {
-    if (input.resolution === 'keep_proma') {
+    if (input.resolution === 'keep_myyoda') {
       if (conflict.kind === 'changed' && conflict.native_item_json) {
         const native = JSON.parse(conflict.native_item_json) as PlanningNativeExternalItem
-        const currentBinding = getDatabase().prepare('SELECT calendar_item_identifier FROM planning_sync_bindings WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').get({ profileId: profile.id, promaEntityId: conflict.proma_entity_id }) as { calendar_item_identifier?: string | null } | undefined
+        const currentBinding = getDatabase().prepare('SELECT calendar_item_identifier FROM planning_sync_bindings WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').get({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id }) as { calendar_item_identifier?: string | null } | undefined
         if (currentBinding?.calendar_item_identifier === native.calendarItemIdentifier) {
-          getDatabase().prepare('UPDATE planning_sync_bindings SET last_synced_hash=:hash,last_synced_at=:now WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ hash: planningNativeCalendarHash(native), now: Date.now(), profileId: profile.id, promaEntityId: conflict.proma_entity_id })
+          getDatabase().prepare('UPDATE planning_sync_bindings SET last_synced_hash=:hash,last_synced_at=:now WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ hash: planningNativeCalendarHash(native), now: Date.now(), profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id })
         } else {
           // 这是 locator recovery 冲突：不能将新系统 locator 自动认领；用户选 MyYoda 后按新项目发布。
-          getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=NULL,last_synced_hash=NULL WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId: profile.id, promaEntityId: conflict.proma_entity_id })
+          getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=NULL,last_synced_hash=NULL WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id })
         }
-        enqueuePlanningSync('calendar_event', conflict.proma_entity_id, 'upsert')
+        enqueuePlanningSync('calendar_event', conflict.myyoda_entity_id, 'upsert')
       } else {
         // locator 已失效；用户已选择保留 MyYoda，重置 locator 并确保下一轮有明确的出站操作。
-        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=NULL,last_synced_hash=NULL WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId: profile.id, promaEntityId: conflict.proma_entity_id })
-        enqueuePlanningSync('calendar_event', conflict.proma_entity_id, 'upsert')
+        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=NULL,last_synced_hash=NULL WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id })
+        enqueuePlanningSync('calendar_event', conflict.myyoda_entity_id, 'upsert')
       }
     } else {
-      getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId: profile.id, promaEntityId: conflict.proma_entity_id })
+      getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id })
       if (conflict.kind === 'changed' && conflict.native_item_json) {
         const native = JSON.parse(conflict.native_item_json) as PlanningNativeExternalItem
         // 用户明确保留系统版本后才接受新的 locator；随后回流会更新日程内容和 stable hash。
-        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=:calendarItemIdentifier,calendar_item_external_identifier=:calendarItemExternalIdentifier WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId: profile.id, promaEntityId: conflict.proma_entity_id, calendarItemIdentifier: native.calendarItemIdentifier, calendarItemExternalIdentifier: native.calendarItemExternalIdentifier ?? null })
+        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=:calendarItemIdentifier,calendar_item_external_identifier=:calendarItemExternalIdentifier WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id, calendarItemIdentifier: native.calendarItemIdentifier, calendarItemExternalIdentifier: native.calendarItemExternalIdentifier ?? null })
       }
       if (conflict.kind === 'deleted') {
-        getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: conflict.proma_entity_id })
-        getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: conflict.proma_entity_id })
-        getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId: profile.id, promaEntityId: conflict.proma_entity_id })
+        getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: conflict.myyoda_entity_id })
+        getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: conflict.myyoda_entity_id })
+        getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: profile.id, myyodaEntityId: conflict.myyoda_entity_id })
       }
     }
     getDatabase().prepare('DELETE FROM planning_sync_profile_conflicts WHERE id=:id').run({ id: conflict.id })
@@ -801,36 +825,36 @@ function syncEntityForPlanningTarget(targetType: PlanningReminderTargetType): 'c
 }
 
 /** 业务数据与待同步操作在同一事务写入，保证崩溃后仍可恢复发布。 */
-function enqueuePlanningSync(targetType: PlanningReminderTargetType, promaEntityId: string, operation: 'upsert' | 'delete', now = Date.now(), nativeStartAt?: number): void {
+function enqueuePlanningSync(targetType: PlanningReminderTargetType, myyodaEntityId: string, operation: 'upsert' | 'delete', now = Date.now(), nativeStartAt?: number): void {
   const entity = syncEntityForPlanningTarget(targetType)
-  const external = getDatabase().prepare('SELECT bindings.connection_id, connections.can_write FROM planning_native_bindings AS bindings JOIN planning_native_connections AS connections ON connections.id=bindings.connection_id WHERE bindings.proma_entity_id=:promaEntityId AND connections.entity=:entity').get({ promaEntityId, entity }) as { connection_id: string; can_write: number } | undefined
+  const external = getDatabase().prepare('SELECT bindings.connection_id, connections.can_write FROM planning_native_bindings AS bindings JOIN planning_native_connections AS connections ON connections.id=bindings.connection_id WHERE bindings.myyoda_entity_id=:myyodaEntityId AND connections.entity=:entity').get({ myyodaEntityId, entity }) as { connection_id: string; can_write: number } | undefined
   if (external) {
     // 用户明确连接的可写 Calendar / Reminder 在 MyYoda 删除时都写穿 EventKit；只读集合一律不能本地假成功。
     if (external.can_write !== 1) throw new Error('该系统集合为只读，不能在 MyYoda 中修改或删除')
     // native outbox 用 hide 表示“本地投影已删除”；coordinator 根据实体执行受限 EventKit remove。
     const externalOperation = operation === 'delete' ? 'hide' : 'upsert'
-    getDatabase().prepare(`INSERT INTO planning_native_outbox (id,connection_id,operation,proma_entity_id,attempts,next_attempt_at,created_at,updated_at) VALUES (:id,:connectionId,:operation,:promaEntityId,0,:now,:now,:now) ON CONFLICT(connection_id,proma_entity_id) DO UPDATE SET operation=excluded.operation,attempts=0,next_attempt_at=excluded.next_attempt_at,last_error=NULL,revision=planning_native_outbox.revision+1,updated_at=excluded.updated_at`).run({ id: randomUUID(), connectionId: external.connection_id, operation: externalOperation, promaEntityId, now })
+    getDatabase().prepare(`INSERT INTO planning_native_outbox (id,connection_id,operation,myyoda_entity_id,attempts,next_attempt_at,created_at,updated_at) VALUES (:id,:connectionId,:operation,:myyodaEntityId,0,:now,:now,:now) ON CONFLICT(connection_id,myyoda_entity_id) DO UPDATE SET operation=excluded.operation,attempts=0,next_attempt_at=excluded.next_attempt_at,last_error=NULL,revision=planning_native_outbox.revision+1,updated_at=excluded.updated_at`).run({ id: randomUUID(), connectionId: external.connection_id, operation: externalOperation, myyodaEntityId, now })
     return
   }
   const profiles = getDatabase().prepare(`SELECT * FROM planning_sync_profiles WHERE entity=:entity AND enabled=1`).all({ entity }) as SyncProfileRow[]
   for (const profile of profiles) {
     getDatabase().prepare(`
-      INSERT INTO planning_sync_outbox (id, profile_id, target_id, operation, proma_entity_id, native_start_at, attempts, next_attempt_at, created_at, updated_at)
-      VALUES (:id, :profileId, :targetId, :operation, :promaEntityId, :nativeStartAt, 0, :now, :now, :now)
-      ON CONFLICT(profile_id, proma_entity_id) DO UPDATE SET
+      INSERT INTO planning_sync_outbox (id, profile_id, target_id, operation, myyoda_entity_id, native_start_at, attempts, next_attempt_at, created_at, updated_at)
+      VALUES (:id, :profileId, :targetId, :operation, :myyodaEntityId, :nativeStartAt, 0, :now, :now, :now)
+      ON CONFLICT(profile_id, myyoda_entity_id) DO UPDATE SET
         target_id=excluded.target_id, operation=excluded.operation, native_start_at=excluded.native_start_at,
         attempts=0, next_attempt_at=excluded.next_attempt_at, last_error=NULL,
         revision=planning_sync_outbox.revision+1, updated_at=excluded.updated_at
-    `).run({ id: randomUUID(), profileId: profile.id, targetId: profile.target_id, operation, promaEntityId, nativeStartAt: nativeStartAt ?? null, now })
+    `).run({ id: randomUUID(), profileId: profile.id, targetId: profile.target_id, operation, myyodaEntityId, nativeStartAt: nativeStartAt ?? null, now })
   }
 }
 
 /** 清理任务独立于 outbox，保证切换受管目标时可同时“删旧、写新”。 */
-function enqueuePlanningSyncCleanup(input: Pick<PlanningSyncCleanupItem, 'entity' | 'targetId' | 'promaEntityId' | 'calendarItemIdentifier' | 'nativeStartAt'>, now = Date.now()): void {
+function enqueuePlanningSyncCleanup(input: Pick<PlanningSyncCleanupItem, 'entity' | 'targetId' | 'myyodaEntityId' | 'calendarItemIdentifier' | 'nativeStartAt'>, now = Date.now()): void {
   getDatabase().prepare(`
-    INSERT INTO planning_sync_cleanup (id, entity, target_id, proma_entity_id, calendar_item_identifier, native_start_at, attempts, next_attempt_at, created_at, updated_at)
-    VALUES (:id, :entity, :targetId, :promaEntityId, :calendarItemIdentifier, :nativeStartAt, 0, :now, :now, :now)
-    ON CONFLICT(entity, target_id, proma_entity_id) DO UPDATE SET
+    INSERT INTO planning_sync_cleanup (id, entity, target_id, myyoda_entity_id, calendar_item_identifier, native_start_at, attempts, next_attempt_at, created_at, updated_at)
+    VALUES (:id, :entity, :targetId, :myyodaEntityId, :calendarItemIdentifier, :nativeStartAt, 0, :now, :now, :now)
+    ON CONFLICT(entity, target_id, myyoda_entity_id) DO UPDATE SET
       calendar_item_identifier=COALESCE(excluded.calendar_item_identifier, planning_sync_cleanup.calendar_item_identifier),
       native_start_at=COALESCE(excluded.native_start_at, planning_sync_cleanup.native_start_at),
       next_attempt_at=excluded.next_attempt_at, last_error=NULL, updated_at=excluded.updated_at
@@ -867,7 +891,7 @@ export function savePlanningSyncProfile(input: SavePlanningSyncProfileInput): Pl
       for (const binding of bindings) enqueuePlanningSyncCleanup({
         entity: existing.entity,
         targetId: binding.target_id ?? existing.target_id,
-        promaEntityId: binding.proma_entity_id,
+        myyodaEntityId: binding.myyoda_entity_id,
         calendarItemIdentifier: binding.calendar_item_identifier ?? undefined,
       }, now)
       // binding 尚未落库前进程可能已在 EventKit 成功写入；旧 outbox 中的 marker 是仅存恢复证据。
@@ -875,7 +899,7 @@ export function savePlanningSyncProfile(input: SavePlanningSyncProfileInput): Pl
       for (const pending of pendingUpserts) enqueuePlanningSyncCleanup({
         entity: existing.entity,
         targetId: pending.target_id ?? existing.target_id,
-        promaEntityId: pending.proma_entity_id,
+        myyodaEntityId: pending.myyoda_entity_id,
         nativeStartAt: pending.native_start_at ?? undefined,
       }, now)
       getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE profile_id=:profileId').run({ profileId: profile.id })
@@ -901,8 +925,8 @@ export function listDuePlanningSyncOutbox(now = Date.now(), limit = 25): Plannin
       bindings.calendar_item_identifier
     FROM planning_sync_outbox AS outbox
     JOIN planning_sync_profiles AS profiles ON profiles.id=outbox.profile_id
-    LEFT JOIN planning_sync_bindings AS bindings ON bindings.profile_id=outbox.profile_id AND bindings.proma_entity_id=outbox.proma_entity_id AND bindings.target_id=COALESCE(outbox.target_id, profiles.target_id)
-    LEFT JOIN planning_sync_profile_conflicts AS conflicts ON conflicts.profile_id=outbox.profile_id AND conflicts.proma_entity_id=outbox.proma_entity_id
+    LEFT JOIN planning_sync_bindings AS bindings ON bindings.profile_id=outbox.profile_id AND bindings.myyoda_entity_id=outbox.myyoda_entity_id AND bindings.target_id=COALESCE(outbox.target_id, profiles.target_id)
+    LEFT JOIN planning_sync_profile_conflicts AS conflicts ON conflicts.profile_id=outbox.profile_id AND conflicts.myyoda_entity_id=outbox.myyoda_entity_id
     WHERE profiles.enabled=1 AND outbox.next_attempt_at<=:now AND conflicts.id IS NULL
     ORDER BY outbox.created_at
     LIMIT :limit
@@ -911,7 +935,7 @@ export function listDuePlanningSyncOutbox(now = Date.now(), limit = 25): Plannin
     id: row.id,
     profile: { id: row.profile_id, entity: row.entity, targetId: row.execution_target_id, targetTitle: row.target_title, sourceTitle: row.source_title, enabled: row.enabled === 1, createdAt: row.profile_created_at, updatedAt: row.profile_updated_at },
     operation: row.operation,
-    promaEntityId: row.proma_entity_id,
+    myyodaEntityId: row.myyoda_entity_id,
     attempts: row.attempts,
     revision: row.revision,
     calendarItemIdentifier: row.calendar_item_identifier ?? undefined,
@@ -921,7 +945,7 @@ export function listDuePlanningSyncOutbox(now = Date.now(), limit = 25): Plannin
 
 export function listDuePlanningSyncCleanup(now = Date.now(), limit = 25): PlanningSyncCleanupItem[] {
   const rows = getDatabase().prepare('SELECT * FROM planning_sync_cleanup WHERE next_attempt_at<=:now ORDER BY created_at LIMIT :limit').all({ now, limit }) as SyncCleanupRow[]
-  return rows.map((row) => ({ id: row.id, entity: row.entity, targetId: row.target_id, promaEntityId: row.proma_entity_id, calendarItemIdentifier: row.calendar_item_identifier ?? undefined, nativeStartAt: row.native_start_at ?? undefined, attempts: row.attempts }))
+  return rows.map((row) => ({ id: row.id, entity: row.entity, targetId: row.target_id, myyodaEntityId: row.myyoda_entity_id, calendarItemIdentifier: row.calendar_item_identifier ?? undefined, nativeStartAt: row.native_start_at ?? undefined, attempts: row.attempts }))
 }
 
 export function completePlanningSyncCleanup(item: PlanningSyncCleanupItem): void {
@@ -942,18 +966,18 @@ export function completePlanningSyncOutbox(item: PlanningSyncOutboxItem, nativeI
     const currentProfile = getDatabase().prepare('SELECT target_id FROM planning_sync_profiles WHERE id=:profileId').get({ profileId: item.profile.id }) as { target_id: string } | undefined
     const isCurrentTarget = currentProfile?.target_id === item.profile.targetId
     if (item.operation === 'delete' && isCurrentTarget) {
-      getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND proma_entity_id=:promaEntityId').run({ profileId: item.profile.id, targetId: item.profile.targetId, promaEntityId: item.promaEntityId })
+      getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND myyoda_entity_id=:myyodaEntityId').run({ profileId: item.profile.id, targetId: item.profile.targetId, myyodaEntityId: item.myyodaEntityId })
     } else if (nativeIdentifiers?.calendarItemIdentifier && isCurrentTarget) {
       getDatabase().prepare(`
-        INSERT INTO planning_sync_bindings (profile_id, target_id, proma_entity_id, calendar_item_identifier, calendar_item_external_identifier, last_synced_hash, last_synced_at)
-        VALUES (:profileId, :targetId, :promaEntityId, :calendarItemIdentifier, :calendarItemExternalIdentifier, :nativeHash, :now)
-        ON CONFLICT(profile_id, proma_entity_id) DO UPDATE SET
+        INSERT INTO planning_sync_bindings (profile_id, target_id, myyoda_entity_id, calendar_item_identifier, calendar_item_external_identifier, last_synced_hash, last_synced_at)
+        VALUES (:profileId, :targetId, :myyodaEntityId, :calendarItemIdentifier, :calendarItemExternalIdentifier, :nativeHash, :now)
+        ON CONFLICT(profile_id, myyoda_entity_id) DO UPDATE SET
           target_id=excluded.target_id, calendar_item_identifier=excluded.calendar_item_identifier,
           calendar_item_external_identifier=excluded.calendar_item_external_identifier,last_synced_hash=excluded.last_synced_hash,last_synced_at=excluded.last_synced_at
-      `).run({ profileId: item.profile.id, targetId: item.profile.targetId, promaEntityId: item.promaEntityId, calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, calendarItemExternalIdentifier: nativeIdentifiers.calendarItemExternalIdentifier ?? null, nativeHash: nativeHash ?? null, now })
+      `).run({ profileId: item.profile.id, targetId: item.profile.targetId, myyodaEntityId: item.myyodaEntityId, calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, calendarItemExternalIdentifier: nativeIdentifiers.calendarItemExternalIdentifier ?? null, nativeHash: nativeHash ?? null, now })
     } else if (nativeIdentifiers?.calendarItemIdentifier) {
       // 目标切换与 native 写入并发时，将刚创建的旧项移入独立清理队列，不能任其孤儿化。
-      enqueuePlanningSyncCleanup({ entity: item.profile.entity, targetId: item.profile.targetId, promaEntityId: item.promaEntityId, calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, nativeStartAt: item.nativeStartAt }, now)
+      enqueuePlanningSyncCleanup({ entity: item.profile.entity, targetId: item.profile.targetId, myyodaEntityId: item.myyodaEntityId, calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, nativeStartAt: item.nativeStartAt }, now)
     }
     getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE id=:id AND revision=:revision').run({ id: item.id, revision: item.revision })
   })
@@ -961,19 +985,19 @@ export function completePlanningSyncOutbox(item: PlanningSyncOutboxItem, nativeI
 
 export function listDuePlanningNativeOutbox(now = Date.now(), limit = 25): PlanningNativeOutboxItem[] {
   // 冲突未决时绝不能自动把 MyYoda 一侧覆盖到系统。
-  const rows = getDatabase().prepare(`SELECT outbox.*, connections.entity,connections.target_id,connections.target_title,connections.source_title,connections.source_type,connections.can_write,connections.connected_at,connections.updated_at AS connection_updated_at,bindings.calendar_item_identifier,bindings.due_date_only,bindings.recreate_pending FROM planning_native_outbox AS outbox JOIN planning_native_connections AS connections ON connections.id=outbox.connection_id JOIN planning_native_bindings AS bindings ON bindings.connection_id=outbox.connection_id AND bindings.proma_entity_id=outbox.proma_entity_id LEFT JOIN planning_native_sync_conflicts AS conflicts ON conflicts.connection_id=outbox.connection_id AND conflicts.proma_entity_id=outbox.proma_entity_id AND conflicts.resolved_at IS NULL WHERE outbox.next_attempt_at<=:now AND conflicts.id IS NULL ORDER BY outbox.created_at LIMIT :limit`).all({ now, limit }) as Array<NativeOutboxRow & NativeConnectionRow & { connection_updated_at: number; calendar_item_identifier: string; due_date_only: number; recreate_pending: number }>
-  return rows.map((row) => ({ id: row.id, connection: nativeConnectionFromRow({ ...row, updated_at: row.connection_updated_at }), operation: row.operation, promaEntityId: row.proma_entity_id, calendarItemIdentifier: row.calendar_item_identifier, dueDateOnly: row.due_date_only === 1, recreatePending: row.recreate_pending === 1, attempts: row.attempts, revision: row.revision }))
+  const rows = getDatabase().prepare(`SELECT outbox.*, connections.entity,connections.target_id,connections.target_title,connections.source_title,connections.source_type,connections.can_write,connections.connected_at,connections.updated_at AS connection_updated_at,bindings.calendar_item_identifier,bindings.due_date_only,bindings.recreate_pending FROM planning_native_outbox AS outbox JOIN planning_native_connections AS connections ON connections.id=outbox.connection_id JOIN planning_native_bindings AS bindings ON bindings.connection_id=outbox.connection_id AND bindings.myyoda_entity_id=outbox.myyoda_entity_id LEFT JOIN planning_native_sync_conflicts AS conflicts ON conflicts.connection_id=outbox.connection_id AND conflicts.myyoda_entity_id=outbox.myyoda_entity_id AND conflicts.resolved_at IS NULL WHERE outbox.next_attempt_at<=:now AND conflicts.id IS NULL ORDER BY outbox.created_at LIMIT :limit`).all({ now, limit }) as Array<NativeOutboxRow & NativeConnectionRow & { connection_updated_at: number; calendar_item_identifier: string; due_date_only: number; recreate_pending: number }>
+  return rows.map((row) => ({ id: row.id, connection: nativeConnectionFromRow({ ...row, updated_at: row.connection_updated_at }), operation: row.operation, myyodaEntityId: row.myyoda_entity_id, calendarItemIdentifier: row.calendar_item_identifier, dueDateOnly: row.due_date_only === 1, recreatePending: row.recreate_pending === 1, attempts: row.attempts, revision: row.revision }))
 }
 
 export function completePlanningNativeOutbox(item: PlanningNativeOutboxItem, nativeIdentifiers?: { calendarItemIdentifier?: string }): void {
   withPlanningTransaction(() => {
     if (item.operation === 'hide') {
       const table = item.connection.entity === 'reminder' ? 'todos' : 'calendar_events'
-      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: item.promaEntityId, connectionId: item.connection.id })
-      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId: item.connection.id, promaEntityId: item.promaEntityId })
+      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: item.myyodaEntityId, connectionId: item.connection.id })
+      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId: item.connection.id, myyodaEntityId: item.myyodaEntityId })
     } else if (nativeIdentifiers?.calendarItemIdentifier) {
       // EventKit locator 会因系统删除后重建等情况变化；写回成功时必须更新 binding，避免下一轮导入出重复投影。
-      getDatabase().prepare('UPDATE planning_native_bindings SET calendar_item_identifier=:calendarItemIdentifier,recreate_pending=0,last_native_hash=NULL,last_synced_at=:now WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, now: Date.now(), connectionId: item.connection.id, promaEntityId: item.promaEntityId })
+      getDatabase().prepare('UPDATE planning_native_bindings SET calendar_item_identifier=:calendarItemIdentifier,recreate_pending=0,last_native_hash=NULL,last_synced_at=:now WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ calendarItemIdentifier: nativeIdentifiers.calendarItemIdentifier, now: Date.now(), connectionId: item.connection.id, myyodaEntityId: item.myyodaEntityId })
     }
     getDatabase().prepare('DELETE FROM planning_native_outbox WHERE id=:id AND revision=:revision').run({ id: item.id, revision: item.revision })
   })
@@ -999,13 +1023,13 @@ export function hideMissingPlanningNativeConnectionItems(connectionId: string, e
     const bindings = getDatabase().prepare('SELECT * FROM planning_native_bindings WHERE connection_id=:connectionId').all({ connectionId }) as NativeBindingRow[]
     for (const binding of bindings) {
       if (existing.has(binding.calendar_item_identifier) || binding.recreate_pending === 1) continue
-      const pending = getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').get({ connectionId, promaEntityId: binding.proma_entity_id })
+      const pending = getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').get({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
       if (pending) {
-        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,proma_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:promaEntityId,'deleted',NULL,:now) ON CONFLICT(connection_id,proma_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, promaEntityId: binding.proma_entity_id, now: Date.now() })
+        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,myyoda_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:myyodaEntityId,'deleted',NULL,:now) ON CONFLICT(connection_id,myyoda_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, myyodaEntityId: binding.myyoda_entity_id, now: Date.now() })
         continue
       }
-      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.proma_entity_id, connectionId })
-      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId, promaEntityId: binding.proma_entity_id })
+      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.myyoda_entity_id, connectionId })
+      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
     }
   })
 }
@@ -1026,20 +1050,20 @@ export function applyPlanningNativeConnectionItems(connectionId: string, items: 
       if (item.isRecurring) {
         if (binding) {
           const table = connection.entity === 'reminder' ? 'todos' : 'calendar_events'
-          getDatabase().prepare('DELETE FROM planning_native_outbox WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId, promaEntityId: binding.proma_entity_id })
-          getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.proma_entity_id, connectionId })
-          getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId, promaEntityId: binding.proma_entity_id })
+          getDatabase().prepare('DELETE FROM planning_native_outbox WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
+          getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.myyoda_entity_id, connectionId })
+          getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
         }
         continue
       }
       const hash = JSON.stringify(item)
       if (binding?.last_native_hash === hash) continue
-      const localId = binding?.proma_entity_id ?? randomUUID()
+      const localId = binding?.myyoda_entity_id ?? randomUUID()
       // 本地写入尚未写回时，让 outbox 优先，避免覆盖用户刚在 MyYoda 中完成的编辑。
-      const pending = binding && getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').get({ connectionId, promaEntityId: localId })
+      const pending = binding && getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').get({ connectionId, myyodaEntityId: localId })
       if (pending) {
         // 两侧都在基于同一 binding 修改：停止自动覆盖，留给用户明确选择。
-        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,proma_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:promaEntityId,'changed',:nativeItemJson,:now) ON CONFLICT(connection_id,proma_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, promaEntityId: localId, nativeItemJson: JSON.stringify(item), now })
+        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,myyoda_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:myyodaEntityId,'changed',:nativeItemJson,:now) ON CONFLICT(connection_id,myyoda_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, myyodaEntityId: localId, nativeItemJson: JSON.stringify(item), now })
         continue
       }
       if (entityType === 'todo') {
@@ -1051,7 +1075,7 @@ export function applyPlanningNativeConnectionItems(connectionId: string, items: 
         if (binding) getDatabase().prepare('UPDATE calendar_events SET title=:title,notes=:notes,start_at=:startAt,end_at=:endAt,all_day=:allDay,updated_at=:updatedAt WHERE id=:id').run({ id: localId, title: item.title.slice(0, 500), notes: item.notes ?? null, startAt: item.startAt, endAt: item.endAt ?? null, allDay: item.allDay ? 1 : 0, updatedAt: Math.max(now, item.lastModifiedAt || now) })
         else getDatabase().prepare('INSERT INTO calendar_events (id,title,notes,start_at,end_at,all_day,workspace_id,native_connection_id,created_at,updated_at) VALUES (:id,:title,:notes,:startAt,:endAt,:allDay,NULL,:connectionId,:now,:updatedAt)').run({ id: localId, title: item.title.slice(0, 500), notes: item.notes ?? null, startAt: item.startAt, endAt: item.endAt ?? null, allDay: item.allDay ? 1 : 0, connectionId, now, updatedAt: Math.max(now, item.lastModifiedAt || now) })
       }
-      getDatabase().prepare('INSERT INTO planning_native_bindings (connection_id,proma_entity_id,calendar_item_identifier,due_date_only,last_native_hash,last_synced_at) VALUES (:connectionId,:promaEntityId,:calendarItemIdentifier,:dueDateOnly,:hash,:now) ON CONFLICT(connection_id,proma_entity_id) DO UPDATE SET calendar_item_identifier=excluded.calendar_item_identifier,due_date_only=excluded.due_date_only,last_native_hash=excluded.last_native_hash,last_synced_at=excluded.last_synced_at').run({ connectionId, promaEntityId: localId, calendarItemIdentifier: item.calendarItemIdentifier, dueDateOnly: item.dueDateOnly ? 1 : 0, hash, now })
+      getDatabase().prepare('INSERT INTO planning_native_bindings (connection_id,myyoda_entity_id,calendar_item_identifier,due_date_only,last_native_hash,last_synced_at) VALUES (:connectionId,:myyodaEntityId,:calendarItemIdentifier,:dueDateOnly,:hash,:now) ON CONFLICT(connection_id,myyoda_entity_id) DO UPDATE SET calendar_item_identifier=excluded.calendar_item_identifier,due_date_only=excluded.due_date_only,last_native_hash=excluded.last_native_hash,last_synced_at=excluded.last_synced_at').run({ connectionId, myyodaEntityId: localId, calendarItemIdentifier: item.calendarItemIdentifier, dueDateOnly: item.dueDateOnly ? 1 : 0, hash, now })
     }
     // 只有真正的完整快照才能以缺失推断系统端删除；有界 Calendar 列表不能这样做。
     if (!options.fullSnapshot) return
@@ -1059,14 +1083,14 @@ export function applyPlanningNativeConnectionItems(connectionId: string, items: 
     const bindings = getDatabase().prepare('SELECT * FROM planning_native_bindings WHERE connection_id=:connectionId').all({ connectionId }) as NativeBindingRow[]
     for (const binding of bindings) {
       if (seen.has(binding.calendar_item_identifier) || binding.recreate_pending === 1) continue
-      const pending = getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').get({ connectionId, promaEntityId: binding.proma_entity_id })
+      const pending = getDatabase().prepare('SELECT id FROM planning_native_outbox WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').get({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
       if (pending) {
-        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,proma_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:promaEntityId,'deleted',NULL,:now) ON CONFLICT(connection_id,proma_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, promaEntityId: binding.proma_entity_id, now })
+        getDatabase().prepare(`INSERT INTO planning_native_sync_conflicts (id,connection_id,entity,myyoda_entity_id,kind,native_item_json,detected_at) VALUES (:id,:connectionId,:entity,:myyodaEntityId,'deleted',NULL,:now) ON CONFLICT(connection_id,myyoda_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at,resolved_at=NULL`).run({ id: randomUUID(), connectionId, entity: connection.entity, myyodaEntityId: binding.myyoda_entity_id, now })
         continue
       }
       const table = connection.entity === 'reminder' ? 'todos' : 'calendar_events'
-      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.proma_entity_id, connectionId })
-      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND proma_entity_id=:promaEntityId').run({ connectionId, promaEntityId: binding.proma_entity_id })
+      getDatabase().prepare(`DELETE FROM ${table} WHERE id=:id AND native_connection_id=:connectionId`).run({ id: binding.myyoda_entity_id, connectionId })
+      getDatabase().prepare('DELETE FROM planning_native_bindings WHERE connection_id=:connectionId AND myyoda_entity_id=:myyodaEntityId').run({ connectionId, myyodaEntityId: binding.myyoda_entity_id })
     }
   })
 }
@@ -1086,49 +1110,49 @@ export function applyManagedCalendarProfileItems(profileId: string, items: Plann
       if (!binding) {
         const candidates = new Map<string, SyncBindingRow>()
         if (item.calendarItemExternalIdentifier) {
-          for (const candidate of getDatabase().prepare('SELECT * FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND calendar_item_external_identifier=:externalIdentifier').all({ profileId, targetId: profile.target_id, externalIdentifier: item.calendarItemExternalIdentifier }) as SyncBindingRow[]) candidates.set(candidate.proma_entity_id, candidate)
+          for (const candidate of getDatabase().prepare('SELECT * FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND calendar_item_external_identifier=:externalIdentifier').all({ profileId, targetId: profile.target_id, externalIdentifier: item.calendarItemExternalIdentifier }) as SyncBindingRow[]) candidates.set(candidate.myyoda_entity_id, candidate)
         }
-        const markerCandidate = item.promaIdentity ? getDatabase().prepare('SELECT * FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND proma_entity_id=:promaEntityId').get({ profileId, targetId: profile.target_id, promaEntityId: item.promaIdentity }) as SyncBindingRow | undefined : undefined
-        if (markerCandidate) candidates.set(markerCandidate.proma_entity_id, markerCandidate)
+        const markerCandidate = item.myyodaIdentity ? getDatabase().prepare('SELECT * FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId AND myyoda_entity_id=:myyodaEntityId').get({ profileId, targetId: profile.target_id, myyodaEntityId: item.myyodaIdentity }) as SyncBindingRow | undefined : undefined
+        if (markerCandidate) candidates.set(markerCandidate.myyoda_entity_id, markerCandidate)
         // 仅“MyYoda marker + 与既有 binding 相同的 external identifier”可自动认回；单个 external id 或复制 UUID marker 都不足以安全认领。
         if (candidates.size === 1 && markerCandidate && item.calendarItemExternalIdentifier && markerCandidate.calendar_item_external_identifier === item.calendarItemExternalIdentifier) binding = markerCandidate
         else if (candidates.size > 0) {
           // locator recovery 需要用户选择。随后 missing-check 会识别冲突并保留旧投影，绝不误删其 tags/reminders。
-          for (const candidate of candidates.values()) getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,proma_entity_id,kind,native_item_json,detected_at)
-            VALUES (:id,:profileId,:promaEntityId,'changed',:nativeItemJson,:now)
-            ON CONFLICT(profile_id,proma_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, promaEntityId: candidate.proma_entity_id, nativeItemJson: JSON.stringify(item), now })
+          for (const candidate of candidates.values()) getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,myyoda_entity_id,kind,native_item_json,detected_at)
+            VALUES (:id,:profileId,:myyodaEntityId,'changed',:nativeItemJson,:now)
+            ON CONFLICT(profile_id,myyoda_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, myyodaEntityId: candidate.myyoda_entity_id, nativeItemJson: JSON.stringify(item), now })
           continue
         }
       }
       if (item.isRecurring) {
         // 不把 recurrence series/exception 误降维为单次 MyYoda event。
         if (binding) {
-          getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId, promaEntityId: binding.proma_entity_id })
-          getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: binding.proma_entity_id })
-          getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: binding.proma_entity_id })
-          getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId, promaEntityId: binding.proma_entity_id })
+          getDatabase().prepare('DELETE FROM planning_sync_outbox WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId, myyodaEntityId: binding.myyoda_entity_id })
+          getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: binding.myyoda_entity_id })
+          getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: binding.myyoda_entity_id })
+          getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId, myyodaEntityId: binding.myyoda_entity_id })
         }
         continue
       }
       if (binding && binding.calendar_item_identifier !== item.calendarItemIdentifier) {
         // 先持久化新 locator，再比较内容基线；否则内容相同的 locator 迁移会被误判为“无变化”。
-        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=:calendarItemIdentifier,calendar_item_external_identifier=:calendarItemExternalIdentifier,last_synced_at=:now WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId, promaEntityId: binding.proma_entity_id, calendarItemIdentifier: item.calendarItemIdentifier, calendarItemExternalIdentifier: item.calendarItemExternalIdentifier ?? binding.calendar_item_external_identifier ?? null, now })
+        getDatabase().prepare('UPDATE planning_sync_bindings SET calendar_item_identifier=:calendarItemIdentifier,calendar_item_external_identifier=:calendarItemExternalIdentifier,last_synced_at=:now WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId, myyodaEntityId: binding.myyoda_entity_id, calendarItemIdentifier: item.calendarItemIdentifier, calendarItemExternalIdentifier: item.calendarItemExternalIdentifier ?? binding.calendar_item_external_identifier ?? null, now })
         binding = { ...binding, calendar_item_identifier: item.calendarItemIdentifier, calendar_item_external_identifier: item.calendarItemExternalIdentifier ?? binding.calendar_item_external_identifier }
       }
       const hash = planningNativeCalendarHash(item)
       if (binding?.last_synced_hash === hash) continue
       // EventKit save 成功、SQLite binding 尚未确认时若进程崩溃，marker 只能在仍有该本地 outbox 时恢复；
       // 不信任任何没有对应 pending outbox 的 marker，避免用户 URL 伪造关联本地日程。
-      const recoveredPending = !binding && item.promaIdentity && getDatabase().prepare(`SELECT outbox.id FROM planning_sync_outbox AS outbox
-        JOIN calendar_events AS events ON events.id=outbox.proma_entity_id
-        WHERE outbox.profile_id=:profileId AND outbox.proma_entity_id=:promaEntityId AND outbox.operation='upsert'`).get({ profileId, promaEntityId: item.promaIdentity })
-      const localId = binding?.proma_entity_id ?? (recoveredPending ? item.promaIdentity! : randomUUID())
-      const pending = (binding || recoveredPending) && getDatabase().prepare('SELECT id FROM planning_sync_outbox WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').get({ profileId, promaEntityId: localId })
+      const recoveredPending = !binding && item.myyodaIdentity && getDatabase().prepare(`SELECT outbox.id FROM planning_sync_outbox AS outbox
+        JOIN calendar_events AS events ON events.id=outbox.myyoda_entity_id
+        WHERE outbox.profile_id=:profileId AND outbox.myyoda_entity_id=:myyodaEntityId AND outbox.operation='upsert'`).get({ profileId, myyodaEntityId: item.myyodaIdentity })
+      const localId = binding?.myyoda_entity_id ?? (recoveredPending ? item.myyodaIdentity! : randomUUID())
+      const pending = (binding || recoveredPending) && getDatabase().prepare('SELECT id FROM planning_sync_outbox WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').get({ profileId, myyodaEntityId: localId })
       if (pending && !recoveredPending) {
         // 双端在同一基线编辑时，宁可暂停出站，也不能静默后写覆盖系统版本。
-        getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,proma_entity_id,kind,native_item_json,detected_at)
-          VALUES (:id,:profileId,:promaEntityId,'changed',:nativeItemJson,:now)
-          ON CONFLICT(profile_id,proma_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, promaEntityId: localId, nativeItemJson: JSON.stringify(item), now })
+        getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,myyoda_entity_id,kind,native_item_json,detected_at)
+          VALUES (:id,:profileId,:myyodaEntityId,'changed',:nativeItemJson,:now)
+          ON CONFLICT(profile_id,myyoda_entity_id) DO UPDATE SET kind='changed',native_item_json=excluded.native_item_json,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, myyodaEntityId: localId, nativeItemJson: JSON.stringify(item), now })
         continue
       }
       const updatedAt = Math.max(now, item.lastModifiedAt || now)
@@ -1137,9 +1161,9 @@ export function applyManagedCalendarProfileItems(profileId: string, items: Plann
       } else {
         getDatabase().prepare('INSERT INTO calendar_events (id,title,notes,start_at,end_at,all_day,workspace_id,created_at,updated_at) VALUES (:id,:title,:notes,:startAt,:endAt,:allDay,NULL,:now,:updatedAt)').run({ id: localId, title: item.title.slice(0, 500), notes: item.notes ?? null, startAt: item.startAt, endAt: item.endAt ?? null, allDay: item.allDay ? 1 : 0, now, updatedAt })
       }
-      getDatabase().prepare(`INSERT INTO planning_sync_bindings (profile_id,target_id,proma_entity_id,calendar_item_identifier,calendar_item_external_identifier,last_synced_hash,last_synced_at)
-        VALUES (:profileId,:targetId,:promaEntityId,:calendarItemIdentifier,:calendarItemExternalIdentifier,:hash,:now)
-        ON CONFLICT(profile_id,proma_entity_id) DO UPDATE SET target_id=excluded.target_id,calendar_item_identifier=excluded.calendar_item_identifier,calendar_item_external_identifier=excluded.calendar_item_external_identifier,last_synced_hash=excluded.last_synced_hash,last_synced_at=excluded.last_synced_at`).run({ profileId, targetId: profile.target_id, promaEntityId: localId, calendarItemIdentifier: item.calendarItemIdentifier, calendarItemExternalIdentifier: item.calendarItemExternalIdentifier ?? null, hash, now })
+      getDatabase().prepare(`INSERT INTO planning_sync_bindings (profile_id,target_id,myyoda_entity_id,calendar_item_identifier,calendar_item_external_identifier,last_synced_hash,last_synced_at)
+        VALUES (:profileId,:targetId,:myyodaEntityId,:calendarItemIdentifier,:calendarItemExternalIdentifier,:hash,:now)
+        ON CONFLICT(profile_id,myyoda_entity_id) DO UPDATE SET target_id=excluded.target_id,calendar_item_identifier=excluded.calendar_item_identifier,calendar_item_external_identifier=excluded.calendar_item_external_identifier,last_synced_hash=excluded.last_synced_hash,last_synced_at=excluded.last_synced_at`).run({ profileId, targetId: profile.target_id, myyodaEntityId: localId, calendarItemIdentifier: item.calendarItemIdentifier, calendarItemExternalIdentifier: item.calendarItemExternalIdentifier ?? null, hash, now })
     }
   })
 }
@@ -1153,17 +1177,17 @@ export function hideMissingManagedCalendarProfileItems(profileId: string, target
     const bindings = getDatabase().prepare('SELECT * FROM planning_sync_bindings WHERE profile_id=:profileId AND target_id=:targetId').all({ profileId, targetId }) as SyncBindingRow[]
     for (const binding of bindings) {
       if (!binding.calendar_item_identifier || existing.has(binding.calendar_item_identifier)) continue
-      const pending = getDatabase().prepare('SELECT id FROM planning_sync_outbox WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').get({ profileId, promaEntityId: binding.proma_entity_id })
-      const recoveryConflict = getDatabase().prepare('SELECT id FROM planning_sync_profile_conflicts WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').get({ profileId, promaEntityId: binding.proma_entity_id })
+      const pending = getDatabase().prepare('SELECT id FROM planning_sync_outbox WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').get({ profileId, myyodaEntityId: binding.myyoda_entity_id })
+      const recoveryConflict = getDatabase().prepare('SELECT id FROM planning_sync_profile_conflicts WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').get({ profileId, myyodaEntityId: binding.myyoda_entity_id })
       if (pending && !recoveryConflict) {
-        getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,proma_entity_id,kind,native_item_json,detected_at)
-          VALUES (:id,:profileId,:promaEntityId,'deleted',NULL,:now)
-          ON CONFLICT(profile_id,proma_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, promaEntityId: binding.proma_entity_id, now: Date.now() })
+        getDatabase().prepare(`INSERT INTO planning_sync_profile_conflicts (id,profile_id,myyoda_entity_id,kind,native_item_json,detected_at)
+          VALUES (:id,:profileId,:myyodaEntityId,'deleted',NULL,:now)
+          ON CONFLICT(profile_id,myyoda_entity_id) DO UPDATE SET kind='deleted',native_item_json=NULL,detected_at=excluded.detected_at`).run({ id: randomUUID(), profileId, myyodaEntityId: binding.myyoda_entity_id, now: Date.now() })
       }
       if (pending || recoveryConflict) continue
-      getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: binding.proma_entity_id })
-      getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: binding.proma_entity_id })
-      getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND proma_entity_id=:promaEntityId').run({ profileId, promaEntityId: binding.proma_entity_id })
+      getDatabase().prepare("DELETE FROM planning_reminders WHERE target_type='calendar_event' AND target_id=:id").run({ id: binding.myyoda_entity_id })
+      getDatabase().prepare('DELETE FROM calendar_events WHERE id=:id').run({ id: binding.myyoda_entity_id })
+      getDatabase().prepare('DELETE FROM planning_sync_bindings WHERE profile_id=:profileId AND myyoda_entity_id=:myyodaEntityId').run({ profileId, myyodaEntityId: binding.myyoda_entity_id })
     }
   })
 }
@@ -1386,7 +1410,7 @@ export function claimDuePlanningReminders(now = Date.now()): ActivePlanningRemin
       AND NOT (
         origin='todo_due_at' AND target_type='todo' AND EXISTS (
           SELECT 1 FROM planning_sync_profiles AS profiles
-          JOIN planning_sync_bindings AS bindings ON bindings.profile_id=profiles.id AND bindings.proma_entity_id=planning_reminders.target_id
+          JOIN planning_sync_bindings AS bindings ON bindings.profile_id=profiles.id AND bindings.myyoda_entity_id=planning_reminders.target_id
           WHERE profiles.entity='reminder' AND profiles.enabled=1
         )
       )

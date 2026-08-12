@@ -10,7 +10,7 @@ mockElectronModule({
   },
 })
 
-const { handlePromaFileRequest, registerPromaDirectoryPath } = await import('./local-file-protocol')
+const { handleMyYodaFileRequest, registerMyYodaDirectoryPath } = await import('./local-file-protocol')
 const roots: string[] = []
 
 afterEach(() => {
@@ -26,9 +26,9 @@ describe('local-file-protocol directory allowlist', () => {
     writeFileSync(join(root, 'assets', 'style.css'), 'body{}', 'utf-8')
     writeFileSync(join(root, 'secret.txt'), 'do not expose', 'utf-8')
 
-    const baseUrl = registerPromaDirectoryPath(root, ['index.html', 'assets/style.css'])
-    const sibling = await handlePromaFileRequest(new Request(`${baseUrl}/secret.txt`))
-    const traversal = await handlePromaFileRequest(new Request(`${baseUrl}/assets/../secret.txt`))
+    const baseUrl = registerMyYodaDirectoryPath(root, ['index.html', 'assets/style.css'])
+    const sibling = await handleMyYodaFileRequest(new Request(`${baseUrl}/secret.txt`))
+    const traversal = await handleMyYodaFileRequest(new Request(`${baseUrl}/assets/../secret.txt`))
 
     expect(sibling.status).toBe(403)
     expect(traversal.status).toBe(403)

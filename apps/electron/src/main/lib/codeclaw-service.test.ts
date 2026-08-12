@@ -46,7 +46,6 @@ mockElectronModule()
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 const realNow = Date.now
 
 let fakeNow = 1_700_000_000_000
@@ -60,7 +59,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-codeclaw-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  process.env.PROMA_DEV = '0'
+  process.env.MYYODA_DEV = '0'
   mock.module('node:os', () => ({ ...os, homedir: () => tempHome }))
   Date.now = mock(() => fakeNow)
   // 真实加载 agent-service：与 codeclaw-service 共享同一个 eventBus 实例
@@ -74,8 +73,6 @@ afterAll(() => {
   process.env.HOME = originalHome
   if (originalMyyodaDev === undefined) delete process.env.MYYODA_DEV
   else process.env.MYYODA_DEV = originalMyyodaDev
-  if (originalPromaDev === undefined) delete process.env.PROMA_DEV
-  else process.env.PROMA_DEV = originalPromaDev
   rmSync(tempHome, { recursive: true, force: true })
 })
 

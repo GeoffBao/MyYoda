@@ -10,12 +10,11 @@
 
 import { useMemo, useState } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronRight, ChevronLeft, HardDriveDownload, KeyRound, Users2 } from 'lucide-react'
+import { BookOpen, ChevronRight, ChevronLeft, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheckPanel'
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
 import { detectIsWindows } from '@/lib/platform'
-import { migrationImportDialogOpenAtom } from '@/atoms/migration-atoms'
 
 /** Onboarding 完成后的后续动作：打开教程 Tab / 打开渠道设置；不传则直接进入主界面 */
 export type OnboardingCompleteAction = 'tutorial' | 'channels'
@@ -30,7 +29,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [step, setStep] = useState<'welcome' | 'environment'>('welcome')
   const isWindows = useMemo(() => detectIsWindows(), [])
   const shellOk = useAtomValue(isShellEnvironmentOkAtom)
-  const setMigrationImportDialogOpen = useSetAtom(migrationImportDialogOpenAtom)
 
   const handleFinish = async (action?: OnboardingCompleteAction) => {
     await window.electronAPI.updateSettings({ onboardingCompleted: true })
@@ -43,10 +41,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     } else {
       handleFinish()
     }
-  }
-
-  const handleOpenMigration = () => {
-    setMigrationImportDialogOpen(true)
   }
 
   return (
@@ -107,45 +101,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               </div>
               <ChevronRight size={16} className="text-muted-foreground/50 flex-shrink-0" />
             </button>
-
-            {/* 团队配置导入 */}
-            <div className="pt-1">
-              <p className="text-xs text-muted-foreground mb-2 px-0.5">
-                已有团队配置？直接导入，跳过手动设置
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleOpenMigration}
-                  className="rounded-xl border border-border/60 bg-card/50 p-4 flex items-start gap-3 hover:bg-card hover:border-border transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <HardDriveDownload size={17} className="text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground">从其他设备迁移</h3>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      导入自己在其他设备上的完整配置<br/>
-                      （.myyoda-backup 文件）
-                    </p>
-                  </div>
-                </button>
-                <button
-                  onClick={handleOpenMigration}
-                  className="rounded-xl border border-border/60 bg-card/50 p-4 flex items-start gap-3 hover:bg-card hover:border-border transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Users2 size={17} className="text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground">导入团队配置</h3>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      从管理员或同事处获取配置包<br/>
-                      （.myyoda-share 文件）
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
 
           <div className="w-full max-w-2xl mt-8 flex flex-col items-center gap-2">

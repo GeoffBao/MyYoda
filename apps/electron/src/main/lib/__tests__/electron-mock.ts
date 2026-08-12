@@ -88,6 +88,23 @@ export function mockElectronModule(overrides: Record<string, unknown> = {}): voi
     },
     // 供 `import type { WebContents }` 等类型导入；运行时不会真正使用。
     WebContents: class WebContents {},
+    // browser-controller 以值导入 WebContentsView；测试中不真正创建视图。
+    WebContentsView: class WebContentsView {
+      webContents = { isDestroyed: () => false, send: () => undefined, loadURL: () => undefined }
+      setBounds(): void {}
+      setBackgroundColor(): void {}
+    },
+    // browser-controller 以值导入 session（浏览器分区/cookie 隔离）；测试中不真正使用。
+    session: {
+      fromPartition: () => ({
+        on: () => undefined,
+        setPermissionRequestHandler: () => undefined,
+        setPermissionCheckHandler: () => undefined,
+        webRequest: { onBeforeRequest: () => undefined, onHeadersReceived: () => undefined },
+        cookies: { get: () => [], set: () => undefined, remove: () => undefined },
+      }),
+      defaultSession: { on: () => undefined },
+    },
     webContents: {
       fromId: () => ({ send: () => undefined }),
     },

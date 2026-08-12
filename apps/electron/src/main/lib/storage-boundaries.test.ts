@@ -53,7 +53,7 @@ describe('Workspace metadata cleanup boundaries', () => {
     }
   })
 
-  test('Proma Workspace Memory 的 memory/ 顶层目录必须受 orphan cleanup 保护', () => {
+  test('MyYoda Workspace Memory 的 memory/ 顶层目录必须受 orphan cleanup 保护', () => {
     expect(isWorkspaceMetadataDir('memory')).toBe(true)
   })
 

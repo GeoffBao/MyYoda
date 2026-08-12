@@ -172,15 +172,15 @@ function registerEntry(path: string, isDirectory: boolean, allowedRelativePaths?
   return `myyoda-file://${token}`
 }
 
-export function registerPromaFilePath(path: string): string {
+export function registerMyYodaFilePath(path: string): string {
   return registerEntry(path, false)
 }
 
-export function registerPromaDirectoryPath(path: string, allowedRelativePaths?: readonly string[]): string {
+export function registerMyYodaDirectoryPath(path: string, allowedRelativePaths?: readonly string[]): string {
   return registerEntry(path, true, allowedRelativePaths)
 }
 
-export function handlePromaFileRequest(request: Request): Promise<Response> | Response {
+export function handleMyYodaFileRequest(request: Request): Promise<Response> | Response {
   let url: URL
   try {
     url = new URL(request.url)

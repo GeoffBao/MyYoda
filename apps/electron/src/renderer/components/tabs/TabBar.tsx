@@ -9,8 +9,8 @@
  */
 
 import * as React from 'react'
-import { useAtom, useAtomValue, useStore } from 'jotai'
-import { PanelRight } from 'lucide-react'
+import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
+import { Globe2, PanelRight } from 'lucide-react'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -44,6 +44,10 @@ import {
 } from '@/lib/platform'
 import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
+// 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
+import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
+// 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
+import { toast } from 'sonner'
 
 /**
  * macOS 原生全屏检测（非 HTML fullscreen，而是 Electron 原生全屏）。
@@ -262,13 +266,57 @@ function TabBarInner({
   // 若右侧关闭按钮样式变化，这里需同步调整。
   const [isPanelOpen, setSidePanelOpen] = useAtom(agentSidePanelOpenAtom)
   const activeTab = React.useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId])
+  const agentSessions = useAtomValue(agentSessionsAtom)
+  const activeAgentSession = activeTab?.type === 'agent'
+    ? agentSessions.find((session) => session.id === activeTab.sessionId)
+    : undefined
+  const showBrowserButton = Boolean(activeAgentSession)
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
-  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton)
+  const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
+  const setBrowserStateMap = useSetAtom(browserStateMapAtom)
+  const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
+  const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
+  const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
+  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton, showBrowserButton)
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
-    setSidePanelOpen((v) => !v)
-  }, [setSidePanelOpen, activeTab])
+    if (!isPanelOpen && activeAgentSession && browserOpenMap.get(activeAgentSession.id)) {
+      setBrowserFilePanelManualRestoreSessionIds((previous) => (
+        previous.includes(activeAgentSession.id) ? previous : [...previous, activeAgentSession.id]
+      ))
+    }
+    setSidePanelOpen(!isPanelOpen)
+  }, [activeAgentSession, activeTab, browserOpenMap, isPanelOpen, setBrowserFilePanelManualRestoreSessionIds, setSidePanelOpen])
+
+  const openBrowser = React.useCallback(async () => {
+    if (!activeAgentSession) return
+    const open = (window.electronAPI as Partial<typeof window.electronAPI>).openAgentBrowser
+    if (typeof open !== 'function') return
+    const state = await open(activeAgentSession.id)
+    setBrowserStateMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, state); return next })
+    setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, true); return next })
+  }, [activeAgentSession, setBrowserOpenMap, setBrowserStateMap])
+
+  React.useEffect(() => {
+    const sessionId = activeAgentSession?.id ?? null
+    const previous = priorBrowserStateRef.current
+    const shouldAutoCollapse = Boolean(
+      sessionId &&
+      previous.sessionId === sessionId &&
+      !previous.open &&
+      activeBrowserIsOpen &&
+      isPanelOpen &&
+      !browserFilePanelManualRestoreSessionIds.includes(sessionId),
+    )
+    priorBrowserStateRef.current = { sessionId, open: activeBrowserIsOpen }
+
+    if (!shouldAutoCollapse) return
+    setSidePanelOpen(false)
+    toast.message('已收起右侧文件面板，便于浏览网页', {
+      description: '按 ⌘⇧B（Windows / Linux：Ctrl+Shift+B）可重新打开；手动打开后，本会话不再自动收起。',
+    })
+  }, [activeAgentSession?.id, activeBrowserIsOpen, browserFilePanelManualRestoreSessionIds, isPanelOpen, setSidePanelOpen])
 
   React.useEffect(() => {
     return registerShortcut('toggle-right-panel', togglePanel)
@@ -465,11 +513,55 @@ function TabBarInner({
         ))}
       </div>
 
+      <ShortcutGuideButton
+        positionClassName={actionLayout.shortcutPositionClassName}
+        showBrowserButton={showBrowserButton}
+        onOpenBrowser={openBrowser}
+      />
+
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
           Windows 上需让出右上角 WindowControls 区域（126px）。 */}
       {showOpenPanelButton && (
         <AgentPanelOpenButton positionClassName={actionLayout.panelPositionClassName} onToggle={togglePanel} />
       )}
+    </div>
+  )
+}
+
+function ShortcutGuideButton({
+  positionClassName,
+  showBrowserButton,
+  onOpenBrowser,
+}: {
+  positionClassName: string
+  showBrowserButton: boolean
+  onOpenBrowser: () => void
+}): React.ReactElement {
+  if (!showBrowserButton) return <></>
+  return (
+    <div
+      className={cn(
+        "absolute flex items-center gap-1 titlebar-no-drag",
+        positionClassName,
+      )}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => void onOpenBrowser()}
+          >
+            <Globe2 className="size-3.5" />
+            <span className="sr-only">打开受管浏览器</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p>打开受管浏览器</p>
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }

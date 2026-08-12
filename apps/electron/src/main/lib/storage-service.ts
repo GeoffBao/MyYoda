@@ -702,7 +702,7 @@ export async function cleanupStorage(options: CleanupOptions): Promise<CleanupRe
     if (options.orphansOnly) {
       switch (cat) {
         case 'agent-sessions': merge(await cleanupOrphanAgentSessions()); break
-        // Pi-only runtime 不再拥有可安全推导 active ownership 的 SDK orphan 索引；沿用 Proma，保留这些历史文件。
+        // Pi-only runtime 不再拥有可安全推导 active ownership 的 SDK orphan 索引；沿用 MyYoda，保留这些历史文件。
         case 'sdk-config': break
         case 'workspaces': merge(await cleanupOrphanWorkspaces()); break
       }

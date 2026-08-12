@@ -413,6 +413,21 @@ export interface ElectronAPI {
   /** 获取独立预览窗口数据 */
   getDetachedPreviewData: (previewId: string) => Promise<DetachedPreviewWindowData | null>
 
+  // ===== Pi 受管浏览器（主进程 WebContentsView） =====
+  openAgentBrowser: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  listAgentBrowserTabs: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  createAgentBrowserTab: (input: import('@myyoda/shared').BrowserCreateTabInput) => Promise<import('@myyoda/shared').BrowserViewState>
+  selectAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => Promise<import('@myyoda/shared').BrowserViewState>
+  closeAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => Promise<import('@myyoda/shared').BrowserViewState | null>
+  getAgentBrowserState: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState | null>
+  setAgentBrowserLayout: (layout: import('@myyoda/shared').BrowserViewLayout) => Promise<void>
+  navigateAgentBrowser: (input: import('@myyoda/shared').BrowserNavigateInput) => Promise<import('@myyoda/shared').BrowserViewState>
+  goBackAgentBrowser: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  goForwardAgentBrowser: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  reloadAgentBrowser: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  closeAgentBrowser: (sessionId: string) => Promise<void>
+  onAgentBrowserStateChanged: (callback: (state: import('@myyoda/shared').BrowserViewState) => void) => () => void
+
   // ===== 通用工具 =====
 
   /** 在系统默认浏览器中打开外部链接 */
@@ -1129,6 +1144,9 @@ export interface ElectronAPI {
   /** 仅解析文件路径（供 PDF/图片等用 file:// 加载） */
   resolveFilePath: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<import('@myyoda/shared').ResolvedFileUrl | null>
 
+  /** 解析 HTML 预览路径，并授权加载同目录的相对资源 */
+  resolveHtmlPreviewPath: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<import('@myyoda/shared').ResolvedFileUrl | null>
+
   /** 为内联 PDF 预览生成临时 HTML 文件，返回文件路径 */
   preparePdfPreview: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<{ tmpHtmlUrl: string } | null>
 
@@ -1386,7 +1404,7 @@ export interface ElectronAPI {
   cancelVoiceDictation: (input: VoiceDictationStopInput) => Promise<void>
   /** 输出最终语音文本 */
   commitVoiceDictation: (input: VoiceDictationCommitInput) => Promise<VoiceDictationCommitResult>
-  /** 更新 Proma 输入框中的临时识别文本 */
+  /** 更新 MyYoda 输入框中的临时识别文本 */
   previewVoiceDictation: (input: VoiceDictationPreviewInput) => Promise<void>
   /** 隐藏语音输入窗口 */
   hideVoiceDictation: () => Promise<void>
@@ -1425,24 +1443,8 @@ export interface ElectronAPI {
 
   // ===== 数据迁移 =====
 
-  /** 获取工作区导出预览信息 */
-  migrationGetExportPreview: (workspaceId: string) => Promise<unknown>
-  /** 获取所有工作区的 Skills/MCP 预览（团队分发模式） */
-  migrationGetShareExportPreview: () => Promise<unknown>
-  /** 执行导出 */
-  migrationExport: (options: unknown) => Promise<MigrationExportResult>
-  /** 执行 v2 多工作区导出 */
-  migrationExportV2: (options: unknown) => Promise<MigrationExportResult>
-  /** 解析导入文件，返回预览信息 */
-  migrationParseImportFile: (filePath: string) => Promise<unknown>
-  /** 确认导入 */
-  migrationConfirmImport: (options: unknown) => Promise<{ success: boolean }>
-  /** 打开文件选择对话框（选择 .myyoda-backup 或 .myyoda-share） */
-  migrationOpenFileDialog: () => Promise<string | null>
-  /** 打开文件保存对话框（选择导出路径） */
-  migrationSaveFileDialog: (mode: string) => Promise<string | null>
-  /** 订阅双击迁移文件触发的导入事件 */
-  onMigrationOpenImportFile: (callback: (data: { filePath: string }) => void) => () => void
+  /** 在系统文件管理器中打开 MyYoda 数据文件夹 */
+  openMigrationDataFolder: () => Promise<void>
 
   // ===== 存储管理 =====
 
@@ -1457,8 +1459,6 @@ export interface ElectronAPI {
 
   /** 获取跨会话用量聚合统计（range: all | 30d | 7d） */
   getUsageStats: (range: unknown) => Promise<unknown>
-  /** 取消迁移导入（清理临时解压目录） */
-  migrationCancelImport: (tempDir: string) => Promise<void>
 
   // ===== 定时任务（Automation）=====
   /** 获取定时任务；scope 默认 'current' 按当前 Workspace 过滤，'all' 不过滤；workspaceId 显式指定时优先使用 */
@@ -1675,12 +1675,6 @@ export interface ElectronAPI {
   }
 }
 
-interface MigrationExportResult {
-  success: boolean
-  filePath: string
-  warnings?: string[]
-}
-
 /**
  * 实现 ElectronAPI 接口
  */
@@ -1744,6 +1738,32 @@ const electronAPI: ElectronAPI = {
 
   getDetachedPreviewData: (previewId: string) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_DETACHED_PREVIEW_DATA, previewId) as Promise<DetachedPreviewWindowData | null>
+  },
+
+  openAgentBrowser: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_BROWSER, sessionId)
+  },
+  listAgentBrowserTabs: (sessionId: string) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_BROWSER_TABS, sessionId),
+  createAgentBrowserTab: (input: import('@myyoda/shared').BrowserCreateTabInput) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_BROWSER_TAB, input),
+  selectAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.SELECT_BROWSER_TAB, input),
+  closeAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.CLOSE_BROWSER_TAB, input),
+  getAgentBrowserState: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_BROWSER_STATE, sessionId)
+  },
+  setAgentBrowserLayout: (layout: import('@myyoda/shared').BrowserViewLayout) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_BROWSER_LAYOUT, layout)
+  },
+  navigateAgentBrowser: (input: import('@myyoda/shared').BrowserNavigateInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.NAVIGATE_BROWSER, input)
+  },
+  goBackAgentBrowser: (sessionId: string) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.GO_BACK_BROWSER, sessionId),
+  goForwardAgentBrowser: (sessionId: string) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.GO_FORWARD_BROWSER, sessionId),
+  reloadAgentBrowser: (sessionId: string) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.RELOAD_BROWSER, sessionId),
+  closeAgentBrowser: (sessionId: string) => ipcRenderer.invoke(AGENT_IPC_CHANNELS.CLOSE_BROWSER, sessionId),
+  onAgentBrowserStateChanged: (callback: (state: import('@myyoda/shared').BrowserViewState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: import('@myyoda/shared').BrowserViewState) => callback(state)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
+    return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
   },
 
   // 通用工具
@@ -2758,6 +2778,10 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke('file:resolve-path', filePath, access) as Promise<import('@myyoda/shared').ResolvedFileUrl | null>
   },
 
+  resolveHtmlPreviewPath: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke('file:resolve-html-preview-path', filePath, access) as Promise<import('@myyoda/shared').ResolvedFileUrl | null>
+  },
+
   preparePdfPreview: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => {
     return ipcRenderer.invoke('file:prepare-pdf-preview', filePath, access) as Promise<{ tmpHtmlUrl: string } | null>
   },
@@ -3260,43 +3284,7 @@ const electronAPI: ElectronAPI = {
     return () => { ipcRenderer.removeListener(TRAY_IPC_CHANNELS.CREATE_SESSION, listener) }
   },
 
-  migrationGetExportPreview: (workspaceId: string) => {
-    return ipcRenderer.invoke('migration:getExportPreview', workspaceId)
-  },
-
-  migrationGetShareExportPreview: () => {
-    return ipcRenderer.invoke('migration:getShareExportPreview')
-  },
-
-  migrationExport: (options: unknown) => {
-    return ipcRenderer.invoke('migration:export', options)
-  },
-
-  migrationExportV2: (options: unknown) => {
-    return ipcRenderer.invoke('migration:exportV2', options)
-  },
-
-  migrationParseImportFile: (filePath: string) => {
-    return ipcRenderer.invoke('migration:parseImportFile', filePath)
-  },
-
-  migrationConfirmImport: (options: unknown) => {
-    return ipcRenderer.invoke('migration:confirmImport', options)
-  },
-
-  migrationOpenFileDialog: () => {
-    return ipcRenderer.invoke('migration:openFileDialog')
-  },
-
-  migrationSaveFileDialog: (mode: string) => {
-    return ipcRenderer.invoke('migration:saveFileDialog', mode)
-  },
-
-  onMigrationOpenImportFile: (callback: (data: { filePath: string }) => void) => {
-    const listener = (_: unknown, data: { filePath: string }): void => callback(data)
-    ipcRenderer.on('migration:open-import-file', listener)
-    return () => { ipcRenderer.removeListener('migration:open-import-file', listener) }
-  },
+  openMigrationDataFolder: () => ipcRenderer.invoke('migration:open-data-folder'),
 
   // ===== 存储管理 =====
 
@@ -3316,10 +3304,6 @@ const electronAPI: ElectronAPI = {
 
   getUsageStats: (range: unknown) => {
     return ipcRenderer.invoke(USAGE_IPC_CHANNELS.GET_STATS, range)
-  },
-
-  migrationCancelImport: (tempDir: string) => {
-    return ipcRenderer.invoke('migration:cancelImport', tempDir)
   },
 
   // ===== 定时任务（Automation）=====

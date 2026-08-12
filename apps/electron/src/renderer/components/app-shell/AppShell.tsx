@@ -238,7 +238,7 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
           {showRightPanel && (
               <div
                 className={cn(
-                  'relative z-[60] flex items-stretch crt-sidebar',
+                  'relative z-[60] flex flex-shrink-0 items-stretch crt-sidebar',
                   isClassic
                     ? 'transition-[padding] duration-slow ease-out'
                     : '',

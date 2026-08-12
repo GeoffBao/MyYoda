@@ -64,3 +64,10 @@ export {
   calculatePiAutoCompactionReserveTokens,
   calculatePiAutoCompactionThresholdTokens,
 } from './pi-compaction'
+export {
+  getSkillSlugFromEntryPath,
+  createSkillActivationFromPath,
+  mergeSkillActivations,
+  collectSuccessfulSkillReadActivations,
+  collectSkillActivations,
+} from './skill-usage'

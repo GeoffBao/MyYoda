@@ -42,31 +42,20 @@ function registerProtocolsAndHandlers(): void {
     app.commandLine.appendSwitch('disable-lcd-text')
   }
 
-  // macOS 文件关联：在 app ready 之前注册 open-file 事件
-  app.on('open-file', (event, filePath) => {
-    event.preventDefault()
-    handleMigrationFileOpen(filePath)
-  })
-
-  // Windows 文件关联：当用户双击文件时，新实例的参数会通过 second-instance 传给已有实例
+  // Windows 等平台通过 second-instance 唤起已有主窗口。
   app.on('second-instance', (_event, argv) => {
     if (hasOpenPlanningArgument(argv)) {
       showPlanningWindow()
       return
     }
     showAndFocusMainWindow()
-    const fileArg = argv.find((arg) => arg.endsWith('.myyoda-backup') || arg.endsWith('.myyoda-share'))
-    if (fileArg) {
-      handleMigrationFileOpen(fileArg)
-    }
   })
 }
 
 
 
-import { migrateDataDirIfNeeded } from './lib/migration-service'
 import { getSettings, updateSettings } from './lib/settings-service'
-import { handlePromaFileRequest } from './lib/local-file-protocol'
+import { handleMyYodaFileRequest } from './lib/local-file-protocol'
 
 // 处理 EPIPE 错误：当 stdout/stderr 管道被关闭时（如 electronmon 重启），忽略写入错误
 // 这在开发环境热重载时经常发生，不影响应用功能
@@ -99,6 +88,7 @@ import { seedBuiltinExperts } from './lib/expert-service'
 import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
 import { stopAllAgents, killOrphanedClaudeSubprocesses, isAgentSessionActive, hasActiveAgentSessions } from './lib/agent-service'
 import { disposePiMcpConnections } from './lib/adapters/pi-mcp-tools'
+import { browserController } from './lib/browser-controller'
 import { markRunningDelegationsAsInterrupted, markStaleTaskSessionsIdle } from './lib/agent-session-manager'
 import { stopAllGenerations } from './lib/chat-service'
 import { configureUpdater, initAutoUpdater, cleanupUpdater } from './lib/updater/auto-updater'
@@ -139,19 +129,10 @@ import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/glob
 import { setAppVersion } from '@myyoda/core'
 import { TRAY_IPC_CHANNELS } from '../types'
 
-const MIGRATION_IPC_OPEN = 'migration:open-import-file'
-
 function startCodeClawSurface(): void {
   // 不再启动时预创建桌宠窗口：CodeClaw 是可选企业桌面助手，默认关闭。
   // 开启后由 codeclaw-service 在推送可见状态时按需创建窗口。
   publishCodeClawNow()
-}
-
-/** 检查文件路径是否为迁移文件，如果是则通知渲染进程打开导入流程 */
-function handleMigrationFileOpen(filePath: string): void {
-  if (filePath.endsWith('.myyoda-backup') || filePath.endsWith('.myyoda-share')) {
-    sendToMainWindow(MIGRATION_IPC_OPEN, { filePath })
-  }
 }
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
@@ -455,6 +436,7 @@ function createWindow(): void {
       console.warn('[TaskRunner] 冷启动恢复失败:', error instanceof Error ? error.message : error)
     })
   installWindowsZoomInFallback(mainWindow)
+  browserController.setOwnerWindow(mainWindow)
 
   // Load the renderer
   const isDev = !app.isPackaged
@@ -573,6 +555,7 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     setStoredMainWindow(null)
+    browserController.dispose()
     mainWindow = null
   })
 }
@@ -603,8 +586,6 @@ app.whenReady().then(bootstrap).catch(handleBootstrapFailure)
  * 单点失败不应阻止窗口和托盘的创建（用户至少要能看到界面）。
  */
 async function bootstrap(): Promise<void> {
-  migrateDataDirIfNeeded()
-
   // 初始化 MyYoda 版本号（供 User-Agent 等全局标识使用）
   setAppVersion(app.getVersion())
 
@@ -613,7 +594,7 @@ async function bootstrap(): Promise<void> {
 
   // 注册自定义协议 myyoda-file:// 用于内联预览本地文件。
   // 协议只接受主进程签发的 opaque token，不解析 renderer 提供的绝对路径。
-  protocol.handle('myyoda-file', handlePromaFileRequest)
+  protocol.handle('myyoda-file', handleMyYodaFileRequest)
 
   // 初始化运行时环境（Shell 环境 + Bun + Git 检测）
   // 必须在其他初始化之前执行，确保环境变量正确加载
@@ -819,6 +800,7 @@ app.on('before-quit', () => {
 
   // 中止所有活跃的 Agent 和 Chat 子进程
   stopAllAgents()
+  browserController.dispose()
   stopAllGenerations()
   // 清理 Pi runtime 资源与残留子进程
   killOrphanedClaudeSubprocesses()

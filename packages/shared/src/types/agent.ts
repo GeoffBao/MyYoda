@@ -90,7 +90,7 @@ export function sessionThinkingLevelPatch(
   return { reasoningLevel: level, thinkingLevel: level, openAIThinkingLevel: level }
 }
 
-/** 是否为 Proma 可暴露 reasoning.effort 的 OpenAI 推理模型。 */
+/** 是否为 MyYoda 可暴露 reasoning.effort 的 OpenAI 推理模型。 */
 export function isOpenAIReasoningSupportedModel(modelId: string | undefined): boolean {
   const normalized = modelId?.toLowerCase() ?? ''
   // Pi catalog 中 gpt-5*-chat-latest 是非 reasoning 的对话变体；它们不能接受
@@ -273,6 +273,26 @@ export interface SDKUserMessage {
   isReplay?: boolean
   /** SDK 合成的消息（如 Skill 展开 prompt），非人类用户输入 */
   isSynthetic?: boolean
+  /** Skills successfully loaded for this specific user input. */
+  skill_activations?: SkillActivation[]
+}
+
+/** Skill successfully loaded during an Agent turn. */
+export type SkillActivationSource = 'explicit' | 'read'
+
+export interface SkillActivation {
+  /** Skill directory slug, stable across display-name changes. */
+  slug: string
+  /** Frontmatter name when available; otherwise the slug. */
+  name: string
+  /** `SKILL.md` path used to load the Skill; retained as a compatibility fallback. */
+  filePath?: string
+  /** Stable MyYoda workspace locator for a managed Skill. */
+  workspaceSlug?: string
+  /** Path relative to the managed workspace Skills directory, such as `my-skill/SKILL.md`. */
+  workspaceSkillPath?: string
+  /** Ways this turn loaded the Skill. */
+  sources: SkillActivationSource[]
 }
 
 /** SDK result 消息（查询结束时返回） */
@@ -294,6 +314,8 @@ export interface SDKResultMessage {
   background_tasks?: SDKBackgroundTaskSummary[]
   session_crons?: SDKSessionCronSummary[]
   session_id?: string
+  /** Skills successfully loaded during this result's turn. */
+  skill_activations?: SkillActivation[]
   /** 渠道配置的模型 ID，用于缺失 modelUsage.contextWindow 时按 Agent SDK 运行窗口兜底 */
   _channelModelId?: string
   /** 渠道 provider，用于按 Agent SDK 实际运行窗口计算压缩阈值 */
@@ -782,7 +804,7 @@ export interface AgentSessionMeta {
   sdkSessionId?: string
   /** Pi session JSONL 的精确路径；避免仅按 session ID 子串定位 artifact。 */
   piSessionFile?: string
-  /** Proma assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
+  /** MyYoda assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
   piEntryBindings?: Record<string, string>
   /** 已退役 Claude runtime 的只读 transcript；必须新建 Pi 会话才能继续。 */
   legacyTranscript?: {
@@ -2001,6 +2023,21 @@ export const AGENT_IPC_CHANNELS = {
   SPAWN_EXPERT_COWORK: 'agent:spawn-expert-cowork',
   /** 查询当前会话的 cowork 子会话列表 */
   LIST_COWORK_SESSIONS: 'agent:list-cowork-sessions',
+
+  // Pi 受管浏览器（网页内容与 CDP 仅驻留主进程）
+  OPEN_BROWSER: 'agent:open-browser',
+  LIST_BROWSER_TABS: 'agent:list-browser-tabs',
+  CREATE_BROWSER_TAB: 'agent:create-browser-tab',
+  SELECT_BROWSER_TAB: 'agent:select-browser-tab',
+  CLOSE_BROWSER_TAB: 'agent:close-browser-tab',
+  GET_BROWSER_STATE: 'agent:get-browser-state',
+  SET_BROWSER_LAYOUT: 'agent:set-browser-layout',
+  NAVIGATE_BROWSER: 'agent:navigate-browser',
+  GO_BACK_BROWSER: 'agent:go-back-browser',
+  GO_FORWARD_BROWSER: 'agent:go-forward-browser',
+  RELOAD_BROWSER: 'agent:reload-browser',
+  CLOSE_BROWSER: 'agent:close-browser',
+  BROWSER_STATE_CHANGED: 'agent:browser-state-changed',
 
   // 后台任务管理
   /** 获取任务输出 */
