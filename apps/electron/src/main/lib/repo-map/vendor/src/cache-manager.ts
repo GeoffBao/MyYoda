@@ -45,6 +45,9 @@ export class CacheManager {
     if (this.initialized) return
     this.initialized = true
 
+    // 清理历史残留（异常退出遗留的 tmp/锁文件），避免与后续写竞争
+    await this.cleanupStaleArtifacts()
+
     try {
       const raw = await fs.readFile(this.dbPath, 'utf-8')
       const parsed = JSON.parse(raw) as Record<string, FileCacheEntry>
@@ -60,7 +63,50 @@ export class CacheManager {
         await this.persist()
       }
     } catch {
-      // 首次运行或文件损坏：空缓存启动
+      // 缓存损坏：保留现场备份（便于定位根因），以空缓存启动并重建
+      await this.backupCorruptCache()
+    }
+  }
+
+  /** 备份损坏的缓存文件（保留现场，不静默丢弃） */
+  private async backupCorruptCache(): Promise<void> {
+    try {
+      const stat = await fs.stat(this.dbPath).catch(() => null)
+      if (stat) {
+        // 旧备份只保留 1 份（损坏备份可达 20-30MB，长期堆积占存储）
+        const dir = path.dirname(this.dbPath)
+        const base = path.basename(this.dbPath)
+        for (const name of await fs.readdir(dir).catch(() => [])) {
+          if (name.startsWith(`${base}.corrupt-`)) {
+            await fs.rm(path.join(dir, name), { force: true }).catch(() => undefined)
+            logger.info(`[CacheManager] 已清理旧损坏备份: ${name}`)
+          }
+        }
+        const backupPath = `${this.dbPath}.corrupt-${Date.now()}`
+        await fs.rename(this.dbPath, backupPath)
+        logger.warn(`[CacheManager] 缓存文件损坏，已备份为 ${backupPath}（${stat.size} 字节）并重建空缓存`)
+      }
+    } catch (error) {
+      logger.error('[CacheManager] 备份损坏缓存失败（继续以空缓存运行）:', error)
+    }
+  }
+
+  /** 清理异常退出遗留的 tmp/锁文件（超过 60s 视为残留） */
+  private async cleanupStaleArtifacts(): Promise<void> {
+    const dir = path.dirname(this.dbPath)
+    const now = Date.now()
+    try {
+      for (const name of await fs.readdir(dir)) {
+        if (!name.startsWith(path.basename(this.dbPath) + '.')) continue
+        const p = path.join(dir, name)
+        const st = await fs.stat(p).catch(() => null)
+        if (st && now - st.mtimeMs > 60_000) {
+          await fs.rm(p, { recursive: true, force: true }).catch(() => undefined)
+          logger.info(`[CacheManager] 已清理残留文件: ${name}`)
+        }
+      }
+    } catch (error) {
+      logger.error('[CacheManager] 清理残留文件失败:', error)
     }
   }
 
@@ -75,15 +121,57 @@ export class CacheManager {
   }
 
   private async persist(): Promise<void> {
+    // 写锁：mkdir 原子创建（已存在则 EEXIST），跨进程串行化写盘；
+    // 持锁失败时短暂重试；**锁龄 >10s 视为残留**（持锁实例异常退出）→ 删除后继续（自愈）
+    const lockPath = `${this.dbPath}.lock`
+    let acquired = false
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await fs.mkdir(lockPath)
+        acquired = true
+        break
+      } catch {
+        // 锁被占用：先检查是否为残留锁（超过 10s 视为异常退出遗留）
+        const st = await fs.stat(lockPath).catch(() => null)
+        if (st && Date.now() - st.mtimeMs > 10_000) {
+          await fs.rmdir(lockPath).catch(() => undefined)
+          logger.warn('[CacheManager] 检测到残留写锁（>10s），已清理并重试')
+          continue
+        }
+        if (attempt === 4) return
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    }
+    if (!acquired) return
+
     try {
       await fs.mkdir(path.dirname(this.dbPath), { recursive: true })
-      const payload = Object.fromEntries(this.cache.entries())
-      // 原子写：先写临时文件再 rename
-      const tmpPath = `${this.dbPath}.tmp`
-      await fs.writeFile(tmpPath, JSON.stringify(payload), 'utf-8')
+      // RMW：先读盘合并（若合法）——避免后写者覆盖先写者的新条目（跨实例竞态）
+      const merged = new Map(this.cache.entries())
+      try {
+        const raw = await fs.readFile(this.dbPath, 'utf-8')
+        const parsed = JSON.parse(raw) as Record<string, FileCacheEntry>
+        for (const [filePath, entry] of Object.entries(parsed)) {
+          if (entry && Array.isArray(entry.tags) && typeof entry.mtime === 'number' && !merged.has(filePath)) {
+            merged.set(filePath, { ...entry, updatedAt: entry.updatedAt ?? Date.now() })
+          }
+        }
+      } catch {
+        // 磁盘缓存缺失/损坏：以内存 Map 为准（损坏由 initialize 备份处理）
+      }
+      const payload = Object.fromEntries(merged.entries())
+      const serialized = JSON.stringify(payload)
+      if (serialized.length === 0) return
+      // 唯一 tmp 路径：彻底消除多实例同 tmp 互踩
+      const tmpPath = `${this.dbPath}.${process.pid}.${Date.now()}.tmp`
+      await fs.writeFile(tmpPath, serialized, 'utf-8')
       await fs.rename(tmpPath, this.dbPath)
+      // 内存同步合并结果，避免下次 persist 重复读盘
+      this.cache = merged
     } catch (error) {
       logger.error('[CacheManager] Failed to persist cache:', error)
+    } finally {
+      await fs.rmdir(lockPath).catch(() => undefined)
     }
   }
 

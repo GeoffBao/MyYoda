@@ -13,7 +13,9 @@
  * - 之后的消息同步读缓存注入（Promise.race + 并发去重，不重复生成）
  */
 import { execSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { getRepoMap } from './vendor/src/index'
@@ -49,12 +51,40 @@ const EXCLUDE_PATTERNS = [
   '**/*.min.js',
   '**/*.min.css',
   '**/*.map',
+  // 噪声目录：内置 skill 脚本/测试夹具/模板资产大量挤占符号排名，排除后核心源码靠前（2026-08-12 修复）
+  '**/default-skills/**',
+  '**/resources/repo-map/**',
+  '**/__tests__/**',
+  '**/*.test.ts',
+  '**/*.test.tsx',
+  '**/*.spec.ts',
 ]
 
 interface CachedMapEntry {
   head: string | undefined
   map: string
   generatedAt: number
+}
+
+/**
+ * 地图盘上缓存（跨进程/会话共享）：同一仓库的多个 worktree 会话（同 HEAD）复用同一份 map，
+ * 避免每个会话各自全量扫描（解析 3 万符号 ~25-36s/次 → N 会话卡顿）。
+ * - key = git HEAD（HEAD 变化 → 不同文件，自然失效）
+ * - 文件：~/.myyoda/cache/repo-map/maps/<sha1(key)>.map
+ * - 安全写：唯一 tmp + 目录锁（与符号缓存同款并发保护）
+ */
+const MAPS_CACHE_DIR = path.join(os.homedir(), '.myyoda', 'cache', 'repo-map', 'maps')
+/** 盘上 map 数量上限（LRU 按 mtime 淘汰，防无界膨胀） */
+const MAX_MAP_CACHE_FILES = 200
+
+function mapCacheKeyFor(cwd: string, head: string | undefined): string {
+  // 同 HEAD 的所有 worktree/主仓库共享一份 map；非 git 目录退化为 cwd
+  return head ?? cwd
+}
+
+function mapCacheFileFor(key: string): string {
+  const hash = createHash('sha1').update(key).digest('hex')
+  return path.join(MAPS_CACHE_DIR, `${hash}.map`)
 }
 
 /**
@@ -97,6 +127,16 @@ export class RepoMapService {
   /** 生成失败/无源码目录的冷却截止时间（避免每条消息都触发重建并白等） */
   private readonly cooldownUntil = new Map<string, number>()
   private static readonly FAILURE_COOLDOWN_MS = 5 * 60_000
+  /**
+   * 最近一次生成的地图（按 cwd，不限 HEAD）——SWR 兜底：HEAD 变化（commit/push）后
+   * 旧 map 继续可用，后台重扫新 HEAD，避免每次提交都全量重扫卡顿。
+   */
+  private readonly recentMapByCwd = new Map<string, { head: string | undefined; map: string; at: number }>()
+  /** recentMapByCwd 上限（LRU 淘汰最旧，防多项目长会话进程无界增长） */
+  private static readonly RECENT_MAP_MAX = 50
+  /** 同 cwd 后台重扫节流：HEAD 连续变化时最多 60s 重扫一次 */
+  private readonly lastRegenAtByCwd = new Map<string, number>()
+  private static readonly REGEN_THROTTLE_MS = 60_000
   /** git HEAD 解析器（测试可注入固定值，避免全量测试并发时被其他 git 操作干扰） */
   private readonly headProvider: (cwd: string) => string | undefined
 
@@ -104,19 +144,47 @@ export class RepoMapService {
     this.headProvider = options?.headProvider ?? this.getGitHead
   }
 
-  /** 同步读取已缓存地图（git HEAD 变化自动失效）；无缓存返回 undefined。 */
+  /**
+   * 同步读取已缓存地图（SWR）：
+   * 1. 精确 HEAD 命中 → 返回
+   * 2. HEAD 已变化但有最近地图 → 触发后台重扫（节流 60s）并返回旧地图（stale，0 等待）
+   * 3. 无任何缓存 → undefined（触发正常生成 + 2s 等待）
+   */
   getCachedMap(cwd: string): string | undefined {
     if (!cwd) return undefined
-    const cached = this.mapCache.get(cwd)
-    if (!cached) return undefined
-
     const head = this.headProvider(cwd)
-    // 非 git 目录（双方 head 均为 undefined）视为命中；只有 git HEAD 发生变化（或缓存被篡改）才失效
-    if (head !== cached.head) {
-      this.mapCache.delete(cwd)
-      return undefined
+    const key = mapCacheKeyFor(cwd, head)
+
+    const cached = this.mapCache.get(key)
+    if (cached) {
+      // 非 git 目录（双方 head 均为 undefined）视为命中；只有 git HEAD 发生变化才失效
+      if (head !== cached.head) {
+        this.mapCache.delete(key)
+        return undefined
+      }
+      return cached.map
     }
-    return cached.map
+
+    // 盘上缓存（其他进程/会话生成过）：命中回填内存并直接返回，跳过全量扫描
+    const disk = this.loadMapFromDisk(key)
+    if (disk !== undefined) {
+      this.mapCache.set(key, { head, map: disk, generatedAt: Date.now() })
+      this.recordRecentMap(cwd, head, disk)
+      return disk
+    }
+
+    // SWR：HEAD 变化（commit/push）但最近生成过 → 后台重扫新 HEAD，先返回旧地图（0 等待）
+    const recent = this.recentMapByCwd.get(cwd)
+    if (recent && recent.map) {
+      const lastRegen = this.lastRegenAtByCwd.get(cwd) ?? 0
+      if (Date.now() - lastRegen > RepoMapService.REGEN_THROTTLE_MS) {
+        this.lastRegenAtByCwd.set(cwd, Date.now())
+        this.warmUp(cwd)
+        console.log(`[RepoMap] HEAD 变化（${recent.head?.slice(0, 8)} → ${head?.slice(0, 8)}），后台重扫，先用旧地图（${recent.map.length} chars）`)
+      }
+      return recent.map
+    }
+    return undefined
   }
 
   /**
@@ -133,46 +201,66 @@ export class RepoMapService {
     if (!cwd || !this.isSuitableDirectory(cwd)) return undefined
     if (this.isInCooldown(cwd)) return undefined
 
+    const head = this.headProvider(cwd)
+    const key = mapCacheKeyFor(cwd, head)
     const cached = this.getCachedMap(cwd)
     if (cached !== undefined) return cached
 
+    // ensureMap 内部自带 pending 去重（同 key 生成中 → 复用），这里只负责等待
     const promise = this.ensureMap(cwd, mention)
-    this.pending.set(cwd, promise)
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), waitMs)),
-      ])
-    } finally {
-      if (this.pending.get(cwd) === promise) {
-        this.pending.delete(cwd)
-      }
-    }
+    return Promise.race([
+      promise,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), waitMs)),
+    ])
   }
 
   /** 后台预热（fire-and-forget），不阻塞调用方。 */
   warmUp(cwd: string, mention?: RepoMapMentionContext): void {
     if (!cwd || !this.isSuitableDirectory(cwd)) return
     if (this.isInCooldown(cwd)) return
-    if (this.mapCache.has(cwd) || this.pending.has(cwd)) return
-    const promise = this.ensureMap(cwd, mention)
-    this.pending.set(cwd, promise)
-    void promise.finally(() => {
-      if (this.pending.get(cwd) === promise) {
-        this.pending.delete(cwd)
-      }
-    })
+    const head = this.headProvider(cwd)
+    const key = mapCacheKeyFor(cwd, head)
+    if (this.mapCache.has(key) || this.pending.has(key)) return
+    void this.ensureMap(cwd, mention)
   }
 
   private async ensureMap(cwd: string, mention?: RepoMapMentionContext): Promise<string | undefined> {
     const head = this.headProvider(cwd)
+    const key = mapCacheKeyFor(cwd, head)
 
-    // 再次检查缓存（并发请求时避免重复生成）
-    const cached = this.mapCache.get(cwd)
-    if (cached && (head === undefined || head === cached.head)) {
-      return cached.map
+    // 精确 key 缓存检查（不走 getCachedMap 的 SWR 分支——SWR 返回旧 map 会导致这里提前返回、新 map 永不生成）
+    const exact = this.mapCache.get(key)
+    if (exact && (head === undefined || head === exact.head)) {
+      return exact.map
+    }
+    const disk = this.loadMapFromDisk(key)
+    if (disk !== undefined) {
+      this.mapCache.set(key, { head, map: disk, generatedAt: Date.now() })
+      this.recordRecentMap(cwd, head, disk)
+      return disk
     }
 
+    // pending 去重：同 key 已在生成中 → 复用（warmUp 与首条消息并发触发时只生成一次）
+    const existing = this.pending.get(key)
+    if (existing) return existing
+
+    const promise = this.generateMap(cwd, key, head, mention)
+    this.pending.set(key, promise)
+    try {
+      return await promise
+    } finally {
+      if (this.pending.get(key) === promise) {
+        this.pending.delete(key)
+      }
+    }
+  }
+
+  private async generateMap(
+    cwd: string,
+    key: string,
+    head: string | undefined,
+    mention?: RepoMapMentionContext,
+  ): Promise<string | undefined> {
     try {
       const map = await Promise.race([
         getRepoMap(cwd, {
@@ -193,14 +281,99 @@ export class RepoMapService {
         return undefined
       }
 
-      this.mapCache.set(cwd, { head, map, generatedAt: Date.now() })
+      this.mapCache.set(key, { head, map, generatedAt: Date.now() })
+      // SWR 记录：按 cwd 保存最近地图（HEAD 变化时旧 map 兜底）
+      this.recordRecentMap(cwd, head, map)
+      // 无 mention 聚焦的结果才落盘（聚焦版会因对话上下文变化而不同，落盘会污染共享缓存）
+      if (!mention?.mentionedFiles?.size && !mention?.mentionedIdents?.size) {
+        this.saveMapToDisk(key, map)
+      }
       this.cooldownUntil.delete(cwd)
-      console.log(`[RepoMap] 已生成代码地图 ${cwd} (${map.length} chars, ${this.mapCache.size} 个目录缓存)`)
+      console.log(`[RepoMap] 已生成代码地图 ${cwd} (${map.length} chars, ${this.mapCache.size} 个目录缓存, key=${key.slice(0, 12)})`)
       return map
     } catch (error) {
       this.cooldownUntil.set(cwd, Date.now() + RepoMapService.FAILURE_COOLDOWN_MS)
       console.warn('[RepoMap] 生成失败（进入 5 分钟冷却）:', error)
       return undefined
+    }
+  }
+
+  /** 记录最近地图（LRU 上限淘汰最旧） */
+  private recordRecentMap(cwd: string, head: string | undefined, map: string): void {
+    this.recentMapByCwd.set(cwd, { head, map, at: Date.now() })
+    if (this.recentMapByCwd.size > RepoMapService.RECENT_MAP_MAX) {
+      let oldestKey: string | undefined
+      let oldestAt = Infinity
+      for (const [k, v] of this.recentMapByCwd) {
+        if (v.at < oldestAt) {
+          oldestAt = v.at
+          oldestKey = k
+        }
+      }
+      if (oldestKey) this.recentMapByCwd.delete(oldestKey)
+    }
+  }
+
+  /** 读盘上 map 缓存（跨进程共享）；不存在/过短返回 undefined */
+  private loadMapFromDisk(key: string): string | undefined {
+    try {
+      const file = mapCacheFileFor(key)
+      const raw = fs.readFileSync(file, 'utf-8')
+      if (!raw || raw.length < 120) return undefined
+      return raw
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 安全写盘上 map 缓存（唯一 tmp + 目录锁；锁残留 >10s 自愈）；LRU 清理旧文件 */
+  private saveMapToDisk(key: string, map: string): void {
+    try {
+      fs.mkdirSync(MAPS_CACHE_DIR, { recursive: true })
+      const target = mapCacheFileFor(key)
+      const lock = `${target}.lock`
+      let acquired = false
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          fs.mkdirSync(lock)
+          acquired = true
+          break
+        } catch {
+          const st = fs.statSync(lock)
+          if (st && Date.now() - st.mtimeMs > 10_000) {
+            fs.rmdirSync(lock)
+            continue
+          }
+          break
+        }
+      }
+      if (!acquired) return
+      try {
+        const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+        fs.writeFileSync(tmp, map, 'utf-8')
+        fs.renameSync(tmp, target)
+      } finally {
+        fs.rmdirSync(lock)
+      }
+      this.trimMapDiskCache()
+    } catch {
+      // 盘上缓存失败不影响主流程
+    }
+  }
+
+  /** 盘上 map LRU：超过上限按 mtime 淘汰最旧 */
+  private trimMapDiskCache(): void {
+    try {
+      const files = fs.readdirSync(MAPS_CACHE_DIR)
+        .filter((name) => name.endsWith('.map'))
+        .map((name) => ({ name, mtime: fs.statSync(path.join(MAPS_CACHE_DIR, name)).mtimeMs }))
+        .sort((a, b) => a.mtime - b.mtime)
+      while (files.length > MAX_MAP_CACHE_FILES) {
+        const oldest = files.shift()
+        if (oldest) fs.rmSync(path.join(MAPS_CACHE_DIR, oldest.name), { force: true })
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -212,8 +385,21 @@ export class RepoMapService {
     return false
   }
 
-  /** 目录可用性快速判断：存在且非空（含至少 MIN_SOURCE_FILES 个候选源码文件时才走全量扫描） */
+  /** 目录可用性快速判断：存在且非空（含至少 MIN_SOURCE_FILES 个候选源码文件时才走全量扫描）。
+   * 结果短缓存 30s（目录属性几乎不变），避免每条消息 readdirSync 阻塞主进程。 */
+  private readonly suitableCache = new Map<string, { ok: boolean; at: number }>()
+  private static readonly SUITABLE_CACHE_TTL_MS = 30_000
+
   private isSuitableDirectory(cwd: string): boolean {
+    const now = Date.now()
+    const hit = this.suitableCache.get(cwd)
+    if (hit && now - hit.at < RepoMapService.SUITABLE_CACHE_TTL_MS) return hit.ok
+    const ok = this.checkSuitableDirectory(cwd)
+    this.suitableCache.set(cwd, { ok, at: now })
+    return ok
+  }
+
+  private checkSuitableDirectory(cwd: string): boolean {
     try {
       const stat = fs.statSync(cwd)
       if (!stat.isDirectory()) return false
@@ -241,18 +427,37 @@ export class RepoMapService {
     }
   }
 
+  /**
+   * 地图 key 解析（设计决策 2026-08-12）：
+   * **整个项目的所有 worktree/本地分支共用 main 分支的 repo map**。
+   * - 本地 commit/push（worktree HEAD 变化）不触发重扫（key 不变，不卡顿）
+   * - 仅 main 同步新代码（pull/checkout 更新 refs/heads/main）时 key 变化 → 后台增量重扫
+   * - 无 main/master 分支的仓库退化为当前 HEAD；非 git 目录返回 undefined（key=cwd）
+   */
   private getGitHead(cwd: string): string | undefined {
+    // 快检：非 git 目录（无 .git 目录/文件）直接返回，避免每条消息 3 次 execSync 失败阻塞主进程
     try {
-      const out = execSync('git rev-parse HEAD', {
-        cwd,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 5_000,
-      })
-      return out.trim()
+      const gitMarker = path.join(cwd, '.git')
+      const st = fs.statSync(gitMarker)
+      if (!st.isDirectory() && !st.isFile()) return undefined
     } catch {
       return undefined
     }
+    for (const ref of ['refs/heads/main', 'refs/heads/master', 'HEAD']) {
+      try {
+        const out = execSync(`git rev-parse ${ref}`, {
+          cwd,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 5_000,
+        })
+        const resolved = out.trim()
+        if (resolved) return resolved
+      } catch {
+        // try next ref
+      }
+    }
+    return undefined
   }
 }
 

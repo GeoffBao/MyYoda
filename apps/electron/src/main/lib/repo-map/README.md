@@ -27,6 +27,14 @@ Aider repo map 的 TypeScript 实现）。**选择 vendor 化而非 npm 依赖**
 - `apps/electron/resources/repo-map/`：27 语言 tags.scm + 核心 tree-sitter.wasm
   （electron-builder extraResources 分发；打包前 `sync:runtime-deps` 会同步
   web-tree-sitter 到 apps/electron/node_modules）
+- **内置语言 wasm（10 种，2026-08-12）**：typescript/tsx/javascript/python/go/java/c/cpp/rust/php
+  （≈7.1MB，离线可用；来源 npm registry tarball，已逐语言实测与内置 web-tree-sitter ABI 兼容）
+  - **tree-sitter-dart 不内置**：npm 最新版（1.x）与内置 web-tree-sitter 0.26.12 ABI 不兼容
+    （Language.load 失败），dart 项目可手动放置兼容版 wasm 到 `~/.myyoda/cache/tree-sitter/`
+- **CDN 回退链**：unpkg → jsdelivr → fastly.jsdelivr（24h 失败冷却 + 10s 超时 + 魔数校验）
+- **地图盘上缓存**（2026-08-12）：`~/.myyoda/cache/repo-map/maps/<sha1(HEAD)>.map`，
+  同 HEAD 的多 worktree 会话/多实例共享（key=HEAD 而非 cwd，避免每个 worktree 重复全量扫描）；
+  LRU 200 个文件；唯一 tmp + 目录锁安全写
 
 ## 缓存
 

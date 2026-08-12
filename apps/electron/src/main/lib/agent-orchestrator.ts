@@ -111,6 +111,25 @@ type RecoverableAgentQueryOptions = {
 
 // ===== 工具函数 =====
 
+// getMainRepoRoot 短缓存（主仓库路径几乎不变，避免每条消息 execSync git）
+const mainRepoRootCache = new Map<string, { root: string | null; at: number }>()
+const MAIN_REPO_ROOT_CACHE_TTL_MS = 5 * 60_000
+async function resolveMainRepoRootCached(cwd: string): Promise<string | null> {
+  const hit = mainRepoRootCache.get(cwd)
+  if (hit && Date.now() - hit.at < MAIN_REPO_ROOT_CACHE_TTL_MS) return hit.root
+  const root = await getMainRepoRoot(cwd)
+  mainRepoRootCache.set(cwd, { root, at: Date.now() })
+  if (mainRepoRootCache.size > 100) {
+    let oldestKey: string | undefined
+    let oldestAt = Infinity
+    for (const [k, v] of mainRepoRootCache) {
+      if (v.at < oldestAt) { oldestAt = v.at; oldestKey = k }
+    }
+    if (oldestKey) mainRepoRootCache.delete(oldestKey)
+  }
+  return root
+}
+
 function sdkPermissionModeForMyYodaMode(mode: MyYodaPermissionMode): MyYodaPermissionMode {
   // Pi runtime 直接使用 MyYoda 权限模式，不需要 Claude SDK 模式映射。
   return mode
@@ -1254,9 +1273,12 @@ export class AgentOrchestrator {
       // 11.4 注入仓库代码地图（repo map）：仅绑定 Project 的会话（cwd 为 worktree/项目代码目录），
       // 且编码优化总开关开启时注入。服务层按 cwd + git HEAD 缓存：同一 worktree 内多会话共享；
       // 首条消息最多等 2s，超时后台继续生成。
+      // 先 warmUp（幂等）：盘上缓存命中/已有生成中任务则 no-op；未生成则立即后台开始，
+      // 让用户在输入后续消息前地图就绪（配合 HEAD 共享 + 盘上缓存，多会话只扫一次）。
       const optimizedCodingEnabled = resolveOptimizedCodingEnabled(appSettings)
       let repoMapBlock: string | undefined
       if (projectContext && agentCwd && optimizedCodingEnabled) {
+        repoMapService.warmUp(agentCwd)
         repoMapBlock = await repoMapService.getRepoMapForPrompt(
           agentCwd,
           extractMentionContext(userMessage, agentCwd),
@@ -1609,7 +1631,7 @@ export class AgentOrchestrator {
         : undefined
       const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId)
       const piThinkingLevel = resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
-      const systemPromptAppend = buildSystemPrompt({
+      let systemPromptAppend = buildSystemPrompt({
         agentRuntime,
         workspaceName: workspace?.name,
         workspaceSlug,
@@ -1633,6 +1655,16 @@ export class AgentOrchestrator {
 ## Work 模式任务上下文
 
 ${workContext}` : '')
+
+      // CRG 共享图谱引导（worktree 会话）：图谱建在主仓库，repo_root 必须传主仓库路径，
+      // 避免每个 worktree 各自建全量图谱（占空间 + 首次 build 卡顿）；差异化分析用 detect_changes。
+      if (projectContext && agentCwd && agentCwdSource === 'worktree' && optimizedCodingEnabled) {
+        const mainRepo = await resolveMainRepoRootCached(agentCwd)
+        if (mainRepo) {
+          const crgGuidance = `\n\n## code_review_graph 共享图谱\n\n当前会话位于 worktree（${agentCwd}），code_review_graph 的图谱建在主仓库。调用其工具时：\n- **repo_root 一律传 \`${mainRepo}\`**（勿传 worktree 路径，避免重复建图；图谱按主仓库构建/共享）\n- 首次使用请先在主仓库运行 \`code-review-graph build\`（可用 \`--data-dir\` 指定共享目录）\n- 分析当前分支改动差异用 detect_changes（base 传 main）\n- 工作区中的改动由 update 增量索引（只解析差异文件）`
+          systemPromptAppend += crgGuidance
+        }
+      }
       const handleSessionId = (sdkSessionId: string, piSessionFile?: string): void => {
         // 仅在 session_id 真正变化时才持久化。SDK v2 几乎每条消息都会回调 onSessionId，
         // capturedSdkSessionId 已初始化为 existingSdkSessionId，并在 recovery 时同步重置。
