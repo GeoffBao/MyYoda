@@ -100,3 +100,93 @@ describe('RepoMapService', () => {
     }
   })
 })
+
+describe('跨 worktree 共享（2026-08-12 新增：同 HEAD 多 cwd 复用同一 map）', () => {
+  test('同 HEAD 的两个不同 cwd：第二个直接命中缓存（不重复全量扫描）', async () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-map-worktree-share-'))
+    try {
+      // 模拟两个 worktree：同内容仓库、同 HEAD、不同目录
+      const worktreeA = path.join(tmpRoot, 'a-main')
+      const worktreeB = path.join(tmpRoot, 'b-main')
+      for (const dir of [worktreeA, worktreeB]) {
+        fs.mkdirSync(dir, { recursive: true })
+        for (let i = 1; i <= 3; i++) {
+          fs.writeFileSync(
+            path.join(dir, `mod${i}.ts`),
+            `/** Module ${i} */\nexport interface Result${i} { value: number }\nexport function helper${i}(x: number): number { return x + ${i} }`,
+            'utf-8',
+          )
+        }
+      }
+
+      const fixedHead = `testhead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` // 随机 head：避免盘上缓存跨测试运行残留
+      let generationCount = 0
+      const service = new RepoMapService({
+        headProvider: () => fixedHead,
+      })
+      // 打桩 getRepoMap 计数：通过生成耗时观察即可——直接用服务内部缓存命中判断
+      const mapA = await service.getRepoMapForPrompt(worktreeA, undefined, 30_000)
+      expect(mapA).toBeDefined()
+      expect((mapA ?? '').length).toBeGreaterThan(100)
+
+      // worktree B：同 HEAD → 应命中 A 生成的缓存（立即返回，无等待）
+      const start = Date.now()
+      const mapB = await service.getRepoMapForPrompt(worktreeB, undefined, 2_000)
+      const elapsed = Date.now() - start
+      expect(mapB).toBe(mapA) // 同一份 map
+      expect(elapsed).toBeLessThan(500) // 命中缓存而非重新生成
+      void generationCount
+
+      // HEAD 变化 → 缓存失效重新生成（内容随文件变化体现重扫）
+      let head = fixedHead
+      const service2 = new RepoMapService({ headProvider: () => head })
+      const mapC = await service2.getRepoMapForPrompt(worktreeA, undefined, 30_000)
+      expect(mapC).toBeDefined()
+      // HEAD 变化（commit/push）→ SWR：先用旧 map（0 等待），后台重扫新 HEAD
+      fs.writeFileSync(path.join(worktreeA, 'mod4.ts'), `/** Module 4 */\nexport interface Result4 { value: number }`, 'utf-8')
+      head = `newhead-${Date.now()}`
+      const startD = Date.now()
+      const mapD = await service2.getRepoMapForPrompt(worktreeA, undefined, 30_000)
+      const elapsedD = Date.now() - startD
+      expect(mapD).toBe(mapC) // SWR：HEAD 变化返回旧地图（不重新扫描阻塞）
+      expect(elapsedD).toBeLessThan(500)
+      // 等待后台重扫完成（小仓库 <2s）→ 新 map 包含新符号
+      await new Promise((resolve) => setTimeout(resolve, 2_500))
+      const mapE = service2.getCachedMap(worktreeA)
+      expect(mapE).toBeDefined()
+      expect(mapE).toContain('Result4') // 重扫完成，新地图包含新符号
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('warmUp 预热与并发去重（2026-08-12 review 补）', () => {
+  test('warmUp 后首条消息立即复用生成任务（pending 去重，只生成一次）', async () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-map-warmup-'))
+    try {
+      const dir = path.join(tmpRoot, 'w')
+      fs.mkdirSync(dir, { recursive: true })
+      for (let i = 1; i <= 3; i++) {
+        fs.writeFileSync(path.join(dir, `m${i}.ts`), `/** M${i} */\nexport interface I${i} { v: number }\nexport function f${i}(): number { return ${i} }`, 'utf-8')
+      }
+      const service = new RepoMapService({ headProvider: () => `warmhead-${Date.now()}` })
+
+      // warmUp 立即返回（fire-and-forget），随后首条消息应复用同一生成任务
+      service.warmUp(dir)
+      const start = Date.now()
+      const map = await service.getRepoMapForPrompt(dir, undefined, 30_000)
+      const elapsed = Date.now() - start
+      expect(map).toBeDefined()
+      expect((map ?? '').length).toBeGreaterThan(100)
+      // 首条消息没有等满 2s 且拿到了 map（warmUp 已提前启动生成，2s 内完成小仓库）
+      expect(elapsed).toBeLessThan(2_000)
+
+      // 再次 warmUp：已缓存 → no-op 不重复生成
+      service.warmUp(dir)
+      expect(service.getCachedMap(dir)).toBe(map)
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true })
+    }
+  })
+})

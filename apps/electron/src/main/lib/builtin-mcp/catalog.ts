@@ -66,7 +66,7 @@ function resolveAvailability(
       available,
       availabilityReason: available
         ? undefined
-        : '需要安装 code-review-graph：把此提示发给 Agent，让 AI 帮你安装并验证；或手动 pip install code-review-graph',
+        : '需要安装 code-review-graph：把此提示发给 Agent，让 AI 帮你安装并验证；或手动 pip install code-review-graph。首次使用请在**主仓库根**运行 code-review-graph build（worktree 会话共享同一图谱，避免每个 worktree 重复建图）',
     }
   }
 
