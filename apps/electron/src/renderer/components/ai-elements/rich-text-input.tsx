@@ -346,16 +346,16 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
     onHtmlChangeRef.current?.(html)
 
     if (lineCheckTimerRef.current !== null) {
-          clearTimeout(lineCheckTimerRef.current)
-        }
-        lineCheckTimerRef.current = setTimeout(() => {
-          lineCheckTimerRef.current = null
-          const nextExpanded = countEditorLines(ed) > 5
-          if (nextExpanded !== isExpandedRef.current) {
-            isExpandedRef.current = nextExpanded
-            setIsExpanded(nextExpanded)
-          }
-        }, 150)
+      clearTimeout(lineCheckTimerRef.current)
+    }
+    lineCheckTimerRef.current = setTimeout(() => {
+      lineCheckTimerRef.current = null
+      const nextExpanded = countEditorLines(ed) > 5
+      if (nextExpanded !== isExpandedRef.current) {
+        isExpandedRef.current = nextExpanded
+        setIsExpanded(nextExpanded)
+      }
+    }, 150)
     return markdown
   }, [onChange, richTextEnabled])
 
