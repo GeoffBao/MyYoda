@@ -1296,7 +1296,7 @@ export class AgentOrchestrator {
       }
 
       // Pi SDK 没有 Claude Agent SDK 的 mcpServers 参数；Claude 路径保持原生 MCP 不变，
-      // Pi 路径由 Proma 主进程连接用户 MCP server，并转换为 Pi customTools。
+      // Pi 路径由 MyYoda 主进程连接用户 MCP server，并转换为 Pi customTools。
       if (!toolsDisabled && Object.keys(mcpServers).length > 0) {
         try {
           piMcpTools = await buildPiMcpTools(mcpServers)

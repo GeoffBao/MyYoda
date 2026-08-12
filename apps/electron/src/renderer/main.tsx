@@ -127,7 +127,7 @@ const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !
 
 // 仅主窗口禁用页面级滚动；独立浮窗各自管理自己的内容高度和滚动。
 if (isMainWindow) {
-  document.documentElement.classList.add('proma-main-window')
+  document.documentElement.classList.add('myyoda-main-window')
 }
 
 /**

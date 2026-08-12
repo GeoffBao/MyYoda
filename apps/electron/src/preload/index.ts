@@ -1404,7 +1404,7 @@ export interface ElectronAPI {
   cancelVoiceDictation: (input: VoiceDictationStopInput) => Promise<void>
   /** 输出最终语音文本 */
   commitVoiceDictation: (input: VoiceDictationCommitInput) => Promise<VoiceDictationCommitResult>
-  /** 更新 Proma 输入框中的临时识别文本 */
+  /** 更新 MyYoda 输入框中的临时识别文本 */
   previewVoiceDictation: (input: VoiceDictationPreviewInput) => Promise<void>
   /** 隐藏语音输入窗口 */
   hideVoiceDictation: () => Promise<void>

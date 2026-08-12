@@ -24,7 +24,6 @@ let projectRepositoryModule: ProjectRepositoryModule
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 
 mockElectronModule({
   app: {
@@ -42,7 +41,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-agent-workspace-manager-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  process.env.PROMA_DEV = '0'
+  process.env.MYYODA_DEV = '0'
   configPaths = await import('./config-paths')
   manager = await import('./agent-workspace-manager')
   projectRepositoryModule = await import('./project-repository')
@@ -64,11 +63,6 @@ afterAll(() => {
     delete process.env.MYYODA_DEV
   } else {
     process.env.MYYODA_DEV = originalMyyodaDev
-  }
-  if (originalPromaDev === undefined) {
-    delete process.env.PROMA_DEV
-  } else {
-    process.env.PROMA_DEV = originalPromaDev
   }
   rmSync(tempHome, { recursive: true, force: true })
 })

@@ -6,7 +6,6 @@ export function buildMyYodaBrowserUserAgent(defaultUserAgent: string, myyodaVers
   const base = defaultUserAgent
     .replace(/\s+Electron\/[^\s]+/gi, '')
     .replace(/\s+MyYoda\/[^\s]+/gi, '')
-    .replace(/\s+Proma\/[^\s]+/gi, '')
     .trim()
   return `${base} MyYoda/${myyodaVersion}`
 }

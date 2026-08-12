@@ -101,12 +101,12 @@ export interface PlanningNativeSyncConflict {
   connectionId?: string
   profileId?: string
   entity: PlanningNativeSyncEntity
-  promaEntityId: string
+  myyodaEntityId: string
   title: string
   kind: 'changed' | 'deleted'
   detectedAt: number
 }
-export type ResolvePlanningNativeSyncConflictInput = { id: string; resolution: 'keep_proma' | 'keep_system' }
+export type ResolvePlanningNativeSyncConflictInput = { id: string; resolution: 'keep_myyoda' | 'keep_system' }
 
 export interface PlanningGroup {
   id: string

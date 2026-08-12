@@ -10,7 +10,6 @@ const sendMock = mock(() => undefined)
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 
 // chat-service.ts 间接 import conversation-manager / attachment-service 等模块，
 // 这些模块可能在加载时触碰 Electron API（对齐 channel-runtime-api-key.test.ts
@@ -44,7 +43,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-chat-service-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  process.env.PROMA_DEV = '0'
+  process.env.MYYODA_DEV = '0'
   writeChannels([
     {
       id: 'claude-oauth-1',
@@ -64,8 +63,6 @@ afterAll(() => {
   process.env.HOME = originalHome
   if (originalMyyodaDev === undefined) delete process.env.MYYODA_DEV
   else process.env.MYYODA_DEV = originalMyyodaDev
-  if (originalPromaDev === undefined) delete process.env.PROMA_DEV
-  else process.env.PROMA_DEV = originalPromaDev
   rmSync(tempHome, { recursive: true, force: true })
 })
 

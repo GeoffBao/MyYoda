@@ -1,7 +1,7 @@
 /**
  * Pi Agent SDK 适配器
  *
- * Proma 内部继续使用 SDKMessage 兼容协议，避免渲染层、Jotai 状态、
+ * MyYoda 内部继续使用 SDKMessage 兼容协议，避免渲染层、Jotai 状态、
  * JSONL 持久化和历史会话展示在 SDK 迁移时一起改名。
  */
 
@@ -61,7 +61,7 @@ import {
   createAgentRuntimeGuard,
   type AgentRuntimeGuard,
 } from '../agent-runtime-guards'
-import { createPromaAgentsFilesOverride } from './pi-resource-loader-overrides'
+import { createMyYodaAgentsFilesOverride } from './pi-resource-loader-overrides'
 import { createCodexFastModeExtension, withCodexFastModeServiceTier } from './pi-codex-request-settings'
 import { createDeepSeekReasoningRequestExtension } from './pi-deepseek-reasoning-request-settings'
 import { createOpenAIReasoningRequestExtension } from './pi-openai-reasoning-request-settings'
@@ -108,7 +108,7 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   provider: ProviderType
   /** 编码优化总开关：控制 D2（DeepSeek 提前压缩阈值差异化）等参数 */
   optimizedCoding?: boolean
-  /** OAuth credential coordination key; equals the selected Proma channel id. */
+  /** OAuth credential coordination key; equals the selected MyYoda channel id. */
   channelId?: string
   channelName?: string
   maxTurns?: number
@@ -136,7 +136,7 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   outputFormat?: JsonSchemaOutputFormat
   /** 无副作用文本生成模式：不向 Pi Agent 暴露任何自定义工具。 */
   toolPolicy?: 'none'
-  /** Proma 聚合的附加目录；Pi 内置工具 factory 不接收多 root 参数，编排层会把它们注入 systemPrompt。 */
+  /** MyYoda 聚合的附加目录；Pi 内置工具 factory 不接收多 root 参数，编排层会把它们注入 systemPrompt。 */
   additionalDirectories?: string[]
   additionalSkillPaths?: string[]
   /** 当前用户输入显式引用的 Skill name（兼容历史 slug 已在编排层归一化） */
@@ -161,11 +161,11 @@ export interface PiAgentQueryOptions extends AgentQueryInput {
   codexFastMode?: boolean
   /** Pi 的 OAuth credential store 使用真实 expires 和 refresh，不读取 ~/.pi。 */
   codexOAuthCredentials?: CodexOAuthCredentials
-  /** Pi 运行中刷新 OAuth 后，将新凭据回写到 Proma 渠道存储。 */
+  /** Pi 运行中刷新 OAuth 后，将新凭据回写到 MyYoda 渠道存储。 */
   onCodexOAuthCredentialsRefreshed?: (credentials: CodexOAuthCredentials) => void | Promise<void>
   /** xAI OAuth credential store 使用真实 expires 和 refresh，不读取 ~/.pi。 */
   xaiOAuthCredentials?: XaiOAuthCredentials
-  /** Pi 运行中刷新 xAI OAuth 后，将新凭据回写到 Proma 渠道存储。 */
+  /** Pi 运行中刷新 xAI OAuth 后，将新凭据回写到 MyYoda 渠道存储。 */
   onXaiOAuthCredentialsRefreshed?: (credentials: XaiOAuthCredentials) => void | Promise<void>
   /** 会话级 OpenAI（Codex OAuth / Responses API）思考深度。 */
   openAIThinkingLevel?: AgentThinkingLevel
@@ -196,7 +196,7 @@ interface PendingInterruptPrompt {
   rejectAccepted: (error: unknown) => void
 }
 
-interface PromaTaskItem {
+interface MyYodaTaskItem {
   id: string
   subject: string
   status: 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled' | 'error' | 'deleted'
@@ -647,20 +647,20 @@ function buildAllowedSkillRoots(additionalSkillPaths: string[] | undefined): str
     .filter((path, index, arr) => arr.indexOf(path) === index)
 }
 
-function isPromaSkillPath(path: string | undefined, allowedRoots: string[]): boolean {
+function isMyYodaSkillPath(path: string | undefined, allowedRoots: string[]): boolean {
   if (!path || allowedRoots.length === 0) return false
   const guardedPath = resolveGuardedRealPath(path)
   return allowedRoots.some((root) => isPathWithinRoot(guardedPath, root))
 }
 
-export function createPromaSkillsOverride(
+export function createMyYodaSkillsOverride(
   additionalSkillPaths: string[] | undefined,
   gatedSkillSlugs: readonly string[] = [],
 ): (base: SkillLoadResult) => SkillLoadResult {
   const allowedRoots = buildAllowedSkillRoots(additionalSkillPaths)
   return (base) => ({
     skills: base.skills.filter((skill) => {
-      const inWorkspace = isPromaSkillPath(skill.filePath, allowedRoots) || isPromaSkillPath(skill.baseDir, allowedRoots)
+      const inWorkspace = isMyYodaSkillPath(skill.filePath, allowedRoots) || isMyYodaSkillPath(skill.baseDir, allowedRoots)
       if (!inWorkspace) return false
       // 编码优化总开关关闭时，屏蔽跟随开关的预置 skill（预置但默认不可见）
       if (gatedSkillSlugs.length > 0) {
@@ -669,7 +669,7 @@ export function createPromaSkillsOverride(
       }
       return true
     }),
-    diagnostics: base.diagnostics.filter((diagnostic) => isPromaSkillPath(diagnostic.path, allowedRoots)),
+    diagnostics: base.diagnostics.filter((diagnostic) => isMyYodaSkillPath(diagnostic.path, allowedRoots)),
   })
 }
 
@@ -729,7 +729,7 @@ interface PreparedPromptWithSkills {
   activations: SkillActivation[]
 }
 
-async function preparePromptWithPromaSkills(
+async function preparePromptWithMyYodaSkills(
   resourceLoader: ResourceLoader,
   prompt: string,
   explicitSkillNames?: string[],
@@ -1054,7 +1054,7 @@ function stringFromInput(input: Record<string, unknown>, keys: string[], fallbac
   return fallback
 }
 
-function normalizeTaskStatus(value: unknown, fallback: PromaTaskItem['status']): PromaTaskItem['status'] {
+function normalizeTaskStatus(value: unknown, fallback: MyYodaTaskItem['status']): MyYodaTaskItem['status'] {
   if (
     value === 'pending' ||
     value === 'in_progress' ||
@@ -1075,8 +1075,8 @@ function normalizeStringArray(value: unknown): string[] | undefined {
   return items.length > 0 ? items : undefined
 }
 
-function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOptions['canUseTool']): ToolDefinition[] {
-  const tasks = new Map<string, PromaTaskItem>()
+function buildMyYodaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOptions['canUseTool']): ToolDefinition[] {
+  const tasks = new Map<string, MyYodaTaskItem>()
   let nextTaskId = 1
 
   const definitions = [
@@ -1145,7 +1145,7 @@ function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOp
       async execute(_toolCallId, params) {
         const input = params as Record<string, unknown>
         const id = stringFromInput(input, ['id', 'taskId', 'task_id'], String(nextTaskId++))
-        const task: PromaTaskItem = {
+        const task: MyYodaTaskItem = {
           id,
           subject: stringFromInput(input, ['subject', 'title', 'name'], `任务 #${id}`),
           status: 'pending',
@@ -1183,7 +1183,7 @@ function buildPromaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryOp
         const id = stringFromInput(input, ['taskId', 'task_id', 'id'])
         if (!id) throw new Error('taskId 必填')
         const existing = tasks.get(id)
-        const task: PromaTaskItem = {
+        const task: MyYodaTaskItem = {
           id,
           subject: stringFromInput(input, ['subject', 'title', 'name'], existing?.subject ?? `任务 #${id}`),
           status: normalizeTaskStatus(input.status, existing?.status ?? 'pending'),
@@ -1354,7 +1354,7 @@ function createWslBashOperations(runtimeEnv: AgentRuntimeEnv): BashOperations {
   }
 }
 
-function createPromaBashToolOptions(runtimeEnv: AgentRuntimeEnv | undefined): BashToolOptions | undefined {
+function createMyYodaBashToolOptions(runtimeEnv: AgentRuntimeEnv | undefined): BashToolOptions | undefined {
   if (!runtimeEnv) return undefined
 
   const spawnHook: NonNullable<BashToolOptions['spawnHook']> = ({ command, cwd, env }) => ({
@@ -1384,7 +1384,7 @@ function buildBuiltinToolDefinitions(
 ): ToolDefinition[] {
   const definitions = [
     sdk.createReadToolDefinition(cwd),
-    sdk.createBashToolDefinition(cwd, createPromaBashToolOptions(runtimeEnv)),
+    sdk.createBashToolDefinition(cwd, createMyYodaBashToolOptions(runtimeEnv)),
     sdk.createEditToolDefinition(cwd),
     sdk.createWriteToolDefinition(cwd),
     sdk.createGrepToolDefinition(cwd),
@@ -1429,7 +1429,7 @@ export function installRuntimeGuardHooks(session: AgentSession, guard: AgentRunt
   session.agent.prepareNextTurnWithContext = async (context, signal) => {
     const previousSnapshot = await previousPrepareNextTurnWithContext?.(context, signal)
     if (guard.shouldStopBeforeNextTurn()) {
-      // Pi 的 steer/follow-up 队列在 turn 完成后才 drain；达到 Proma 上限时必须在这里清空，
+      // Pi 的 steer/follow-up 队列在 turn 完成后才 drain；达到 MyYoda 上限时必须在这里清空，
       // 否则纯文本 turn 之后追加的队列消息会绕过 afterToolCall 继续进入下一轮。
       session.agent.clearAllQueues()
     }
@@ -1527,7 +1527,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
               input.canUseTool,
               input.runtimeEnv,
             ),
-            ...buildPromaProductToolDefinitions(sdk, input.canUseTool),
+            ...buildMyYodaProductToolDefinitions(sdk, input.canUseTool),
             ...wrapCustomToolDefinitions(input.customTools, input.canUseTool),
           ]
 
@@ -1585,12 +1585,12 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         settingsManager,
         noSkills: true,
         additionalSkillPaths: input.additionalSkillPaths ?? [],
-        skillsOverride: createPromaSkillsOverride(
+        skillsOverride: createMyYodaSkillsOverride(
           input.additionalSkillPaths,
           // 编码优化总开关关闭时屏蔽 gated 预置 skill；开启时放行
           input.optimizedCoding ? [] : OPTIMIZED_CODING_GATED_SKILLS,
         ),
-        agentsFilesOverride: createPromaAgentsFilesOverride(),
+        agentsFilesOverride: createMyYodaAgentsFilesOverride(),
         ...(model.reasoning && extensionFactories.length > 0 && { extensionFactories }),
         systemPromptOverride: () => input.systemPrompt,
       })
@@ -1762,7 +1762,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
                 (event.message as AssistantMessage).stopReason === 'error' || shouldDeferNativeOverflow
               )
               if (shouldDeferAssistantTerminal && converted?.type === 'assistant' && assistantUuid) {
-                // Native retry 会丢弃该失败 assistant；不应消耗 Proma 的 turn/budget 配额。
+                // Native retry 会丢弃该失败 assistant；不应消耗 MyYoda 的 turn/budget 配额。
                 // 关键：此处不能重置 UUID。retry 后的新 partial/final 必须原地替换此前
                 // 已经展示的 partial，避免用户同时看到断流残片和恢复后的完整回答。
                 retryTerminalGate.defer({
@@ -1988,7 +1988,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
             try {
               preparedPrompt = promptInput.skipSkillExpansion
                 ? { content: promptInput.content, activations: [] }
-                : await preparePromptWithPromaSkills(
+                : await preparePromptWithMyYodaSkills(
                   resourceLoader,
                   promptInput.content,
                   promptInput.skillMentions,
@@ -2124,7 +2124,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       throw new Error(stopOverride?.errors[0] ?? 'Agent 已达到运行限制，无法继续追加消息')
     }
     const preparedPrompt = active.resourceLoader
-      ? await preparePromptWithPromaSkills(
+      ? await preparePromptWithMyYodaSkills(
         active.resourceLoader,
         message.message.content,
         options?.skillMentions,
@@ -2186,7 +2186,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
   }
 
   async setPermissionMode(_sessionId: string, _mode: string): Promise<void> {
-    // Proma 权限由工具包装层实时读取 sessionPermissionModes，自身无需同步给 Pi。
+    // MyYoda 权限由工具包装层实时读取 sessionPermissionModes，自身无需同步给 Pi。
   }
 
   dispose(): void {

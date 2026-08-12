@@ -3,7 +3,7 @@ import type { BrowserExecutionSource, BrowserOperationStatus, BrowserTraceAction
 import { AGENT_IPC_CHANNELS } from '@myyoda/shared'
 import { assertSafeBrowserDestination, assertSafeBrowserUrl } from './browser-policy'
 import { createAuthorizedPreviewUrl, isAuthorizedPreviewProtocol } from './browser-preview-service'
-import { handlePromaFileRequest } from './local-file-protocol'
+import { handleMyYodaFileRequest } from './local-file-protocol'
 import { BrowserCdpTimeoutError, BrowserOperationAbortedError, BROWSER_OBSERVE_TIMEOUT_MS, resolveBrowserObserveAxDepth, throwIfBrowserOperationAborted, withBrowserCdpTimeout } from './browser-cdp'
 import { parseBrowserPressAction } from './browser-key-policy'
 import { browserObservationNameLimit, prioritizeBrowserObservationCandidates, resolveBrowserObserveMaxElements } from './browser-observation-policy'
@@ -386,7 +386,7 @@ export class BrowserController {
 
   private installPreviewProtocol(browserSession: Session): void {
     if (this.previewProtocolSessions.has(browserSession)) return
-    browserSession.protocol.handle('proma-file', handlePromaFileRequest)
+    browserSession.protocol.handle('myyoda-file', handleMyYodaFileRequest)
     this.previewProtocolSessions.add(browserSession)
   }
 

@@ -608,13 +608,13 @@ export async function preparePdfPreview(filePath: string, basePaths?: string[]):
   let standardFontDataUrl: string
   let registerFilePath: (path: string) => string
   try {
-    const { registerPromaDirectoryPath, registerPromaFilePath } = await import('./local-file-protocol')
-    registerFilePath = registerPromaFilePath
-    fileUrl = registerPromaFilePath(safePath)
-    pdfScriptUrl = registerPromaFilePath(require.resolve(`${PDFJS_PACKAGE}/build/pdf.min.mjs`))
-    pdfWorkerUrl = registerPromaFilePath(require.resolve(`${PDFJS_PACKAGE}/build/pdf.worker.min.mjs`))
+    const { registerMyYodaDirectoryPath, registerMyYodaFilePath } = await import('./local-file-protocol')
+    registerFilePath = registerMyYodaFilePath
+    fileUrl = registerMyYodaFilePath(safePath)
+    pdfScriptUrl = registerMyYodaFilePath(require.resolve(`${PDFJS_PACKAGE}/build/pdf.min.mjs`))
+    pdfWorkerUrl = registerMyYodaFilePath(require.resolve(`${PDFJS_PACKAGE}/build/pdf.worker.min.mjs`))
     const pdfPackageDir = dirname(require.resolve(`${PDFJS_PACKAGE}/package.json`))
-    standardFontDataUrl = `${registerPromaDirectoryPath(join(pdfPackageDir, 'standard_fonts'))}/`
+    standardFontDataUrl = `${registerMyYodaDirectoryPath(join(pdfPackageDir, 'standard_fonts'))}/`
   } catch (err) {
     console.error('[file-preview] preparePdfPreview asset resolution failed:', err)
     return null
@@ -746,8 +746,8 @@ export async function prepareHtmlPreview(filePath: string, basePaths?: string[])
   if (st.size > MAX_FILE_SIZE) return null
 
   try {
-    const { registerPromaDirectoryPath } = await import('./local-file-protocol')
-    const dirUrl = registerPromaDirectoryPath(dirname(safePath), collectHtmlPreviewResources(safePath))
+    const { registerMyYodaDirectoryPath } = await import('./local-file-protocol')
+    const dirUrl = registerMyYodaDirectoryPath(dirname(safePath), collectHtmlPreviewResources(safePath))
     // 目录 URL 形如 myyoda-file://{token}，拼接文件名后 iframe 可直接加载；
     // 页面内明确引用的 css/img 等资源可加载，未引用的 sibling 文件被拒绝。
     const tmpUrl = `${dirUrl}/${encodeURIComponent(basename(safePath))}`

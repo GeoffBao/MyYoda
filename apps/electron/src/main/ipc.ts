@@ -182,7 +182,7 @@ import {
   getMainRepoRoot,
 } from './lib/git-diff-service'
 import { listGitBranchesForSession, prepareSessionGitContext } from './lib/git-session-context-service'
-import { registerPromaDirectoryPath, registerPromaFilePath } from './lib/local-file-protocol'
+import { registerMyYodaDirectoryPath, registerMyYodaFilePath } from './lib/local-file-protocol'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
 import {
   listChannels,
@@ -4188,7 +4188,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 仅解析文件路径（供 PDF/图片等用 proma-file:// 加载）
+  // 仅解析文件路径（供 PDF/图片等用 myyoda-file:// 加载）
   ipcMain.handle(
     'file:resolve-path',
     async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
@@ -4200,10 +4200,10 @@ export function registerIpcHandlers(): void {
         return null
       }
       if (!result) return null
-      // registerPromaFilePath 对目录路径会抛「不是文件」。渲染端（如悬浮预览解析 markdown
+      // registerMyYodaFilePath 对目录路径会抛「不是文件」。渲染端（如悬浮预览解析 markdown
       // 链接）可能传入目录路径，此处优雅降级为 null，而不是让异常冒泡成未捕获的 handler 错误。
       try {
-        return { url: registerPromaFilePath(result) }
+        return { url: registerMyYodaFilePath(result) }
       } catch (err) {
         console.warn('[IPC] file:resolve-path 无法注册为文件，跳过:', result, err instanceof Error ? err.message : err)
         return null
@@ -4212,7 +4212,7 @@ export function registerIpcHandlers(): void {
   )
 
   // 为 HTML 预览注册所在目录，使相对 CSS、脚本和图片资源保持可加载。
-  // 返回的仍是 token-gated proma-file URL，不向渲染进程泄露本机绝对路径。
+  // 返回的仍是 token-gated myyoda-file URL，不向渲染进程泄露本机绝对路径。
   ipcMain.handle(
     'file:resolve-html-preview-path',
     async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
@@ -4221,7 +4221,7 @@ export function registerIpcHandlers(): void {
       const result = resolveFilePath(filePath, getPreviewCandidateBasePaths(options))
       if (!result) return null
       try {
-        const directoryUrl = registerPromaDirectoryPath(dirname(result))
+        const directoryUrl = registerMyYodaDirectoryPath(dirname(result))
         return { url: `${directoryUrl}/${encodeURIComponent(basename(result))}` }
       } catch (err) {
         console.warn('[IPC] file:resolve-html-preview-path 无法注册预览目录，跳过:', result, err instanceof Error ? err.message : err)
@@ -5786,7 +5786,7 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(PLANNING_IPC_CHANNELS.LIST_NATIVE_SYNC_CONFLICTS, async (): Promise<PlanningNativeSyncConflict[]> => listPlanningNativeSyncConflicts())
   ipcMain.handle(PLANNING_IPC_CHANNELS.RESOLVE_NATIVE_SYNC_CONFLICT, async (_, input: ResolvePlanningNativeSyncConflictInput): Promise<boolean> => {
-    if (!input || typeof input.id !== 'string' || !['keep_proma', 'keep_system'].includes(input.resolution)) throw new Error('冲突解决参数非法')
+    if (!input || typeof input.id !== 'string' || !['keep_myyoda', 'keep_system'].includes(input.resolution)) throw new Error('冲突解决参数非法')
     const resolved = resolvePlanningNativeSyncConflict(input)
     if (resolved) { broadcastPlanningChanged(['todos', 'calendar_events']); void runPlanningNativeSync(true) }
     return resolved

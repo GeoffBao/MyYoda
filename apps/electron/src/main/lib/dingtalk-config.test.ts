@@ -13,7 +13,6 @@ let configPaths: ConfigPathsModule
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 
 mockElectronModule({
   app: {
@@ -31,7 +30,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-dingtalk-config-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  process.env.PROMA_DEV = '0'
+  process.env.MYYODA_DEV = '0'
   configPaths = await import('./config-paths')
   dingtalkConfig = await import('./dingtalk-config')
 })
@@ -52,11 +51,6 @@ afterAll(() => {
     delete process.env.MYYODA_DEV
   } else {
     process.env.MYYODA_DEV = originalMyyodaDev
-  }
-  if (originalPromaDev === undefined) {
-    delete process.env.PROMA_DEV
-  } else {
-    process.env.PROMA_DEV = originalPromaDev
   }
   rmSync(tempHome, { recursive: true, force: true })
 })

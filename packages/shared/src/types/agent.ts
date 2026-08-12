@@ -90,7 +90,7 @@ export function sessionThinkingLevelPatch(
   return { reasoningLevel: level, thinkingLevel: level, openAIThinkingLevel: level }
 }
 
-/** 是否为 Proma 可暴露 reasoning.effort 的 OpenAI 推理模型。 */
+/** 是否为 MyYoda 可暴露 reasoning.effort 的 OpenAI 推理模型。 */
 export function isOpenAIReasoningSupportedModel(modelId: string | undefined): boolean {
   const normalized = modelId?.toLowerCase() ?? ''
   // Pi catalog 中 gpt-5*-chat-latest 是非 reasoning 的对话变体；它们不能接受
@@ -804,7 +804,7 @@ export interface AgentSessionMeta {
   sdkSessionId?: string
   /** Pi session JSONL 的精确路径；避免仅按 session ID 子串定位 artifact。 */
   piSessionFile?: string
-  /** Proma assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
+  /** MyYoda assistant UI UUID 到 Pi 树状 session entry ID 的持久映射。 */
   piEntryBindings?: Record<string, string>
   /** 已退役 Claude runtime 的只读 transcript；必须新建 Pi 会话才能继续。 */
   legacyTranscript?: {

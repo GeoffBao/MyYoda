@@ -14,7 +14,6 @@ let contextPrompt: AgentSessionContextPrompt
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR
 
 mockElectronModule({
@@ -83,7 +82,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-agent-session-manager-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  delete process.env.PROMA_DEV
+  delete process.env.MYYODA_DEV
   delete process.env.CLAUDE_CONFIG_DIR
   manager = await import('./agent-session-manager')
   contextPrompt = await import('./agent-session-context-prompt')
@@ -99,11 +98,6 @@ afterAll(() => {
     delete process.env.MYYODA_DEV
   } else {
     process.env.MYYODA_DEV = originalMyyodaDev
-  }
-  if (originalPromaDev === undefined) {
-    delete process.env.PROMA_DEV
-  } else {
-    process.env.PROMA_DEV = originalPromaDev
   }
   if (originalClaudeConfigDir === undefined) {
     delete process.env.CLAUDE_CONFIG_DIR

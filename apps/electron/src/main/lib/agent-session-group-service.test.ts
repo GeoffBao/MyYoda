@@ -12,7 +12,6 @@ let sessionManager: SessionManager
 let tempHome: string
 const originalHome = process.env.HOME
 const originalMyyodaDev = process.env.MYYODA_DEV
-const originalPromaDev = process.env.PROMA_DEV
 
 mockElectronModule({
   app: {
@@ -44,7 +43,7 @@ beforeAll(async () => {
   tempHome = mkdtempSync(join(os.tmpdir(), 'myyoda-session-group-service-'))
   process.env.HOME = tempHome
   delete process.env.MYYODA_DEV
-  delete process.env.PROMA_DEV
+  delete process.env.MYYODA_DEV
   groupService = await import('./agent-session-group-service')
   sessionManager = await import('./agent-session-manager')
 })
@@ -60,8 +59,6 @@ afterAll(() => {
   else process.env.HOME = originalHome
   if (originalMyyodaDev === undefined) delete process.env.MYYODA_DEV
   else process.env.MYYODA_DEV = originalMyyodaDev
-  if (originalPromaDev === undefined) delete process.env.PROMA_DEV
-  else process.env.PROMA_DEV = originalPromaDev
   rmSync(tempHome, { recursive: true, force: true })
 })
 
