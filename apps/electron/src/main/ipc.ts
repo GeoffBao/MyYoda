@@ -297,6 +297,7 @@ import {
   getAgentSessionSDKMessages,
   updateAgentSessionMeta,
   deleteAgentSession,
+  assertAgentSessionDeletionSafe,
   migrateChatToAgentSession,
   moveSessionToWorkspace,
   forkAgentSession,
@@ -324,6 +325,7 @@ import {
   createAgentWorkspace,
   updateAgentWorkspace,
   deleteAgentWorkspace,
+  assertAgentWorkspaceDeletionSafe,
   reorderAgentWorkspaces,
   ensureDefaultWorkspace,
   getWorkspaceMcpConfig,
@@ -487,6 +489,9 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
     // 查找因项目被删除/改名等原因失败，已建立的 Git 上下文也不应该突然失去访问权限。
     if (meta?.gitRepoPath) roots.push(meta.gitRepoPath)
     if (meta?.gitWorktreePath) roots.push(meta.gitWorktreePath)
+    // 会话已显式解析/绑定的工作目录也要授权；未绑定 Project 或 Git 上下文的
+    // 任务会话仍可能以 workingDirectory 作为 SidePanel / Diff / 文件打开的根。
+    if (meta?.workingDirectory) roots.push(meta.workingDirectory)
     if (meta?.workspaceId) {
       const workspace = getAgentWorkspace(meta.workspaceId)
       if (workspace?.slug) {
@@ -2719,6 +2724,8 @@ export function registerIpcHandlers(): void {
         listSessions: listAgentSessions,
         listAutomations,
         isSessionActive: isAgentSessionActive,
+        assertSessionDeletionSafe: assertAgentSessionDeletionSafe,
+        assertWorkspaceDeletionSafe: assertAgentWorkspaceDeletionSafe,
         stopSession: stopAgent,
         deleteSession: deleteAgentSession,
         deleteAutomation,

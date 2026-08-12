@@ -32,6 +32,7 @@ import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
 import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
+import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -295,6 +296,23 @@ export function updateAgentWorkspace(
   return updated
 }
 
+/** 只读预检查工作区删除路径，供 Workspace 级联在任何 Session 副作用前调用。 */
+export function assertAgentWorkspaceDeletionSafe(id: string): void {
+  const index = readIndex()
+  const target = index.workspaces.find((workspace) => workspace.id === id)
+  if (!target) throw new Error(`Agent 工作区不存在: ${id}`)
+  if (target.slug === 'default') throw new Error('默认工作区不能删除')
+  if (index.workspaces.length <= 1) throw new Error('至少需要保留一个工作区')
+
+  const workspacesRoot = resolve(getAgentWorkspacesDir())
+  const workspaceDir = resolve(join(workspacesRoot, target.slug))
+  const relativePath = relative(workspacesRoot, workspaceDir)
+  if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
+  }
+  assertRecoveryTargetSafe(workspacesRoot, workspaceDir)
+}
+
 /** 删除工作区索引条目及其本地目录 */
 export function deleteAgentWorkspace(id: string): void {
   const index = readIndex()
@@ -318,20 +336,27 @@ export function deleteAgentWorkspace(id: string): void {
   if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
     throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
   }
+  assertRecoveryTargetSafe(workspacesRoot, workspaceDir)
 
-  // 先移除索引条目并落盘，再删目录：
-  // 即使随后 rmSync 失败，也只会残留一个无引用目录（无害，可被同 slug 重建覆盖），
-  // 而不会留下指向已删目录的孤儿索引条目导致 UI 状态不一致
+  // 先移除索引条目并落盘，再把目录移入同卷、带 journal 的恢复隔离区。
+  // 隔离失败时恢复索引并向调用方抛错，避免 Renderer 把部分删除误报为成功。
   const removed = index.workspaces.splice(idx, 1)[0]!
   writeIndex(index)
 
-  if (existsSync(workspaceDir)) {
-    try {
-      rmSyncWithRetry(workspaceDir, { recursive: true, force: true })
-      console.log(`[Agent 工作区] 已删除工作区目录: ${workspaceDir}`)
-    } catch (error) {
-      console.warn(`[Agent 工作区] 删除工作区目录失败，已残留无引用目录 (${target.slug}):`, error)
+  try {
+    if (existsSync(workspaceDir)) {
+      quarantineForRecovery(workspacesRoot, workspaceDir, 'workspace', target.slug)
+      console.log(`[Agent 工作区] 已移入恢复隔离区: ${workspaceDir}`)
     }
+  } catch (error) {
+    try {
+      const current = readIndex()
+      current.workspaces.splice(idx, 0, removed)
+      writeIndex(current)
+    } catch (restoreError) {
+      console.error(`[Agent 工作区] 删除失败后恢复工作区索引失败 (${target.slug}):`, restoreError)
+    }
+    throw error
   }
 
   console.log(`[Agent 工作区] 已删除工作区: ${removed.name} (slug: ${removed.slug})`)

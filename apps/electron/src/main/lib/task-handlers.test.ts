@@ -161,7 +161,9 @@ describe('task handler Kanban payloads', () => {
       }))
       expect(() => projectDeleteHandler(undefined, workspaceRoot, slug)).toThrow(/先归档/)
       updateHandler(undefined, workspaceRoot, slug, { archivedAt: Date.now() })
-      expect(() => projectDeleteHandler(undefined, workspaceRoot, slug)).not.toThrow()
+      const purgeImpact = projectImpactHandler(undefined, workspaceRoot, slug) as { confirmationToken?: string }
+      expect(purgeImpact.confirmationToken).toBeString()
+      expect(() => projectDeleteHandler(undefined, workspaceRoot, slug, purgeImpact.confirmationToken)).not.toThrow()
 
       const secondCreated = createHandler(undefined, workspaceRoot, { name: '含引用项目' })
       if (typeof secondCreated !== 'object' || secondCreated === null) throw new Error('create handler 未返回第二个项目')
