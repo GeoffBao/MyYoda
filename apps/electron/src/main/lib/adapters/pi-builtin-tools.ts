@@ -1012,7 +1012,7 @@ export async function buildPiBuiltinTools(
   browserController.configureSession(ctx.sessionId, {
     profileKey: resolveBrowserProfileKey(ctx.workspaceId, ctx.sessionId),
     allowedRoots: ctx.allowedRoots,
-    executionSource: ctx.triggeredBy ?? 'user',
+    executionSource: ctx.triggeredBy === 'work' ? 'user' : (ctx.triggeredBy ?? 'user'),
   })
 
   const tools: ToolDefinition[] = []

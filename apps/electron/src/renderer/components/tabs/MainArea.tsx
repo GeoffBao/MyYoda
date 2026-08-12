@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import type { BrowserViewState } from '@proma/shared'
+import type { BrowserViewState } from '@myyoda/shared'
 import { useAtomValue, useSetAtom, useAtom, useStore } from 'jotai'
 import {
   tabsAtom,

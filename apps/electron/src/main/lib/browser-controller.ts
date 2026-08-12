@@ -1,6 +1,6 @@
 import { app, BrowserWindow, WebContentsView, session as electronSession, type Session } from 'electron'
-import type { BrowserExecutionSource, BrowserOperationStatus, BrowserTraceAction, BrowserTraceItem, BrowserViewLayout, BrowserViewState, BrowserTabState } from '@proma/shared'
-import { AGENT_IPC_CHANNELS } from '@proma/shared'
+import type { BrowserExecutionSource, BrowserOperationStatus, BrowserTraceAction, BrowserTraceItem, BrowserViewLayout, BrowserViewState, BrowserTabState } from '@myyoda/shared'
+import { AGENT_IPC_CHANNELS } from '@myyoda/shared'
 import { assertSafeBrowserDestination, assertSafeBrowserUrl } from './browser-policy'
 import { createAuthorizedPreviewUrl, isAuthorizedPreviewProtocol } from './browser-preview-service'
 import { handlePromaFileRequest } from './local-file-protocol'

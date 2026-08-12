@@ -63,7 +63,6 @@ const DOCX_EXTS = new Set(['.docx'])
 const OFFICE_PREVIEW_EXTS = new Set(['.xlsx', '.pptx'])
 const LEGACY_OFFICE_EXTS = new Set(['.doc', '.xls', '.ppt'])
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'])
-const HTML_EXTS = new Set(['.html', '.htm'])
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg'])
 const FILE_FIND_SHORTCUT_OPTIONS = { exclusive: true }
 
@@ -274,7 +273,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const isOfficePreview = previewOnly && OFFICE_PREVIEW_EXTS.has(ext)
   const isLegacyOffice = previewOnly && LEGACY_OFFICE_EXTS.has(ext)
   const isImage = previewOnly && IMAGE_EXTS.has(ext)
-  const isHtml = previewOnly && HTML_EXTS.has(ext)
   const isVideo = previewOnly && VIDEO_EXTS.has(ext)
   const markdownEditorCacheKey = React.useMemo(
     () => createMarkdownEditorCacheKey({ filePath, dirPath, gitRoot, basePaths }),

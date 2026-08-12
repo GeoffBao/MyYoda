@@ -1,6 +1,6 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
-import type { BrowserViewState } from '@proma/shared'
+import type { BrowserViewState } from '@myyoda/shared'
 import { currentAgentSessionIdAtom } from './agent-atoms'
 
 /** 每个 Agent 会话的受管浏览器面板开关。主进程仍是状态权威。 */

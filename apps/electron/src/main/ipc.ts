@@ -551,20 +551,6 @@ function isPathAllowed(filePath: string, options?: FileAccessOptions): boolean {
   return getAuthorizedRoots(options).some((root) => isUnderRoot(resolved, root))
 }
 
-function normalizeFileAccessOptions(value?: FileAccessOptions | string[]): FileAccessOptions | undefined {
-  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined
-  return {
-    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
-    workspaceSlug: typeof value.workspaceSlug === 'string' ? value.workspaceSlug : undefined,
-    workspaceSkillSlug: typeof value.workspaceSkillSlug === 'string' ? value.workspaceSkillSlug : undefined,
-    legacySkillFilePath: typeof value.legacySkillFilePath === 'string' ? value.legacySkillFilePath : undefined,
-    candidateBasePaths: Array.isArray(value.candidateBasePaths)
-      ? value.candidateBasePaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
-      : undefined,
-    unrestricted: value.unrestricted === true,
-  }
-}
-
 function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
   const workspaceSlugs = new Set<string>()
   if (options?.sessionId) {

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { BrowserViewState } from '@proma/shared'
+import type { BrowserViewState } from '@myyoda/shared'
 import { ArrowLeft, ArrowRight, Globe2, LoaderCircle, Plus, RefreshCw, ShieldAlert, Square, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

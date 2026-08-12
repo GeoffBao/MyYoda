@@ -54,7 +54,6 @@ export {
   type SDKCompactStatus,
 } from './agent-system-message'
 export {
-export {
   AUTOMATION_OCCURRENCE_SAMPLES_PER_DAY,
   getAutomationOccurrencesByDay,
   type AutomationOccurrenceDay,

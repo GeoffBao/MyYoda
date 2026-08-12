@@ -53,7 +53,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
+import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -1001,7 +1001,7 @@ export class AgentOrchestrator {
     }
 
     const appSettings = getSettings()
-    let sessionMeta = getAgentSessionMeta(sessionId)
+    sessionMeta = getAgentSessionMeta(sessionId)
     // Claude runtime 已于 2026-08 退役，所有会话统一走 Pi。
     // 历史回退点（resumeAtMessageUuid）与新 session 统一由 Pi 处理。
     console.log(`[Agent 编排] Agent runtime: pi`)
@@ -1231,7 +1231,7 @@ export class AgentOrchestrator {
       // 受管浏览器授权根：Agent 工作目录、项目文件目录与附加目录。
       const browserAllowedRoots = [...new Set([
         workspaceId ? agentCwd : undefined,
-        workspaceSlug ? getProjectFilesPath(workspaceSlug) : undefined,
+        workspaceSlug ? getWorkspaceFilesDir(workspaceSlug) : undefined,
         ...allAdditionalDirectories,
       ].filter((root): root is string => typeof root === 'string' && root.length > 0))]
       const builtinToolAllowedRoots = [...new Set([...visionRelayAllowedRoots, ...browserAllowedRoots])]
@@ -1283,7 +1283,6 @@ export class AgentOrchestrator {
               allowedRoots: builtinToolAllowedRoots,
               permissionMode: permissionModeOverride ?? sessionMeta?.permissionMode ?? MYYODA_DEFAULT_PERMISSION_MODE,
               triggeredBy: input.triggeredBy,
-              windowsShellAvailable: process.platform !== 'win32' || runtimeEnv.shellKind != null,
             })
             piBuiltinTools = result.tools
             return { collaborationAvailable: result.collaborationAvailable }

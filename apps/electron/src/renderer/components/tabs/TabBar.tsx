@@ -275,6 +275,10 @@ function TabBarInner({
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
+  const setShortcutGuideOpen = useSetAtom(shortcutGuideOpenAtom)
+  const setFaqDialogOpen = useSetAtom(faqDialogOpenAtom)
+  const openShortcutGuide = React.useCallback((): void => { setShortcutGuideOpen(true) }, [setShortcutGuideOpen])
+  const openFaqDialog = React.useCallback((): void => { setFaqDialogOpen(true) }, [setFaqDialogOpen])
   const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
