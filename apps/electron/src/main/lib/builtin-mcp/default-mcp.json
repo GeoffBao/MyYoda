@@ -118,51 +118,16 @@
       "defaultEnabled": false,
       "toggleable": true,
       "tools": [
-        {
-          "name": "list_pages",
-          "description": "列出当前浏览器页面。",
-          "readOnly": true
-        },
-        {
-          "name": "navigate_page",
-          "description": "导航到指定 URL。"
-        },
-        {
-          "name": "take_snapshot",
-          "description": "获取页面可访问性快照，用于理解页面结构。",
-          "readOnly": true
-        },
-        {
-          "name": "take_screenshot",
-          "description": "截取页面或元素截图，用于视觉检查。",
-          "readOnly": true
-        },
-        {
-          "name": "click",
-          "description": "点击页面元素。"
-        },
-        {
-          "name": "type",
-          "description": "向页面元素输入文本。"
-        },
-        {
-          "name": "evaluate_script",
-          "description": "在页面上下文执行脚本，用于诊断页面状态。"
-        },
-        {
-          "name": "list_network_requests",
-          "description": "查看页面网络请求。",
-          "readOnly": true
-        },
-        {
-          "name": "performance_start_trace",
-          "description": "开始性能追踪。"
-        },
-        {
-          "name": "performance_stop_trace",
-          "description": "停止性能追踪并返回结果。",
-          "readOnly": true
-        }
+        { "name": "list_pages", "description": "列出当前浏览器页面。", "readOnly": true },
+        { "name": "navigate_page", "description": "导航到指定 URL。" },
+        { "name": "take_snapshot", "description": "获取页面可访问性快照，用于理解页面结构。", "readOnly": true },
+        { "name": "take_screenshot", "description": "截取页面或元素截图，用于视觉检查。", "readOnly": true },
+        { "name": "click", "description": "点击页面元素。" },
+        { "name": "type", "description": "向页面元素输入文本。" },
+        { "name": "evaluate_script", "description": "在页面上下文执行脚本，用于诊断页面状态。" },
+        { "name": "list_network_requests", "description": "查看页面网络请求。", "readOnly": true },
+        { "name": "performance_start_trace", "description": "开始性能追踪。" },
+        { "name": "performance_stop_trace", "description": "停止性能追踪并返回结果。", "readOnly": true }
       ]
     },
     {
@@ -176,10 +141,7 @@
       "defaultEnabled": true,
       "toggleable": true,
       "tools": [
-        {
-          "name": "create_task",
-          "description": "创建一个 todo 状态的看板任务，不自动运行。"
-        }
+        { "name": "create_task", "description": "创建一个 todo 状态的看板任务，不自动运行。" }
       ]
     },
     {
@@ -192,33 +154,7 @@
       "deletable": false,
       "defaultEnabled": false,
       "toggleable": true,
-      "tools": [
-        {
-          "name": "get_minimal_context",
-          "description": "获取超紧凑的代码库上下文（图谱统计/风险/社区）。",
-          "readOnly": true
-        },
-        {
-          "name": "detect_changes",
-          "description": "检测变更并生成风险评分的审查指引。",
-          "readOnly": true
-        },
-        {
-          "name": "query_graph",
-          "description": "查询代码关系（调用方/被调用/导入/继承等）。",
-          "readOnly": true
-        },
-        {
-          "name": "get_impact_radius",
-          "description": "分析改动的影响半径（爆炸半径）。",
-          "readOnly": true
-        },
-        {
-          "name": "get_review_context",
-          "description": "生成聚焦的代码审查上下文。",
-          "readOnly": true
-        }
-      ]
+      "tools": [ {"name": "get_minimal_context", "description": "获取超紧凑的代码库上下文（图谱统计/风险/社区）。", "readOnly": true}, {"name": "detect_changes", "description": "检测变更并生成风险评分的审查指引。", "readOnly": true}, {"name": "query_graph", "description": "查询代码关系（调用方/被调用/导入/继承等）。", "readOnly": true}, {"name": "get_impact_radius", "description": "分析改动的影响半径（爆炸半径）。", "readOnly": true}, {"name": "get_review_context", "description": "生成聚焦的代码审查上下文。", "readOnly": true} ]
     }
   ]
 }

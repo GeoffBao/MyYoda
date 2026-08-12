@@ -4,6 +4,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveSafeChildPath } from './agent-file-path-policy'
 
+// Windows 无管理员权限时创建 symlink 会 EPERM：跳过 symlink 用例（与既有基线修复一致）
+const noSymlinkPermission = (() => {
+  if (process.platform !== 'win32') return false
+  try {
+    const probe = mkdtempSync(join(tmpdir(), 'myyoda-symlink-probe-'))
+    symlinkSync(probe, join(probe, 'probe'))
+    rmSync(probe, { recursive: true, force: true })
+    return false
+  } catch {
+    return true
+  }
+})()
+
 const tempDirs: string[] = []
 
 afterEach(() => {
@@ -40,7 +53,7 @@ describe('safe file path policy', () => {
     expect(resolveSafeChildPath(root, 'report.md')).toBe(join(root, 'report.md'))
   })
 
-  test('Given a symlinked parent outside the root When resolving Then rejects the escape', () => {
+  test.skipIf(noSymlinkPermission)('Given a symlinked parent outside the root When resolving Then rejects the escape', () => {
     const root = createRoot()
     const outside = mkdtempSync(join(tmpdir(), 'myyoda-file-policy-outside-'))
     tempDirs.push(outside)
@@ -49,7 +62,7 @@ describe('safe file path policy', () => {
     expect(() => resolveSafeChildPath(root, 'linked/escape.txt')).toThrow()
   })
 
-  test('Given an existing symlink target outside the root When resolving Then rejects the target', () => {
+  test.skipIf(noSymlinkPermission)('Given an existing symlink target outside the root When resolving Then rejects the target', () => {
     const root = createRoot()
     const outside = join(tmpdir(), `myyoda-file-policy-target-${Date.now()}.txt`)
     writeFileSync(outside, 'outside', 'utf8')

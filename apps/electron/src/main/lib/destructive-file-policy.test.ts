@@ -1,24 +1,26 @@
 import { describe, expect, test } from 'bun:test'
+import { join, resolve } from 'node:path'
 import { isSafeDeleteTarget } from './destructive-file-policy'
 
-const WS = '/agent-workspaces/default'
-const MEM = `${WS}/memory`
+// 参数语义为已 resolve 的绝对路径；用 resolve 构造保证跨平台
+const WS = resolve('/agent-workspaces/default')
+const MEM = join(WS, 'memory')
 
 describe('destructive file policy', () => {
   test('Given a forbidden root When deleting Then rejects the root itself', () => {
-    expect(isSafeDeleteTarget(`${WS}/session`, [`${WS}/session`], [`${WS}`])).toBe(false)
+    expect(isSafeDeleteTarget(join(WS, 'session'), [join(WS, 'session')], [`${WS}`])).toBe(false)
   })
 
   test('Given a child file under an allowed root When deleting Then allows the child', () => {
-    expect(isSafeDeleteTarget(`${WS}/session/report.md`, [], [`${WS}/session`])).toBe(true)
+    expect(isSafeDeleteTarget(join(WS, 'session', 'report.md'), [], [join(WS, 'session')])).toBe(true)
   })
 
   test('Given a sibling with a similar prefix When deleting Then rejects it', () => {
-    expect(isSafeDeleteTarget(`${WS}/session-copy`, [], [`${WS}/session`])).toBe(false)
+    expect(isSafeDeleteTarget(join(WS, 'session-copy'), [], [join(WS, 'session')])).toBe(false)
   })
 
   test('Given no allowed roots When deleting Then fails closed', () => {
-    expect(isSafeDeleteTarget(`${WS}/session/report.md`, [], [])).toBe(false)
+    expect(isSafeDeleteTarget(join(WS, 'session', 'report.md'), [], [])).toBe(false)
   })
 
   // ─── root guard bypass regression ──────────────────────────────────
