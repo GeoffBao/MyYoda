@@ -159,7 +159,7 @@ export const scratchPadLoadedAtom = atom<boolean>(false)
 export const scratchPadPanelOpenAtom = atom<boolean>(false)
 /** 右侧工作区中 Preview 与 Scratch 并排时，Preview 占比 */
 export const rightWorkspaceSplitRatioAtom = atomWithStorage<number>(
-  'proma-right-workspace-split-ratio',
+  'myyoda-right-workspace-split-ratio',
   0.58,
   undefined,
   { getOnInit: true },

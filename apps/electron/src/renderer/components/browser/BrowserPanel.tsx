@@ -157,7 +157,7 @@ export function BrowserPanel({ sessionId, state, onClose }: BrowserPanelProps): 
       <div className="flex items-center h-7 px-3 gap-2 border-b border-border/25 text-[11px] text-muted-foreground">
         <span className="truncate">{title}</span>
         {isBackgroundRun && <span className="shrink-0 text-amber-600">{state?.executionSource === 'automation' ? '自动任务' : '委派'}来源 · 可停止当前运行</span>}
-        <span className="ml-auto shrink-0">Proma 仅本地存储登录状态</span>
+        <span className="ml-auto shrink-0">MyYoda 仅本地存储登录状态</span>
       </div>
       {activity && (
         <div className="flex min-h-7 items-center gap-2 border-b border-border/25 bg-primary/[0.04] px-3 py-1 text-[11px]" role="status" aria-live="polite">
@@ -187,9 +187,9 @@ export function BrowserPanel({ sessionId, state, onClose }: BrowserPanelProps): 
             <AlertDialogTitle className="text-balance">首次使用受管浏览器</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left leading-6">
-                <p>Proma 可让 Agent 在浏览器中读取、搜索、点击和输入。部分平台可能将这些行为或高频操作识别为自动化活动。</p>
+                <p>MyYoda 可让 Agent 在浏览器中读取、搜索、点击和输入。部分平台可能将这些行为或高频操作识别为自动化活动。</p>
                 <p>这可能导致验证码、限流、功能限制、账号风控，严重时可能造成账号处罚或封禁。请自行了解并遵守目标平台规则，并自行承担相应风险。</p>
-                <p className="text-xs">Proma 不会保证第三方平台接受这些操作；请避免不必要的高频互动，并在重要操作前核对页面状态。</p>
+                <p className="text-xs">MyYoda 不会保证第三方平台接受这些操作；请避免不必要的高频互动，并在重要操作前核对页面状态。</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

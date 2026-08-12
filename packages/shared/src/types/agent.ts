@@ -287,7 +287,7 @@ export interface SkillActivation {
   name: string
   /** `SKILL.md` path used to load the Skill; retained as a compatibility fallback. */
   filePath?: string
-  /** Stable Proma workspace locator for a managed Skill. */
+  /** Stable MyYoda workspace locator for a managed Skill. */
   workspaceSlug?: string
   /** Path relative to the managed workspace Skills directory, such as `my-skill/SKILL.md`. */
   workspaceSkillPath?: string

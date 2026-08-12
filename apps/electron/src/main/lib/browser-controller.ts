@@ -9,7 +9,7 @@ import { parseBrowserPressAction } from './browser-key-policy'
 import { browserObservationNameLimit, prioritizeBrowserObservationCandidates, resolveBrowserObserveMaxElements } from './browser-observation-policy'
 import { buildPersistentBrowserPartition, resolveBrowserProfileKey } from './browser-profile-policy'
 import { hasAcknowledgedBrowserRiskDisclaimer } from './browser-risk-disclaimer'
-import { buildPromaBrowserUserAgent } from './browser-identity'
+import { buildMyYodaBrowserUserAgent } from './browser-identity'
 import { assertBrowserScript, buildBrowserDomActionExpression, type BrowserDomActionInput } from './browser-script-policy'
 import { getSettings } from './settings-service'
 
@@ -396,8 +396,8 @@ export class BrowserController {
     const profileKey = configuration?.profileKey ?? resolveBrowserProfileKey(undefined, sessionId)
     const partition = buildPersistentBrowserPartition(profileKey)
     const browserSession = electronSession.fromPartition(partition)
-    // 默认 UA 会暴露 Electron；受管网页改为诚实的 Proma 标识，并保留 Chromium token 保证站点兼容。
-    browserSession.setUserAgent(buildPromaBrowserUserAgent(browserSession.getUserAgent(), app.getVersion()))
+    // 默认 UA 会暴露 Electron；受管网页改为诚实的 MyYoda 标识，并保留 Chromium token 保证站点兼容。
+    browserSession.setUserAgent(buildMyYodaBrowserUserAgent(browserSession.getUserAgent(), app.getVersion()))
     const record: BrowserSessionRecord = {
       sessionId,
       partition,

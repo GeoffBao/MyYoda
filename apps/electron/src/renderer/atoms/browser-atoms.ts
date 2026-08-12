@@ -9,7 +9,7 @@ export const browserStateMapAtom = atom<Map<string, BrowserViewState>>(new Map()
 
 /** 用户手动恢复文件面板后，该会话再次打开浏览器时不再自动收起。 */
 export const browserFilePanelManualRestoreSessionIdsAtom = atomWithStorage<string[]>(
-  'proma-browser-file-panel-manual-restore-session-ids',
+  'myyoda-browser-file-panel-manual-restore-session-ids',
   [],
 )
 
