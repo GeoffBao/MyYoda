@@ -48,3 +48,6 @@ export const codeMainViewAtom = atom<CodeMainView>('session')
  * （create / edit），避免维护第二份重复定义。
  */
 export const pendingTaskEditorTargetAtom = atom<TaskEditorTarget | null>(null)
+
+/** 当前激活的 TaskEditor 目标（持久化，避免组件重载丢失状态） */
+export const activeTaskEditorTargetAtom = atom<TaskEditorTarget | null>(null)
