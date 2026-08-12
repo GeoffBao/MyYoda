@@ -340,8 +340,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const [pdfSrc, setPdfSrc] = React.useState('')
   const [pdfZoom, setPdfZoom] = React.useState(100)
   const pdfIframeRef = React.useRef<HTMLIFrameElement>(null)
-  const [htmlUrl, setHtmlUrl] = React.useState('')
-  const htmlIframeRef = React.useRef<HTMLIFrameElement>(null)
   const [videoUrl, setVideoUrl] = React.useState('')
   const [imagePath, setImagePath] = React.useState('')
   const [imageDataUrl, setImageDataUrl] = React.useState('')
@@ -646,7 +644,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     setHtmlSourceMode(false)
     setPdfSrc('')
     setPdfZoom(100)
-    setHtmlUrl('')
     setVideoUrl('')
     setImagePath('')
     setImageDataUrl('')
@@ -808,11 +805,10 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       setDocxHtml(cached.docxHtml ?? '')
       setOfficeHtml(cached.officeHtml ?? '')
       setOfficeText(cached.officeText ?? '')
-      setHtmlPreviewUrl(cached.htmlPreviewUrl ?? '')
+      setHtmlPreviewUrl(cached.htmlPreviewUrl ?? cached.htmlUrl ?? '')
       setUnsupportedPreviewReason(cached.unsupportedPreviewReason ?? '')
       setPdfSrc(cached.pdfSrc ?? '')
       setPdfZoom(100)
-      setHtmlUrl(cached.htmlUrl ?? '')
       setVideoUrl(cached.videoUrl ?? '')
       setImagePath(cached.imagePath ?? '')
       setImageDataUrl(cached.imageDataUrl ?? '')
@@ -836,7 +832,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         setUnsupportedPreviewReason('')
         setPdfSrc('')
         setPdfZoom(100)
-        setHtmlUrl('')
         setVideoUrl('')
         setImagePath('')
         setImageDataUrl('')
@@ -869,11 +864,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               return
             }
             if (isHtml) {
-              const result = await window.electronAPI.prepareHtmlPreview(filePath, fileAccess)
+              const result = await window.electronAPI.resolveHtmlPreviewPath(filePath, fileAccess)
               if (cancelled) return
-              const url = result?.tmpUrl ?? ''
-              setHtmlUrl(url)
-              cacheSet(cacheKey, { oldContent: '', newContent: '', htmlUrl: url })
+              const url = result?.url ?? ''
+              setHtmlPreviewUrl(url)
+              cacheSet(cacheKey, { oldContent: '', newContent: '', htmlPreviewUrl: url })
               return
             }
             if (isVideo) {
@@ -1027,7 +1022,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       message = `暂不支持 ${ext.toUpperCase().slice(1)} 格式内联预览`
     } else if (isPdf && !pdfSrc) {
       message = 'PDF 文件过大，无法在此预览'
-    } else if (isHtml && !htmlUrl) {
+    } else if (isHtml && !htmlPreviewUrl) {
       message = '无法加载 HTML 预览'
     } else if (isVideo && !videoUrl) {
       message = '无法加载视频预览'
@@ -1042,7 +1037,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       toastedPreviewFailRef.current = key
       toast.warning(message)
     }
-  }, [previewOnly, loading, filePath, ext, isLegacyOffice, isPdf, pdfSrc, isHtml, htmlUrl, isVideo, videoUrl, isDocx, docxHtml, isOfficePreview, officeHtml, isImage, imageDataUrl])
+  }, [previewOnly, loading, filePath, ext, isLegacyOffice, isPdf, pdfSrc, isHtml, htmlPreviewUrl, isVideo, videoUrl, isDocx, docxHtml, isOfficePreview, officeHtml, isImage, imageDataUrl])
 
   // scrollPosition persistent: module-level Map scoped by session, file path, and resolution context
   // content changes (refreshVersion bump) → delete stored position;
