@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain, Globe } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -1062,15 +1062,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       return
     }
     setActiveView('repo-wiki')
-  }, [activeView, setActiveView])
-
-  /** 打开/关闭浏览器面板（内嵌浏览器，Agent 可视化操作） */
-  const handleOpenBrowser = React.useCallback((): void => {
-    if (activeView === 'browser') {
-      setActiveView('conversations')
-      return
-    }
-    setActiveView('browser')
   }, [activeView, setActiveView])
 
   /** 打开唯一正式任务看板；重复点击保持当前页面，不隐式退回会话。 */
@@ -3284,19 +3275,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             active={activeView === 'repo-wiki'}
             onClick={handleOpenRepoWiki}
             ariaLabel="Yoda 知识库（待开发）"
-          />
-        </div>
-      )}
-
-      {/* 浏览器：内嵌浏览器面板（Agent 可视化操作，synara 移植） */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={Globe}
-            title="浏览器"
-            active={activeView === 'browser'}
-            onClick={handleOpenBrowser}
-            ariaLabel="浏览器"
           />
         </div>
       )}

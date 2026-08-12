@@ -83,8 +83,7 @@ export function isLegacyCoworkMode(mode: AppMode): boolean {
 export function isOverlayActiveView(activeView: ActiveView): boolean {
   return (
     activeView === 'planning' ||
-    activeView === 'agent-skills' ||
-    activeView === 'browser'
+    activeView === 'agent-skills'
   )
 }
 

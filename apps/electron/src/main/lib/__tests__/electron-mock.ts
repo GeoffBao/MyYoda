@@ -42,21 +42,8 @@ export function mockElectronModule(overrides: Record<string, unknown> = {}): voi
         isDestroyed: (): boolean => false,
         send: (): undefined => undefined,
       }
-      contentView = {
-        addChildView: (): undefined => undefined,
-        removeChildView: (): undefined => undefined,
-      }
       // agent-service 的 IPC 转发中间件会调用 getAllWindows 定位主窗口
       static getAllWindows(): unknown[] { return [] }
-    },
-    // 内嵌浏览器（synara 移植）：WebContentsView 宿主类，测试环境仅占位。
-    WebContentsView: class WebContentsView {
-      webContents = {
-        isDestroyed: (): boolean => false,
-        isAttached: (): boolean => false,
-        send: (): undefined => undefined,
-      }
-      setBounds(): void {}
     },
     clipboard: {
       writeText: () => undefined,
@@ -103,7 +90,6 @@ export function mockElectronModule(overrides: Record<string, unknown> = {}): voi
     WebContents: class WebContents {},
     webContents: {
       fromId: () => ({ send: () => undefined }),
-      getAllWebContents: () => [],
     },
     ...overrides,
   }))
