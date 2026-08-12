@@ -15,6 +15,10 @@ export const WINDOW_CONTROLS_PADDING_RIGHT = 'pr-[126px]'
 export const MAC_TRAFFIC_LIGHTS_WIDTH_PX = 80
 export const MAC_TRAFFIC_LIGHTS_PADDING_LEFT = 'pl-[80px]'
 
+export function getWindowControlsPaddingClass(isWindows: boolean): string {
+  return isWindows ? WINDOW_CONTROLS_PADDING_RIGHT : ''
+}
+
 export function detectIsWindows(): boolean {
   const platform =
     typeof navigator !== 'undefined' &&

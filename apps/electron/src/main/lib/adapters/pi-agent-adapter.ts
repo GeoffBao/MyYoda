@@ -66,6 +66,7 @@ import { createCodexFastModeExtension, withCodexFastModeServiceTier } from './pi
 import { createDeepSeekReasoningRequestExtension } from './pi-deepseek-reasoning-request-settings'
 import { createOpenAIReasoningRequestExtension } from './pi-openai-reasoning-request-settings'
 import { mergeRuntimeEnv, type AgentRuntimeEnv } from '../agent-runtime-env'
+import { sanitizePiMessageImageContent, sanitizeToolResultImageContent } from '../image-content-validation'
 import {
   convertPiMessage,
   convertResultMessage,
@@ -1413,14 +1414,23 @@ export function installRuntimeGuardHooks(session: AgentSession, guard: AgentRunt
       details: previousResult?.details ?? context.result.details,
       terminate: previousResult?.terminate ?? context.result.terminate,
     }
-    const guardedResult = guard.applyToolResult(resultAfterPreviousHooks)
+    const sanitizedContent = sanitizeToolResultImageContent(resultAfterPreviousHooks.content)
+    const guardedResult = guard.applyToolResult({
+      ...resultAfterPreviousHooks,
+      content: sanitizedContent,
+    })
 
-    if (!previousResult && guardedResult.terminate === context.result.terminate) {
+    if (
+      !previousResult
+      && guardedResult.terminate === context.result.terminate
+      && sanitizedContent === context.result.content
+    ) {
       return undefined
     }
 
     return {
       ...previousResult,
+      content: sanitizedContent,
       terminate: guardedResult.terminate,
     }
   }
@@ -1616,6 +1626,12 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         customTools,
       })
       session.agent.toolExecution = 'sequential'
+      // Pi session artifact 可以来自旧版本，不能假设其历史 tool_result 已通过当前校验。
+      // transformContext 在每个 provider 请求前执行，能隔离 resume 的坏图片而不篡改原 artifact。
+      const previousTransformContext = session.agent.transformContext
+      session.agent.transformContext = async (messages, signal) => sanitizePiMessageImageContent(
+        await previousTransformContext?.(messages, signal) ?? messages,
+      )
       if (piAi && input.codexFastMode && input.provider === 'openai-codex' && isCodexFastModeSupportedModel(input.model)) {
         // Pi 的通用 streamSimple 会丢弃 provider 专属 serviceTier；这里直接走
         // provider stream，确保 request body 与 usage.cost 都使用 priority tier。

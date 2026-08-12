@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { groupIntoTurns, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, parseAttachedFiles as sdkParseAttachedFiles, isImageFile as sdkIsImageFile, buildTaskProgressDataForTurn, type MessageGroup } from './SDKMessageRenderer'
 import { buildLiveGroupSet } from './live-group-set'
 import { ContentBlock } from './ContentBlock'
+import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkProvider'
 import { parseThinkTagsFromText } from './thinking-tag-parser'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
@@ -498,7 +499,7 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
-export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+export const AgentMessages = React.memo(function AgentMessages({ sessionId, projectId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
   const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
@@ -752,9 +753,8 @@ export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLo
                 const isLastAssistantTurn = !streaming && stoppedByUser
                   && group.type === 'assistant-turn'
                   && idx === visibleGroups.findLastIndex((g) => g.type === 'assistant-turn')
-                return (
+                const renderer = (
                   <MessageGroupRenderer
-                    key={getGroupId(group)}
                     group={group}
                     allMessages={allSDKMessages}
                     basePath={messageBasePath}
@@ -768,6 +768,9 @@ export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLo
                     sessionModelId={sessionModelId}
                   />
                 )
+                return group.type === 'assistant-turn'
+                  ? <AgentBrowserLinkProvider key={getGroupId(group)} sessionId={sessionId}>{renderer}</AgentBrowserLinkProvider>
+                  : <React.Fragment key={getGroupId(group)}>{renderer}</React.Fragment>
               })}
 
               {/* 有实时助手内容时：显示运行指示器或占位（防止 streaming 结束到 Actions Bar 出现之间的高度跳动） */}
@@ -783,6 +786,7 @@ export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLo
               {/* 无实时助手内容时：显示完整气泡（含头像/名称/时间） */}
               {/* 注意：工具活动已通过 SDK 渲染路径（liveGroups）展示 */}
               {!hasLiveAssistantContent && !suppressAgentRunning && (streaming || smoothContent || retrying) && (
+                <AgentBrowserLinkProvider sessionId={sessionId}>
                 <Message from="assistant">
                   <MessageHeader
                     model={agentStreamingModel}
@@ -814,6 +818,7 @@ export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLo
                     )}
                   </MessageContent>
                 </Message>
+                </AgentBrowserLinkProvider>
               )}
 
             </>
@@ -834,4 +839,4 @@ export function AgentMessages({ sessionId, projectId, sessionModelId, messagesLo
     </div>
     </BasePathsProvider>
   )
-}
+})

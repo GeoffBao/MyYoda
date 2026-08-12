@@ -729,6 +729,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const store = useStore()
   const sidebarRootRef = React.useRef<HTMLDivElement>(null)
   const quickSwitchTargetsRef = React.useRef<QuickSwitchTarget[]>([])
+  // 快捷切换只会标注前 9 行；保留它们避免滚动时全量清理/重写所有列表行。
+  const quickSwitchHintRowsRef = React.useRef<HTMLElement[]>([])
+  const quickSwitchRefreshFrameRef = React.useRef<number | null>(null)
   const quickSwitchHintTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const processedQuickSwitchEventsRef = React.useRef<WeakSet<KeyboardEvent>>(new WeakSet())
   const [quickSwitchHintsVisible, setQuickSwitchHintsVisible] = React.useState(false)
@@ -761,14 +764,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     return () => window.clearInterval(id)
   }, [])
 
-  // 当 activeTabId 变化时，自动滚动侧边栏使选中项可见
+  // Chat 列表改由 virtualizer 按 index 定位；普通 Agent 项目列表当前仍是树状 DOM，
+  // 保留既有的原生定位行为，避免打开后台 Agent 会话后选中项不可见。
   React.useEffect(() => {
-    if (!activeTabId) return
+    if (!activeTabId || mode !== 'agent' || viewMode !== 'active') return
     requestAnimationFrame(() => {
-      const el = document.querySelector('.agent-session-item-active, .session-item-selected')
+      const el = document.querySelector('.agent-session-item-active')
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     })
-  }, [activeTabId])
+  }, [activeTabId, mode, viewMode])
 
   // per-conversation/session Map atoms（删除时清理）
   const setConvModels = useSetAtom(conversationModelsAtom)
@@ -1815,23 +1819,29 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     })
   }, [openSession, setActiveView, setUnviewedCompleted])
 
-  const refreshQuickSwitchTargets = React.useCallback((): QuickSwitchTarget[] => {
-    const root = sidebarRootRef.current
-    if (!root) {
-      quickSwitchTargetsRef.current = []
-      return []
-    }
-
-    const rows = Array.from(root.querySelectorAll<HTMLElement>('.session-quick-switch-row'))
-    for (const row of rows) {
+  const clearQuickSwitchHints = React.useCallback((): void => {
+    for (const row of quickSwitchHintRowsRef.current) {
       delete row.dataset.quickSwitchLabel
       delete row.dataset.quickSwitchIndex
       row.querySelector<HTMLElement>('.session-quick-switch-modifier')?.replaceChildren()
       row.querySelector<HTMLElement>('.session-quick-switch-number')?.replaceChildren()
     }
+    quickSwitchHintRowsRef.current = []
+    quickSwitchTargetsRef.current = []
+  }, [])
 
+  const refreshQuickSwitchTargets = React.useCallback((): QuickSwitchTarget[] => {
+    const root = sidebarRootRef.current
+    if (!root) {
+      clearQuickSwitchHints()
+      return []
+    }
+
+    // 先完成所有布局读取，再只写入上次/本次涉及的最多 9 行，避免 write→read
+    // 交错造成的 forced reflow。
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('.session-quick-switch-row'))
+    const selectedRows: HTMLElement[] = []
     const targets: QuickSwitchTarget[] = []
-    const modifierLabel = getPrimaryModifierLabel(isMac)
     for (const row of rows) {
       if (targets.length >= SESSION_QUICK_SWITCH_LIMIT) break
       if (!isQuickSwitchRowVisible(row, root)) continue
@@ -1841,56 +1851,71 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         !sessionSwitchId
         || !sessionSwitchTitle
         || (sessionSwitchType !== 'chat' && sessionSwitchType !== 'agent')
-      ) {
-        continue
-      }
+      ) continue
 
-      const index = targets.length + 1
-      row.dataset.quickSwitchIndex = String(index)
-      row.dataset.quickSwitchLabel = `${modifierLabel}${index}`
+      selectedRows.push(row)
+      targets.push({ id: sessionSwitchId, title: sessionSwitchTitle, type: sessionSwitchType })
+    }
+
+    const modifierLabel = getPrimaryModifierLabel(isMac)
+    const nextRows = new Set(selectedRows)
+    for (const row of quickSwitchHintRowsRef.current) {
+      if (nextRows.has(row)) continue
+      delete row.dataset.quickSwitchLabel
+      delete row.dataset.quickSwitchIndex
+      row.querySelector<HTMLElement>('.session-quick-switch-modifier')?.replaceChildren()
+      row.querySelector<HTMLElement>('.session-quick-switch-number')?.replaceChildren()
+    }
+    selectedRows.forEach((row, index) => {
+      const position = String(index + 1)
+      if (row.dataset.quickSwitchIndex === position) return
+      row.dataset.quickSwitchIndex = position
+      row.dataset.quickSwitchLabel = `${modifierLabel}${position}`
       const modifier = row.querySelector<HTMLElement>('.session-quick-switch-modifier')
       const number = row.querySelector<HTMLElement>('.session-quick-switch-number')
       if (modifier) modifier.textContent = modifierLabel
-      if (number) number.textContent = String(index)
-      targets.push({
-        id: sessionSwitchId,
-        title: sessionSwitchTitle,
-        type: sessionSwitchType,
-      })
-    }
+      if (number) number.textContent = position
+    })
 
+    quickSwitchHintRowsRef.current = selectedRows
     quickSwitchTargetsRef.current = targets
     return targets
-  }, [isMac])
+  }, [clearQuickSwitchHints, isMac])
 
   React.useEffect(() => {
     const root = sidebarRootRef.current
     if (!root) return
 
     if (!quickSwitchHintsVisible) {
-      const rows = Array.from(root.querySelectorAll<HTMLElement>('.session-quick-switch-row'))
-      for (const row of rows) {
-        delete row.dataset.quickSwitchLabel
-        delete row.dataset.quickSwitchIndex
-        row.querySelector<HTMLElement>('.session-quick-switch-modifier')?.replaceChildren()
-        row.querySelector<HTMLElement>('.session-quick-switch-number')?.replaceChildren()
+      if (quickSwitchRefreshFrameRef.current !== null) {
+        cancelAnimationFrame(quickSwitchRefreshFrameRef.current)
+        quickSwitchRefreshFrameRef.current = null
       }
-      quickSwitchTargetsRef.current = []
+      clearQuickSwitchHints()
       return
     }
 
     const refresh = (): void => {
-      refreshQuickSwitchTargets()
+      if (quickSwitchRefreshFrameRef.current !== null) return
+      quickSwitchRefreshFrameRef.current = requestAnimationFrame(() => {
+        quickSwitchRefreshFrameRef.current = null
+        refreshQuickSwitchTargets()
+      })
     }
     refresh()
     root.addEventListener('scroll', refresh, true)
     window.addEventListener('resize', refresh)
     return () => {
+      if (quickSwitchRefreshFrameRef.current !== null) {
+        cancelAnimationFrame(quickSwitchRefreshFrameRef.current)
+        quickSwitchRefreshFrameRef.current = null
+      }
       root.removeEventListener('scroll', refresh, true)
       window.removeEventListener('resize', refresh)
     }
   }, [
     quickSwitchHintsVisible,
+    clearQuickSwitchHints,
     refreshQuickSwitchTargets,
     sidebarCollapsed,
     mode,

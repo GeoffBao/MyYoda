@@ -109,6 +109,7 @@ import { TabSwitcher } from './components/tabs/TabSwitcher'
 import { htmlToMarkdown, markdownToHtml } from './lib/markdown-rich-text'
 import { MyYodaLogo } from './lib/model-logo'
 import { initShortcutRegistry, updateShortcutOverrides } from './lib/shortcut-registry'
+import { initializePerformanceMonitor } from './lib/performance-monitor'
 import './styles/globals.css'
 import 'katex/dist/katex.min.css'
 
@@ -124,6 +125,8 @@ const isPlanningWindow = windowKind === 'planning'
 const isCodeClawWindow = windowKind === 'codeclaw'
 const isWorkspaceMemoryWindow = windowKind === 'workspace-memory'
 const isMainWindow = !isQuickTaskWindow && !isVoiceDictationIndicatorWindow && !isDetachedPreviewWindow && !isPlanningWindow && !isCodeClawWindow && !isWorkspaceMemoryWindow
+
+initializePerformanceMonitor()
 
 // 仅主窗口禁用页面级滚动；独立浮窗各自管理自己的内容高度和滚动。
 if (isMainWindow) {
