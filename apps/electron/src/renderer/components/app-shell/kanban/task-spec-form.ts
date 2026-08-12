@@ -192,7 +192,8 @@ export function buildSpec(form: SpecForm, modelToConnection: Map<string, string>
 }
 
 /** 将已编写的 TaskSpec nodes 映射为编辑器可用的多依赖子任务行。 */
-export function specToSubtasks(nodes: SpecNode[], _fallbackModel?: string): EditorSubtask[] {
+export function specToSubtasks(nodes: SpecNode[] | undefined, _fallbackModel?: string): EditorSubtask[] {
+  if (!nodes || nodes.length === 0) return []
   const uidByNodeId = new Map<string, string>()
   for (const n of nodes) uidByNodeId.set(n.id, uid())
   return nodes.map((n) => ({

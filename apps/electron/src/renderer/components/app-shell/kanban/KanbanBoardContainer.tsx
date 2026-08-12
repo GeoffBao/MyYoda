@@ -19,6 +19,7 @@ import {
   serverTaskSummariesAtom,
 } from '@/atoms/kanban-atoms'
 import {
+  activeTaskEditorTargetAtom,
   pendingTaskEditorTargetAtom,
   serverKanbanProjectsAtom,
   taskBoardScopeAtom,
@@ -112,7 +113,8 @@ export function KanbanBoardContainer({
   const setChannelsLoaded = useSetAtom(channelsLoadedAtom)
   const agentModelId = useAtomValue(agentModelIdAtom)
   const [workspaceRoot, setWorkspaceRoot] = React.useState<string | null>(null)
-  const [editorTarget, setEditorTarget] = React.useState<TaskEditorTarget | null>(null)
+  // 使用持久化 atom 替代 local state，防止 KanbanBoardContainer 重载时丢失 TaskEditor
+  const [editorTarget, setEditorTarget] = useAtom(activeTaskEditorTargetAtom)
   const pendingEditorTarget = useAtomValue(pendingTaskEditorTargetAtom)
   const setPendingEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const setAgentSessions = useSetAtom(agentSessionsAtom)

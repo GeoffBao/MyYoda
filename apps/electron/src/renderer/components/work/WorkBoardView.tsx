@@ -53,6 +53,8 @@ export function WorkBoardView(): React.ReactElement {
   const activeWorkspaceLoadRef = React.useRef<WorkspaceLoadIdentity | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // 跟踪上一次的 workspace id，避免 onWorkspaceFilesChanged 产生新引用但同一工作区时重置全部状态
+  const prevWorkspaceIdRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     setSessions(agentSessions)
@@ -64,15 +66,20 @@ export function WorkBoardView(): React.ReactElement {
     activeWorkspaceLoadRef.current = workspace
       ? { generation, workspaceId: workspace.id, root: null }
       : null
-    // 项目 atom 的生命周期由全局 ProjectsInitializer 管理（工作区切换时按 slug 重载），WorkBoardView 不再清空。
-    // selectedProjectId 只表示 Task Board 的 Project facet；Project Page 使用独立页面身份。
-    setRuns([])
-    setTaskSummaries([])
-    setBindings([])
-    setSpecNodes(new Map())
-    setTaskExpertIds(new Map())
-    setWorkspaceRoot(null)
-    setError(null)
+    // 同一工作区（id 未变）不重置状态，避免 onWorkspaceFilesChanged 产生新对象引用导致 KanbanBoardContainer 重载
+    const workspaceChanged = prevWorkspaceIdRef.current !== (workspace?.id ?? null)
+    prevWorkspaceIdRef.current = workspace?.id ?? null
+    if (workspaceChanged) {
+      // 项目 atom 的生命周期由全局 ProjectsInitializer 管理（工作区切换时按 slug 重载），WorkBoardView 不再清空。
+      // selectedProjectId 只表示 Task Board 的 Project facet；Project Page 使用独立页面身份。
+      setRuns([])
+      setTaskSummaries([])
+      setBindings([])
+      setSpecNodes(new Map())
+      setTaskExpertIds(new Map())
+      setWorkspaceRoot(null)
+      setError(null)
+    }
     if (!workspace) return () => { cancelled = true }
 
     setLoading(true)
