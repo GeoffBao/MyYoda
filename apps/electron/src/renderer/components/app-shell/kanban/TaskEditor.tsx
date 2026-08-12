@@ -257,6 +257,7 @@ export function TaskEditor({
   }, [])
 
   const consumeGeneratedEvent = React.useCallback((event: TaskGeneratedEventPayload): void => {
+    try {
     const action = resolveGeneratedTaskEvent(event, workspaceId, pendingGenerationRef.current)
     if (action.kind === 'ignore') return
     finishGeneration()
@@ -280,6 +281,10 @@ export function TaskEditor({
       teamId: action.spec.defaults?.teamId ?? current.teamId,
     }))
     setMode('manual')
+    } catch (err) {
+      console.error('[TaskEditor] consumeGeneratedEvent error:', err)
+      toast.error('生成任务失败', { description: err instanceof Error ? err.message : String(err) })
+    }
   }, [defaultModel, finishGeneration, target, workspaceId])
 
   React.useEffect(() => window.electronAPI.tasks.onGenerated((event) => {
@@ -292,10 +297,13 @@ export function TaskEditor({
     consumeGeneratedEvent(event)
   }), [consumeGeneratedEvent, workspaceId])
 
+  // 卸载时只清理已完成生成的草稿 session，不删除仍在生成中的 session。
+  // 生成中的 session 由 generateTaskForSession 的超时/完成逻辑自行清理。
   React.useEffect(() => () => {
     if (generationTimerRef.current) clearTimeout(generationTimerRef.current)
-    const drafts = new Set([generatedDraftRef.current, pendingGenerationRef.current].filter((id): id is string => Boolean(id)))
-    for (const draftId of drafts) void window.electronAPI.deleteAgentSession(draftId).catch(() => undefined)
+    if (generatedDraftRef.current) {
+      void window.electronAPI.deleteAgentSession(generatedDraftRef.current).catch(() => undefined)
+    }
   }, [])
 
   const addSubtask = (): void => {
@@ -363,6 +371,7 @@ export function TaskEditor({
         toast.error('生成任务超时，请稍后重试')
       }, GENERATE_TIMEOUT_MS)
     } catch (cause) {
+      console.error('[TaskEditor] generate failed:', cause)
       finishGeneration()
       toast.error('生成任务失败', { description: cause instanceof Error ? cause.message : String(cause) })
     }
@@ -487,9 +496,8 @@ export function TaskEditor({
                 项目
                 <select
                   value={draft.projectId}
-                  disabled={Boolean(initialProjectId)}
                   onChange={(event) => patchDraft({ projectId: event.target.value })}
-                  className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm disabled:opacity-70"
+                  className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm"
                 >
                   <option value="">不绑定项目（工作区级任务）</option>
                   {projects.map((project) => (

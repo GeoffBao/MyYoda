@@ -733,6 +733,35 @@ export type SessionKanbanCommand =
 // ===== Agent 会话管理 =====
 
 /**
+ * Agent 执行时使用的文件根。
+ *
+ * 未持久化该字段的历史会话必须按 session 解释，避免升级后将历史 SDK 相对路径
+ * 错误应用到新的共享项目根。
+ */
+export type AgentCwdMode = 'session' | 'project'
+
+/** 会话私有工作台的文件布局。缺失字段兼容旧版 `.context/` 子目录。 */
+export type SessionWorkbenchLayout = 'legacy-context' | 'root'
+
+/** 经主进程校验后持久化的 Agent 会话活动 worktree。 */
+export interface AgentActiveWorktree {
+  /** linked worktree 的绝对路径 */
+  path: string
+  /** worktree 所属主仓库根目录 */
+  mainRepoRoot: string
+  /** 选择时 Git 报告的分支名 */
+  branch: string
+  /** 用户明确选择的时间戳 */
+  selectedAt: number
+}
+
+/** 更新 Agent 会话活动 worktree 的输入；null 表示回到默认 cwd。 */
+export interface SetAgentSessionActiveWorktreeInput {
+  sessionId: string
+  worktreePath: string | null
+}
+
+/**
  * Agent 会话轻量索引项
  *
  * 存储在 ~/.myyoda/agent-sessions.json 中，
@@ -775,6 +804,21 @@ export interface AgentSessionMeta {
   openAIThinkingLevel?: AgentThinkingLevel
   /** 所属工作区 ID */
   workspaceId?: string
+  /**
+   * Agent 执行 cwd 的持久化语义。新会话使用 project；缺失字段兼容升级前的
+   * session workbench cwd。
+   */
+  agentCwdMode?: AgentCwdMode
+  /**
+   * 当前会话显式激活的 linked worktree。缺失时保持 agentCwdMode 定义的默认 cwd；
+   * worktree 失效时主进程会主动清除，不会猜测切换到其它分支。
+   */
+  activeWorktree?: AgentActiveWorktree
+  /**
+   * 会话私有工作台的文件布局。新会话在 workbench 根目录直接存放计划、handoff
+   * 等私有资料；缺失字段的历史会话保留 `.context/` 路径以兼容工具历史。
+   */
+  sessionWorkbenchLayout?: SessionWorkbenchLayout
   /** 是否置顶 */
   pinned?: boolean
   /** 是否已星标（仅用于侧栏快速识别，不影响排序或置顶） */
@@ -824,13 +868,6 @@ export interface AgentSessionMeta {
   delegationGoal?: string
   /** 绑定的项目 ID（project.config.id），看板过滤用 */
   projectId?: string
-  /**
-   * Agent 执行 cwd 的持久化语义：'project' 表示优先使用 projectId 绑定 Project 的
-   * workingDirectory（若可用）；'session' 表示固定使用会话隔离沙箱目录。
-   * 新会话创建时写入 'project'；历史会话缺失该字段按 'session' 解释，避免升级后
-   * 把旧会话已经在沙箱里产生的状态错误切换到共享项目目录。
-   */
-  agentCwdMode?: 'session' | 'project'
   /** 用户自建分组 ID（SessionGroup.id），与 projectId 独立，用于侧边栏「分组方式：自定义分组」 */
   customGroupId?: string
   /** 项目继承的工作目录绝对路径（Conductor / additionalDirectories）；Git Worktree 模式下为 worktree 路径 */
@@ -1914,6 +1951,8 @@ export const AGENT_IPC_CHANNELS = {
   UPDATE_TITLE: 'agent:update-title',
   /** 更新会话模型选择 */
   UPDATE_SESSION_MODEL: 'agent:update-session-model',
+  /** 选择或清除当前会话的活动 worktree */
+  SET_ACTIVE_WORKTREE: 'agent:set-active-worktree',
   /** 删除会话 */
   DELETE_SESSION: 'agent:delete-session',
   /** 迁移 Chat 对话记录到 Agent 会话 */
