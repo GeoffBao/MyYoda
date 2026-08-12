@@ -10,7 +10,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
-import { HelpCircle, Keyboard, Globe2, PanelRight } from 'lucide-react'
+import { Globe2, PanelRight } from 'lucide-react'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -44,8 +44,7 @@ import {
 } from '@/lib/platform'
 import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
-import { shortcutGuideOpenAtom } from '@/atoms/shortcut-guide'
-import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
+// 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
 import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 // 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
 import { toast } from 'sonner'
@@ -275,10 +274,6 @@ function TabBarInner({
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
-  const setShortcutGuideOpen = useSetAtom(shortcutGuideOpenAtom)
-  const setFaqDialogOpen = useSetAtom(faqDialogOpenAtom)
-  const openShortcutGuide = React.useCallback((): void => { setShortcutGuideOpen(true) }, [setShortcutGuideOpen])
-  const openFaqDialog = React.useCallback((): void => { setFaqDialogOpen(true) }, [setFaqDialogOpen])
   const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
@@ -522,8 +517,6 @@ function TabBarInner({
         positionClassName={actionLayout.shortcutPositionClassName}
         showBrowserButton={showBrowserButton}
         onOpenBrowser={openBrowser}
-        onOpen={openShortcutGuide}
-        onOpenFaq={openFaqDialog}
       />
 
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
@@ -539,15 +532,12 @@ function ShortcutGuideButton({
   positionClassName,
   showBrowserButton,
   onOpenBrowser,
-  onOpen,
-  onOpenFaq,
 }: {
   positionClassName: string
   showBrowserButton: boolean
   onOpenBrowser: () => void
-  onOpen: () => void
-  onOpenFaq: () => void
 }): React.ReactElement {
+  if (!showBrowserButton) return <></>
   return (
     <div
       className={cn(
@@ -555,7 +545,6 @@ function ShortcutGuideButton({
         positionClassName,
       )}
     >
-      {/* FAQ 快捷按钮（在快捷键地图左边） */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -563,51 +552,14 @@ function ShortcutGuideButton({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={onOpenFaq}
+            onClick={() => void onOpenBrowser()}
           >
-            <HelpCircle className="size-3.5" />
-            <span className="sr-only">查看常见问题</span>
+            <Globe2 className="size-3.5" />
+            <span className="sr-only">打开受管浏览器</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          <p>查看常见问题</p>
-        </TooltipContent>
-      </Tooltip>
-
-      {showBrowserButton && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => void onOpenBrowser()}
-            >
-              <Globe2 className="size-3.5" />
-              <span className="sr-only">打开受管浏览器</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p>打开受管浏览器</p>
-          </TooltipContent>
-        </Tooltip>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onOpen}
-          >
-            <Keyboard className="size-3.5" />
-            <span className="sr-only">查看快捷键地图</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          <p>查看快捷键地图</p>
+          <p>打开受管浏览器</p>
         </TooltipContent>
       </Tooltip>
     </div>
