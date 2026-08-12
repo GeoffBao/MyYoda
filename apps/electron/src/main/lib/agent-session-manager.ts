@@ -20,6 +20,7 @@ import {
   getAgentSessionMessagesPath,
   getAgentSessionWorkspacePath,
   getAgentWorkspacePath,
+  getWorkspaceFilesDir,
   getSdkConfigDir,
 } from './config-paths'
 import { getAgentWorkspace, getWorkspaceAutoMemoryDir, listAgentWorkspaces } from './agent-workspace-manager'
@@ -28,6 +29,7 @@ import { removeSessionWorktree } from './git-session-context-service'
 import type {
   AgentSessionMeta,
   AgentMessage,
+  AgentWorkspace,
   SDKMessage,
   ForkSessionInput,
   AgentMessageSearchResult,
@@ -359,12 +361,12 @@ export function resolveAgentCwd(
   const activeWorktreePath = getActiveWorktreePath({ activeWorktree })
   if (activeWorktreePath) return activeWorktreePath
   return getAgentCwdMode({ agentCwdMode }) === 'project'
-    ? getProjectFilesPath(workspace.slug)
+    ? getWorkspaceFilesDir(workspace.slug)
     : getAgentSessionWorkspacePath(workspace.slug, sessionId)
 }
 
 export function resolveAgentWorkbenchDir(
-  workspace: Pick<AgentWorkspace, 'slug' | 'projectRootPath'> | undefined,
+  workspace: Pick<AgentWorkspace, 'slug'> | undefined,
   sessionId: string,
 ): string | undefined {
   if (!workspace) return undefined
@@ -1025,7 +1027,6 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     : sourceMeta.modelId
   const workspace = sourceMeta.workspaceId ? getAgentWorkspace(sourceMeta.workspaceId) : undefined
   const sourceCwdMode = getAgentCwdMode(sourceMeta)
-  const sourceWorkbenchLayout = getSessionWorkbenchLayout(sourceMeta)
   const sourceActiveWorktree = getActiveWorktreePath(sourceMeta) ? sourceMeta.activeWorktree : undefined
   const sourceDir = resolveAgentCwd(workspace, sourceMeta.id, sourceCwdMode, sourceActiveWorktree)
   const sourceWorkbenchDir = resolveAgentWorkbenchDir(workspace, sourceMeta.id)
@@ -1035,7 +1036,6 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     sourceMeta.workspaceId,
     forkModelId,
     sourceCwdMode,
-    sourceWorkbenchLayout,
   )
   const sourceThinking = getSessionThinkingLevel(sourceMeta)
   if (sourceThinking) {
