@@ -184,7 +184,6 @@ function main(): void {
   printStepStart(step, totalSteps, '构建 Preload (esbuild)')
   results.push(
     runStep('构建 Preload', 'bun', ['run', 'build:preload'], { verbose: opts.verbose })
-    runStep('构建 Guest Preload（浏览器标注）', 'bun', ['run', 'build:guest-preload'], { verbose: opts.verbose })
   )
   printStepResult(results[results.length - 1])
   if (!results[results.length - 1].success) return printSummary(results)
