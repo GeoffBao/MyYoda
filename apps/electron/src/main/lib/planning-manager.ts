@@ -148,7 +148,7 @@ function withPlanningTransaction<T>(work: () => T): T {
   }
 }
 
-const PLANNING_SCHEMA_VERSION = 9
+const PLANNING_SCHEMA_VERSION = 10
 
 /** EventKit 的内部 locator、marker 与 lastModifiedDate 不属于用户可编辑内容，不能参与双向基线。 */
 export function planningNativeCalendarHash(item: Pick<PlanningNativeExternalItem, 'title' | 'notes' | 'startAt' | 'endAt' | 'allDay'>): string {
