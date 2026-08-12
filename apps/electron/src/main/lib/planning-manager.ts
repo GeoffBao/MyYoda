@@ -403,7 +403,7 @@ function migrateDatabase(db: SqliteDatabase): void {
       // SQLite 3.25+ 支持 ALTER TABLE RENAME COLUMN；旧库（user_version<10）可能仍有 proma_entity_id 列。
       // CREATE TABLE IF NOT EXISTS 不会重建已存在的表，因此需要显式 RENAME。
       const renameColumns = (table: string): void => {
-        const cols = getDatabase().prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
         if (cols.some((c) => c.name === 'proma_entity_id')) {
           db.exec(`ALTER TABLE ${table} RENAME COLUMN proma_entity_id TO myyoda_entity_id`)
         }
@@ -415,7 +415,7 @@ function migrateDatabase(db: SqliteDatabase): void {
         'planning_sync_cleanup',
         'planning_native_bindings',
         'planning_native_outbox',
-        'planning_native_conflicts',
+        'planning_native_sync_conflicts',
       ]) {
         renameColumns(table)
       }
