@@ -67,8 +67,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'Agent 可以调用哪些工具？',
-        answer: '工具由当前工作区的 MCP、Skills 和内置能力共同决定。会话执行时会显示工具活动；遇到需要确认的操作，MyYoda 会先请求你的授权。',
-        keywords: ['MCP', '权限', '技能'],
+        answer: '工具由当前工作区的 MCP、Skills 和内置能力共同决定。社区市场提供 60+ 可安装 Skill，覆盖文档、视频、代码审查等场景。会话执行时右侧面板实时显示工具活动；遇到需要确认的操作，MyYoda 会先请求你的授权。',
+        keywords: ['MCP', '权限', '技能', '社区市场'],
+      },
+      {
+        question: 'Code 模式现在用的什么 Runtime？',
+        answer: 'v0.8.0 起统一使用 Pi Agent SDK 作为 Code Agent 的唯一执行引擎，不再区分 Claude Code CLI 和 Pi 两套 runtime。所有渠道的 Agent 会话行为一致，不再有双 runtime 的兼容差异。',
+        keywords: ['Runtime', 'Pi', 'SDK', '执行引擎'],
       },
       {
         question: '怎样让 Agent 更容易一次做对？',
@@ -111,6 +116,33 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: '什么时候应该把内容写进记忆？',
         answer: '只有稳定、反复有用且已经确认的规则、偏好和结论才适合写入记忆。临时想法、未验证结论和一次性任务记录应留在会话或 Project 文件中。',
         keywords: ['记忆', 'MEMORY.md', '最佳实践'],
+      },
+    ],
+  },
+  {
+    id: 'skills-market',
+    topic: 'Skills 与社区市场',
+    description: '使用和发现可复用的 Agent 能力。',
+    items: [
+      {
+        question: '社区市场里有哪些 Skill？',
+        answer: '社区市场包含 60+ 个 Skill，覆盖文档处理（PDF/PPTX/XLSX）、视频创作（HyperFrames）、前端设计、演示制作、代码审查、知识管理、微信读书等场景。本地维护的 19 个 Skill 可直接安装，另外 44 个外部收录的 Skill 一键拉取安装。',
+        keywords: ['社区市场', 'Skill', '安装', '外部'],
+      },
+      {
+        question: 'Skill 的版本和下载量是什么意思？',
+        answer: '版本号表示 Skill 的最新迭代，下载量反映社区的使用热度。你可以参考这些指标来选择更成熟、更活跃的 Skill。',
+        keywords: ['版本', '下载量', '热度'],
+      },
+      {
+        question: '外部收录的 Skill 和本地托管的有什么区别？',
+        answer: '本地托管的 Skill 由 MyYoda 维护并保证兼容性；外部收录的 Skill 从原作者的 GitHub 仓库直接拉取安装，版本跟随上游更新。两者安装后使用方式一致。',
+        keywords: ['外部', '托管', '上游'],
+      },
+      {
+        question: '我想创建自己的 Skill 并分享，该怎么做？',
+        answer: '使用 skill-creator 从零创建或优化现有 Skill，完成后提交到 myyoda-skills 仓库的 PR。社区市场会自动拉取并通过版本号跟踪更新。',
+        keywords: ['创建', '分享', '贡献'],
       },
     ],
   },
@@ -192,8 +224,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'Agent 执行敏感操作时会怎么样？',
-        answer: '权限模式决定 Agent 是否需要确认。建议从 safe 或 ask 开始；只有在明确理解风险并且工作目录可信时，才考虑更宽松的权限模式。',
-        keywords: ['权限', '安全', '确认'],
+        answer: '权限模式决定 Agent 是否需要确认。建议从 safe 或 ask 开始；只有在明确理解风险并且工作目录可信时，才考虑更宽松的权限模式。v0.8.0 新增了多层文件安全边界策略，防止 Agent 越权访问工作区之外的文件。',
+        keywords: ['权限', '安全', '确认', '边界'],
+      },
+      {
+        question: 'MyYoda 如何保护我的文件安全？',
+        answer: 'v0.8.0 全面加固了文件安全：Agent 上传拒绝路径穿越和符号链接绕过；IPC 通信收窄了授权根范围；存储清理在索引损坏时 fail-closed 不再误删；工作区元数据和恢复区全面纳入白名单保护。',
+        keywords: ['文件安全', '路径穿越', '符号链接', '清理'],
       },
       {
         question: '为什么 Agent 没有直接执行某个操作？',

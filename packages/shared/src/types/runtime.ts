@@ -269,10 +269,7 @@ export interface FileAccessOptions {
   workspaceSlug?: string
   /** 路径解析候选目录；主进程会先过滤到已授权目录内再使用 */
   candidateBasePaths?: string[]
-  /**
-   * 文件面板以 Agent 实际可操作的文件系统为准，不再按会话附件二次收窄。
-   * 启用后，调用方可以操作任意已存在的本地路径。
-   */
+  /** @deprecated 仅用于兼容旧 Renderer 输入；主进程永不将其视为授权绕过。 */
   unrestricted?: boolean
 }
 
@@ -454,10 +451,6 @@ export const IPC_CHANNELS = {
   WINDOW_IS_MAXIMIZED: 'window:is-maximized',
   /** 窗口是否处于原生全屏 */
   WINDOW_IS_FULLSCREEN: 'window:is-fullscreen',
-  /** 获取当前窗口的页面缩放系数（webContents.getZoomFactor） */
-  WINDOW_GET_ZOOM_FACTOR: 'window:get-zoom-factor',
-  /** 页面缩放系数变化推送（Cmd+/Cmd-、菜单缩放、Windows Ctrl+= 兜底等） */
-  WINDOW_ZOOM_FACTOR_CHANGED: 'window:zoom-factor-changed',
   /** 在系统剪贴板中写入纯文本 */
   WRITE_CLIPBOARD_TEXT: 'clipboard:write-text',
   /** 截图导出：将 HTML 渲染为 PNG 图片 */

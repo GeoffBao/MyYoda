@@ -118,69 +118,51 @@
       "defaultEnabled": false,
       "toggleable": true,
       "tools": [
-        { "name": "list_pages", "description": "列出当前浏览器页面。", "readOnly": true },
-        { "name": "navigate_page", "description": "导航到指定 URL。" },
-        { "name": "take_snapshot", "description": "获取页面可访问性快照，用于理解页面结构。", "readOnly": true },
-        { "name": "take_screenshot", "description": "截取页面或元素截图，用于视觉检查。", "readOnly": true },
-        { "name": "click", "description": "点击页面元素。" },
-        { "name": "type", "description": "向页面元素输入文本。" },
-        { "name": "evaluate_script", "description": "在页面上下文执行脚本，用于诊断页面状态。" },
-        { "name": "list_network_requests", "description": "查看页面网络请求。", "readOnly": true },
-        { "name": "performance_start_trace", "description": "开始性能追踪。" },
-        { "name": "performance_stop_trace", "description": "停止性能追踪并返回结果。", "readOnly": true }
-      ]
-    },
-    {
-      "id": "browser",
-      "name": "browser",
-      "displayName": "内置浏览器",
-      "description": "应用内嵌浏览器（synara 移植）：Agent 可直接打开网页、导航、点击、输入、截图与语义快照，登录态跨会话保留。",
-      "category": "browser",
-      "kind": "internal",
-      "deletable": false,
-      "defaultEnabled": true,
-      "toggleable": true,
-      "tools": [
-        { "name": "browser_status", "description": "检查浏览器是否已打开。", "readOnly": true },
-        { "name": "browser_tabs", "description": "列出当前会话的标签页。", "readOnly": true },
-        { "name": "browser_open", "description": "打开内嵌浏览器并加载 URL（浏览器任务的第一步）。" },
-        { "name": "browser_navigate", "description": "导航到新 URL。" },
-        { "name": "browser_back", "description": "后退。" },
-        { "name": "browser_forward", "description": "前进。" },
-        { "name": "browser_reload", "description": "刷新。" },
-        { "name": "browser_snapshot", "description": "语义快照：元素 ref + 可见文本。", "readOnly": true },
-        { "name": "browser_screenshot", "description": "截图。", "readOnly": true },
-        { "name": "browser_click", "description": "点击元素（ref/selector/locator/point）。" },
-        { "name": "browser_hover", "description": "悬停元素（ref/selector/locator/point）。" },
-        { "name": "browser_drag", "description": "拖拽源元素到目标元素。" },
-        { "name": "browser_type", "description": "输入文本（可选按 Enter）。" },
-        { "name": "browser_select", "description": "在下拉框选择选项。" },
-        { "name": "browser_upload", "description": "上传工作区文件到 file input。" },
-        { "name": "browser_press", "description": "按键盘键。" },
-        { "name": "browser_scroll", "description": "滚动页面。" },
-        { "name": "browser_wait", "description": "等待固定时长。" },
-        { "name": "browser_evaluate", "description": "在页面执行 JavaScript 表达式。" },
-        { "name": "browser_logs", "description": "读取页面控制台日志。", "readOnly": true },
-        { "name": "browser_resize", "description": "调整浏览器视口大小。" },
-        { "name": "browser_close", "description": "关闭浏览器。" }
-      ]
-    },
-    {
-      "id": "code-review-graph",
-      "name": "code_review_graph",
-      "displayName": "代码库知识图谱",
-      "description": "本地优先的代码智能图谱（code-review-graph，tree-sitter + 知识图谱）：查询调用链/依赖/影响面，用于代码审查与库结构分析。需要先安装 code-review-graph（pip install code-review-graph）并保证命令行可用。",
-      "category": "knowledge",
-      "kind": "internal",
-      "deletable": false,
-      "defaultEnabled": false,
-      "toggleable": true,
-      "tools": [
-        { "name": "get_minimal_context", "description": "获取超紧凑的代码库上下文（图谱统计/风险/社区）。", "readOnly": true },
-        { "name": "detect_changes", "description": "检测变更并生成风险评分的审查指引。", "readOnly": true },
-        { "name": "query_graph", "description": "查询代码关系（调用方/被调用/导入/继承等）。", "readOnly": true },
-        { "name": "get_impact_radius", "description": "分析改动的影响半径（爆炸半径）。", "readOnly": true },
-        { "name": "get_review_context", "description": "生成聚焦的代码审查上下文。", "readOnly": true }
+        {
+          "name": "list_pages",
+          "description": "列出当前浏览器页面。",
+          "readOnly": true
+        },
+        {
+          "name": "navigate_page",
+          "description": "导航到指定 URL。"
+        },
+        {
+          "name": "take_snapshot",
+          "description": "获取页面可访问性快照，用于理解页面结构。",
+          "readOnly": true
+        },
+        {
+          "name": "take_screenshot",
+          "description": "截取页面或元素截图，用于视觉检查。",
+          "readOnly": true
+        },
+        {
+          "name": "click",
+          "description": "点击页面元素。"
+        },
+        {
+          "name": "type",
+          "description": "向页面元素输入文本。"
+        },
+        {
+          "name": "evaluate_script",
+          "description": "在页面上下文执行脚本，用于诊断页面状态。"
+        },
+        {
+          "name": "list_network_requests",
+          "description": "查看页面网络请求。",
+          "readOnly": true
+        },
+        {
+          "name": "performance_start_trace",
+          "description": "开始性能追踪。"
+        },
+        {
+          "name": "performance_stop_trace",
+          "description": "停止性能追踪并返回结果。",
+          "readOnly": true
+        }
       ]
     },
     {
@@ -194,7 +176,48 @@
       "defaultEnabled": true,
       "toggleable": true,
       "tools": [
-        { "name": "create_task", "description": "创建一个 todo 状态的看板任务，不自动运行。" }
+        {
+          "name": "create_task",
+          "description": "创建一个 todo 状态的看板任务，不自动运行。"
+        }
+      ]
+    },
+    {
+      "id": "code-review-graph",
+      "name": "code_review_graph",
+      "displayName": "代码库知识图谱",
+      "description": "本地优先的代码智能图谱（code-review-graph，tree-sitter + 知识图谱）：查询调用链/依赖/影响面，用于代码审查与库结构分析。需要先安装 code-review-graph（pip install code-review-graph）并保证命令行可用。",
+      "category": "knowledge",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "get_minimal_context",
+          "description": "获取超紧凑的代码库上下文（图谱统计/风险/社区）。",
+          "readOnly": true
+        },
+        {
+          "name": "detect_changes",
+          "description": "检测变更并生成风险评分的审查指引。",
+          "readOnly": true
+        },
+        {
+          "name": "query_graph",
+          "description": "查询代码关系（调用方/被调用/导入/继承等）。",
+          "readOnly": true
+        },
+        {
+          "name": "get_impact_radius",
+          "description": "分析改动的影响半径（爆炸半径）。",
+          "readOnly": true
+        },
+        {
+          "name": "get_review_context",
+          "description": "生成聚焦的代码审查上下文。",
+          "readOnly": true
+        }
       ]
     }
   ]

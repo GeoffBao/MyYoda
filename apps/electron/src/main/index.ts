@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, protocol, screen, shell } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { IPC_CHANNELS } from '@myyoda/shared'
 
 // Dev 与正式版使用独立的 userData 目录，避免共享 Chromium SingletonLock 导致 dev 启动被静默退出
 // 必须在任何会读取 userData 路径的模块加载之前执行
@@ -125,7 +124,6 @@ import { getDingTalkMultiBotConfig } from './lib/dingtalk-config'
 import { wechatBridge } from './lib/wechat-bridge'
 import { getWeChatConfig } from './lib/wechat-config'
 import { toggleQuickTaskWindow, destroyQuickTaskWindow } from './lib/quick-task-window'
-import { attachBrowserToWindow, disposeBrowserRuntime } from './lib/browser/browser-tools-injector'
 import { destroyPlanningWindow, showPlanningWindow } from './lib/planning-window'
 import { configurePlanningQuickEntries } from './lib/planning-quick-entry'
 import { hasOpenPlanningArgument } from './lib/planning-quick-entry-model'
@@ -321,26 +319,6 @@ function installWindowsZoomInFallback(win: BrowserWindow): void {
     event.preventDefault()
     const currentZoomLevel = win.webContents.getZoomLevel()
     win.webContents.setZoomLevel(Math.min(currentZoomLevel + 0.5, 9))
-    win.webContents.send(IPC_CHANNELS.WINDOW_ZOOM_FACTOR_CHANGED, win.webContents.getZoomFactor())
-  })
-}
-
-/**
- * 页面缩放（Cmd+/Cmd-、滚轮/触控板缩放）会改变 renderer 的 CSS px ↔ 窗口 DIP 换算比例。
- * 内嵌浏览器 WebContentsView.setBounds 用的是 DIP，renderer 侧 getBoundingClientRect
- * 返回的是当前缩放下的 CSS px，二者只有缩放为 100% 时才相等——必须把缩放系数变化广播给
- * renderer，由 BrowserPanel 按系数换算后再 setBounds，否则非 100% 缩放下视图会错位/超出
- * 覆盖到工具栏（见 packages/shared/src/types/runtime.ts 的 WINDOW_ZOOM_FACTOR_CHANGED）。
- * 菜单缩放的广播见 menu.ts 的 applyZoomDelta；这里补齐滚轮/触控板缩放（webContents 原生
- * 'zoom-changed' 事件仅在该场景触发，role/菜单缩放不会触发）。
- */
-function installZoomFactorBroadcast(win: BrowserWindow): void {
-  win.webContents.on('zoom-changed', () => {
-    // 'zoom-changed' 在缩放实际生效前触发，下一个 tick 再读取才是新值。
-    setImmediate(() => {
-      if (win.isDestroyed()) return
-      win.webContents.send(IPC_CHANNELS.WINDOW_ZOOM_FACTOR_CHANGED, win.webContents.getZoomFactor())
-    })
   })
 }
 
@@ -471,15 +449,12 @@ function createWindow(): void {
   })
   setStoredMainWindow(mainWindow)
   registerTaskHandlers(mainWindow)
-  // 内嵌浏览器（synara 移植）：主窗口就绪后挂载 WebContentsView 生命周期。
-  attachBrowserToWindow(mainWindow)
   void rehydrateIncompleteTaskRuns()
     .then(() => healOrphanedTaskRuns())
     .catch((error: unknown) => {
       console.warn('[TaskRunner] 冷启动恢复失败:', error instanceof Error ? error.message : error)
     })
   installWindowsZoomInFallback(mainWindow)
-  installZoomFactorBroadcast(mainWindow)
 
   // Load the renderer
   const isDev = !app.isPackaged
@@ -869,8 +844,6 @@ app.on('before-quit', () => {
   // 销毁 CodeClaw 服务与窗口
   disposeCodeClawService()
   destroyCodeClawWindow()
-  // 销毁内嵌浏览器 runtime（WebContentsView）
-  disposeBrowserRuntime()
   // 关闭 Pi MCP 桥接连接（释放 stdio 子进程）
   disposePiMcpConnections().catch(() => {})
   // Clean up system tray before quitting

@@ -14,14 +14,17 @@ import { app } from 'electron'
 import {
   getConfigDir,
   getAgentSessionsDir,
+  getAgentSessionsIndexPath,
   getSdkConfigDir,
   getAgentWorkspacesDir,
+  getAgentWorkspacesIndexPath,
   getAttachmentsDir,
   getConversationsDir,
 } from './config-paths'
 import { listAgentSessions } from './agent-session-manager'
 import { listAgentWorkspaces } from './agent-workspace-manager'
 import { isWorkspaceMetadataDir } from './storage-boundaries'
+import { assessOrphanCleanupIndex } from './storage-cleanup-policy'
 
 // ─── 类型定义 ───
 
@@ -521,10 +524,16 @@ export async function cleanupTempFiles(): Promise<CleanupResult> {
 
 async function cleanupOrphanAgentSessions(): Promise<CleanupResult> {
   const dir = getAgentSessionsDir()
-  const activeIds = getActiveSessionIds()
   let freedBytes = 0, deletedCount = 0
   const errors: string[] = []
 
+  const assessment = assessOrphanCleanupIndex(getAgentSessionsIndexPath(), dir, 'sessions')
+  if (!assessment.safe) {
+    errors.push(`已跳过孤儿会话清理：会话索引${assessment.reason === 'index_missing' ? '缺失' : assessment.reason === 'index_invalid' ? '结构非法' : '不可恢复'}`)
+    return { freedBytes, deletedCount, errors }
+  }
+
+  const activeIds = getActiveSessionIds()
   if (!existsSync(dir)) return { freedBytes, deletedCount, errors }
 
   try {
@@ -600,11 +609,17 @@ async function cleanupOrphanSdkConfig(): Promise<CleanupResult> {
 
 async function cleanupOrphanWorkspaces(): Promise<CleanupResult> {
   const wsDir = getAgentWorkspacesDir()
-  const activeIds = getActiveSessionIds()
-  const activeSlugs = getActiveWorkspaceSlugs()
   let freedBytes = 0, deletedCount = 0
   const errors: string[] = []
 
+  const assessment = assessOrphanCleanupIndex(getAgentWorkspacesIndexPath(), wsDir, 'workspaces')
+  if (!assessment.safe) {
+    errors.push(`已跳过孤儿工作区清理：工作区索引${assessment.reason === 'index_missing' ? '缺失' : assessment.reason === 'index_invalid' ? '结构非法' : '不可恢复'}`)
+    return { freedBytes, deletedCount, errors }
+  }
+
+  const activeIds = getActiveSessionIds()
+  const activeSlugs = getActiveWorkspaceSlugs()
   if (!existsSync(wsDir)) return { freedBytes, deletedCount, errors }
 
   try {
@@ -687,7 +702,8 @@ export async function cleanupStorage(options: CleanupOptions): Promise<CleanupRe
     if (options.orphansOnly) {
       switch (cat) {
         case 'agent-sessions': merge(await cleanupOrphanAgentSessions()); break
-        case 'sdk-config': merge(await cleanupOrphanSdkConfig()); break
+        // Pi-only runtime 不再拥有可安全推导 active ownership 的 SDK orphan 索引；沿用 Proma，保留这些历史文件。
+        case 'sdk-config': break
         case 'workspaces': merge(await cleanupOrphanWorkspaces()); break
       }
     } else if (options.archivedBeforeDays > 0) {

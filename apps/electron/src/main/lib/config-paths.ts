@@ -9,6 +9,7 @@ import { join, basename } from 'node:path'
 import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { rmSyncWithRetry } from './fs-retry'
+import { resolveSafeAttachmentPath } from './attachment-path-policy'
 
 /**
  * 获取配置目录名称
@@ -130,7 +131,7 @@ export function getAttachmentsDir(): string {
  * @returns ~/.myyoda/attachments/{conversationId}/
  */
 export function getConversationAttachmentsDir(conversationId: string): string {
-  const dir = join(getAttachmentsDir(), conversationId)
+  const dir = resolveSafeAttachmentPath(getAttachmentsDir(), conversationId)
 
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
@@ -146,7 +147,7 @@ export function getConversationAttachmentsDir(conversationId: string): string {
  * @returns 完整路径 ~/.myyoda/attachments/{conversationId}/{uuid}.ext
  */
 export function resolveAttachmentPath(localPath: string): string {
-  return join(getAttachmentsDir(), localPath)
+  return resolveSafeAttachmentPath(getAttachmentsDir(), localPath)
 }
 
 /**

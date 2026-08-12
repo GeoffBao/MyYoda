@@ -11,7 +11,6 @@ import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, type PlanningWorkspaceScope } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
-import { registerBrowserIpcHandlers } from './lib/browser/browser-ipc'
 import type {
   QuickTaskSubmitInput,
   VoiceDictationAudioChunkInput,
@@ -438,6 +437,9 @@ import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDin
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
+import { normalizeFileAccessOptions } from './lib/file-access-policy'
+import { isSafeDeleteTarget } from './lib/destructive-file-policy'
+import { getWorkspaceMetadataDirNames } from './lib/storage-boundaries'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -464,8 +466,10 @@ function realpathOrResolve(path: string): string {
 }
 
 function getAuthorizedRoots(options?: FileAccessOptions): string[] {
+  const hasSessionContext = !!(options?.sessionId || options?.workspaceSlug)
   const roots: string[] = [
-    getAgentWorkspacesDir(),
+    // 无会话上下文时保留全局根供文件面板浏览；有会话时只按具体工作区授权。
+    ...(hasSessionContext ? [] : [getAgentWorkspacesDir()]),
     join(tmpdir(), 'myyoda-preview'),
   ]
 
@@ -485,7 +489,11 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
     if (meta?.gitWorktreePath) roots.push(meta.gitWorktreePath)
     if (meta?.workspaceId) {
       const workspace = getAgentWorkspace(meta.workspaceId)
-      if (workspace?.slug) workspaceSlugs.add(workspace.slug)
+      if (workspace?.slug) {
+        workspaceSlugs.add(workspace.slug)
+        // 有会话归属时，当前工作区的 agent-workspaces/{slug}/ 也是合法根。
+        roots.push(getAgentWorkspacePath(workspace.slug))
+      }
       // 会话绑定的 Project（Git 项目）工作目录也要授权，否则新会话选择 Git 分支/创建
       // Worktree 时，ensurePathAllowedWithWorktree 永远无法通过校验——这里之前完全没有
       // 打通 sessionMeta.projectId → project.config.workingDirectory 这条链路，是
@@ -526,22 +534,7 @@ function isPathAllowed(filePath: string, options?: FileAccessOptions): boolean {
   } catch {
     return false
   }
-  // 文件面板应反映 Agent 实际可访问的路径。调用方已明确开启 unrestricted 时，
-  // 保留 realpath 校验以拒绝不存在的目标，但不再按会话附件重复收窄范围。
-  if (options?.unrestricted) return true
   return getAuthorizedRoots(options).some((root) => isUnderRoot(resolved, root))
-}
-
-function normalizeFileAccessOptions(value?: FileAccessOptions | string[]): FileAccessOptions | undefined {
-  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined
-  return {
-    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
-    workspaceSlug: typeof value.workspaceSlug === 'string' ? value.workspaceSlug : undefined,
-    candidateBasePaths: Array.isArray(value.candidateBasePaths)
-      ? value.candidateBasePaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
-      : undefined,
-    unrestricted: value.unrestricted === true,
-  }
 }
 
 function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
@@ -3860,9 +3853,33 @@ export function registerIpcHandlers(): void {
       const { rmSync } = await import('node:fs')
       const { resolve } = await import('node:path')
 
+      const options = normalizeFileAccessOptions(access)
       const safePath = resolve(filePath)
-      if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
+      if (!isPathAllowed(safePath, options)) {
         throw new Error('访问路径超出当前会话的授权范围')
+      }
+
+      const allowedRoots = getAuthorizedRoots(options)
+      const forbiddenRoots = listAgentWorkspaces().flatMap((workspace) => {
+        const workspaceRoot = getAgentWorkspacePath(workspace.slug)
+        return [
+          workspaceRoot,
+          ...getWorkspaceMetadataDirNames().map((dirname) => join(workspaceRoot, dirname)),
+        ]
+      })
+      if (options?.sessionId) {
+        const meta = getAgentSessionMeta(options.sessionId)
+        const workspace = meta?.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
+        if (workspace) {
+          forbiddenRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
+        }
+      }
+      if (!isSafeDeleteTarget(
+        realpathOrResolve(safePath),
+        forbiddenRoots.map(realpathOrResolve),
+        allowedRoots.map(realpathOrResolve),
+      )) {
+        throw new Error('不能删除 Workspace、Session 或其他受管访问根目录')
       }
 
       rmSync(safePath, { recursive: true, force: true })
@@ -5480,11 +5497,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.WINDOW_GET_ZOOM_FACTOR,
-    async (event) => event.sender.getZoomFactor(),
-  )
-
   // ===== 任务 / 日程（Planning）=====
 
   const isPlanningTitle = (value: unknown): value is string =>
@@ -6007,7 +6019,4 @@ export function registerIpcHandlers(): void {
       return templates.sort((a, b) => a.slug.localeCompare(b.slug))
     },
   )
-
-  // ===== 内嵌浏览器（synara 移植） =====
-  registerBrowserIpcHandlers()
 }

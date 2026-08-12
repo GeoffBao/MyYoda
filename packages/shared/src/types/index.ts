@@ -63,9 +63,6 @@ export * from './planning'
 // Agent 专家包 IPC 通道
 export { EXPERT_IPC_CHANNELS } from '../experts/channels'
 
-// 内嵌浏览器（synara 移植）类型与 IPC 通道
-export * from './browser'
-
 // Projects 相关类型（仅类型，避免 renderer 引入 Node.js 文件存储实现）
 export type * from '../projects/types'
 

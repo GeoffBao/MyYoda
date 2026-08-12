@@ -16,7 +16,7 @@ import { isWorkspaceMetadataDir } from './storage-boundaries'
  * 在 storage-boundaries.ts 里手动登记并在下面的 KNOWN_CROSS_PACKAGE_DIRS 里补一条，
  * 保证这条测试知道要去检查它。
  */
-const KNOWN_CROSS_PACKAGE_DIRS = ['projects']
+const KNOWN_CROSS_PACKAGE_DIRS = ['projects', 'tasks', 'labels', 'expert-bindings']
 
 function extractTopLevelWorkspaceDirLiterals(): string[] {
   const configPathsSource = readFileSync(
@@ -51,5 +51,9 @@ describe('Workspace metadata cleanup boundaries', () => {
     for (const dirName of KNOWN_CROSS_PACKAGE_DIRS) {
       expect(isWorkspaceMetadataDir(dirName)).toBe(true)
     }
+  })
+
+  test('Proma Workspace Memory 的 memory/ 顶层目录必须受 orphan cleanup 保护', () => {
+    expect(isWorkspaceMetadataDir('memory')).toBe(true)
   })
 })
