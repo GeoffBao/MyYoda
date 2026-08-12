@@ -240,7 +240,7 @@ export async function downloadWasmForLanguage(language: string): Promise<Buffer 
       logger.info(`Downloaded and cached WASM for ${language} (${Math.round(buffer.byteLength / 1024)} KB) from ${source}`)
       return buffer
     } catch (error) {
-      logger.warn(`Failed to download WASM for ${language} from ${source}:`)
+      logger.warn(`Failed to download WASM for ${language} from ${source}:`, error)
     }
   }
   wasmDownloadCooldown.set(language, Date.now())

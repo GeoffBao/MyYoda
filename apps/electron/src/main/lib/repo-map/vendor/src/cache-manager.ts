@@ -166,8 +166,9 @@ export class CacheManager {
       const tmpPath = `${this.dbPath}.${process.pid}.${Date.now()}.tmp`
       await fs.writeFile(tmpPath, serialized, 'utf-8')
       await fs.rename(tmpPath, this.dbPath)
-      // 内存同步合并结果，避免下次 persist 重复读盘
-      this.cache = merged
+      // 注意：不替换 this.cache——persist 是 async，await 期间 setFileCache 可能已写入新条目，
+      // 用快照替换会丢失并发新条目（回归）。内存 Map 保持权威，磁盘合并结果只用于本次落盘。
+      // 其他实例新写的盘上条目由内存 miss 时的 loadMapFromDisk 兜底。
     } catch (error) {
       logger.error('[CacheManager] Failed to persist cache:', error)
     } finally {

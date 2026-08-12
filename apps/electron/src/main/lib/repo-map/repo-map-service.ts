@@ -262,8 +262,10 @@ export class RepoMapService {
     mention?: RepoMapMentionContext,
   ): Promise<string | undefined> {
     try {
+      // 扫描主仓库（key 为 main/master 分支引用时，内容与 key 自洽；worktree 本地分支差异不影响 map）
+      const scanRoot = this.getMainRepoRootSync(cwd) ?? cwd
       const map = await Promise.race([
-        getRepoMap(cwd, {
+        getRepoMap(scanRoot, {
           maxLines: DEFAULT_MAX_LINES,
           excludePatterns: EXCLUDE_PATTERNS,
           mentionedFiles: mention?.mentionedFiles,
@@ -434,7 +436,31 @@ export class RepoMapService {
    * - 仅 main 同步新代码（pull/checkout 更新 refs/heads/main）时 key 变化 → 后台增量重扫
    * - 无 main/master 分支的仓库退化为当前 HEAD；非 git 目录返回 undefined（key=cwd）
    */
+  /** 主仓库根解析（同步）：worktree 的 --git-common-dir 指向主仓库 .git，其父目录即主仓库根。 */
+  private getMainRepoRootSync(cwd: string): string | undefined {
+    try {
+      const common = execSync('git rev-parse --path-format=absolute --git-common-dir', {
+        cwd,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 5_000,
+      }).trim()
+      if (!common) return undefined
+      return path.dirname(common)
+    } catch {
+      return undefined
+    }
+  }
+
+  /** getGitHead 结果短缓存（5s TTL）：main 引用不会秒变，避免每条消息多次 execSync 阻塞主进程 */
+  private readonly headCache = new Map<string, { head: string | undefined; at: number }>()
+  private static readonly HEAD_CACHE_TTL_MS = 5_000
+
   private getGitHead(cwd: string): string | undefined {
+    const now = Date.now()
+    const hit = this.headCache.get(cwd)
+    if (hit && now - hit.at < RepoMapService.HEAD_CACHE_TTL_MS) return hit.head
+
     // 快检：非 git 目录（无 .git 目录/文件）直接返回，避免每条消息 3 次 execSync 失败阻塞主进程
     try {
       const gitMarker = path.join(cwd, '.git')
@@ -443,6 +469,7 @@ export class RepoMapService {
     } catch {
       return undefined
     }
+    let resolved: string | undefined
     for (const ref of ['refs/heads/main', 'refs/heads/master', 'HEAD']) {
       try {
         const out = execSync(`git rev-parse ${ref}`, {
@@ -451,13 +478,25 @@ export class RepoMapService {
           stdio: ['ignore', 'pipe', 'ignore'],
           timeout: 5_000,
         })
-        const resolved = out.trim()
-        if (resolved) return resolved
+        const value = out.trim()
+        if (value) {
+          resolved = value
+          break
+        }
       } catch {
         // try next ref
       }
     }
-    return undefined
+    this.headCache.set(cwd, { head: resolved, at: now })
+    if (this.headCache.size > 100) {
+      let oldestKey: string | undefined
+      let oldestAt = Infinity
+      for (const [k, v] of this.headCache) {
+        if (v.at < oldestAt) { oldestAt = v.at; oldestKey = k }
+      }
+      if (oldestKey) this.headCache.delete(oldestKey)
+    }
+    return resolved
   }
 }
 
