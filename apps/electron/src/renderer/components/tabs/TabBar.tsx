@@ -34,13 +34,13 @@ import { SidebarToggleButton } from '@/components/app-shell/SidebarToggleButton'
 import { TabBarItem } from './TabBarItem'
 import { TabNavigationControls } from './TabNavigationControls'
 import { activateTab } from './activate-tab'
+import { getTabBarActionLayout } from './tab-bar-action-layout'
 import { useCloseTab } from '@/hooks/useCloseTab'
 import {
   detectIsMac,
   detectIsWindows,
   MAC_TRAFFIC_LIGHTS_PADDING_LEFT,
   WINDOW_CONTROLS_INSET_RIGHT,
-  WINDOW_CONTROLS_PADDING_RIGHT,
 } from '@/lib/platform'
 import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
@@ -263,6 +263,7 @@ function TabBarInner({
   const [isPanelOpen, setSidePanelOpen] = useAtom(agentSidePanelOpenAtom)
   const activeTab = React.useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId])
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
+  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton)
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
@@ -435,9 +436,7 @@ function TabBarInner({
         ref={scrollRef}
         className={cn(
           "relative flex items-end flex-1 min-w-0 overflow-x-auto scrollbar-none",
-          // Windows 始终避开 WindowControls（~126px）；非 Windows 打开按钮时给 scroll 预留空间
-          isWindows && WINDOW_CONTROLS_PADDING_RIGHT,
-          !isWindows && showOpenPanelButton && "pr-10",
+          actionLayout.scrollPaddingClassName,
         )}
       >
         {tabs.map((tab) => (
@@ -469,29 +468,26 @@ function TabBarInner({
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
           Windows 上需让出右上角 WindowControls 区域（126px）。 */}
       {showOpenPanelButton && (
-        <AgentPanelOpenButton isWindows={isWindows} onToggle={togglePanel} />
+        <AgentPanelOpenButton positionClassName={actionLayout.panelPositionClassName} onToggle={togglePanel} />
       )}
     </div>
   )
 }
 
-/** 打开 Agent 文件面板按钮。
- *  非 Windows：inset-y-0 撑满 TabBar，贴右边缘 right-1。
- *  Windows：溢出到 TabBar 下方（top-[37px]），避开 WindowControls，贴右边缘与关闭按钮对齐。 */
+/** 打开 Agent 文件面板按钮。使用的具体位置由 getTabBarActionLayout 集中管理，
+ *  保证 Windows 和 macOS 的窗口控制区域布局在不同按钮组合下不发生冲突。 */
 function AgentPanelOpenButton({
-  isWindows,
+  positionClassName,
   onToggle,
 }: {
-  isWindows: boolean
+  positionClassName: string
   onToggle: () => void
 }): React.ReactElement {
   return (
     <div
       className={cn(
         "absolute flex titlebar-no-drag",
-        isWindows
-          ? "top-[37px] right-1 h-7 z-[52]"
-          : "inset-y-0 right-1 items-end pb-[3px] z-10",
+        positionClassName,
       )}
     >
       <Tooltip>

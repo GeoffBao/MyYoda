@@ -51,6 +51,7 @@ import type {
   FileOrFolderDialogResult,
   RecentMessagesResult,
   AgentSessionMeta,
+  SetAgentSessionActiveWorktreeInput,
   AgentSendInput,
   AgentRuntime,
   AgentThinkingLevel,
@@ -436,15 +437,13 @@ import { feishuBridgeManager } from './lib/feishu-bridge-manager'
 import { syncFeishuSyncSleepBlocker } from './lib/feishu-sleep-blocker'
 import { presenceService } from './lib/feishu-presence'
 import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDingTalkMultiBotConfig, saveDingTalkBotConfig, removeDingTalkBot, getDecryptedBotClientSecret } from './lib/dingtalk-config'
+import { listShallowDirectory } from './lib/directory-listing'
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
 import { normalizeFileAccessOptions } from './lib/file-access-policy'
 import { isSafeDeleteTarget } from './lib/destructive-file-policy'
 import { getWorkspaceMetadataDirNames } from './lib/storage-boundaries'
-
-/** 文件浏览器中需要隐藏的系统文件 */
-const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
 
 /** 已知编辑器应用名称白名单（macOS） */
 const KNOWN_EDITORS = [
@@ -481,6 +480,9 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
     const meta = getAgentSessionMeta(options.sessionId)
     if (meta?.attachedDirectories) {
       roots.push(...meta.attachedDirectories)
+    }
+    if (meta?.activeWorktree?.path) {
+      roots.push(meta.activeWorktree.path)
     }
     if (meta?.attachedFiles) {
       roots.push(...meta.attachedFiles)
@@ -2528,6 +2530,43 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 选择或清除 Agent 会话的活动 worktree
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SET_ACTIVE_WORKTREE,
+    async (_, input: SetAgentSessionActiveWorktreeInput): Promise<AgentSessionMeta> => {
+      if (!input || typeof input.sessionId !== 'string' || (input.worktreePath !== null && typeof input.worktreePath !== 'string')) {
+        throw new Error('活动 worktree 参数无效')
+      }
+      const session = getAgentSessionMeta(input.sessionId)
+      if (!session) throw new Error(`Agent 会话不存在: ${input.sessionId}`)
+      if (input.worktreePath === null) {
+        return updateAgentSessionMeta(input.sessionId, { activeWorktree: undefined })
+      }
+
+      const access = normalizeFileAccessOptions({ sessionId: input.sessionId })
+      if (!(await ensurePathAllowedWithWorktree(input.worktreePath, access))) {
+        throw new Error('无权将该目录设为活动 worktree')
+      }
+
+      const requestedPath = normalizePathForCompare(realpathOrResolve(input.worktreePath))
+      const selected = (await listWorktrees(input.worktreePath)).find((worktree) =>
+        !worktree.isMain && normalizePathForCompare(realpathOrResolve(worktree.path)) === requestedPath,
+      )
+      if (!selected) throw new Error('指定目录不是可用的 linked worktree')
+
+      const mainRepoRoot = await getMainRepoRoot(selected.path)
+      if (!mainRepoRoot) throw new Error('无法确认 worktree 的主仓库')
+      return updateAgentSessionMeta(input.sessionId, {
+        activeWorktree: {
+          path: realpathOrResolve(selected.path),
+          mainRepoRoot: realpathOrResolve(mainRepoRoot),
+          branch: selected.branch,
+          selectedAt: Date.now(),
+        },
+      })
+    },
+  )
+
   // 生成 Agent 会话标题
   ipcMain.handle(
     AGENT_IPC_CHANNELS.GENERATE_TITLE,
@@ -3812,44 +3851,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.LIST_DIRECTORY,
     async (_, dirPath: string, access?: FileAccessOptions): Promise<FileEntry[]> => {
-      const { existsSync, readdirSync, statSync } = await import('node:fs')
-      const { resolve } = await import('node:path')
-
       const safePath = resolve(dirPath)
-      // 目录可能已被删除（如删除 Agent 会话后面板仍持有旧路径），优雅返回空列表
-      if (!existsSync(safePath)) {
-        return []
-      }
+      // 目录可能已被删除（如删除 Agent 会话后面板仍持有旧路径），优雅返回空列表。
+      if (!existsSync(safePath)) return []
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
+        // 路径可能刚好在 existsSync 与 realpath 校验之间被删除。
+        if (!existsSync(safePath)) return []
         throw new Error('访问路径超出当前会话的授权范围')
       }
 
-      const entries: FileEntry[] = []
-      const items = readdirSync(safePath, { withFileTypes: true })
-
-      for (const item of items) {
-        if (HIDDEN_FS_ENTRIES.has(item.name)) continue
-        const fullPath = resolve(safePath, item.name)
-        const isDirectory = item.isDirectory()
-        const size = isDirectory ? undefined : statSync(fullPath).size
-        entries.push({
-          name: item.name,
-          path: fullPath,
-          isDirectory,
-          size,
-        })
-      }
-
-      // 目录在前，文件在后；隐藏文件（.开头）排在同类末尾，各自按名称排序
-      entries.sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-        const aHidden = a.name.startsWith('.')
-        const bHidden = b.name.startsWith('.')
-        if (aHidden !== bHidden) return aHidden ? 1 : -1
-        return a.name.localeCompare(b.name)
-      })
-
-      return entries
+      return listShallowDirectory(safePath)
     }
   )
 
@@ -4016,7 +4027,7 @@ export function registerIpcHandlers(): void {
   // 解析文件路径并读取内容（供内联预览使用）
   ipcMain.handle(
     'file:resolve-and-read',
-    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<{ resolvedPath: string; content: string } | null> => {
+    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null> => {
       const { resolveAndReadFile, resolveFilePath } = await import('./lib/file-preview-service')
       const options = normalizeFileAccessOptions(access)
       const allowedBasePaths = getAllowedCandidateBasePaths(options)
@@ -4149,7 +4160,7 @@ export function registerIpcHandlers(): void {
       const resolved = resolveFilePath(filePath, getAllowedCandidateBasePaths(options))
       if (!resolved || !isPathAllowed(resolved, options)) return null
       const st = statSync(resolved)
-      if (maxSize && st.size > maxSize) return null
+      if (st.size > MAX_ATTACHMENT_SIZE) return null
       return readFileSync(resolved).toString('base64')
     }
   )
@@ -4200,40 +4211,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.LIST_ATTACHED_DIRECTORY,
     async (_, dirPath: string, access?: FileAccessOptions | string[]): Promise<FileEntry[]> => {
-      const { readdirSync, statSync } = await import('node:fs')
-      const { resolve } = await import('node:path')
-
       const safePath = resolve(dirPath)
       const options = normalizeFileAccessOptions(access)
       if (!isPathAllowed(safePath, options)) {
+        // 已解绑或被删除的附加目录不应让文件面板持续报错。
+        if (!existsSync(safePath)) return []
         throw new Error('访问路径不在允许范围内')
       }
-      const entries: FileEntry[] = []
-      const items = readdirSync(safePath, { withFileTypes: true })
 
-      for (const item of items) {
-        if (HIDDEN_FS_ENTRIES.has(item.name)) continue
-        const fullPath = resolve(safePath, item.name)
-        const isDirectory = item.isDirectory()
-        const size = isDirectory ? undefined : statSync(fullPath).size
-        entries.push({
-          name: item.name,
-          path: fullPath,
-          isDirectory,
-          size,
-        })
-      }
-
-      // 目录在前，文件在后；隐藏文件（.开头）排在同类末尾
-      entries.sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-        const aHidden = a.name.startsWith('.')
-        const bHidden = b.name.startsWith('.')
-        if (aHidden !== bHidden) return aHidden ? 1 : -1
-        return a.name.localeCompare(b.name)
-      })
-
-      return entries
+      return listShallowDirectory(safePath)
     }
   )
 

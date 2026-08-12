@@ -51,6 +51,7 @@ import type {
   RecentMessagesResult,
   MessageSearchResult,
   AgentSessionMeta,
+  SetAgentSessionActiveWorktreeInput,
   SDKMessage,
   AgentSendInput,
   AgentRuntime,
@@ -747,6 +748,9 @@ export interface ElectronAPI {
   /** 更新 Agent 会话模型选择 */
   updateAgentSessionModel: (id: string, channelId?: string, modelId?: string) => Promise<AgentSessionMeta>
 
+  /** 选择或清除当前会话的活动 worktree */
+  setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => Promise<AgentSessionMeta>
+
   /** 删除 Agent 会话 */
   deleteAgentSession: (id: string) => Promise<void>
 
@@ -1117,7 +1121,7 @@ export interface ElectronAPI {
   showItemInFolder: (filePath: string, candidateBasePaths?: string[]) => Promise<boolean>
 
   /** 解析文件路径并读取内容（供内联预览使用） */
-  resolveAndReadFile: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<{ resolvedPath: string; content: string } | null>
+  resolveAndReadFile: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null>
 
   /** 写入文本文件（供 Markdown 内联编辑使用） */
   writeTextFile: (filePath: string, content: string, access?: import('@myyoda/shared').FileAccessOptions) => Promise<boolean>
@@ -2182,6 +2186,10 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_SESSION_MODEL, id, channelId, modelId)
   },
 
+  setAgentSessionActiveWorktree: (input: SetAgentSessionActiveWorktreeInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_ACTIVE_WORKTREE, input)
+  },
+
   deleteAgentSession: (id: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_SESSION, id)
   },
@@ -2739,7 +2747,7 @@ const electronAPI: ElectronAPI = {
   },
 
   resolveAndReadFile: (filePath: string, access?: import('@myyoda/shared').FileAccessOptions) => {
-    return ipcRenderer.invoke('file:resolve-and-read', filePath, access) as Promise<{ resolvedPath: string; content: string } | null>
+    return ipcRenderer.invoke('file:resolve-and-read', filePath, access) as Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null>
   },
 
   writeTextFile: (filePath: string, content: string, access?: import('@myyoda/shared').FileAccessOptions) => {

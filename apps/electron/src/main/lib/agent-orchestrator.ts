@@ -35,6 +35,8 @@ import {
 } from '@myyoda/shared'
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
+import { getMainRepoRoot } from './git-diff-service'
+import { normalizePathForCompare } from '@myyoda/shared'
 import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
 import { friendlyErrorMessage, isPromptTooLongError, isThinkingSignatureError, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './agent-error-utils'
@@ -46,7 +48,7 @@ import { getFetchFn } from './proxy-fetch'
 import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
-import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, rewindPiAgentSession } from './agent-session-manager'
+import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
 import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
@@ -287,6 +289,8 @@ function collectAttachedDirectories(params: {
   }
 
   for (const d of extraDirs ?? []) push(d)
+  if (sessionMeta?.activeWorktree?.path) push(sessionMeta.activeWorktree.path)
+  if (workspaceSlug && sessionMeta) push(getAgentSessionWorkspacePath(workspaceSlug, sessionMeta.id))
   for (const d of sessionMeta?.attachedDirectories ?? []) push(d)
   for (const file of sessionMeta?.attachedFiles ?? []) push(dirname(file))
 
@@ -1072,6 +1076,19 @@ export class AgentOrchestrator {
       let agentSandboxDir: string | undefined
       if (workspaceId) {
         const ws = getAgentWorkspace(workspaceId)
+        if (!ws) {
+          throw new Error(`指定的 Agent 项目不存在或已删除: ${workspaceId}`)
+        }
+        let activeWorktree = sessionMeta?.activeWorktree
+        if (activeWorktree) {
+          const activeWorktreePath = getActiveWorktreePath(sessionMeta)
+          const currentMainRepoRoot = activeWorktreePath ? await getMainRepoRoot(activeWorktreePath) : null
+          if (!activeWorktreePath || !currentMainRepoRoot || normalizePathForCompare(currentMainRepoRoot) !== normalizePathForCompare(activeWorktree.mainRepoRoot)) {
+            console.warn(`[Agent 编排] 活动 worktree 已失效，回退默认 cwd: ${activeWorktree.path}`)
+            sessionMeta = updateAgentSessionMeta(sessionId, { activeWorktree: undefined })
+            activeWorktree = undefined
+          }
+        }
         if (ws) {
           workspaceSlug = ws.slug
           workspace = ws
@@ -1081,13 +1098,14 @@ export class AgentOrchestrator {
           const sandboxCwd = getAgentSessionWorkspacePath(ws.slug, sessionId)
           agentSandboxDir = sandboxCwd
           const cwdResolution = resolveSessionCwd({
-            gitWorktreePath: sessionMeta?.gitWorktreePath,
+            gitWorktreePath: sessionMeta?.gitWorktreePath ?? activeWorktree?.path,
             agentCwdMode: sessionMeta?.agentCwdMode,
             projectId: sessionMeta?.projectId,
             resolveProjectCwd: (projectId) =>
               projectRepository.resolveEffectiveCwdForProject(getAgentWorkspacePath(ws.slug), projectId),
             sandboxCwd,
           })
+
 
           if ('unavailable' in cwdResolution) {
             reportPreflightError({
