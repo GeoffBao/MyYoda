@@ -1242,7 +1242,7 @@ function buildMyYodaProductToolDefinitions(sdk: PiSdk, canUseTool: PiAgentQueryO
 }
 
 const WSL_EXPORT_ENV_KEYS = [
-  'PROMA_CLI',
+  'MYYODA_CLI',
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'ALL_PROXY',
@@ -1251,8 +1251,8 @@ const WSL_EXPORT_ENV_KEYS = [
   'https_proxy',
   'all_proxy',
   'no_proxy',
-  'PROMA_WINDOWS_SHELL',
-  'PROMA_WSL_DISTRO',
+  'MYYODA_WINDOWS_SHELL',
+  'MYYODA_WSL_DISTRO',
 ] as const
 
 function shellQuote(value: string): string {
@@ -1272,7 +1272,7 @@ function buildWslCommand(command: string, env: NodeJS.ProcessEnv | undefined): s
   for (const key of WSL_EXPORT_ENV_KEYS) {
     const rawValue = env?.[key]
     if (!rawValue) continue
-    const value = key === 'PROMA_CLI' ? windowsPathToWslPath(rawValue) : rawValue
+    const value = key === 'MYYODA_CLI' ? windowsPathToWslPath(rawValue) : rawValue
     exportLines.push(`export ${key}=${shellQuote(value)}`)
   }
 

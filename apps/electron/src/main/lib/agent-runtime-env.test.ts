@@ -36,7 +36,7 @@ describe('Agent Windows Shell 运行环境', () => {
       shellKind: 'git-bash',
       shellPath: gitBash.path,
       env: {
-        PROMA_WINDOWS_SHELL: 'git-bash',
+        MYYODA_WINDOWS_SHELL: 'git-bash',
       },
     })
   })
@@ -55,8 +55,8 @@ describe('Agent Windows Shell 运行环境', () => {
       wslCommand: 'wsl.exe',
       wslDistro: 'Ubuntu-24.04',
       env: {
-        PROMA_WINDOWS_SHELL: 'wsl',
-        PROMA_WSL_DISTRO: 'Ubuntu-24.04',
+        MYYODA_WINDOWS_SHELL: 'wsl',
+        MYYODA_WSL_DISTRO: 'Ubuntu-24.04',
       },
     })
   })
