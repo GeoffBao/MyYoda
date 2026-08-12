@@ -18,6 +18,7 @@ import { UserAvatar } from '@/components/chat/UserAvatar'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { stickyUserMessageEnabledAtom } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
+import { measurePerformance } from '@/lib/performance-monitor'
 
 /**
  * 悬浮条只需要单行摘要，不需要完整 Markdown 渲染（那是原始消息本身的事）。
@@ -88,31 +89,39 @@ export function StickyUserMessage({ userMessages }: StickyUserMessageProps): Rea
       return
     }
 
+    let frame: number | null = null
     const check = () => {
-      const containerRect = el.getBoundingClientRect()
-      const nodes = el.querySelectorAll<HTMLElement>('[data-message-role="user"]')
+      measurePerformance('history.sticky-user-scan', () => {
+        const containerRect = el.getBoundingClientRect()
+        const nodes = el.querySelectorAll<HTMLElement>('[data-message-role="user"]')
 
-      // 从后往前找第一个完全在视口上方的用户消息节点
-      let found: UserMessageData | null = null
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const node = nodes[i]!
-        const nodeRect = node.getBoundingClientRect()
-        if (nodeRect.bottom < containerRect.top) {
-          // 找到了视口上方最近的用户消息
-          const msgId = node.getAttribute('data-message-id')
-          if (msgId) {
-            found = messageMap.get(msgId) ?? null
+        // 从后往前找第一个完全在视口上方的用户消息节点
+        let found: UserMessageData | null = null
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const node = nodes[i]!
+          const nodeRect = node.getBoundingClientRect()
+          if (nodeRect.bottom < containerRect.top) {
+            // 找到了视口上方最近的用户消息
+            const msgId = node.getAttribute('data-message-id')
+            if (msgId) found = messageMap.get(msgId) ?? null
+            break
           }
-          break
         }
-      }
-      setStickyMessage(found)
+        setStickyMessage((previous) => previous?.id === found?.id ? previous : found)
+      })
+    }
+    const scheduleCheck = (): void => {
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        check()
+      })
     }
 
-    el.addEventListener('scroll', check, { passive: true })
+    el.addEventListener('scroll', scheduleCheck, { passive: true })
 
     // 监听容器尺寸变化
-    const resizeObserver = new ResizeObserver(check)
+    const resizeObserver = new ResizeObserver(scheduleCheck)
     resizeObserver.observe(el)
 
     // 监听内容区域 DOM 变化（流式输出、消息加载后及时检测）
@@ -125,7 +134,8 @@ export function StickyUserMessage({ userMessages }: StickyUserMessageProps): Rea
     const rafId = requestAnimationFrame(check)
 
     return () => {
-      el.removeEventListener('scroll', check)
+      if (frame !== null) cancelAnimationFrame(frame)
+      el.removeEventListener('scroll', scheduleCheck)
       resizeObserver.disconnect()
       cancelAnimationFrame(rafId)
     }
