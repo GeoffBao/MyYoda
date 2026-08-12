@@ -516,6 +516,8 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
     usedPaths.add(targetPath)
 
     mkdirSync(dirname(targetPath), { recursive: true })
+
+    const buffer = Buffer.from(file.data, 'base64')
     writeFileSync(targetPath, buffer)
 
     const actualFilename = relative(sessionDir, targetPath)

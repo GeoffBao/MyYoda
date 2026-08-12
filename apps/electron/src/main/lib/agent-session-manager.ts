@@ -1059,7 +1059,7 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     updateAgentSessionMeta(newMeta.id, {
       sdkSessionId: forkedManager.getSessionId(),
       piSessionFile,
-      piEntryBindings: branchBindings,
+      piEntryBindings: { ...(sourceMeta.piEntryBindings ?? {}) },
       activeWorktree: sourceActiveWorktree,
       forkSourceDir: sourceDir,
       // fork 继承源会话的 projectId，让新会话出现在左侧「项目」分组；
@@ -1069,7 +1069,7 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     })
     newMeta.sdkSessionId = forkedManager.getSessionId()
     newMeta.piSessionFile = piSessionFile
-    newMeta.piEntryBindings = branchBindings
+    newMeta.piEntryBindings = { ...(sourceMeta.piEntryBindings ?? {}) }
     newMeta.activeWorktree = sourceActiveWorktree
     if (sourceMeta.projectId) newMeta.projectId = sourceMeta.projectId
     newMeta.agentCwdMode = 'session'

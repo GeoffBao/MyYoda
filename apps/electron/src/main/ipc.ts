@@ -4154,7 +4154,7 @@ export function registerIpcHandlers(): void {
       const resolved = resolveFilePath(filePath, getAllowedCandidateBasePaths(options))
       if (!resolved || !isPathAllowed(resolved, options)) return null
       const st = statSync(resolved)
-      if (st.size > effectiveMaxSize) return null
+      if (st.size > MAX_ATTACHMENT_SIZE) return null
       return readFileSync(resolved).toString('base64')
     }
   )

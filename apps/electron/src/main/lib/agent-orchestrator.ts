@@ -36,6 +36,7 @@ import {
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getMainRepoRoot } from './git-diff-service'
+import { normalizePathForCompare } from '@myyoda/shared'
 import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
 import { friendlyErrorMessage, isPromptTooLongError, isThinkingSignatureError, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './agent-error-utils'
@@ -1104,8 +1105,7 @@ export class AgentOrchestrator {
               projectRepository.resolveEffectiveCwdForProject(getAgentWorkspacePath(ws.slug), projectId),
             sandboxCwd,
           })
-          runtimeEnv.env.PROMA_WORKSPACE_DIR = getAgentWorkspacePath(ws.slug)
-          runtimeEnv.env.PROMA_WORKSPACE_SLUG = ws.slug
+
 
           if ('unavailable' in cwdResolution) {
             reportPreflightError({
