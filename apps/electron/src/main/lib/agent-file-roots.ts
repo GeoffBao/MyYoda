@@ -10,6 +10,7 @@ import { mkdirSync } from 'node:fs'
 import { projectRepository } from './project-repository'
 import { resolveSessionCwd } from './agent-cwd-resolver'
 import { getAgentSessionWorkspacePath, getAgentWorkspacePath, getWorkspaceFilesDir } from './config-paths'
+import { getAgentWorkspaceBySlug } from './agent-workspace-manager'
 
 export interface BuildAgentSessionFileRootsInput {
   sessionDir: string
@@ -50,6 +51,7 @@ export function resolveAgentSessionFileRoots(
   const workspaceFilesPath = getWorkspaceFilesDir(workspaceSlug)
   const cwdResolution = resolveSessionCwd({
     gitWorktreePath: sessionMeta.gitWorktreePath,
+    workspaceProjectRootPath: getAgentWorkspaceBySlug(workspaceSlug)?.projectRootPath,
     agentCwdMode: sessionMeta.agentCwdMode,
     projectId: sessionMeta.projectId,
     resolveProjectCwd: (projectId) => projectRepository.resolveEffectiveCwdForProject(getAgentWorkspacePath(workspaceSlug), projectId),

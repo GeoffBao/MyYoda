@@ -332,6 +332,7 @@ import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/s
 import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
+import { getProjectToWorkspaceMigrationStatus, runProjectToWorkspaceMigration, type ProjectToWorkspaceMigrationResult } from './lib/project-to-workspace-migration'
 import {
   listAgentWorkspaces,
   createAgentWorkspace,
@@ -339,6 +340,8 @@ import {
   deleteAgentWorkspace,
   assertAgentWorkspaceDeletionSafe,
   reorderAgentWorkspaces,
+  relinkAgentWorkspaceProjectRoot,
+  restoreAgentWorkspaceProjectRoot,
   ensureDefaultWorkspace,
   getWorkspaceMcpConfig,
   saveWorkspaceMcpConfig,
@@ -2879,11 +2882,11 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 创建 Agent 工作区
+  // 创建 Agent 工作区（支持绑定本地项目根目录：从本地文件夹创建项目）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_WORKSPACE,
-    async (_, name: string): Promise<AgentWorkspace> => {
-      return createAgentWorkspace(name)
+    async (_event, input: string | { name: string; projectRootPath?: string }): Promise<AgentWorkspace> => {
+      return createAgentWorkspace(input)
     }
   )
 
@@ -2921,6 +2924,38 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.REORDER_WORKSPACES,
     async (_, orderedIds: string[]): Promise<AgentWorkspace[]> => {
       return reorderAgentWorkspaces(orderedIds)
+    }
+  )
+
+  // 重新关联工作区本地项目根目录（从本地文件夹创建/重新绑定项目）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RELINK_WORKSPACE_PROJECT_ROOT,
+    async (_event, id: string, projectRootPath: string): Promise<AgentWorkspace> => {
+      return relinkAgentWorkspaceProjectRoot(id, projectRootPath)
+    }
+  )
+
+  // 在缺失的原路径恢复空项目根目录
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RESTORE_WORKSPACE_PROJECT_ROOT,
+    async (_event, id: string): Promise<AgentWorkspace> => {
+      return restoreAgentWorkspaceProjectRoot(id)
+    }
+  )
+
+  // 查询项目→工作区迁移状态（阶段二，手动触发入口状态）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_PROJECT_WORKSPACE_MIGRATION_STATUS,
+    async (_event, workspaceId: string): Promise<{ done: boolean; pendingCount: number }> => {
+      return getProjectToWorkspaceMigrationStatus(workspaceId)
+    }
+  )
+
+  // 执行项目→工作区迁移（手动触发，含备份；幂等）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION,
+    async (_event, workspaceId: string): Promise<ProjectToWorkspaceMigrationResult> => {
+      return runProjectToWorkspaceMigration(workspaceId)
     }
   )
 

@@ -1389,6 +1389,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
   }, [setAgentSessions])
 
+  /** 从本地文件夹创建项目（工作区，对齐 Proma）：选择文件夹 → 创建并切换到新工作区 */
+  const handleCreateProjectFromFolder = React.useCallback(async (): Promise<void> => {
+    const result = await window.electronAPI.openFolderDialog()
+    if (!result?.path) return
+    try {
+      const workspace = await window.electronAPI.createAgentWorkspace({ name: result.name, projectRootPath: result.path })
+      setWorkspaces((prev) => [workspace, ...prev.filter((existing) => existing.id !== workspace.id)])
+      setCurrentWorkspaceId(workspace.id)
+      setActiveView('conversations')
+      window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
+      toast.success(`已创建项目「${workspace.name}」`)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '创建失败'
+      toast.error(msg)
+    }
+  }, [setActiveView, setCurrentWorkspaceId, setWorkspaces])
+
   /** Project 分组模式下全局「+」新建项目（KanbanProject，不是 AgentWorkspace） */
   const handleCreateKanbanProject = React.useCallback(async (input: Parameters<typeof window.electronAPI.projects.create>[1]): Promise<void> => {
     if (!workspaceRoot) return
@@ -2769,7 +2786,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  aria-label={`Project 看板，${activeTaskCount} 个未完成`}
+                  aria-label={`看板，${activeTaskCount} 个未完成`}
                   onClick={handleOpenTaskBoard}
                   className={cn(
                     'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
@@ -2793,7 +2810,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Project 看板（{activeTaskCount} 个未完成）</TooltipContent>
+              <TooltipContent side="right">看板（{activeTaskCount} 个未完成）</TooltipContent>
             </Tooltip>
           )}
 
@@ -3249,7 +3266,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               )}
             </button>
 
-            {/* Project 看板：Workspace 级正式工作项入口 */}
+            {/* 任务看板：工作区级正式工作项入口（回归 Proma：看板按工作区展示） */}
             {mode === 'agent' && (
               <button
                 type="button"
@@ -3262,7 +3279,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 )}
               >
                 <LayoutDashboard size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">Project 看板</span>
+                <span className="min-w-0 flex-1 truncate text-left">看板</span>
                 {activeTaskCount > 0 && (
                   <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
                     {formatSidebarModuleCount(activeTaskCount)}
@@ -3516,11 +3533,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       )}
 
       {/* 项目/会话列表标题行（回归 Proma：Agent 模式左侧以项目分组为主导，无筛选菜单；
-          右侧常驻「新建项目」入口） */}
+          右侧常驻「从本地文件夹创建项目」+「新建项目」入口） */}
       {mode === 'agent' && (
         <div className="flex items-center justify-between px-3 pt-1 pb-1 border-b border-border/50">
           <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">项目</span>
           <span className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="从本地文件夹创建项目"
+                  onClick={() => void handleCreateProjectFromFolder()}
+                  className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                >
+                  <FolderOpen size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">从本地文件夹创建项目</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

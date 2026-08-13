@@ -1190,6 +1190,7 @@ export class AgentOrchestrator {
           agentSandboxDir = sandboxCwd
           const cwdResolution = resolveSessionCwd({
             gitWorktreePath: sessionMeta?.gitWorktreePath ?? activeWorktree?.path,
+            workspaceProjectRootPath: ws.projectRootPath,
             agentCwdMode: sessionMeta?.agentCwdMode,
             projectId: sessionMeta?.projectId,
             resolveProjectCwd: (projectId) =>
