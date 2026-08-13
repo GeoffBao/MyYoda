@@ -37,6 +37,8 @@ export interface BuildKanbanViewModelInput {
   /** taskSlug → TaskSpec.defaults.expertId */
   expertIdsBySlug?: Map<string, string>
   fallbackModel?: string
+  /** workspaceId → 工作区名；跨工作区视图（scope=all）时传入，卡片归属显示工作区徽标 */
+  workspaceNameById?: Map<string, string>
 }
 
 function findTaskRun(session: AgentSessionMeta, runs: KanbanTaskRun[]): KanbanTaskRun | undefined {
@@ -73,6 +75,7 @@ function buildItem(
   specNodes: SpecNodeSummary[] | undefined,
   fallbackModel: string,
   taskExpertId: string | undefined,
+  workspaceNameById?: Map<string, string>,
 ): KanbanItem {
   const run = findTaskRun(session, runs)
   const totalNodes = session.taskNodeCount
@@ -86,6 +89,8 @@ function buildItem(
   // （{ kind: 'workspace' } → !session.projectId）承载「未绑定」语义，不再懒归类到隐藏容器。
   const project = session.projectId ? projectsById.get(session.projectId) ?? null : null
   const expertId = resolveExpertId(taskExpertId, project?.defaultExpertId) ?? undefined
+  // 跨工作区视图（scope=all）时携带工作区名，卡片显示归属徽标；当前工作区视图不冗余设置
+  const workspaceName = session.workspaceId ? workspaceNameById?.get(session.workspaceId) : undefined
 
   // 有 run 节点状态但还没 child session 时，用 nodeStates 合成行标题，避免卡片只有 0/N 进度条
   const nodesForMerge = specNodes?.length
@@ -114,6 +119,7 @@ function buildItem(
     session,
     hasSession: true,
     project,
+    ...(workspaceName ? { workspaceName } : {}),
     subtasks,
     ...(expertId ? { expertId } : {}),
     ...(totalNodes > 0 ? { subtaskTotal: totalNodes } : {}),
@@ -200,6 +206,7 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
         input.specNodesBySlug?.get(summary.taskSlug),
         fallbackModel,
         input.expertIdsBySlug?.get(summary.taskSlug),
+        input.workspaceNameById,
       )
       return {
         ...item,
@@ -232,6 +239,7 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
       session.taskSlug ? input.specNodesBySlug?.get(session.taskSlug) : undefined,
       fallbackModel,
       session.taskSlug ? input.expertIdsBySlug?.get(session.taskSlug) : undefined,
+      input.workspaceNameById,
     ))
     .sort((left, right) => right.session.updatedAt - left.session.updatedAt || left.id.localeCompare(right.id))
 
