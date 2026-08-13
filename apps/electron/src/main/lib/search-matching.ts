@@ -2,4 +2,4 @@ export {
   findBestSearchMatch,
   type SearchMatch,
   type SearchMatchKind,
-} from '@proma/shared'
+} from '@myyoda/shared'

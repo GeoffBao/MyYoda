@@ -348,7 +348,7 @@ export function SearchDialog(): React.ReactElement {
 
     // 项目搜索
     const projectMatches: ProjectResult[] = kanbanProjects
-      .filter((p) => p.name.toLowerCase().includes(qLower))
+      .filter((p) => matchesTitle(p.name))
       .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
       .slice(0, 10)
       .map((p) => ({
