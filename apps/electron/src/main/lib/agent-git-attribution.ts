@@ -2,15 +2,14 @@
  * MyYoda Git / PR 归因标识
  *
  * 目标：当 Agent 代用户创建 commit / PR 时，附带可搜索、可关闭的 MyYoda 标识，
- * 用于产品曝光，同时标注实际执行的模型；避免污染 GitHub contributors——
- * `Co-Authored-By` trailer 只有值满足 `Name <email>` 格式才会被 GitHub 计入 co-author，
- * 本项目的值固定是 `<模型名> in MyYoda`（无邮箱），不会匹配该格式，不会产生虚假 contributor。
+ * 用于产品曝光。Commit trailer 固定为 `MyYoda <MyYoda@noreply.github.com>`——
+ * 标准 `Name <email>` 格式，GitHub 会正式识别为 co-author（署名固定为 MyYoda，
+ * 不随执行模型变化；这是用户明确要求的固定署名方式，会显示在 contributors 列表）。
  *
- * v1（最小版）两层保障：
+ * v1（最小版）保障：
  * 1. System prompt 指令（Claude / Pi 通用）— 引导 Agent 在 git commit / gh pr 时附加标识，
- *    模型名由 Agent 自己填入（它在 preset 中已知道自己的展示名，如「Sonnet 5」）
- * 2. Claude SDK session `.claude/settings.json` 的 `attribution` 字段 — 覆盖 SDK 默认 Co-Authored-By，
- *    用当前会话选定的 modelId 作为标识（该路径无法感知 Agent 自称的展示名，直接用 modelId）
+ *    值固定，无需 Agent 自行填入模型名。
+ * 2. （Claude runtime 已退役，Pi runtime 不需要 .claude/settings.json，SDK attribution 路径不再使用）
  *
  * 后续可增强：canUseTool 对 Bash 的确定性 --trailer / body 注入。
  */
@@ -24,12 +23,13 @@ export const MYYODA_GITHUB_URL = 'https://github.com/GeoffBao/MyYoda'
 /** Commit trailer key（标准 git trailer key） */
 export const MYYODA_COMMIT_TRAILER_KEY = 'Co-Authored-By'
 
-/** Commit trailer 值的固定后缀，标识来自 MyYoda */
-const MYYODA_COMMIT_TRAILER_SUFFIX = 'in MyYoda'
-
-/** 未知模型时的兜底展示名 */
 /**
- * 生成 commit trailer：`Co-Authored-By: <模型名> in MyYoda`
+ * Commit trailer 固定值：`MyYoda <MyYoda@noreply.github.com>`。
+ * 标准 `Name <email>` 格式，GitHub 会识别为 co-author；固定署名 MyYoda，
+ * 不随执行模型变化（旧版为 `<模型名> in MyYoda`，无邮箱、不计入 co-author）。
+ */
+export const MYYODA_COMMIT_TRAILER_VALUE = 'MyYoda <MyYoda@noreply.github.com>'
+
 /**
  * PR / MR 描述底部标识。
  * 含开源仓库完整链接，便于推广与引流。
@@ -57,7 +57,7 @@ export function buildGitAttributionPromptSection(enabled: boolean): string {
     return `## Git / PR 标识
 
 用户已在 MyYoda 设置中关闭「Git/PR 标识」。当你创建 git commit 或 Pull Request / Merge Request 时：
-- **不要**添加任何 MyYoda 相关归因（包括 \`${MYYODA_COMMIT_TRAILER_KEY}: ... ${MYYODA_COMMIT_TRAILER_SUFFIX}\`、\`${MYYODA_PR_ATTRIBUTION}\`、\`Generated with MyYoda\` 等）
+- **不要**添加任何 MyYoda 相关归因（包括 \`${MYYODA_COMMIT_TRAILER_KEY}: ${MYYODA_COMMIT_TRAILER_VALUE}\`、\`${MYYODA_PR_ATTRIBUTION}\`、\`Generated with MyYoda\` 等）
 - 也不要主动建议用户打开该标识；仅当用户明确要求时再添加`
   }
 
@@ -69,15 +69,14 @@ export function buildGitAttributionPromptSection(enabled: boolean): string {
 在 commit message **末尾**追加标准 git trailer（与正文之间空一行）：
 
 \`\`\`text
-${MYYODA_COMMIT_TRAILER_KEY}: <当前模型展示名> ${MYYODA_COMMIT_TRAILER_SUFFIX}
+${MYYODA_COMMIT_TRAILER_KEY}: ${MYYODA_COMMIT_TRAILER_VALUE}
 \`\`\`
 
-\`<当前模型展示名>\` 用你在本次会话中实际运行的模型的展示名（preset 里「You are powered by the model named ...」给出的名字，例如 \`Claude Opus 4.8\`、\`Sonnet 5\`）；不要写成模型 ID（如 \`claude-opus-4-8\`），也不要固定写死某个模型名——如果委派了使用不同模型的子会话去提交，用那个子会话实际运行的模型名。
+值固定为 \`MyYoda <MyYoda@noreply.github.com>\`（标准 \`Name <email>\` 格式，GitHub 会显示为 MyYoda 的 co-author，这是有意为之的固定署名）；**不要**改成当前模型的展示名，也不要改名字或邮箱。
 
 规则：
-- trailer 值不含邮箱，格式不匹配 GitHub \`Name <email>\` 的 co-author 识别规则，不会污染 contributors 列表，可放心使用
-- 若 message 已含匹配 \`${MYYODA_COMMIT_TRAILER_KEY}:.*${MYYODA_COMMIT_TRAILER_SUFFIX}\`（大小写不敏感）的行，不要重复添加
-- 推荐：\`git commit --trailer "${MYYODA_COMMIT_TRAILER_KEY}: <当前模型展示名> ${MYYODA_COMMIT_TRAILER_SUFFIX}" -m "subject"\`；或多段 \`-m\`，确保 trailer 单独处于最后一段且格式为 \`Key: Value\`
+- 若 message 已含匹配 \`${MYYODA_COMMIT_TRAILER_KEY}:.*MyYoda.*\`（大小写不敏感）的行，不要重复添加
+- 推荐：\`git commit --trailer "${MYYODA_COMMIT_TRAILER_KEY}: ${MYYODA_COMMIT_TRAILER_VALUE}" -m "subject"\`；或多段 \`-m\`，确保 trailer 单独处于最后一段且格式为 \`Key: Value\`
 - 不要改 author / committer 身份；标识只出现在 message trailer
 
 ### Pull Request / Merge Request

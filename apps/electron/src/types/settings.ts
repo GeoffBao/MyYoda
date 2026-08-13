@@ -478,7 +478,7 @@ export interface AppSettings {
   autoCleanupArchivedDays?: number
   /**
    * Agent 代创建 git commit / PR 时是否附加 MyYoda 推广标识。
-   * 默认 true：commit trailer `Co-Authored-By: <模型名> in MyYoda`，PR body 末尾含 https://github.com/GeoffBao/MyYoda。
+   * 默认 true：commit trailer `Co-Authored-By: MyYoda <MyYoda@noreply.github.com>`，PR body 末尾含 https://github.com/GeoffBao/MyYoda。
    * 关闭后不注入任何 MyYoda 归因，并覆盖 Claude SDK 默认 Co-Authored-By。
    */
   gitAttributionEnabled?: boolean
