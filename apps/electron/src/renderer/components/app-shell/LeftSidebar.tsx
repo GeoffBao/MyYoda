@@ -62,6 +62,8 @@ import {
   liveMessagesMapAtom,
   agentSessionPendingFilesAtom,
   agentSessionStreamingStateAtomFamily,
+  agentSessionViewStreamStateAtomFamily,
+  agentLiveMessagesAtomFamily,
   agentSessionDraftsAtom,
   agentSessionDraftAtomFamily,
   agentSessionDraftHtmlAtomFamily,
@@ -856,6 +858,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     // atomFamily 内部缓存（Jotai 对 string key 强引用 Map，不显式 remove 永不释放）。
     // 删除/归档是会话的终态，连同草稿一起清理，无需像关闭 Tab 那样保留可恢复输入。
     agentSessionStreamingStateAtomFamily.remove(id)
+    agentSessionViewStreamStateAtomFamily.remove(id)
+    agentLiveMessagesAtomFamily.remove(id)
     agentSessionDraftAtomFamily.remove(id)
     agentSessionDraftHtmlAtomFamily.remove(id)
     agentPendingFilesAtomFamily.remove(id)
@@ -3937,6 +3941,10 @@ const ConversationItem = React.memo(function ConversationItem({
           onDoubleClick={(e) => {
             e.stopPropagation()
             startEdit()
+          }}
+          style={active ? undefined : {
+            contentVisibility: 'auto',
+            containIntrinsicSize: 'auto 30px',
           }}
           className={cn(
             'session-quick-switch-row group relative w-full flex items-center gap-1.5 rounded-md py-1 pl-2 pr-1.5 transition-colors duration-fast titlebar-no-drag text-left',
