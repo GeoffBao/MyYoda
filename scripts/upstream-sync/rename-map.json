@@ -95,6 +95,10 @@
     {
       "from": "proma_event",
       "to": "myyoda_event"
+    },
+    {
+      "from": "_promaLiveRunStartedAt",
+      "to": "_myyodaLiveRunStartedAt"
     }
   ],
   "forbiddenPatterns": [

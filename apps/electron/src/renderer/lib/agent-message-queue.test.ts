@@ -1,5 +1,43 @@
 import { describe, expect, test } from 'bun:test'
-import { buildQueuedMessageSendPayload, getQueuedMessageDisplayParts, parseQueuedMessageMentions } from './agent-message-queue'
+import {
+  buildQueuedMessageSendPayload,
+  getQueuedMessageDisplayParts,
+  parseQueuedMessageMentions,
+  shouldAutoDispatchQueuedMessage,
+} from './agent-message-queue'
+
+const baseDispatchOptions = {
+  queueLength: 1,
+  running: false,
+  backgroundWaiting: false,
+  stoppedByUser: false,
+  hasBlockingRequests: false,
+  hasChannel: true,
+  hasAvailableModel: true,
+}
+
+describe('shouldAutoDispatchQueuedMessage（后台队列自动派发的闸门条件）', () => {
+  test('Given 队列非空且无阻塞条件 When 判断是否派发 Then 允许', () => {
+    expect(shouldAutoDispatchQueuedMessage(baseDispatchOptions)).toBe(true)
+  })
+
+  test('Given 队列为空 When 判断是否派发 Then 拒绝', () => {
+    expect(shouldAutoDispatchQueuedMessage({ ...baseDispatchOptions, queueLength: 0 })).toBe(false)
+  })
+
+  for (const [field, value] of [
+    ['running', true],
+    ['backgroundWaiting', true],
+    ['stoppedByUser', true],
+    ['hasBlockingRequests', true],
+    ['hasChannel', false],
+    ['hasAvailableModel', false],
+  ] as const) {
+    test(`Given ${field}=${value} When 判断是否派发 Then 拒绝`, () => {
+      expect(shouldAutoDispatchQueuedMessage({ ...baseDispatchOptions, [field]: value })).toBe(false)
+    })
+  }
+})
 
 describe('queued message @file mention path decoding (Agent 侧真实路径)', () => {
   test('decodes percent-encoded @file path back to the real path with spaces', () => {
