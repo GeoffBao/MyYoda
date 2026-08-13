@@ -16,13 +16,13 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2 } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2, ArrowRightLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
-import { agentSkillsTabAtom } from '@/atoms/active-view'
+import { agentSkillsTabAtom, pendingAgentSkillsProjectIdAtom } from '@/atoms/active-view'
 import { toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
@@ -103,6 +103,16 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   React.useEffect(() => { setSelectedProjectId(null) }, [currentWorkspaceId])
   const pickableProjects = React.useMemo(() => filterPickableKanbanProjects(kanbanProjects), [kanbanProjects])
   const selectedProject = selectedProjectId ? pickableProjects.find((p) => p.id === selectedProjectId) ?? null : null
+
+  // 消费从 Project 设置页“管理 Skills/MCP”跳转过来的预选信号：一旦在当前工作区的可选 Project 列表里找到匹配项（包括数据晚于本组件挂载才到位的情况）就自动选中并清空，避免影响之后的手动切换
+  const [pendingProjectId, setPendingProjectId] = useAtom(pendingAgentSkillsProjectIdAtom)
+  React.useEffect(() => {
+    if (!pendingProjectId) return
+    const match = pickableProjects.find((p) => p.id === pendingProjectId)
+    if (!match) return
+    setSelectedProjectId(pendingProjectId)
+    setPendingProjectId(null)
+  }, [pendingProjectId, pickableProjects, setPendingProjectId])
 
   const data = useAgentSkillsData(selectedProjectId)
 
@@ -285,21 +295,30 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                 <ChevronDown size={14} className="text-foreground/45" />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="max-h-[400px] w-64 overflow-y-auto scrollbar-thin p-1">
-              <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                {data.workspaceName || '当前工作区'}
+            <PopoverContent align="end" className="max-h-[440px] w-72 overflow-y-auto scrollbar-thin p-1">
+              {/* 当前工作区上下文标题——明确标明下面这段选项都属于哪个工作区，避免跟下方“共享”选项的措辞撞词 */}
+              <div className="px-2 pb-1.5 pt-1.5 text-[11px] font-medium text-muted-foreground/70">
+                当前工作区：{data.workspaceName || '未选择'}
               </div>
               <button
                 type="button"
                 onClick={() => { setSelectedProjectId(null); setWsPopoverOpen(false) }}
                 className={cn(
-                  'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors',
+                  'flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-[13px] transition-colors',
                   !selectedProjectId ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
                 )}
               >
-                <span className="min-w-0 flex-1 truncate">工作区默认（跨项目共享）</span>
-                {!selectedProjectId && <Check size={14} className="shrink-0 text-primary" />}
+                <Blocks size={15} className="mt-0.5 shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">全部项目共享</span>
+                  <span className="block text-[11px] text-muted-foreground">不限定具体项目，这个工作区下所有 Project 都能用</span>
+                </span>
+                {!selectedProjectId && <Check size={14} className="mt-0.5 shrink-0 text-primary" />}
               </button>
+
+              {pickableProjects.length > 0 && (
+                <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/70">项目（只对当前项目生效）</div>
+              )}
               {pickableProjects.map((project) => (
                 <button
                   key={project.id}
@@ -310,7 +329,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                     selectedProjectId === project.id ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <FolderOpen size={14} className="shrink-0 text-foreground/35" />
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                  </span>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <LocalProjectBadge workingDirectory={project.workingDirectory} />
                     {selectedProjectId === project.id && <Check size={14} className="shrink-0 text-primary" />}
@@ -321,8 +343,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               {workspaces.length > 1 && (
                 <>
                   <div className="my-1 border-t border-border/50" />
-                  <div className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                    切换工作区
+                  <div className="flex items-center gap-1.5 px-2 pb-1 pt-1 text-[11px] font-medium text-muted-foreground/70">
+                    <ArrowRightLeft size={11} />
+                    切换到其他工作区（离开当前工作区）
                   </div>
                   {workspaces.filter((w) => w.id !== currentWorkspaceId).map((w) => (
                     <button
@@ -335,6 +358,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                       }}
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-accent/50"
                     >
+                      <ArrowRightLeft size={13} className="shrink-0 text-foreground/35" />
                       <span className="min-w-0 flex-1 truncate">{w.name}</span>
                     </button>
                   ))}
@@ -512,6 +536,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onOpen={setSelectedSkillSlug}
               onToggle={data.toggleSkill}
               onUpdate={data.updateSkill}
+              onImport={() => (selectedProjectId ? setShowProjectImport(true) : setShowImport(true))}
             />
           ) : tab === 'mcp' ? (
             <McpTab
@@ -662,6 +687,8 @@ interface SkillsTabProps {
   onOpen: (slug: string) => void
   onToggle: (slug: string, enabled: boolean) => void
   onUpdate: (slug: string) => void
+  /** 打开导入弹窗（按当前 scope 已在上层路由好），空列表下直接给一个可点击的入口，不再只用文字描述 */
+  onImport: () => void
 }
 
 function SkillsTab({
@@ -675,13 +702,24 @@ function SkillsTab({
   onOpen,
   onToggle,
   onUpdate,
+  onImport,
 }: SkillsTabProps): React.ReactElement {
   if (total === 0) {
     return (
       <EmptyState
         icon={<Blocks className="size-8 text-foreground/30" />}
         title="暂无 Skill"
-        hint={isProjectScope ? '可以让 MyYoda 帮你联网查找并安装 Skill，或从工作区默认/其他项目导入。' : '可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或从其他工作区导入。'}
+        hint={isProjectScope ? '可以让 MyYoda 帮你联网查找并安装 Skill，或点击下方按钮从工作区共享配置/其他项目导入。' : '可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或点击下方按钮从其他工作区导入。'}
+        action={
+          <button
+            type="button"
+            onClick={onImport}
+            className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <Plus size={14} />
+            <span>{isProjectScope ? '从工作区默认/其他项目导入' : '从其他工作区导入'}</span>
+          </button>
+        }
       />
     )
   }

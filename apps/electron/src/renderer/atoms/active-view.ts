@@ -24,3 +24,9 @@ export const activeViewAtom = atom<ActiveView>('conversations')
 
 /** Agent 技能视图当前子页，用于外部入口直达 MCP 管理 */
 export const agentSkillsTabAtom = atom<AgentSkillsCapabilityTab>('experts')
+
+/**
+ * 一次性“预选 Project”信号：从 Project 设置页点击“管理 Skills/MCP”跳转到 Yoda 插件时写入，
+ * AgentSkillsView 挂载后读取并自动选中对应 Project，消费后立即清空，避免影响之后正常的手动切换。
+ */
+export const pendingAgentSkillsProjectIdAtom = atom<string | null>(null)

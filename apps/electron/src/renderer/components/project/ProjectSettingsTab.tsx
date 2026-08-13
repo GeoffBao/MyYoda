@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Save } from 'lucide-react'
+import { ArrowRight, Blocks, Save } from 'lucide-react'
+import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,7 @@ import { useExpertOptions } from '@/components/agent-experts/useExpertOptions'
 import { AccentColorPicker } from '@/components/work/AccentColorPicker'
 import { buildProjectUpdate, type ProjectSettingsDraft } from '@/components/work/project-view-model'
 import type { KanbanProject } from '@/components/app-shell/kanban/types'
+import { activeViewAtom, agentSkillsTabAtom, pendingAgentSkillsProjectIdAtom } from '@/atoms/active-view'
 
 interface ProjectSettingsTabProps {
   workspaceRoot: string
@@ -27,12 +29,56 @@ function toDraft(project: KanbanProject): ProjectSettingsDraft {
   }
 }
 
+interface ProjectCapabilitySummary {
+  skillsCount: number
+  mcpCount: number
+  /** 项目是否已自己配置过 Skills/MCP（区别于“没配置过，现在看到的是工作区默认”与“已经自己配置过”两种状态） */
+  hasOwnSkills: boolean
+  hasOwnMcp: boolean
+}
+
 export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }: ProjectSettingsTabProps): React.ReactElement {
   const { options } = useExpertOptions()
   const [draft, setDraft] = React.useState(() => toDraft(project))
   const [busy, setBusy] = React.useState(false)
+  const [capability, setCapability] = React.useState<ProjectCapabilitySummary | null>(null)
+  const setActiveView = useSetAtom(activeViewAtom)
+  const setAgentSkillsTab = useSetAtom(agentSkillsTabAtom)
+  const setPendingAgentSkillsProjectId = useSetAtom(pendingAgentSkillsProjectIdAtom)
 
   React.useEffect(() => setDraft(toDraft(project)), [project])
+
+  // KanbanProject.workspaceId 存的就是 workspace slug（主进程 basename(workspaceRoot)），与 AutomationFormView 同样的取数方式，
+  // 不需要另外从 workspaceRoot 解析。项目尚未关联到 workspaceId（理论上不应发生）时跳过，不显示该小节。
+  React.useEffect(() => {
+    const workspaceSlug = project.workspaceId
+    if (!workspaceSlug) { setCapability(null); return }
+    let cancelled = false
+    Promise.all([
+      window.electronAPI.getProjectSkills(workspaceSlug, project.id),
+      window.electronAPI.getProjectMcpConfig(workspaceSlug, project.id),
+      window.electronAPI.hasProjectSkills(workspaceSlug, project.id),
+      window.electronAPI.hasProjectMcpServers(workspaceSlug, project.id),
+    ]).then(([skills, mcpConfig, hasOwnSkills, hasOwnMcp]) => {
+      if (cancelled) return
+      setCapability({
+        skillsCount: skills.length,
+        mcpCount: Object.keys(mcpConfig.servers).length,
+        hasOwnSkills,
+        hasOwnMcp,
+      })
+    }).catch((cause) => {
+      console.error('[项目设置] 加载 Skills/MCP 摘要失败:', cause)
+    })
+    return () => { cancelled = true }
+  }, [project.workspaceId, project.id])
+
+  /** 跳转到 Yoda 插件并自动预选中当前 Project 的 Skills tab */
+  const openSkillsAndMcp = (): void => {
+    setPendingAgentSkillsProjectId(project.id)
+    setAgentSkillsTab('skills')
+    setActiveView('agent-skills')
+  }
 
   const save = async (): Promise<void> => {
     if (!project.slug || !draft.name.trim() || busy) return
@@ -61,6 +107,28 @@ export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }:
         </div>
         <label className="block space-y-1.5 text-xs font-medium">描述<Input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></label>
       </section>
+
+      {project.workspaceId && (
+        <section className="space-y-3 rounded-xl border border-border/40 bg-card p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Skills / MCP</h2>
+              <p className="text-xs text-muted-foreground">该项目自己的 Skills 与 MCP 服务器；未单独配置时自动沿用工作区默认。</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={openSkillsAndMcp} className="shrink-0 gap-1.5">
+              <Blocks className="h-3.5 w-3.5" />
+              管理
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          {capability && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>Skills：{capability.skillsCount} 个{capability.hasOwnSkills ? '' : '（沿用工作区默认）'}</span>
+              <span>MCP：{capability.mcpCount} 个{capability.hasOwnMcp ? '' : '（沿用工作区默认）'}</span>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="space-y-4 rounded-xl border border-border/40 bg-card p-4 shadow-sm">
         <div><h2 className="text-sm font-semibold">执行上下文</h2><p className="text-xs text-muted-foreground">Task 未显式覆盖时继承这里的工作目录和专家。</p></div>
