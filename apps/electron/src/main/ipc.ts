@@ -72,6 +72,8 @@ import type {
   BulkImportSkillItemResult,
   BulkImportSkillsResult,
   BulkImportWorkspaceSelection,
+  BulkImportProjectSelection,
+  OtherProjectSkillsGroup,
   SkillFileContent,
   WorkspaceCapabilities,
   WorkspaceMemorySummary,
@@ -352,6 +354,8 @@ import {
   hasProjectMcpServers,
   getProjectMcpConfig,
   saveProjectMcpConfig,
+  getOtherProjectSkills,
+  batchImportSkillsToProject,
   importSkillFromWorkspace,
   batchImportSkillsFromWorkspaces,
   updateSkillFromSource,
@@ -3069,6 +3073,22 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.SAVE_PROJECT_MCP_CONFIG,
     async (_, workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig): Promise<void> => {
       return saveProjectMcpConfig(workspaceSlug, projectId, config)
+    }
+  )
+
+  // 获取同工作区内可导入到当前 Project 的 Skill 来源（工作区默认 + 其他嵌套 Project）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_OTHER_PROJECT_SKILLS,
+    async (_, workspaceSlug: string, currentProjectId: string): Promise<OtherProjectSkillsGroup[]> => {
+      return getOtherProjectSkills(workspaceSlug, currentProjectId)
+    }
+  )
+
+  // 从工作区默认或其他嵌套 Project 批量导入 Skill 到当前 Project
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_TO_PROJECT,
+    async (_, workspaceSlug: string, targetProjectId: string, selections: BulkImportProjectSelection[]): Promise<BulkImportSkillsResult> => {
+      return batchImportSkillsToProject(workspaceSlug, targetProjectId, selections)
     }
   )
 

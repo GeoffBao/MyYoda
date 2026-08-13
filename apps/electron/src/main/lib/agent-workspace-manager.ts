@@ -30,7 +30,7 @@ import { projectRepository } from './project-repository'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
-import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
+import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
 import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 
@@ -1115,6 +1115,140 @@ function summarizeBulkImport(items: BulkImportSkillItemResult[]): BulkImportSkil
     else failed += 1
   }
   return { imported, skipped, failed, items }
+}
+
+// ===== 跨 Project 导入 Skill（对齐 Proma“跨工作区导入”的真实粒度：Proma 一个 workspace = 一个仓库，
+// 等价于这里的一个嵌套 Project，所以这里的“其他来源”限定在同一 MyYoda 工作区内，不跨 MyYoda 工作区） =====
+
+/**
+ * 获取当前 Project 之外、同工作区内可导入的 Skill 来源：工作区默认（跨项目共享）+ 其他嵌套 Project 自己的 Skills。
+ */
+export function getOtherProjectSkills(workspaceSlug: string, currentProjectId: string): OtherProjectSkillsGroup[] {
+  const result: OtherProjectSkillsGroup[] = []
+
+  const workspaceSkills = getAllWorkspaceSkills(workspaceSlug)
+  if (workspaceSkills.length > 0) {
+    result.push({ sourceKind: 'workspace', sourceLabel: '工作区默认（跨项目共享）', skills: workspaceSkills })
+  }
+
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const projects = projectRepository.listProjectsAtRoot(workspaceRoot)
+  for (const project of projects) {
+    if (project.config.id === currentProjectId) continue
+    if (project.config.kind === 'home' || project.config.kind === 'ad-hoc') continue
+    const skills = getProjectSkills(workspaceSlug, project.config.id)
+    if (skills.length === 0) continue
+    result.push({ sourceKind: 'project', sourceProjectId: project.config.id, sourceLabel: project.config.name, skills })
+  }
+
+  return result
+}
+
+/** 解析跨 Project 导入的源 Skill 目录（工作区级或某个 Project 级），不存在返回 null */
+function resolveProjectImportSourceDir(
+  workspaceSlug: string,
+  source: { sourceKind: 'workspace' | 'project'; sourceProjectId?: string },
+  skillSlug: string,
+): string | null {
+  if (source.sourceKind === 'workspace') {
+    return resolveSkillDir(workspaceSlug, skillSlug)
+  }
+  if (!source.sourceProjectId) return null
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, source.sourceProjectId)
+  const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, source.sourceProjectId)
+  if (activeDir && existsSync(join(activeDir, skillSlug))) return join(activeDir, skillSlug)
+  if (inactiveDir && existsSync(join(inactiveDir, skillSlug))) return join(inactiveDir, skillSlug)
+  return null
+}
+
+/**
+ * 从工作区默认或另一个嵌套 Project 导入单个 Skill 到目标 Project。
+ *
+ * 与 importSkillFromWorkspace 的关键差异：项目级 Skill 没有导入来源追踪体系（批次 2 已定的范围，
+ * useAgentSkillsData 删除过 canUpdateSkillSource 字段），复制时显式排除 .source.json，
+ * 避免把源头（尤其是工作区级 Skill 若本身是被导入的）的来源元数据带进项目里，触发本不该出现的
+ * “可更新”提示——项目级 Skill 的“更新”按钮在 useAgentSkillsData 里会被 toast 拦截，但带着一个
+ * 用户点了没反应的按钮体验很差，不如从源头不产生它。
+ */
+async function importSkillToProject(
+  workspaceSlug: string,
+  targetProjectId: string,
+  source: { sourceKind: 'workspace' | 'project'; sourceProjectId?: string },
+  skillSlug: string,
+): Promise<SkillMeta> {
+  const sourcePath = resolveProjectImportSourceDir(workspaceSlug, source, skillSlug)
+  if (!sourcePath) {
+    throw new Error(`源中不存在 Skill: ${skillSlug}`)
+  }
+
+  const sourceSkillMdPath = join(sourcePath, 'SKILL.md')
+  if (!existsSync(sourceSkillMdPath)) {
+    throw new Error(`源 Skill 缺少 SKILL.md: ${skillSlug}`)
+  }
+
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const targetActiveDir = projectRepository.ensureProjectSkillsDirAtRoot(workspaceRoot, targetProjectId)
+  const targetInactiveDir = projectRepository.ensureProjectInactiveSkillsDirAtRoot(workspaceRoot, targetProjectId)
+  const targetPath = join(targetActiveDir, skillSlug)
+  const targetInactivePath = join(targetInactiveDir, skillSlug)
+
+  return withSkillImportLock(targetPath, async () => {
+    if (existsSync(targetPath) || existsSync(targetInactivePath)) {
+      throw new SkillAlreadyExistsError(skillSlug)
+    }
+
+    const tempPath = join(targetActiveDir, `.${skillSlug}.importing-${randomUUID()}`)
+    try {
+      await cpAsync(sourcePath, tempPath, {
+        recursive: true,
+        filter: (src) => basename(src) !== SOURCE_META_FILE,
+      })
+
+      const content = await readFileAsync(join(tempPath, 'SKILL.md'), 'utf-8')
+      const meta = parseSkillFrontmatter(content, skillSlug, true)
+
+      if (existsSync(targetInactivePath) || !renameIfDestinationAbsentWithRetry(tempPath, targetPath)) {
+        throw new SkillAlreadyExistsError(skillSlug)
+      }
+      const sourceLabel = source.sourceKind === 'workspace' ? '工作区默认' : source.sourceProjectId
+      console.log(`[项目 Skills] 已导入: ${workspaceSlug}/${targetProjectId}/${skillSlug}（来自 ${sourceLabel}）`)
+      return meta
+    } catch (error) {
+      if (existsSync(tempPath)) {
+        try {
+          rmSyncWithRetry(tempPath, { recursive: true, force: true })
+        } catch (cleanupError) {
+          console.warn(`[项目 Skills] 清理导入临时目录失败: ${tempPath}`, cleanupError)
+        }
+      }
+      throw error
+    }
+  })
+}
+
+/** 从工作区默认或其他嵌套 Project 批量导入多个 Skill 到目标 Project */
+export async function batchImportSkillsToProject(
+  workspaceSlug: string,
+  targetProjectId: string,
+  selections: BulkImportProjectSelection[],
+): Promise<BulkImportSkillsResult> {
+  const items: BulkImportSkillItemResult[] = []
+  for (const { sourceKind, sourceProjectId, skillSlug } of selections) {
+    try {
+      const imported = await importSkillToProject(workspaceSlug, targetProjectId, { sourceKind, sourceProjectId }, skillSlug)
+      items.push({ slug: skillSlug, name: imported.name, status: 'imported' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误'
+      items.push({
+        slug: skillSlug,
+        name: skillSlug,
+        status: error instanceof SkillAlreadyExistsError ? 'skipped' : 'failed',
+        reason: message,
+      })
+    }
+  }
+  return summarizeBulkImport(items)
 }
 
 /**

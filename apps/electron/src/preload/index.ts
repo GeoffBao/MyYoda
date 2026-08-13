@@ -893,6 +893,10 @@ export interface ElectronAPI {
   getProjectMcpConfig: (workspaceSlug: string, projectId: string) => Promise<WorkspaceMcpConfig>
   /** 保存项目级 MCP 配置 */
   saveProjectMcpConfig: (workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig) => Promise<void>
+  /** 获取同工作区内可导入到当前 Project 的 Skill 来源（工作区默认 + 其他嵌套 Project） */
+  getOtherProjectSkills: (workspaceSlug: string, currentProjectId: string) => Promise<import('@myyoda/shared').OtherProjectSkillsGroup[]>
+  /** 从工作区默认或其他嵌套 Project 批量导入 Skill 到当前 Project */
+  batchImportSkillsToProject: (workspaceSlug: string, targetProjectId: string, selections: import('@myyoda/shared').BulkImportProjectSelection[]) => Promise<import('@myyoda/shared').BulkImportSkillsResult>
 
   /** 从其他工作区导入 Skill */
   importSkillFromWorkspace: (targetSlug: string, sourceSlug: string, skillSlug: string) => Promise<SkillMeta>
@@ -2398,6 +2402,19 @@ const electronAPI: ElectronAPI = {
 
   saveProjectMcpConfig: (workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_PROJECT_MCP_CONFIG, workspaceSlug, projectId, config)
+  },
+
+  getOtherProjectSkills: (workspaceSlug: string, currentProjectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_OTHER_PROJECT_SKILLS, workspaceSlug, currentProjectId)
+  },
+
+  batchImportSkillsToProject: (workspaceSlug: string, targetProjectId: string, selections: import('@myyoda/shared').BulkImportProjectSelection[]) => {
+    return ipcRenderer.invoke(
+      AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_TO_PROJECT,
+      workspaceSlug,
+      targetProjectId,
+      selections,
+    )
   },
 
   importSkillFromWorkspace: (targetSlug: string, sourceSlug: string, skillSlug: string) => {

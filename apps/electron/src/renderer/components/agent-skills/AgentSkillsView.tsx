@@ -38,6 +38,7 @@ import { SkillDetailSheet } from './SkillDetailSheet'
 import { McpDetailSheet } from './McpDetailSheet'
 import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
+import { ImportProjectSkillDialog } from './ImportProjectSkillDialog'
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
 import { EnhancedToolsPanel } from '@/components/settings/ToolSettings'
@@ -145,6 +146,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
   const [showImport, setShowImport] = React.useState(false)
+  const [showProjectImport, setShowProjectImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [showCommunityMarket, setShowCommunityMarket] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -417,40 +419,46 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </button>
         )}
 
-        {/* Skills：从其他工作区导入（仅工作区范围） */}
+        {/* Skills：AI 分类 / 从企业组织导入仅操作工作区级 Skills（对话框/导入流程都直接用 workspaceSlug），切到项目范围时隐藏，避免误导入到错误位置 */}
         {tab === 'skills' && !selectedProjectId && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void handleClassifySkills()}
-                  disabled={classifyingSkills || data.skills.length === 0}
-                  className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {classifyingSkills ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  <span>AI 分类</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">创建 Agent 会话，读取 SKILL.md 内容并补全 group</TooltipContent>
-            </Tooltip>
-            <button
-              type="button"
-              onClick={() => setShowImport(true)}
-              className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
-            >
-              <Plus size={14} />
-              <span>导入</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowOrgImport(true)}
-              className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 text-[13px] font-medium text-indigo-600 shadow-sm transition-colors hover:bg-indigo-500/20 dark:text-indigo-400"
-            >
-              <Building2 size={14} />
-              <span>从企业组织导入</span>
-            </button>
-          </>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => void handleClassifySkills()}
+                disabled={classifyingSkills || data.skills.length === 0}
+                className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {classifyingSkills ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                <span>AI 分类</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">创建 Agent 会话，读取 SKILL.md 内容并补全 group</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Skills：导入——工作区范围时从其他工作区导入，项目范围时改为从工作区默认/其他嵌套 Project 导入（两套独立弹窗+IPC，同一个入口按当前 scope 分流） */}
+        {tab === 'skills' && (
+          <button
+            type="button"
+            onClick={() => (selectedProjectId ? setShowProjectImport(true) : setShowImport(true))}
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
+          >
+            <Plus size={14} />
+            <span>导入</span>
+          </button>
+        )}
+
+        {/* Skills：从企业组织导入（仅工作区范围） */}
+        {tab === 'skills' && !selectedProjectId && (
+          <button
+            type="button"
+            onClick={() => setShowOrgImport(true)}
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 text-[13px] font-medium text-indigo-600 shadow-sm transition-colors hover:bg-indigo-500/20 dark:text-indigo-400"
+          >
+            <Building2 size={14} />
+            <span>从企业组织导入</span>
+          </button>
         )}
 
         {/* 新增 MCP */}
@@ -499,6 +507,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               total={data.skills.length}
               updateCount={updateCount}
               updatingSkill={data.updatingSkill}
+              isProjectScope={!!selectedProjectId}
               isBuiltin={(slug) => data.defaultSkillSlugs.has(slug)}
               onOpen={setSelectedSkillSlug}
               onToggle={data.toggleSkill}
@@ -609,6 +618,17 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
 
+      {selectedProjectId && (
+        <ImportProjectSkillDialog
+          open={showProjectImport}
+          onOpenChange={setShowProjectImport}
+          workspaceSlug={data.workspaceSlug}
+          projectId={selectedProjectId}
+          installedSkills={data.skills}
+          onImported={() => bumpCapabilities((v) => v + 1)}
+        />
+      )}
+
       <OrgSkillImportDialog
         open={showOrgImport}
         onOpenChange={setShowOrgImport}
@@ -636,6 +656,8 @@ interface SkillsTabProps {
   total: number
   updateCount: number
   updatingSkill: string | null
+  /** 当前是否处于嵌套 Project 范围（仅影响空列表提示文案中“其他工作区”/“其他项目”的描述） */
+  isProjectScope: boolean
   isBuiltin: (slug: string) => boolean
   onOpen: (slug: string) => void
   onToggle: (slug: string, enabled: boolean) => void
@@ -648,13 +670,20 @@ function SkillsTab({
   total,
   updateCount,
   updatingSkill,
+  isProjectScope,
   isBuiltin,
   onOpen,
   onToggle,
   onUpdate,
 }: SkillsTabProps): React.ReactElement {
   if (total === 0) {
-    return <EmptyState icon={<Blocks className="size-8 text-foreground/30" />} title="暂无 Skill" hint="可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或从其他工作区导入。" />
+    return (
+      <EmptyState
+        icon={<Blocks className="size-8 text-foreground/30" />}
+        title="暂无 Skill"
+        hint={isProjectScope ? '可以让 MyYoda 帮你联网查找并安装 Skill，或从工作区默认/其他项目导入。' : '可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或从其他工作区导入。'}
+      />
+    )
   }
   if (customSkills.length === 0 && builtinSkills.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 Skill" hint="试试更换搜索关键词。" />

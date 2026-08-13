@@ -331,6 +331,111 @@ describe('Agent 工作区 Skill 批量导入', () => {
   })
 })
 
+describe('跨 Project 导入 Skill（对齐 Proma “跨工作区导入”的真实粒度：他们一个 workspace = 一个仓库，等价于这里的一个嵌套 Project）', () => {
+  test('Given 工作区默认 + 另一个嵌套 Project 都有 Skill，还有一个隐藏容器 Project When 获取可导入来源 Then 排除当前 Project、排除隐藏容器，来源标签正确', () => {
+    const workspace = manager.createAgentWorkspace('跨项目导入测试工作区')
+    const root = configPaths.getAgentWorkspacePath(workspace.slug)
+
+    writeWorkspaceSkill(workspace.slug, 'ws-shared', '工作区共享技能')
+
+    const current = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '当前项目' })
+    const sibling = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '另一个项目' })
+    const hidden = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '隐藏容器', kind: 'ad-hoc' })
+
+    const siblingSkillsDir = projectRepositoryModule.projectRepository.ensureProjectSkillsDirAtRoot(root, sibling.id)
+    mkdirSync(join(siblingSkillsDir, 'sibling-skill'), { recursive: true })
+    writeFileSync(join(siblingSkillsDir, 'sibling-skill', 'SKILL.md'), '---\nname: 另项目技能\n---\n', 'utf-8')
+
+    const hiddenSkillsDir = projectRepositoryModule.projectRepository.ensureProjectSkillsDirAtRoot(root, hidden.id)
+    mkdirSync(join(hiddenSkillsDir, 'hidden-skill'), { recursive: true })
+    writeFileSync(join(hiddenSkillsDir, 'hidden-skill', 'SKILL.md'), '---\nname: 隐藏技能\n---\n', 'utf-8')
+
+    const groups = manager.getOtherProjectSkills(workspace.slug, current.id)
+
+    expect(groups).toHaveLength(2)
+    const workspaceGroup = groups.find((g) => g.sourceKind === 'workspace')
+    expect(workspaceGroup?.sourceLabel).toBe('工作区默认（跨项目共享）')
+    expect(workspaceGroup?.skills.map((s) => s.slug)).toEqual(['ws-shared'])
+
+    const projectGroup = groups.find((g) => g.sourceKind === 'project')
+    expect(projectGroup?.sourceProjectId).toBe(sibling.id)
+    expect(projectGroup?.sourceLabel).toBe('另一个项目')
+    expect(projectGroup?.skills.map((s) => s.slug)).toEqual(['sibling-skill'])
+
+    // 隐藏容器 Project 不应出现在可导入来源里
+    expect(groups.some((g) => g.sourceProjectId === hidden.id)).toBe(false)
+  })
+
+  test('Given 从工作区默认和另一个 Project 各导入一个 Skill When 批量导入 Then 都成功且不带 .source.json（项目级无导入来源追踪体系）', async () => {
+    const workspace = manager.createAgentWorkspace('跨项目导入执行测试工作区')
+    const root = configPaths.getAgentWorkspacePath(workspace.slug)
+
+    writeWorkspaceSkill(workspace.slug, 'from-workspace', '来自工作区')
+
+    const target = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '目标项目' })
+    const source = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '源项目' })
+    const sourceSkillsDir = projectRepositoryModule.projectRepository.ensureProjectSkillsDirAtRoot(root, source.id)
+    mkdirSync(join(sourceSkillsDir, 'from-project'), { recursive: true })
+    writeFileSync(join(sourceSkillsDir, 'from-project', 'SKILL.md'), '---\nname: 来自项目\n---\n', 'utf-8')
+
+    const result = await manager.batchImportSkillsToProject(workspace.slug, target.id, [
+      { sourceKind: 'workspace', skillSlug: 'from-workspace' },
+      { sourceKind: 'project', sourceProjectId: source.id, skillSlug: 'from-project' },
+    ])
+
+    expect(result.imported).toBe(2)
+    expect(result.skipped).toBe(0)
+    expect(result.failed).toBe(0)
+
+    const targetSkillsDir = projectRepositoryModule.projectRepository.getProjectSkillsDirPath(root, target.id)
+    expect(targetSkillsDir).not.toBeNull()
+    expect(existsSync(join(targetSkillsDir!, 'from-workspace', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(targetSkillsDir!, 'from-project', 'SKILL.md'))).toBe(true)
+    // 关键断言：不带 .source.json，避免项目级 Skill 凭空出现“可更新”提示（项目级无导入来源追踪体系，批次 2 已定的范围）
+    expect(existsSync(join(targetSkillsDir!, 'from-workspace', '.source.json'))).toBe(false)
+    expect(existsSync(join(targetSkillsDir!, 'from-project', '.source.json'))).toBe(false)
+
+    const imported = manager.getProjectSkills(workspace.slug, target.id)
+    const importedFromWorkspace = imported.find((s) => s.slug === 'from-workspace')
+    expect(importedFromWorkspace?.hasUpdate).toBeUndefined()
+    expect(importedFromWorkspace?.importSource).toBeUndefined()
+  })
+
+  test('Given 目标 Project 已存在同名 Skill When 导入 Then 跳过且不覆盖', async () => {
+    const workspace = manager.createAgentWorkspace('跨项目导入重复测试工作区')
+    const root = configPaths.getAgentWorkspacePath(workspace.slug)
+
+    writeWorkspaceSkill(workspace.slug, 'dup-skill', '来源版')
+
+    const target = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '目标项目' })
+    const targetSkillsDir = projectRepositoryModule.projectRepository.ensureProjectSkillsDirAtRoot(root, target.id)
+    mkdirSync(join(targetSkillsDir, 'dup-skill'), { recursive: true })
+    writeFileSync(join(targetSkillsDir, 'dup-skill', 'SKILL.md'), '---\nname: 已存在版\n---\n', 'utf-8')
+
+    const result = await manager.batchImportSkillsToProject(workspace.slug, target.id, [
+      { sourceKind: 'workspace', skillSlug: 'dup-skill' },
+    ])
+
+    expect(result.imported).toBe(0)
+    expect(result.skipped).toBe(1)
+    expect(result.failed).toBe(0)
+    expect(readFileSync(join(targetSkillsDir, 'dup-skill', 'SKILL.md'), 'utf-8')).toContain('已存在版')
+  })
+
+  test('Given 来源 Skill 不存在 When 导入 Then 返回失败而非抛异常', async () => {
+    const workspace = manager.createAgentWorkspace('跨项目导入失败测试工作区')
+    const target = projectRepositoryModule.projectRepository.createProject(workspace.id, { name: '目标项目' })
+
+    const result = await manager.batchImportSkillsToProject(workspace.slug, target.id, [
+      { sourceKind: 'project', sourceProjectId: 'not-exist', skillSlug: 'ghost' },
+    ])
+
+    expect(result.imported).toBe(0)
+    expect(result.skipped).toBe(0)
+    expect(result.failed).toBe(1)
+  })
+})
+
 describe('项目级 Skills 目录解析（仅查看不创建）', () => {
   test('Given 本地目录绑定项目 When 仅调用 getProjectSkillsDir（未真正使用 Skills） Then 不在真实工作目录下创建 .context/skills/', () => {
     manager.ensureDefaultWorkspace()

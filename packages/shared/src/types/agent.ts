@@ -1204,6 +1204,22 @@ export interface OtherWorkspaceSkillsGroup {
   skills: SkillMeta[]
 }
 
+/**
+ * 跨嵌套 Project 导入 Skill 的来源分组：工作区默认（跨项目共享），或同一工作区下另一个嵌套 Project 自己的 Skills。
+ *
+ * 与 OtherWorkspaceSkillsGroup（跨工作区导入）是两套独立机制：这里的"其他来源"限定在当前工作区内，
+ * 对齐 Proma 单层实体里"跨工作区导入"的真实粒度（Proma 一个 workspace = 一个仓库，等价于这里的一个嵌套 Project）。
+ */
+export interface OtherProjectSkillsGroup {
+  /** 'workspace' = 工作区默认（跨项目共享）；'project' = 同工作区下另一个嵌套 Project */
+  sourceKind: 'workspace' | 'project'
+  /** sourceKind='project' 时的 Project ID；'workspace' 来源不填 */
+  sourceProjectId?: string
+  /** 展示名称（工作区名或 Project 名） */
+  sourceLabel: string
+  skills: SkillMeta[]
+}
+
 // ===== 企业版组织 Skills 分发 =====
 
 /** 组织连接配置（~/.myyoda/org-settings.json） */
@@ -1333,6 +1349,13 @@ export interface BulkImportSkillsResult {
 /** 从其他工作区批量导入的选中项 */
 export interface BulkImportWorkspaceSelection {
   sourceSlug: string
+  skillSlug: string
+}
+
+/** 跨嵌套 Project 批量导入 Skill 的单项选择 */
+export interface BulkImportProjectSelection {
+  sourceKind: 'workspace' | 'project'
+  sourceProjectId?: string
   skillSlug: string
 }
 
@@ -2084,6 +2107,10 @@ export const AGENT_IPC_CHANNELS = {
   SAVE_PROJECT_MCP_CONFIG: 'agent:save-project-mcp-config',
   /** 项目是否已配置自己的 MCP 服务器 */
   HAS_PROJECT_MCP_SERVERS: 'agent:has-project-mcp-servers',
+  /** 获取同工作区内可导入到当前 Project 的 Skill 来源（工作区默认 + 其他嵌套 Project） */
+  GET_OTHER_PROJECT_SKILLS: 'agent:get-other-project-skills',
+  /** 从工作区默认或其他嵌套 Project 批量导入 Skill 到当前 Project */
+  BATCH_IMPORT_SKILLS_TO_PROJECT: 'agent:batch-import-skills-to-project',
   /** 获取默认 Skills 的 slug 列表（来自 ~/.myyoda/default-skills/） */
   GET_DEFAULT_SKILL_SLUGS: 'agent:get-default-skill-slugs',
   /** 从其他工作区导入 Skill 到当前工作区 */
