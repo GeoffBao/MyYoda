@@ -19,6 +19,7 @@ import {
   ArchiveRestore,
   BookOpen,
   ChevronRight,
+  FolderOpen,
   LayoutDashboard,
   MoreHorizontal,
   Pencil,
@@ -79,6 +80,7 @@ import {
   buildAgentSessionTrees,
   getSessionStatus,
   getSessionTreeProgress,
+  getSessionTreeProjectId,
   getSessionTreeStatus,
   sortSessionTrees,
   treeContainsSessionId,
@@ -127,6 +129,8 @@ const ATTENTION_DOT_CLASS: Record<string, string> = {
 
 /** 项目分组视图每个 project 下默认展示的会话数量上限；超出部分折叠在「显示全部」按钮后 */
 const PROJECT_MODE_PREVIEW_LIMIT = 8
+/** 「默认工作区」兜底组专用折叠 key（不对应真实项目 ID） */
+const DEFAULT_WORKSPACE_GROUP_ID = '__default_workspace__'
 
 export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sortBy }: SidebarProjectsTabProps): React.ReactElement {
   const workspaces = useAtomValue(agentWorkspacesAtom)
@@ -187,13 +191,24 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
     [agentSessions, draftSessionIds, workspace?.id],
   )
 
+  const allSessionTrees = React.useMemo(
+    () => buildAgentSessionTrees(groupableSessions),
+    [groupableSessions],
+  )
+
   const treesByProject = React.useMemo(() => {
-    const byProject = groupSessionTreesByProject(buildAgentSessionTrees(groupableSessions))
+    const byProject = groupSessionTreesByProject(allSessionTrees)
     for (const [projectId, trees] of byProject) {
       byProject.set(projectId, sortSessionTrees(trees, sortBy))
     }
     return byProject
-  }, [groupableSessions, sortBy])
+  }, [allSessionTrees, sortBy])
+
+  /** 未绑定任何项目的会话树 →「默认工作区」兜底组（对齐 Proma 侧栏的默认工作区组） */
+  const ungroupedTrees = React.useMemo(
+    () => allSessionTrees.filter((tree) => !getSessionTreeProjectId(tree)),
+    [allSessionTrees],
+  )
 
   /** 项目排序：任务族内任一子任务活动都会提升所属项目。 */
   const sortedProjects = React.useMemo(
@@ -367,7 +382,7 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
 
       {/* 项目 → 会话分组 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
-        {!hasVisible ? (
+        {!hasVisible && ungroupedTrees.length === 0 ? (
           <div className="px-2 py-8 text-center text-[13px] text-foreground/35">
             {hasProjects ? '没有匹配的项目' : '暂无项目'}
           </div>
@@ -541,6 +556,42 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                 </div>
               )
             })}
+
+            {/* 默认工作区兜底组：未绑定任何项目的会话树（对齐 Proma 侧栏的「默认工作区」组） */}
+            {ungroupedTrees.length > 0 && (
+              <div className="rounded-lg">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleCollapsed(DEFAULT_WORKSPACE_GROUP_ID)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      toggleCollapsed(DEFAULT_WORKSPACE_GROUP_ID)
+                    }
+                  }}
+                  className="group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.04]"
+                >
+                  <FolderOpen size={14} className="shrink-0 text-foreground/45" />
+                  <MarqueeText text="默认工作区" className="min-w-0 flex-1 text-[13px]" />
+                  <span className="shrink-0 text-[10px] tabular-nums text-foreground/30">
+                    {ungroupedTrees.length}
+                  </span>
+                  <ChevronRight
+                    size={12}
+                    className={cn(
+                      'shrink-0 text-foreground/30 transition-transform duration-fast',
+                      !collapsedIds.has(DEFAULT_WORKSPACE_GROUP_ID) && 'rotate-90',
+                    )}
+                  />
+                </div>
+                {!collapsedIds.has(DEFAULT_WORKSPACE_GROUP_ID) && (
+                  <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
+                    {ungroupedTrees.map(renderSessionTree)}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 /**
- * YodaSearchView — 「Yoda 搜索」独立视图（左侧栏独立模块）
+ * YodaSearchView — 「搜索」独立视图（左侧栏独立模块）
  *
  * 参考 NewMax：搜索从悬浮 Dialog 升级为左侧独立模块入口，主区切换为全屏搜索视图。
  *
@@ -618,7 +618,7 @@ export function YodaSearchView(): React.ReactElement {
       <div className="titlebar-no-drag mx-auto flex w-full max-w-4xl shrink-0 items-center justify-between px-8 pt-8 pb-3">
         <div className="flex items-center gap-2.5">
           <Search className="size-6 text-foreground/70" />
-          <h1 className="text-2xl font-semibold text-foreground">Yoda 搜索</h1>
+          <h1 className="text-2xl font-semibold text-foreground">搜索</h1>
         </div>
         <button
           type="button"

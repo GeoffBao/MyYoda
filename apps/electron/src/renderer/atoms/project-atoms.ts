@@ -27,7 +27,7 @@ export const selectedKanbanProjectAtom = atom((get) => {
   return get(serverKanbanProjectsAtom).find((project) => project.id === selectedProjectId) ?? null
 })
 
-export type ProjectPageTab = 'overview' | 'sessions' | 'knowledge' | 'assets' | 'settings'
+export type ProjectPageTab = 'overview' | 'sessions' | 'assets' | 'settings'
 
 /** Project Page 页面身份与当前子页；与 Task Board 的 Project facet 明确分离。 */
 export const activeProjectPageIdAtom = atom<string | null>(null)

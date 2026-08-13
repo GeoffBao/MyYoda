@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useSetAtom } from 'jotai'
-import { ArrowLeft, BookOpen, FolderOpen, LayoutDashboard, MessageSquare, Settings } from 'lucide-react'
+import { ArrowLeft, FolderOpen, LayoutDashboard, MessageSquare, Settings } from 'lucide-react'
 import {
   codeMainViewAtom,
   projectPageTabAtom,
@@ -12,7 +12,6 @@ import { buildTaskBoardNavigation } from '@/components/app-shell/code-main-view-
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { KanbanProject } from '@/components/app-shell/kanban/types'
-import { ProjectKnowledgeTab } from './ProjectKnowledgeTab'
 import { ProjectAssetsTab } from './ProjectAssetsTab'
 import { ProjectOverviewTab } from './ProjectOverviewTab'
 import { ProjectSessionsTab } from './ProjectSessionsTab'
@@ -24,10 +23,10 @@ interface ProjectPageProps {
   onProjectChanged: (project: KanbanProject) => void
 }
 
+/** 对齐 Proma：无独立「Project Knowledge」（记忆统一走 Yoda 插件 → 记忆页，Proma 形态） */
 const TABS: Array<{ id: ProjectPageTab; label: string; icon: React.ElementType }> = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'sessions', label: '会话', icon: MessageSquare },
-  { id: 'knowledge', label: '知识', icon: BookOpen },
   { id: 'assets', label: '资料', icon: FolderOpen },
   { id: 'settings', label: '设置', icon: Settings },
 ]
@@ -46,12 +45,10 @@ export function ProjectPage({ workspaceRoot, project, onProjectChanged }: Projec
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const [error, setError] = React.useState<string | null>(null)
-  const [knowledgeDirty, setKnowledgeDirty] = React.useState(false)
 
   const color = project.color ?? 'hsl(var(--muted-foreground))'
 
   const openTaskBoard = (): void => {
-    if (knowledgeDirty && !window.confirm('Project Knowledge 还有未保存内容。草稿会在本次应用会话中保留，仍要离开吗？')) return
     const navigation = buildTaskBoardNavigation(project.id)
     setSelectedProjectId(navigation.selectedProjectId)
     setCodeMainView(navigation.codeMainView)
@@ -108,14 +105,6 @@ export function ProjectPage({ workspaceRoot, project, onProjectChanged }: Projec
         {tab === 'overview' && <ProjectOverviewTab project={project} onOpenTasks={openTaskBoard} />}
         {tab === 'sessions' && (
           <ProjectSessionsTab workspaceRoot={workspaceRoot} project={project} onError={setError} onOpenTasks={openTaskBoard} />
-        )}
-        {tab === 'knowledge' && (
-          <ProjectKnowledgeTab
-            workspaceRoot={workspaceRoot}
-            project={project}
-            onError={setError}
-            onDirtyChange={setKnowledgeDirty}
-          />
         )}
         {tab === 'assets' && (
           <ProjectAssetsTab workspaceRoot={workspaceRoot} project={project} onError={setError} />

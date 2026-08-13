@@ -118,7 +118,7 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   },
   {
     id: 'global-search',
-    name: 'Yoda 搜索',
+    name: '搜索',
     description: '打开搜索视图（标题/内容搜索 + 最近会话按时间分组）',
     defaultMac: 'Cmd+Shift+F',
     defaultWin: 'Ctrl+Shift+F',

@@ -1,7 +1,7 @@
 /**
  * ProjectSettingsDialog — 项目设置弹窗
  *
- * 从侧栏项目菜单触发，编辑项目元信息和默认专家。Project Knowledge 只在项目页面维护。
+ * 从侧栏项目菜单触发，编辑项目元信息和默认专家。项目资料（概览/会话/资产/设置）在项目页面维护。
  */
 
 import * as React from 'react'

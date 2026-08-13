@@ -3162,29 +3162,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         height={isMac ? SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac : SIDEBAR_DRAG_STRIP_HEIGHT.expanded}
       />
 
-      {/* 展开态顶部工具栏：全部留在左侧栏上方（折叠、搜索、后退、前进）。
-          SidebarWindowDragStrip 是 z-1 的原生窗口拖拽层；工具栏必须 z-10 + no-drag，
-          否则 Electron 会将点击吞为窗口拖拽，Tooltip 也不会触发。 */}
+      {/* 展开态顶部工具栏：折叠按钮 + Tab 导航（搜索入口已升级为左侧栏独立「搜索」模块，⌘⇧F 直达；
+          这里不再放重复的搜索图标）。SidebarWindowDragStrip 是 z-1 的原生窗口拖拽层；
+          工具栏必须 z-10 + no-drag，否则 Electron 会将点击吞为窗口拖拽，Tooltip 也不会触发。 */}
       <div className={cn('relative z-10 w-full flex-shrink-0 flex items-center justify-end gap-1 titlebar-no-drag', isMac ? 'h-[30px] pr-2' : 'h-7 pr-1.5')}>
         <SidebarToggleButton className="size-6" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="搜索"
-              onClick={() => setActiveView('yoda-search')}
-              className={cn(
-                'size-6 flex items-center justify-center rounded-md text-foreground/50 transition-colors duration-fast',
-                isClassic
-                  ? 'sidebar-control-surface hover:text-foreground/70'
-                  : 'hover:bg-foreground/[0.08] hover:text-foreground/85'
-              )}
-            >
-              <Search size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">搜索 ({getAcceleratorDisplay(getActiveAccelerator('global-search'))})</TooltipContent>
-        </Tooltip>
         <TabNavigationControls className="h-7 gap-0" />
       </div>
 
@@ -3224,15 +3206,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         />
       )}
 
-      {/* Yoda 搜索：左侧栏独立模块（⌘K 直达），主区切换为搜索 + 最近会话按时间分组视图 */}
+      {/* 搜索：左侧栏独立模块（⌘⇧F 直达），主区切换为搜索 + 最近会话按时间分组视图 */}
       <div className="sidebar-module-zone px-3 pt-2 pb-0.5">
         <SidebarModule
           icon={Search}
-          title="Yoda 搜索"
+          title="搜索"
           active={activeView === 'yoda-search'}
           onClick={() => setActiveView('yoda-search')}
           keycapShortcutId="global-search"
-          ariaLabel="Yoda 搜索"
+          ariaLabel="搜索"
         />
       </div>
 
@@ -3533,11 +3515,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       )}
 
-      {/* 会话列表标题行（回归 Proma 样式）：固定时间分组，无筛选菜单；
-          右侧常驻「新建项目」入口（项目入口显眼化，普通人也能找到） */}
+      {/* 项目/会话列表标题行（回归 Proma：Agent 模式左侧以项目分组为主导，无筛选菜单；
+          右侧常驻「新建项目」入口） */}
       {mode === 'agent' && (
         <div className="flex items-center justify-between px-3 pt-1 pb-1 border-b border-border/50">
-          <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">会话</span>
+          <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">项目</span>
           <span className="flex items-center gap-0.5">
             <Tooltip>
               <TooltipTrigger asChild>

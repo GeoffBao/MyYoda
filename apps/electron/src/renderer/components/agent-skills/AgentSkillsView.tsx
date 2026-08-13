@@ -10,7 +10,8 @@
  * - 内容：各能力 tab 卡片/列表，点击打开详情抽屉；Memory 复用 WorkspaceMemoryTab
  *
  * 注意：此处“工作区”对应 Proma 上游 UI 中的“项目”概念（同一个 AgentWorkspace 实体，Proma 仅在展示层重命名）；
- * MyYoda 另有一层嵌套的真正“项目”（KanbanProject，自带目录绑定与独立 Project Knowledge），与此处切换器无关，不要混淆。
+ * MyYoda 另有一层嵌套的真正“项目”（KanbanProject，自带目录绑定），与此处切换器无关，不要混淆。
+ * 记忆（Memory）已对齐 Proma：不区分项目范围，统一为工作区记忆页。
  */
 
 import * as React from 'react'
@@ -43,7 +44,6 @@ import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
 import { EnhancedToolsPanel } from '@/components/settings/ToolSettings'
 import { AgentExpertsView } from '@/components/agent-experts/AgentExpertsView'
-import { ProjectKnowledgeTab } from '@/components/project/ProjectKnowledgeTab'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
 
@@ -115,17 +115,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   }, [pendingProjectId, pickableProjects, setPendingProjectId])
 
   const data = useAgentSkillsData(selectedProjectId)
-
-  // Memory tab 切到项目范围时，需要实际工作区根目录路径来复用 ProjectKnowledgeTab（与 ProjectPage 同样的取数方式）
-  const [memoryWorkspaceRoot, setMemoryWorkspaceRoot] = React.useState('')
-  React.useEffect(() => {
-    if (!data.workspaceSlug) { setMemoryWorkspaceRoot(''); return }
-    let cancelled = false
-    window.electronAPI.getWorkspaceRootPath(data.workspaceSlug)
-      .then((root) => { if (!cancelled) setMemoryWorkspaceRoot(root) })
-      .catch((error) => console.error('[Yoda 插件] 获取工作区根路径失败:', error))
-    return () => { cancelled = true }
-  }, [data.workspaceSlug])
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const setToolSettingsFocus = useSetAtom(toolSettingsFocusAtom)
@@ -205,19 +194,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   )
   // API（增强工具）Tab 计数：已启用的增强工具数量（联网搜索 / Nano Banana / 自定义工具）
   const apiToolCount = chatTools.filter((t) => t.enabled).length
-  // Memory Tab 计数：工作区范围是 AGENTS.md + 长期记忆文件数；项目范围是它自己的 Project Knowledge 有内容时为 1，避免展示工作区数字造成误导
+  // Memory Tab 计数：工作区记忆（AGENTS.md + 长期记忆文件数）；项目选择不影响记忆页（对齐 Proma，无独立 Project Knowledge）
   const workspaceMemoryCount = (data.capabilities?.memory.agentsMd.exists ? 1 : 0) + (data.capabilities?.memory.autoMemory.fileCount ?? 0)
-  const [projectMemoryHasContent, setProjectMemoryHasContent] = React.useState(false)
-  React.useEffect(() => {
-    // readMemory 需要真实 URL-safe slug（不接受 id）；pickableProjects 里的正常项目都有 slug，缺失时保守跳过不发请求
-    if (!selectedProject?.slug || !memoryWorkspaceRoot) { setProjectMemoryHasContent(false); return }
-    let cancelled = false
-    window.electronAPI.projects.readMemory(memoryWorkspaceRoot, selectedProject.slug)
-      .then((content) => { if (!cancelled) setProjectMemoryHasContent(content.trim().length > 0) })
-      .catch(() => { if (!cancelled) setProjectMemoryHasContent(false) })
-    return () => { cancelled = true }
-  }, [selectedProject, memoryWorkspaceRoot])
-  const memoryCount = selectedProject ? (projectMemoryHasContent ? 1 : 0) : workspaceMemoryCount
+  const memoryCount = workspaceMemoryCount
 
   const selectedSkill = data.skills.find((s) => s.slug === selectedSkillSlug) ?? null
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
@@ -406,8 +385,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           ))}
         </div>
 
-        {/* 搜索框（API 占位 Tab 无搜索逻辑；Memory Tab 切到项目范围时是单文件 Project Knowledge，无列表可搜，同样隐藏） */}
-        {tab !== 'api' && !(tab === 'memory' && selectedProject) && (
+        {/* 搜索框（API 占位 Tab 无搜索逻辑；记忆页统一为工作区记忆，始终可搜） */}
+        {tab !== 'api' && (
           <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 transition-colors focus-within:border-primary/40">
             <Search size={14} className="shrink-0 text-foreground/40" />
             <input
@@ -550,18 +529,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onRequestDelete={setPendingDeleteMcpName}
               onAdd={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
             />
-          ) : tab === 'memory' && selectedProject ? (
-            // 项目范围下的记忆是已有的 Project Knowledge（单文件），不是工作区那套 AGENTS.md+树+两段式引导
-            memoryWorkspaceRoot ? (
-              <ProjectKnowledgeTab
-                workspaceRoot={memoryWorkspaceRoot}
-                project={selectedProject}
-                onError={(message) => { if (message) toast.error(message) }}
-              />
-            ) : (
-              <div className="py-20 text-center text-sm text-muted-foreground">加载中...</div>
-            )
           ) : tab === 'memory' ? (
+            // 记忆页统一为工作区记忆（AGENTS.md + memory/ 文件列表 + 授权引导，Proma 形态）；
+            // 项目选择器只影响 Skills/MCP 的项目级覆盖，不再切出独立的 Project Knowledge 编辑器（已对齐移除）
             <WorkspaceMemoryTab workspaceSlug={data.workspaceSlug} search={search} />
           ) : null}
         </div>
