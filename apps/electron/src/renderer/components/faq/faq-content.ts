@@ -144,6 +144,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         answer: '使用 skill-creator 从零创建或优化现有 Skill，完成后提交到 myyoda-skills 仓库的 PR。社区市场会自动拉取并通过版本号跟踪更新。',
         keywords: ['创建', '分享', '贡献'],
       },
+      {
+        question: 'Skills 和 MCP 能不能按 Project 单独配置？',
+        answer: '可以。Yoda 插件右上角的切换器默认是“全部项目共享”（工作区级），切到具体 Project 后可以单独为它添加/删除 Skill 或 MCP 服务器。一旦这个 Project 有了自己的配置，就不再回退展示工作区默认。Memory（记忆）不走这套机制，始终是工作区级。',
+        keywords: ['Project', '项目级', '隔离', '切换器'],
+      },
+      {
+        question: '怎么在不同 Project 之间共享 Skill？',
+        answer: '切到目标 Project 后，Skills 页点“导入”会弹出“从工作区默认/其他项目批量导入 Skill”，可以从同一工作区下的其他 Project 或工作区默认里批量勾选。这个入口与旋转页面上方“社区市场”旁边的“导入”（跨工作区导入）不是同一个；导入进 Project 的 Skill 不支持一键更新，需要时重新导入一次即可。',
+        keywords: ['导入', 'Project', '共享', '批量'],
+      },
     ],
   },
   {
@@ -234,8 +244,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '为什么 Agent 没有直接执行某个操作？',
-        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再检查工作区设置中的 MCP 与 Skills。',
-        keywords: ['MCP', '权限模式', '工具'],
+        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再到左侧栏“Yoda 插件”里检查 MCP 与 Skills 是否启用——注意页面右上角的切换器，当前看的是“全部项目共享”还是某个具体 Project 自己的配置，两者不互通。',
+        keywords: ['MCP', '权限模式', '工具', 'Project'],
       },
     ],
   },
@@ -261,8 +271,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'MCP 或 Skill 没有生效怎么办？',
-        answer: '先确认当前 Workspace 已启用对应能力，再检查工具活动里是否出现调用记录。变更 MCP 或 Skill 后，必要时重新打开会话让能力上下文刷新。',
-        keywords: ['MCP', 'Skill', 'Workspace', '工具'],
+        answer: '先确认当前 Workspace 已启用对应能力。如果在 Project 中使用，还要确认 Yoda 插件右上角切换器选对了范围——某个 Project 一旦自己配置过 Skills/MCP，就不再回退展示工作区默认内容，可能让人误以为“失效了”。再检查工具活动里是否出现调用记录。变更 MCP 或 Skill 后，必要时重新打开会话让能力上下文刷新。',
+        keywords: ['MCP', 'Skill', 'Workspace', 'Project', '工具'],
       },
     ],
   },

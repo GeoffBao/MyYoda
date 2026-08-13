@@ -53,6 +53,8 @@ export function ProjectSettingsTab({ workspaceRoot, project, onProjectChanged }:
   React.useEffect(() => {
     const workspaceSlug = project.workspaceId
     if (!workspaceSlug) { setCapability(null); return }
+    // ProjectPage 切换 Project 时不会重新挂载本组件（无 key={project.id}），先清空旧数据避免切换 Project 时瞬间闪现上一个 Project 的 Skills/MCP 数量。
+    setCapability(null)
     let cancelled = false
     Promise.all([
       window.electronAPI.getProjectSkills(workspaceSlug, project.id),
