@@ -4,6 +4,7 @@
  * 控制 MainArea 显示的内容：
  * - conversations: 对话视图（Chat/Agent 模式内容）
  * - planning: Task 日历视图（Todo / 日历 / 定时任务合一）
+ * - yoda-search: Yoda 搜索独立视图（左侧栏独立模块，⌘K 直达；含最近会话按时间分组）
  * - agent-skills: Yoda 插件（专家 / 专家团 / Skills / MCP / API / Memory）全屏管理视图，左侧栏独立入口，Home / Code 共享
  * - repo-wiki: Project 模式 Yoda 知识库（LLM 知识库）入口
  * - projects: 遗留值（项目中心已移除；运行时回退到 conversations）
@@ -14,6 +15,7 @@ import { atom } from 'jotai'
 
 export type ActiveView = 'conversations' | 'planning' | 'agent-skills'
   | 'repo-wiki'
+  | 'yoda-search'
   | 'excalidraw-gallery'
   | 'excalidraw-editor'
 /** Yoda 插件视图的子页：专家/专家团平级置顶，随后是 Skills / MCP / API（增强工具），Memory（工作区记忆）已并入为子模块。 */

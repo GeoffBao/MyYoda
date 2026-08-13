@@ -26,13 +26,31 @@ export const sessionListPreferenceAtom = atom(
   },
 )
 
-/** 从主进程加载持久化的会话列表偏好 */
+/**
+ * 从主进程加载持久化的会话列表偏好。
+ *
+ * 回归 Proma（2026-08-14）：会话筛选菜单已从左侧栏移除，列表固定为
+ * 日期分组 + 最近更新 + 活跃（Proma 原样式）。旧版本曾允许用户持久化
+ * 其他 groupBy/status/sortBy，这里一次性归一为默认值，避免已选过
+ * 「项目/状态/自定义分组」的用户在筛选入口消失后仍看到旧分组。
+ */
 export async function initializeSessionListPreference(
   setPreference: (preference: SessionListPreference) => void,
 ): Promise<void> {
   try {
     const settings = await window.electronAPI.getSettings()
-    setPreference(settings.sessionListPreference ?? DEFAULT_PREFERENCE)
+    setPreference(DEFAULT_PREFERENCE)
+    if (settings.sessionListPreference
+      && settings.sessionListPreference.groupBy === DEFAULT_PREFERENCE.groupBy
+      && settings.sessionListPreference.status === DEFAULT_PREFERENCE.status
+      && settings.sessionListPreference.sortBy === DEFAULT_PREFERENCE.sortBy) {
+      // 已是默认值：保留（等价于无操作）
+      return
+    }
+    // 旧偏好已归一：把默认值持久化回去，下次加载直接命中默认
+    window.electronAPI
+      .updateSettings({ sessionListPreference: DEFAULT_PREFERENCE })
+      .catch((error) => console.error('[会话列表偏好] 归一化持久化失败:', error))
   } catch (error) {
     console.error('[会话列表偏好] 加载失败:', error)
   }

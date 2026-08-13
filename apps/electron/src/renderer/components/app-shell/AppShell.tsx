@@ -9,7 +9,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { LeftSidebar } from './LeftSidebar'
-import { SearchDialog } from './SearchDialog'
 import { RightSidePanel } from './RightSidePanel'
 import { MainArea } from '@/components/tabs/MainArea'
 import { AppShellProvider, type AppShellContextType } from '@/contexts/AppShellContext'
@@ -272,8 +271,8 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
       {/* 即使右侧文件面板未打开，也持续观测当前工作区的 memory/ 变化 */}
       {currentWorkspace && <WorkspaceMemoryChangeObserver workspaceSlug={currentWorkspace.slug} />}
 
-      {/* 全局搜索：与侧边栏折叠态解耦，收起侧边栏后 ⌘⇧F 仍要能唤出 */}
-      <SearchDialog />
+      {/* 全局搜索已升级为左侧栏独立模块「Yoda 搜索」（activeView='yoda-search'，⌘K 直达），
+          悬浮 SearchDialog 退役；即使收起侧边栏 ⌘⇧F 仍可唤出搜索视图（GlobalShortcuts 处理） */}
       {labelManagerWorkspaceRoot && (
         <WorkspaceLabelManagerDialog
           workspaceRoot={labelManagerWorkspaceRoot}

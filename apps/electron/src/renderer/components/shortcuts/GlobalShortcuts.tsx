@@ -13,7 +13,6 @@ import { useEffect, useCallback } from 'react'
 import { useAtomValue, useSetAtom, useAtom, useStore } from 'jotai'
 import { appModeAtom } from '@/atoms/app-mode'
 import { settingsOpenAtom, channelFormDirtyAtom, settingsCloseRequestedAtom } from '@/atoms/settings-tab'
-import { searchDialogOpenAtom } from '@/atoms/search-atoms'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -79,7 +78,7 @@ export function GlobalShortcuts(): null {
   const [settingsOpen, setSettingsOpen] = useAtom(settingsOpenAtom)
   const channelFormDirty = useAtomValue(channelFormDirtyAtom)
   const setSettingsCloseRequested = useSetAtom(settingsCloseRequestedAtom)
-  const [searchOpen, setSearchOpen] = useAtom(searchDialogOpenAtom)
+  const [activeView, setActiveView] = useAtom(activeViewAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const setShortcutOverrides = useSetAtom(shortcutOverridesAtom)
   const shortcutOverrides = useAtomValue(shortcutOverridesAtom)
@@ -136,14 +135,14 @@ export function GlobalShortcuts(): null {
       setSettingsOpen(false)
       return
     }
-    if (searchOpen) {
-      setSearchOpen(false)
+    if (activeView === 'yoda-search') {
+      setActiveView('conversations')
       return
     }
 
     if (!activeTabId) return
     requestClose(activeTabId)
-  }, [settingsOpen, setSettingsOpen, channelFormDirty, setSettingsCloseRequested, searchOpen, setSearchOpen, activeTabId, requestClose])
+  }, [settingsOpen, setSettingsOpen, channelFormDirty, setSettingsCloseRequested, activeView, setActiveView, activeTabId, requestClose])
 
   // 监听菜单 IPC 事件（Cmd+W 被 Electron 菜单拦截后通过 IPC 转发）
   useEffect(() => {
@@ -162,10 +161,14 @@ export function GlobalShortcuts(): null {
     useCallback(() => setSettingsOpen(true), [setSettingsOpen]),
   )
 
-  // Cmd+Shift+F / Ctrl+Shift+F → 全局搜索
+  // Cmd+Shift+F / Ctrl+Shift+F → Yoda 搜索独立视图
   useShortcut(
     'global-search',
-    useCallback(() => setSearchOpen(true), [setSearchOpen]),
+    useCallback(() => {
+      // 设置面板打开时仍切到搜索视图（与 ⌘K 一致）；搜索视图自身再次触发则无副作用
+      setSettingsOpen(false)
+      setActiveView('yoda-search')
+    }, [setActiveView, setSettingsOpen]),
   )
 
   // Cmd+O → 在项目选择器上下文中浏览文件夹

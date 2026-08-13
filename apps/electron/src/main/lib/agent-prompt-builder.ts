@@ -200,12 +200,13 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 存在多个 \`.context/\` 目录，用途不同：
 - **会话级** \`${join(workspacePaths.sessionDir, '.context')}\`（会话沙箱下）：当前会话的临时工作台，存放 todo.md、临时笔记、handoff 等；执行计划不放这里
 - **工作区级** \`${workspacePaths?.workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、工作区级知识等
-- **项目级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：该 Project 自己的持久记忆，含 MEMORY.md（按日期+状态记录该 Project 的决策/踩坑）。**这和该目录下人写的 AGENTS.md（旧版为 CLAUDE.md）是两回事——AGENTS.md 可能同时被其他 CLI 等外部工具读取，只读不要自动创建或修改；Project 自动记忆一律按消息里的 \`<project_memory_path>\` 写入，不要写入指令文件。**
+- **项目级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：该 Project 自己的持久记忆，含 MEMORY.md（按日期+状态记录该 Project 的决策/踩坑）。
+- **项目根 AGENTS.md（项目地图，Cursor 式）**：\`<Project 工作目录>/AGENTS.md\`（旧版为 CLAUDE.md）就是该工程工作区的记忆——记录项目架构、目录、命令、验证与关键文档索引；可能同时被其他 CLI 等外部工具读取，未获授权时只读不自动创建或修改（获授权后按知识维护规则小幅维护）。
 
 选择写入哪个目录时：
 - 当前任务的临时笔记、todo、handoff 等 → 会话级 \`.context/\`
 - 跨会话有参考价值、但不专属于某个 Project 的内容（调研报告、架构分析等） → 工作区级 \`.context/\`
-- 专属于当前绑定 Project 的决策/踩坑/约定 → 按 \`<project_memory_path>\` 写入该 Project 的 MEMORY.md；该路径可能在项目级 \`.context/\` 下，也可能仍是 MyYoda 托管路径，取决于消息里给出的实际值，不要自行猜测或改写路径本身
+- 专属于当前绑定 Project 的决策/踩坑/约定 → 优先写入项目工作目录的 \`.context/MEMORY.md\`（Cursor 式，与项目代码同在）；存量会话消息里若给出 \`<project_memory_path>\` 托管路径，仍按其写入（兼容读取，不要自行猜测或改写路径本身）
 - 用户明确指定了位置时，按用户要求
 - 新会话开始时，会话级、工作区级 \`.context/\` 都要检查；如绑定了 Project，Project 记忆随每条消息的 \`<project_memory>\` 一并给出，不需要额外去读`)
 
@@ -281,8 +282,9 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 | 场景 | 处理方式 |
 |------|---------|
 | 当前工作区的硬约束、架构边界、命令和入口 | → 小幅更新工作区 AGENTS.md（仅在已获授权时） |
+| 项目根 AGENTS.md（项目地图：架构/目录/命令/验证/关键文档索引） | → 获授权后小幅维护（Cursor 式，项目工作目录下的 AGENTS.md） |
 | 当前工作区内跨项目稳定复用的偏好与经验 | → 必要时更新工作区 memory/ |
-| 专属于当前绑定 Project 的决策、踩坑、约定 | → 按消息里的 \`<project_memory_path>\` 写入该 Project 的 MEMORY.md；不要写入 Project 自己的 AGENTS.md（旧版 CLAUDE.md） |
+| 专属于当前绑定 Project 的决策、踩坑、约定 | → 优先写项目工作目录 \`.context/MEMORY.md\`；存量托管 \`<project_memory_path>\` 兼容读取 |
 | 用户偏好、误判纠正、问题解决/未解决/加重、跨会话经验 | → 必要时小幅更新 memory/MEMORY.md 或主题文件 |
 | 重复流程、固定检查清单、可复用工作方式 | → 搜索/创建/更新 Skill |
 | 当前任务的临时进度、交接和中间结论 | → 写入会话级 .context/ |
@@ -297,14 +299,14 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
   if (ctx.projectKnowledgeMaintenanceApproved === true) {
     sections.push(`## AGENTS.md 主动维护授权
 
-用户已授权你在稳定事实出现时小幅维护工作区 \`AGENTS.md\`（架构/命令/边界/入口）与项目知识。仍遵循分级：
+用户已授权你在稳定事实出现时小幅维护工作区 \`AGENTS.md\`（架构/命令/边界/入口）与项目根 \`AGENTS.md\`（项目地图：项目架构/目录/命令/验证/关键文档索引，Cursor 式）。仍遵循分级：
 - 可主动小幅更新，但保留用户已有内容、不重复双写；优先维护受管区块。
 - 长期记忆（memory/）里明确、稳定且不与既有内容冲突的最小增量可直接写入并在完成后简短说明，不必先问"要不要记住"。
 - 只有涉及删除/大段覆盖既有内容、出现冲突、需要从单次行为做不确定推断，或可能涉及敏感个人信息时，才先给出 1–3 条候选供用户确认，不擅自大改。`)
   } else {
     sections.push(`## AGENTS.md 维护边界
 
-你尚未获得主动维护 \`AGENTS.md\` 的授权：只读取/核验/提出维护建议，不自动写入。用户可通过「Agent 技能记忆页」的"同意并开始建立"授权。`)
+你尚未获得主动维护 \`AGENTS.md\`（工作区规则与项目根项目地图）的授权：只读取/核验/提出维护建议，不自动写入。用户可通过「Agent 技能记忆页」的"同意并开始建立"授权。`)
   }
 
   // 协作画像未建立时提示（不要求立即收集资料）
