@@ -1116,18 +1116,19 @@ async function queryKimiPlanQuota(apiKey: string, proxyUrl?: string): Promise<Ch
     const duration = item.window.duration
     const isFiveHourWindow = (duration === 5 && item.window.timeUnit === 'TIME_UNIT_HOUR')
       || (duration === 300 && item.window.timeUnit === 'TIME_UNIT_MINUTE')
+    const isMonthlyWindow = item.window.timeUnit === 'TIME_UNIT_MONTH'
     const unitLabel = item.window.timeUnit === 'TIME_UNIT_HOUR'
       ? '小时'
       : item.window.timeUnit === 'TIME_UNIT_MINUTE'
         ? '分钟'
         : item.window.timeUnit === 'TIME_UNIT_DAY'
           ? '天'
-          : item.window.timeUnit === 'TIME_UNIT_MONTH'
+          : isMonthlyWindow
             ? '月'
             : item.window.timeUnit
     windows.push({
-      type: isFiveHourWindow ? '5h' : 'custom',
-      label: isFiveHourWindow ? '每 5 小时' : `${duration} ${unitLabel}`,
+      type: isFiveHourWindow ? '5h' : isMonthlyWindow ? 'monthly' : 'custom',
+      label: isFiveHourWindow ? '每 5 小时' : isMonthlyWindow ? `${duration} 月` : `${duration} ${unitLabel}`,
       remainingPercent: remaining,
       usedPercent: used,
       ...planQuotaResetAt(item.detail.resetTime),
@@ -1523,7 +1524,7 @@ function parseZhipuQuotaData(
     const total = totalCount > 0 ? totalCount : remainingCount + usedCount
     const remainingPercent = total > 0 ? (remainingCount / total) * 100 : 0
     windows.push({
-      type: 'custom',
+      type: 'monthly',
       label: 'MCP 每月',
       remainingPercent: clampPercent(remainingPercent),
       usedPercent: clampPercent(100 - remainingPercent),

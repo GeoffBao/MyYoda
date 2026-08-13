@@ -15,8 +15,9 @@ function formatWindow(window: ChannelPlanQuotaWindow): string {
 function buildSummary(result: ChannelPlanQuotaResult): string {
   const fiveHour = result.windows.find((window) => window.type === '5h')
   const weekly = result.windows.find((window) => window.type === 'weekly')
+  const monthly = result.windows.find((window) => window.type === 'monthly')
   const custom = result.windows.find((window) => window.type === 'custom')
-  const primary = [fiveHour, weekly].filter(Boolean) as ChannelPlanQuotaWindow[]
+  const primary = [fiveHour, weekly, monthly].filter(Boolean) as ChannelPlanQuotaWindow[]
   const windows = primary.length > 0 ? primary : result.windows.slice(0, 2)
   if (windows.length === 0 && custom) return formatWindow(custom)
   return windows.map(formatWindow).join(' · ')

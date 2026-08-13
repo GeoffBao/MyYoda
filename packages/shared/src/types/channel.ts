@@ -495,7 +495,7 @@ export interface FetchModelsResult {
  */
 export interface ChannelPlanQuotaWindow {
   /** 窗口类型标识 */
-  type: '5h' | 'weekly' | 'custom'
+  type: '5h' | 'weekly' | 'monthly' | 'custom'
   /** 展示标签 */
   label: string
   /** 剩余额度百分比，0-100 */

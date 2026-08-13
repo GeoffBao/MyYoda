@@ -12,7 +12,12 @@
  * - **Token / 成本只从 `result` 消息取**：每条 `result`（subtype=success/error_*）是一次
  *   Agent 运行的权威用量，自带聚合 `usage`（input/output/cache）+ 按模型拆分的 `modelUsage`
  *   + `total_cost_usd`。把它按天累加即得到"被计费的总 token"，不会与逐消息 usage 重复计数。
- * - **Messages 数 = user + assistant 消息数**（不含 system / result / thinking / tool 进度）。
+ * - **「总 Token」口径 = input + output + cache_creation（新消耗），排除 cache_read**：
+ *   cache_read 是模型重读历史上下文的廉价 token（通常占大头，但不代表真实新消耗），
+ *   用独立的 `cacheReadTokens` 字段累计展示，与 Claude Code `/usage`（input/output/cache
+ *   read/cache write 分列）一致。
+ * - **Messages 数 = 真实对话**：user 排除 tool_result（工具结果回传），assistant 只计含
+ *   text 的回复（纯 thinking / tool_use 的工具往返不计）。
  * - **按天 / 按小时 / streak / 热力图** 都从 `_createdAt`（毫秒）推导。
  *
  * 性能：增量聚合缓存 `~/.myyoda/agent-usage-cache.json`，以会话 JSONL 的 (size, mtimeMs)
@@ -26,12 +31,12 @@ import { readJsonFileSafe, writeJsonFileAtomic } from './safe-file'
 import type { SDKAssistantMessage, SDKResultMessage, SDKUserMessage, ProviderType } from '@myyoda/shared'
 
 /** 用量时间范围 */
-export type UsageRange = 'all' | '30d' | '7d'
+export type UsageRange = 'all' | '30d' | '7d' | 'month'
 
 /** 单个模型在某范围 / 某天的用量汇总 */
 export interface UsageModelAgg {
-  /** 消息数（按 model 归属的消息数，仅来自带 usage 的 result 归属模型） */
-  messages: number
+  /** 该模型 result 调用次数（每条带 usage 的 result 归属到模型时 +1） */
+  resultCount: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -82,14 +87,19 @@ interface UsageCacheFile {
 
 // v2：模型聚合新增 provider 字段（从 result._channelProvider 取），旧缓存没有该字段，
 // 版本号变化触发一次全量重扫以回填，而不是让老会话永远显示"未知渠道"。
-const CACHE_VERSION = 2
+// v4：修复 aggregate 合并时漏合各天的 models，导致按模型堆叠柱状图拿不到分段数据、柱子透明。
+// v3：总 Token 口径改为新消耗（排除 cache_read），消息数改为真实对话（排除工具往返），
+// 旧缓存的 totalTokens/messages 口径不同，需全量重扫一次。
+// v5：模型聚合新增 resultCount（result 调用次数）字段，旧缓存模型没有该字段，需重扫回填。
+const CACHE_VERSION = 5
 
 /** 汇总后的单模型行（供 Models Tab 明细表） */
 export interface UsageModelRow {
   modelId: string
   /** 供应商类型，缺失时前端展示"未知渠道"（不再回退到无意义的 channelId UUID） */
   provider?: ProviderType
-  messages: number
+  /** 该模型 result 调用次数 */
+  resultCount: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -132,6 +142,8 @@ export interface UsageOverview {
   sessions: number
   messages: number
   totalTokens: number
+  /** 缓存读取 token 汇总（重读历史上下文的廉价 token，不计入 totalTokens） */
+  cacheReadTokens: number
   activeDays: number
   currentStreak: number
   longestStreak: number
@@ -157,9 +169,14 @@ export interface AgentUsageStats {
 /** 时间范围 → 起始日（本地零点毫秒）；all 返回 0 */
 function rangeStart(range: UsageRange, now: number): number {
   if (range === 'all') return 0
-  const days = range === '30d' ? 30 : 7
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
+  if (range === 'month') {
+    // 自然月：本月 1 号零点
+    start.setDate(1)
+    return start.getTime()
+  }
+  const days = range === '30d' ? 30 : 7
   start.setDate(start.getDate() - (days - 1))
   return start.getTime()
 }
@@ -191,7 +208,7 @@ function ensureModel(day: UsageDayAgg, modelId: string): UsageModelAgg {
   let m = day.models[modelId]
   if (!m) {
     m = {
-      messages: 0,
+      resultCount: 0,
       inputTokens: 0,
       outputTokens: 0,
       cacheReadTokens: 0,
@@ -206,6 +223,23 @@ function ensureModel(day: UsageDayAgg, modelId: string): UsageModelAgg {
 /** 首次遇到某模型时记下它的供应商；同一 modelId 后续出现 provider 缺失也不覆盖已知值 */
 function stampProvider(agg: UsageModelAgg, provider: ProviderType | undefined): void {
   if (!agg.provider && provider) agg.provider = provider
+}
+
+/** 是否含 tool_result 内容块（工具结果回传，非真实用户输入） */
+function isToolResultUser(user: SDKUserMessage): boolean {
+  const blocks = user.message?.content ?? []
+  return blocks.some((block) => block.type === 'tool_result')
+}
+
+/** 是否含 text 内容块（有实际文本输出，而非纯思考 / 工具调用） */
+function hasTextBlock(asst: SDKAssistantMessage): boolean {
+  const blocks = asst.message?.content ?? []
+  return blocks.some((block) => block.type === 'text')
+}
+
+/** 新消耗 token：新输入 + 新写缓存 + 输出，排除缓存读取（重读旧上下文） */
+function sumFreshTokens(agg: { inputTokens: number; outputTokens: number; cacheCreationTokens: number }): number {
+  return agg.inputTokens + agg.outputTokens + agg.cacheCreationTokens
 }
 
 interface ResultUsage {
@@ -278,7 +312,8 @@ export function scanSessionLines(
       const output = usage.output_tokens ?? 0
       const cacheRead = usage.cache_read_input_tokens ?? 0
       const cacheCreation = usage.cache_creation_input_tokens ?? 0
-      const total = input + output + cacheRead + cacheCreation
+      // 新消耗 token：排除缓存读取（重读旧上下文的廉价 token），与 Claude Code /usage 口径一致
+      const total = input + output + cacheCreation
       const cost = result.total_cost_usd ?? 0
       const provider = result._channelProvider
 
@@ -295,6 +330,7 @@ export function scanSessionLines(
       if (modelUsage && Object.keys(modelUsage).length > 0) {
         for (const [modelId, entry] of Object.entries(modelUsage)) {
           const mi = ensureModel(day, modelId)
+          mi.resultCount += 1
           mi.inputTokens += entry?.inputTokens ?? 0
           mi.outputTokens += entry?.outputTokens ?? 0
           mi.cacheReadTokens += entry?.cacheReadInputTokens ?? 0
@@ -306,6 +342,7 @@ export function scanSessionLines(
       } else {
         const modelId = result._channelModelId ?? 'unknown'
         const mi = ensureModel(day, modelId)
+        mi.resultCount += 1
         mi.inputTokens += input
         mi.outputTokens += output
         mi.cacheReadTokens += cacheRead
@@ -315,12 +352,16 @@ export function scanSessionLines(
       }
     } else if (msg.type === 'assistant') {
       const asst = msg as SDKAssistantMessage
+      // 只统计含文本的回复；纯 thinking / tool_use 的工具往返不算真实对话消息
+      if (!hasTextBlock(asst)) continue
       const day = days[dayKey] ?? (days[dayKey] = newDayAgg())
       day.messages += 1
       const hour = new Date(createdAt).getHours()
       day.hourlyMessages[hour] = (day.hourlyMessages[hour] ?? 0) + 1
     } else if (msg.type === 'user') {
       const user = msg as SDKUserMessage
+      // 工具结果回传（tool_result）不算真实用户输入
+      if (isToolResultUser(user)) continue
       const day = days[dayKey] ?? (days[dayKey] = newDayAgg())
       day.messages += 1
       const hour = new Date(createdAt).getHours()
@@ -401,6 +442,7 @@ export function computeTodayBucket(sessions: SessionUsageAgg[], now: number): Us
     merged.costUsd += day.costUsd
     for (const [modelId, m] of Object.entries(day.models)) {
       const target = ensureModel(merged, modelId)
+      target.resultCount += m.resultCount ?? 0
       target.inputTokens += m.inputTokens
       target.outputTokens += m.outputTokens
       target.cacheReadTokens += m.cacheReadTokens
@@ -414,7 +456,7 @@ export function computeTodayBucket(sessions: SessionUsageAgg[], now: number): Us
     .map(([modelId, m]) => ({
       modelId,
       provider: m.provider,
-      totalTokens: m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheCreationTokens,
+      totalTokens: sumFreshTokens(m),
     }))
     .sort((a, b) => b.totalTokens - a.totalTokens)
 
@@ -438,6 +480,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
   let totalSessions = 0
   let totalMessages = 0
   let totalTokens = 0
+  let totalCacheRead = 0
 
   // 汇总所有模型行（跨天合并）
   const modelRows = new Map<string, UsageModelRow>()
@@ -463,10 +506,21 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
       merged.costUsd += day.costUsd
       for (let h = 0; h < 24; h++) merged.hourlyMessages[h] = (merged.hourlyMessages[h] ?? 0) + (day.hourlyMessages[h] ?? 0)
       for (const [modelId, m] of Object.entries(day.models)) {
+        // 合并到该日的 models（供按天堆叠柱状图使用）
+        const dayModel = ensureModel(merged, modelId)
+        dayModel.resultCount += m.resultCount ?? 0
+        dayModel.inputTokens += m.inputTokens
+        dayModel.outputTokens += m.outputTokens
+        dayModel.cacheReadTokens += m.cacheReadTokens
+        dayModel.cacheCreationTokens += m.cacheCreationTokens
+        dayModel.costUsd += m.costUsd
+        stampProvider(dayModel, m.provider)
+
+        // 合并到全局模型明细行
         const row = modelRows.get(modelId) ?? {
           modelId,
           provider: undefined,
-          messages: 0,
+          resultCount: 0,
           inputTokens: 0,
           outputTokens: 0,
           cacheReadTokens: 0,
@@ -478,7 +532,8 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
         row.outputTokens += m.outputTokens
         row.cacheReadTokens += m.cacheReadTokens
         row.cacheCreationTokens += m.cacheCreationTokens
-        row.totalTokens = row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens
+        row.resultCount += m.resultCount ?? 0
+        row.totalTokens = sumFreshTokens(row)
         row.costUsd += m.costUsd
         if (!row.provider && m.provider) row.provider = m.provider
         modelRows.set(modelId, row)
@@ -505,6 +560,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
   for (const day of dayAggs.values()) {
     totalMessages += day.messages
     totalTokens += day.totalTokens
+    totalCacheRead += day.cacheReadTokens
   }
 
   // 活跃天数 / streak
@@ -543,7 +599,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
       models: Object.entries(agg.models)
         .map(([modelId, m]) => ({
           modelId,
-          totalTokens: m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheCreationTokens,
+          totalTokens: sumFreshTokens(m),
           inputTokens: m.inputTokens,
           outputTokens: m.outputTokens,
         }))
@@ -558,6 +614,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
     sessions: totalSessions,
     messages: totalMessages,
     totalTokens,
+    cacheReadTokens: totalCacheRead,
     activeDays: activeDays.size,
     currentStreak: streaks.currentStreak,
     longestStreak: streaks.longestStreak,
@@ -637,6 +694,7 @@ export async function getAgentUsageStats(range: UsageRange): Promise<AgentUsageS
       sessions: 0,
       messages: 0,
       totalTokens: 0,
+      cacheReadTokens: 0,
       activeDays: 0,
       currentStreak: 0,
       longestStreak: 0,

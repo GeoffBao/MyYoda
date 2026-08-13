@@ -40,6 +40,9 @@ function formatWindow(durationSeconds: number): Pick<ChannelPlanQuotaWindow, 'ty
   if (durationSeconds === 7 * 24 * 60 * 60) {
     return { type: 'weekly', label: '每周额度' }
   }
+  if (durationSeconds >= 28 * 24 * 60 * 60 && durationSeconds <= 31 * 24 * 60 * 60) {
+    return { type: 'monthly', label: '每月额度' }
+  }
   if (durationSeconds > 0 && durationSeconds % (24 * 60 * 60) === 0) {
     return { type: 'custom', label: `每 ${durationSeconds / (24 * 60 * 60)} 天` }
   }

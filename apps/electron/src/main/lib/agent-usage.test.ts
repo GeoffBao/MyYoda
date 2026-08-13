@@ -4,12 +4,12 @@ import type { SessionUsageAgg } from './agent-usage'
 
 function userMsg(day: string, hour = 9): string {
   const iso = `${day}T${String(hour).padStart(2, '0')}:00:00Z`
-  return JSON.stringify({ type: 'user', _createdAt: Date.parse(iso) })
+  return JSON.stringify({ type: 'user', _createdAt: Date.parse(iso), message: { content: [{ type: 'text', text: 'hi' }] } })
 }
 
 function assistantMsg(day: string, hour = 10): string {
   const iso = `${day}T${String(hour).padStart(2, '0')}:00:00Z`
-  return JSON.stringify({ type: 'assistant', _createdAt: Date.parse(iso) })
+  return JSON.stringify({ type: 'assistant', _createdAt: Date.parse(iso), message: { content: [{ type: 'text', text: 'hi' }] } })
 }
 
 function resultMsg(day: string, opts: { input?: number; output?: number; cacheRead?: number; cacheCreation?: number; cost?: number; model?: string; hour?: number }): string {
@@ -49,15 +49,42 @@ describe('agent-usage scanSessionLines', () => {
     const agg = scanSessionLines(lines, META)
     const day = agg.days['2026-08-01']
     expect(day).toBeDefined()
-    expect(day!.totalTokens).toBe(100 + 50 + 20 + 5)
+    expect(day!.totalTokens).toBe(100 + 50 + 5)
     expect(day!.inputTokens).toBe(100)
     expect(day!.outputTokens).toBe(50)
     expect(day!.cacheReadTokens).toBe(20)
     expect(day!.cacheCreationTokens).toBe(5)
     expect(day!.costUsd).toBe(0.5)
     expect(day!.models['claude-sonnet-4']!.inputTokens).toBe(100)
+    expect(day!.models['claude-sonnet-4']!.resultCount).toBe(1)
     // result 不计 message 数
     expect(day!.messages).toBe(0)
+  })
+
+  test('同模型多条 result 累加 resultCount；modelUsage 多模型分别计数', () => {
+    const a = resultMsg('2026-08-01', { model: 'claude-sonnet-4', input: 10 })
+    const b = resultMsg('2026-08-01', { model: 'claude-sonnet-4', input: 20 })
+    const c = resultMsg('2026-08-01', { model: 'deepseek-v4-flash', input: 30 })
+    const agg = scanSessionLines([a, b, c], META)
+    const day = agg.days['2026-08-01']!
+    expect(day.models['claude-sonnet-4']!.resultCount).toBe(2)
+    expect(day.models['deepseek-v4-flash']!.resultCount).toBe(1)
+  })
+
+  test('tool_result 回传与纯工具调用不计入真实对话消息数', () => {
+    const toolResultUser = JSON.stringify({
+      type: 'user',
+      _createdAt: Date.parse('2026-08-01T09:00:00Z'),
+      message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+    })
+    const toolUseAssistant = JSON.stringify({
+      type: 'assistant',
+      _createdAt: Date.parse('2026-08-01T10:00:00Z'),
+      message: { content: [{ type: 'tool_use', id: 't1', name: 'bash', input: {} }] },
+    })
+    const lines = [toolResultUser, toolUseAssistant, assistantMsg('2026-08-01', 11), userMsg('2026-08-01', 9)]
+    const agg = scanSessionLines(lines, META)
+    expect(agg.days['2026-08-01']!.messages).toBe(2)
   })
 
   test('user + assistant 消息计 message 数并写进小时槽', () => {
@@ -171,13 +198,13 @@ describe('agent-usage computeTodayBucket', () => {
         days: {
           [todayKey]: {
             messages: 3,
-            totalTokens: 175,
+            totalTokens: 155,
             inputTokens: 100,
             outputTokens: 50,
             cacheReadTokens: 20,
             cacheCreationTokens: 5,
             costUsd: 0.5,
-            models: { 'claude-sonnet-4': { messages: 0, inputTokens: 100, outputTokens: 50, cacheReadTokens: 20, cacheCreationTokens: 5, costUsd: 0.5, provider: 'anthropic' } },
+            models: { 'claude-sonnet-4': { resultCount: 1, inputTokens: 100, outputTokens: 50, cacheReadTokens: 20, cacheCreationTokens: 5, costUsd: 0.5, provider: 'anthropic' } },
             hourlyMessages: new Array(24).fill(0),
           },
           [yesterdayKey]: {
@@ -197,8 +224,8 @@ describe('agent-usage computeTodayBucket', () => {
     const today = computeTodayBucket(sessions, now)
     expect(today.day).toBe(todayKey)
     expect(today.messages).toBe(3)
-    expect(today.totalTokens).toBe(175)
-    expect(today.models).toEqual([{ modelId: 'claude-sonnet-4', provider: 'anthropic', totalTokens: 175 }])
+    expect(today.totalTokens).toBe(155)
+    expect(today.models).toEqual([{ modelId: 'claude-sonnet-4', provider: 'anthropic', totalTokens: 155 }])
   })
 
   test('跨多个会话累加同一天的数据', () => {

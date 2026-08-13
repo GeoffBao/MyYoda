@@ -46,6 +46,21 @@ describe('Codex OAuth 订阅额度解析', () => {
     })
   })
 
+  test('Given 30 天窗口 When 解析 Then 标记为每月额度', () => {
+    const result = parseCodexPlanQuotaResponse({
+      rate_limit: {
+        primary_window: {
+          used_percent: 30,
+          limit_window_seconds: 30 * 24 * 60 * 60,
+        },
+      },
+    })
+
+    expect(result.windows).toMatchObject([
+      { type: 'monthly', label: '每月额度', usedPercent: 30, remainingPercent: 70 },
+    ])
+  })
+
   test('Given 非标准的 4.5 小时和 6 天窗口 When 解析 Then 不误标为 5 小时或每周', () => {
     const result = parseCodexPlanQuotaResponse({
       rate_limit: {
