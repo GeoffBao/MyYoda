@@ -1,4 +1,5 @@
 import type { ProviderType } from './channel'
+import type { KanbanColumnDef } from '../projects/types'
 
 /**
  * Agent 相关类型定义
@@ -27,6 +28,8 @@ export interface AgentWorkspace {
   projectRootPath?: string
   /** 本地项目根目录的运行时状态；Proma 托管项目不设置此字段。 */
   projectRootStatus?: LocalProjectRootStatus
+  /** 工作区自定义看板列（对齐看板=工作区模型）；缺省用默认四列（待办/进行中/待验收/已完成） */
+  kanbanColumns?: KanbanColumnDef[]
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */

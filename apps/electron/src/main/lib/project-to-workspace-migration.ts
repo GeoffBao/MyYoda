@@ -17,7 +17,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { getConfigDir, getAgentWorkspacePath, getWorkspaceMcpPath, getWorkspaceSkillsDir, getInactiveSkillsDir, getWorkspaceFilesDir } from './config-paths'
-import { getAgentWorkspace, createAgentWorkspace, listAgentWorkspaces } from './agent-workspace-manager'
+import { getAgentWorkspace, createAgentWorkspace, listAgentWorkspaces, updateAgentWorkspace } from './agent-workspace-manager'
 import { projectRepository } from './project-repository'
 import { listAgentSessions, moveSessionToWorkspace, updateAgentSessionMeta } from './agent-session-manager'
 import { listAutomations, updateAutomation } from './automation-manager'
@@ -296,6 +296,12 @@ function migrateOneProject(
   const projectMcp = projectRepository.getProjectMcpConfigRaw(workspaceRoot, project.slug)
   if (projectMcp && Object.keys(projectMcp).length > 0) {
     projectRepository.saveProjectMcpConfigRaw(newRoot, project.slug, projectMcp)
+  }
+
+  // 4.5 看板列迁移：KanbanProject.kanbanColumns → 工作区配置（自定义列不随项目丢失）
+  const projectColumns = projectRepository.getProjectAtRoot(workspaceRoot, project.slug)?.config.kanbanColumns
+  if (projectColumns && projectColumns.length > 0 && !(newWorkspace as { kanbanColumns?: unknown }).kanbanColumns) {
+    updateAgentWorkspace(newWorkspace.id, { kanbanColumns: projectColumns })
   }
 
   // 5. 会话重绑定：projectId === 项目 id → 移动到新工作区 + 清除 projectId

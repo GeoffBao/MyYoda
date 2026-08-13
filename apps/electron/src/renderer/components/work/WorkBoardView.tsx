@@ -20,6 +20,7 @@ import {
 import {
   selectedProjectIdAtom,
   serverKanbanProjectsAtom,
+  taskBoardScopeAtom,
 } from '@/atoms/project-atoms'
 import { KanbanBoardContainer } from '@/components/app-shell/kanban/KanbanBoardContainer'
 import type { SpecNodeSummary } from '@/components/app-shell/kanban/subtask-merge'
@@ -39,6 +40,16 @@ export function WorkBoardView(): React.ReactElement {
   const [agentSessions, setAgentSessions] = useAtom(agentSessionsAtom)
   const [projects, setProjects] = useAtom(serverKanbanProjectsAtom)
   const [selectedProjectId, setSelectedProjectId] = useAtom(selectedProjectIdAtom)
+  const taskBoardScope = useAtomValue(taskBoardScopeAtom)
+  const kanbanProjects = useAtomValue(serverKanbanProjectsAtom)
+
+  // 看板默认当前工作区：旧 project facet（迁移后项目已不存在）挂载时归一到 workspace；
+  // 存量项目仍存在时保留（KanbanProject 兼容层）
+  React.useEffect(() => {
+    if (taskBoardScope.kind !== 'project') return
+    const stillExists = kanbanProjects.some((project) => project.id === taskBoardScope.projectId)
+    if (!stillExists) setSelectedProjectId(null)
+  }, [taskBoardScope, kanbanProjects, setSelectedProjectId])
   const setSessions = useSetAtom(serverKanbanSessionsAtom)
   const [taskSummaries, setTaskSummaries] = useAtom(serverTaskSummariesAtom)
   const setRuns = useSetAtom(serverKanbanRunsAtom)

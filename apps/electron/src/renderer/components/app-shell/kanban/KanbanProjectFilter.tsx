@@ -7,6 +7,8 @@ interface KanbanProjectFilterProps {
   value: TaskBoardScopeFilter
   onChange: (value: TaskBoardScopeFilter) => void
   onCreateProject?: () => void
+  /** 当前工作区名称（展示在「工作区」选项后；不传则只显示「工作区」） */
+  workspaceName?: string
   className?: string
 }
 
@@ -20,12 +22,13 @@ function scopeValue(scope: TaskBoardScopeFilter): string {
   return scope.projectId
 }
 
-/** Project 是 Task Board scope facet，而不是看板的强制父级。 */
+/** Project 是 Task Board scope facet，而不是看板的强制父级。新模型下默认「当前工作区」；存量 Project 兼容保留。 */
 export function KanbanProjectFilter({
   projects,
   value,
   onChange,
   onCreateProject,
+  workspaceName,
   className,
 }: KanbanProjectFilterProps): React.ReactElement {
   return (
@@ -46,8 +49,8 @@ export function KanbanProjectFilter({
         }}
         className="h-8 min-w-0 max-w-52 rounded-lg border border-border/60 bg-card px-2 text-xs text-foreground shadow-sm outline-none focus:border-ring"
       >
+        <option value={WORKSPACE}>{workspaceName ? `工作区（${workspaceName}）` : '当前工作区'}</option>
         <option value={ALL}>全部任务</option>
-        <option value={WORKSPACE}>Workspace Task</option>
         {projects.filter((project) => !project.archivedAt).map((project) => (
           <option key={project.id} value={project.id}>{project.name}</option>
         ))}

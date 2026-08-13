@@ -87,7 +87,7 @@ import {
   sessionViewStateMapAtom,
 } from '@/atoms/tab-atoms'
 import { userProfileAtom } from '@/atoms/user-profile'
-import { selectedProjectIdAtom, serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom } from '@/atoms/project-atoms'
+import { selectedProjectIdAtom, serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom, taskBoardScopeAtom } from '@/atoms/project-atoms'
 import { isHiddenKanbanProjectKind } from '@/components/app-shell/kanban/types'
 import { serverTaskSummariesAtom } from '@/atoms/kanban-atoms'
 import { sessionGroupsAtom } from '@/atoms/session-groups-atoms'
@@ -692,6 +692,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const setSelectedProjectId = useSetAtom(selectedProjectIdAtom)
   const setPendingTaskEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const [codeMainView, setCodeMainView] = useAtom(codeMainViewAtom)
+  const [, setTaskBoardScope] = useAtom(taskBoardScopeAtom)
 
   // 当前工作区能力（MCP + Skill 计数）
   const [capabilities, setCapabilities] = React.useState<WorkspaceCapabilities | null>(null)
@@ -1076,9 +1077,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const handleOpenTaskBoard = React.useCallback((): void => {
     if (codeMainView === 'tasks' && activeView === 'conversations') return
     setAutomationForm({ open: false, draft: null })
+    // 看板默认聚焦当前工作区（项目=工作区）；旧 project facet 由 WorkBoardView 挂载时清理
+    setTaskBoardScope({ kind: 'workspace' })
     setCodeMainView('tasks')
     setActiveView('conversations')
-  }, [activeView, codeMainView, setActiveView, setAutomationForm, setCodeMainView])
+  }, [activeView, codeMainView, setActiveView, setAutomationForm, setCodeMainView, setTaskBoardScope])
 
   /** 打开/关闭 Excalidraw 画布 */
   const handleOpenExcalidraw = React.useCallback((): void => {

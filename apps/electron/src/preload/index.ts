@@ -851,7 +851,7 @@ export interface ElectronAPI {
   }>
 
   /** 更新 Agent 工作区 */
-  updateAgentWorkspace: (id: string, updates: { name: string }) => Promise<AgentWorkspace>
+  updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => Promise<AgentWorkspace>
 
   /** 删除 Agent 工作区 */
   deleteAgentWorkspace: (id: string) => Promise<void>
@@ -2353,7 +2353,7 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION, workspaceId)
   },
 
-  updateAgentWorkspace: (id: string, updates: { name: string }) => {
+  updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_WORKSPACE, id, updates)
   },
 

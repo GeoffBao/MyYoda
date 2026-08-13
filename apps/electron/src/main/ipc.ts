@@ -2893,7 +2893,7 @@ export function registerIpcHandlers(): void {
   // 更新 Agent 工作区
   ipcMain.handle(
     AGENT_IPC_CHANNELS.UPDATE_WORKSPACE,
-    async (_, id: string, updates: { name: string }): Promise<AgentWorkspace> => {
+    async (_, id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }): Promise<AgentWorkspace> => {
       return updateAgentWorkspace(id, updates)
     }
   )

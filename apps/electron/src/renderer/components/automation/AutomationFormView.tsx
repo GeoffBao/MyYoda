@@ -1238,12 +1238,17 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
             </div>
           </div>
 
-          {/* 项目（仅「创建任务」模式可选）：任务运行会话挂载到该项目（cwd 用项目工作目录） */}
+          {/* 挂载目标（仅「创建任务」模式）：迁移后项目=工作区，任务会话挂到工作区（cwd 用工程目录）；
+              存量 KanbanProject 存在时仍可选（兼容层） */}
           {form.executionMode === 'create_task' && (
           <div className="flex flex-col gap-2">
-            <Label>项目（可选）</Label>
+            <Label>执行工作区</Label>
             {!form.workspaceId ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/35">请先选择工作区</div>
+            ) : pickableProjects.filter((p) => !p.archivedAt && p.workspaceId === workspaceSlugById.get(form.workspaceId ?? '')).length === 0 ? (
+              <div className="px-0.5 text-xs leading-relaxed text-foreground/50">
+                在当前工作区根目录执行任务（会话 cwd 继承工作区工程目录）
+              </div>
             ) : (
               <Select
                 value={form.projectId ?? NO_PROJECT}

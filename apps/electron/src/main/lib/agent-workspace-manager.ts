@@ -31,7 +31,7 @@ import { projectRepository } from './project-repository'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
-import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
+import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, KanbanColumnDef, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
 import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 
@@ -375,7 +375,7 @@ export function restoreAgentWorkspaceProjectRoot(id: string): AgentWorkspace {
 /** 更新工作区名称（slug 和目录不变） */
 export function updateAgentWorkspace(
   id: string,
-  updates: { name: string },
+  updates: { name?: string; kanbanColumns?: KanbanColumnDef[] },
 ): AgentWorkspace {
   const index = readIndex()
   const idx = index.workspaces.findIndex((w) => w.id === id)
@@ -386,14 +386,17 @@ export function updateAgentWorkspace(
 
   const existing = index.workspaces[idx]!
 
-  const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
-  if (duplicate) {
-    throw new Error(`工作区名称「${updates.name}」已存在`)
+  if (updates.name !== undefined) {
+    const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
+    if (duplicate) {
+      throw new Error(`工作区名称「${updates.name}」已存在`)
+    }
   }
 
   const updated: AgentWorkspace = {
     ...existing,
-    name: updates.name,
+    ...(updates.name !== undefined ? { name: updates.name } : {}),
+    ...(updates.kanbanColumns !== undefined ? { kanbanColumns: updates.kanbanColumns } : {}),
     updatedAt: Date.now(),
   }
 
