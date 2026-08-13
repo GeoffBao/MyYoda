@@ -75,6 +75,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { AgentSessionItem } from './AgentSessionItem'
+import { LocalProjectBadge } from '@/components/agent-skills/LocalProjectBadge'
 import type { KanbanProject } from './kanban/types'
 import {
   buildAgentSessionTrees,
@@ -450,7 +451,16 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                         }}
                         className="group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.04]"
                       >
-                        <MarqueeText text={project.name} className="min-w-0 flex-1 text-[13px]" />
+                        {/* 项目图标：绑定本地目录的项目用文件夹图标，否则用文件夹占位（对齐 Proma 项目行视觉） */}
+                        <span className="grid size-5 shrink-0 place-items-center rounded-md bg-foreground/[0.045] text-foreground/45">
+                          <FolderOpen size={13} />
+                        </span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <MarqueeText text={project.name} className="min-w-0 flex-1 text-[13px] font-medium" />
+                          {project.workingDirectory && (
+                            <LocalProjectBadge workingDirectory={project.workingDirectory} className="bg-foreground/[0.045] text-foreground/40" />
+                          )}
+                        </span>
 
                         {/* 聚合注意力点 + 会话计数（非 hover 时显示） */}
                         {attention && (

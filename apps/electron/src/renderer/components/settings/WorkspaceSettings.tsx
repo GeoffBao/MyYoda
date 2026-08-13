@@ -402,7 +402,7 @@ export function WorkspaceSettings(): React.ReactElement {
             <div className="flex items-center gap-3 px-4 py-3">
               <ArrowRightLeft size={16} className="shrink-0 text-foreground/45" />
               <div className="min-w-0 flex-1 text-[13px] text-foreground/70">
-                {migrationResult ?? '对齐 Proma 的项目模型：项目即工作区，AGENTS.md 就是工程工作区的记忆。'}
+                {migrationResult ?? '项目即工作区：每个项目独立成区，AGENTS.md 就是工程工作区的记忆。'}
               </div>
               {!migrationConfirm ? (
                 <button

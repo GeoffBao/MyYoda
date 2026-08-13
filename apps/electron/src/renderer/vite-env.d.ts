@@ -37,7 +37,7 @@ interface UpdaterAPI {
   cancelIdleInstall: () => Promise<void>
 }
 
-interface PromaPerformanceDiagnostics {
+interface MyYodaPerformanceDiagnostics {
   snapshot: () => import('./lib/performance-monitor').PerformanceSnapshot
   clear: () => void
 }
@@ -46,6 +46,6 @@ interface PromaPerformanceDiagnostics {
 interface Window {
   __pendingAttachmentData?: Map<string, string>
   __pendingAgentFileData?: Map<string, string>
-  /** 仅在 ?perf=1 或 proma-performance-debug=1 时安装的性能诊断接口。 */
-  __promaPerformance?: PromaPerformanceDiagnostics
+  /** 仅在 ?perf=1 或 myyoda-performance-debug=1 时安装的性能诊断接口。 */
+  __myyodaPerformance?: MyYodaPerformanceDiagnostics
 }

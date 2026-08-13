@@ -14,7 +14,7 @@
  * - 原 projects/{slug}/ 目录在成功后移入 recovery-trash（30 天可恢复）。
  */
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { getConfigDir, getAgentWorkspacePath, getWorkspaceMcpPath, getWorkspaceSkillsDir, getInactiveSkillsDir, getWorkspaceFilesDir } from './config-paths'
 import { getAgentWorkspace, createAgentWorkspace, listAgentWorkspaces } from './agent-workspace-manager'
@@ -165,8 +165,15 @@ export function runProjectToWorkspaceMigration(workspaceId: string): ProjectToWo
 
   try {
     for (const project of migratable) {
-      const item = migrateOneProject(workspace, workspaceRoot, project)
-      migrated.push(item)
+      try {
+        const item = migrateOneProject(workspace, workspaceRoot, project)
+        migrated.push(item)
+      } catch (error) {
+        // 单个项目失败（如工作区名称已存在）不中断整体迁移：跳过并记录原因，其余项目继续
+        const msg = error instanceof Error ? error.message : '未知错误'
+        console.warn(`[项目→工作区迁移] 「${project.name}」迁移失败，已跳过:`, error)
+        skipped.push({ projectId: project.id, projectName: project.name, reason: msg })
+      }
     }
 
     // 2. automation 重绑定：projectId === 任一已迁移项目 id → workspaceId 指向新工作区，清 projectId
@@ -198,11 +205,32 @@ function migrateOneProject(
 ): ProjectMigrationItem {
   const projectDir = getProjectPath(workspaceRoot, project.slug)
 
-  // 1. 创建独立工作区（slug 由项目名 slugify，一般与原项目 slug 一致）
-  const newWorkspace = createAgentWorkspace({
-    name: project.name,
-    projectRootPath: project.workingDirectory,
-  })
+  // 1. 解析目标工作区：同名且绑定同一本地目录的工作区直接复用（用户可能已手动创建过）；
+  //    同名但目录不同 → 抛错由调用方跳过（不覆盖已有工作区）。
+  const existing = listAgentWorkspaces().find((w) => w.name === project.name)
+  let newWorkspace: { id: string; slug: string; name: string }
+  if (existing && existing.projectRootPath) {
+    const sameRoot = (() => {
+      const real = (p: string): string => {
+        try {
+          return realpathSync(resolve(p))
+        } catch {
+          return resolve(p)
+        }
+      }
+      return real(existing.projectRootPath!) === real(project.workingDirectory ?? '')
+    })()
+    if (!sameRoot) {
+      throw new Error(`工作区名称「${project.name}」已存在（绑定不同目录），请重命名后重试`)
+    }
+    newWorkspace = { id: existing.id, slug: existing.slug, name: existing.name }
+    console.log(`[项目→工作区迁移] 复用已有工作区「${existing.name}」（目录一致）`)
+  } else {
+    newWorkspace = createAgentWorkspace({
+      name: project.name,
+      projectRootPath: project.workingDirectory,
+    })
+  }
   const newRoot = getAgentWorkspacePath(newWorkspace.slug)
 
   // 2. 迁移记忆：projects/{slug}/MEMORY.md → 新工作区 memory/MEMORY.md
