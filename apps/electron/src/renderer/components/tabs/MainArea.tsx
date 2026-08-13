@@ -28,7 +28,6 @@ import { TabContent } from './TabContent'
 import { AutomationFormView } from '@/components/automation/AutomationFormView'
 import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
-import { WorkspaceContextView } from '@/components/agent-skills/WorkspaceContextView'
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
@@ -287,11 +286,8 @@ export function MainArea(): React.ReactElement {
                 <PlanningView />
               )
             ) : activeView === 'agent-skills' ? (
-              // Yoda 插件视图：专家 / Skills / MCP / API 合一，Home / Code 共享，全屏取代 TabBar + TabContent
+              // Yoda 插件视图：专家 / Skills / MCP / API / Memory 合一，Home / Code 共享，全屏取代 TabBar + TabContent
               <AgentSkillsView />
-            ) : activeView === 'workspace-context' ? (
-              // Yoda 记忆：已迁入设置面板；全屏视图保留兼容（历史 deep-link）
-              <WorkspaceContextView />
             ) : activeView === 'repo-wiki' ? (
               // Yoda 知识库：Project 模式知识库入口（待开发占位）
               <RepoWikiView />

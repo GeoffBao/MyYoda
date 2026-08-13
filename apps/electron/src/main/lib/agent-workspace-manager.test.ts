@@ -330,3 +330,43 @@ describe('Agent 工作区 Skill 批量导入', () => {
     expect(readdirSync(targetSkillsDir).some((name) => name.startsWith('.malformed.importing-'))).toBe(false)
   })
 })
+
+describe('项目级 Skills 目录解析（仅查看不创建）', () => {
+  test('Given 本地目录绑定项目 When 仅调用 getProjectSkillsDir（未真正使用 Skills） Then 不在真实工作目录下创建 .context/skills/', () => {
+    manager.ensureDefaultWorkspace()
+    const workspace = manager.createAgentWorkspace('本地代码仓库项目')
+    const externalDir = mkdtempSync(join(os.tmpdir(), 'myyoda-project-view-only-'))
+    const project = projectRepositoryModule.projectRepository.createProject(workspace.id, {
+      name: '外部仓库',
+      workingDirectory: externalDir,
+    })
+
+    const dir = manager.getProjectSkillsDir(workspace.slug, project.id)
+
+    expect(dir).toBe(join(externalDir, '.context', 'skills'))
+    // 关键断言：仅查询路径不能在用户真实代码仓库里静默创建 .context/ 目录，与 readProjectMemory 只读不写的原则保持一致
+    expect(existsSync(join(externalDir, '.context'))).toBe(false)
+
+    rmSync(externalDir, { recursive: true, force: true })
+  })
+
+  test('Given 托管（无 workingDirectory）项目 When 仅调用 getProjectSkillsDir Then 同样不创建目录，仅解析路径', () => {
+    manager.ensureDefaultWorkspace()
+    const workspace = manager.createAgentWorkspace('托管项目工作区')
+    const project = projectRepositoryModule.projectRepository.createProject(workspace.id, {
+      name: '无目录绑定项目',
+    })
+
+    const dir = manager.getProjectSkillsDir(workspace.slug, project.id)
+
+    expect(dir).toBe(join(configPaths.getAgentWorkspacePath(workspace.slug), 'projects', project.slug ?? '', 'skills'))
+    expect(existsSync(dir)).toBe(false)
+  })
+
+  test('Given 项目不存在 When 调用 getProjectSkillsDir Then 返回空字符串而非抛错', () => {
+    manager.ensureDefaultWorkspace()
+    const workspace = manager.createAgentWorkspace('无项目工作区')
+
+    expect(manager.getProjectSkillsDir(workspace.slug, 'not-a-real-project-id')).toBe('')
+  })
+})

@@ -12,15 +12,23 @@ import {
   createProject as createProjectInStorage,
   deleteProject as deleteProjectInStorage,
   deleteProjectAsset as deleteProjectAssetInStorage,
+  ensureProjectInactiveSkillsDir,
+  ensureProjectSkillsDir,
+  getProjectInactiveSkillsPath,
   getProjectMemoryPath,
+  getProjectSkillsPath,
+  hasProjectMcpServers as hasProjectMcpServersInStorage,
+  hasProjectSkills as hasProjectSkillsInStorage,
   listProjectAssets as listProjectAssetsInStorage,
   loadProject,
   loadProjectById,
   loadProjectMemory,
   loadWorkspaceProjects,
+  readProjectMcpConfigRaw,
   readProjectMemory,
   updateProject as updateProjectInStorage,
   uploadProjectAsset as uploadProjectAssetInStorage,
+  writeProjectMcpConfigRaw,
   writeProjectMemory as writeProjectMemoryInStorage,
 } from '../../../../../packages/shared/src/projects/storage.ts'
 import { getAgentWorkspace } from './agent-workspace-manager'
@@ -239,6 +247,64 @@ export class ProjectRepository {
     const result = this.resolveEffectiveCwdForProject(workspaceRoot, projectId)
     if (!result) return undefined
     return assertRunnableCwd(result)
+  }
+
+  // ===== 项目级 Skills / MCP（可选覆盖，不影响工作区级现有行为） =====
+
+  /** 项目是否已配置自己的 Skills；项目不存在时返回 false */
+  hasProjectSkills(workspaceRoot: string, idOrSlug: string): boolean {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) return false
+    return hasProjectSkillsInStorage(workspaceRoot, project.config.slug)
+  }
+
+  /** 项目 Skills 目录绝对路径（不自动创建）；项目不存在时返回 null */
+  getProjectSkillsDirPath(workspaceRoot: string, idOrSlug: string): string | null {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) return null
+    return getProjectSkillsPath(workspaceRoot, project.config.slug)
+  }
+
+  /** 确保并返回项目 Skills 目录（自动创建）；仅在用户明确管理该项目 Skills 时调用 */
+  ensureProjectSkillsDirAtRoot(workspaceRoot: string, idOrSlug: string): string {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
+    return ensureProjectSkillsDir(workspaceRoot, project.config.slug)
+  }
+
+  /** 确保并返回项目停用 Skills 目录 */
+  ensureProjectInactiveSkillsDirAtRoot(workspaceRoot: string, idOrSlug: string): string {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
+    return ensureProjectInactiveSkillsDir(workspaceRoot, project.config.slug)
+  }
+
+  /** 项目停用 Skills 目录绝对路径（不自动创建）；项目不存在时返回 null */
+  getProjectInactiveSkillsDirPath(workspaceRoot: string, idOrSlug: string): string | null {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) return null
+    return getProjectInactiveSkillsPath(workspaceRoot, project.config.slug)
+  }
+
+  /** 项目是否已配置自己的 MCP 服务器 */
+  hasProjectMcpServers(workspaceRoot: string, idOrSlug: string): boolean {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) return false
+    return hasProjectMcpServersInStorage(workspaceRoot, project.config.slug)
+  }
+
+  /** 项目级 MCP 配置原始数据（未归一化，由调用方按 WorkspaceMcpConfig 校验） */
+  getProjectMcpConfigRaw(workspaceRoot: string, idOrSlug: string): { servers: Record<string, unknown> } {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) return { servers: {} }
+    return readProjectMcpConfigRaw(workspaceRoot, project.config.slug)
+  }
+
+  /** 写入项目级 MCP 配置 */
+  saveProjectMcpConfigRaw(workspaceRoot: string, idOrSlug: string, config: { servers: Record<string, unknown> }): void {
+    const project = this.getProjectAtRoot(workspaceRoot, idOrSlug)
+    if (!project) throw new Error(`项目不存在: ${idOrSlug}`)
+    writeProjectMcpConfigRaw(workspaceRoot, project.config.slug, config)
   }
 
   /** 构建注入 Agent prompt 的项目上下文 */

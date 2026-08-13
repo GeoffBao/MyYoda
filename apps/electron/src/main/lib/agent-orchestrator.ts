@@ -53,7 +53,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
+import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -397,13 +397,18 @@ export class AgentOrchestrator {
   // buildSdkEnv 已删除（Claude runtime 退役）。Pi runtime 使用 buildPiRuntimeEnv。
 
   /**
-   * 构建工作区 MCP 服务器配置
+   * 构建 MCP 服务器配置。
+   *
+   * 若会话绑定了嵌套 Project 且该 Project 已自己配置过 MCP 服务器，用项目级覆盖工作区级；
+   * 否则（未绑定项目、项目未自己配置过）100% 沿用工作区级行为，不影响存量会话。
    */
-  private buildMcpServers(workspaceSlug: string | undefined): Record<string, Record<string, unknown>> {
+  private buildMcpServers(workspaceSlug: string | undefined, projectId: string | undefined): Record<string, Record<string, unknown>> {
     const mcpServers: Record<string, Record<string, unknown>> = {}
     if (!workspaceSlug) return mcpServers
 
-    const mcpConfig = getWorkspaceMcpConfig(workspaceSlug)
+    const mcpConfig = projectId && hasProjectMcpServers(workspaceSlug, projectId)
+      ? getProjectMcpConfig(workspaceSlug, projectId)
+      : getWorkspaceMcpConfig(workspaceSlug)
     for (const [name, entry] of Object.entries(mcpConfig.servers ?? {})) {
       if (!entry.enabled) continue
       if (name === 'memos-cloud') continue
@@ -1267,7 +1272,13 @@ export class AgentOrchestrator {
 
       // 10. 构建 MCP 服务器配置 + 记忆工具 + 生图工具 + 自定义工具
       // toolPolicy=none 用于 task.yaml 生成草稿：只允许模型产出文本，不暴露任何会产生副作用的工具。
-      const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug)
+      const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug, sessionMeta?.projectId)
+      // 与 buildMcpServers 同样的 fallback 规则：项目自己配置过 Skills 才用项目级目录，否则沿用工作区级目录（不影响存量会话）
+      const effectiveSkillsDir = workspaceSlug
+        ? (sessionMeta?.projectId && hasProjectSkills(workspaceSlug, sessionMeta.projectId)
+          ? getProjectSkillsDir(workspaceSlug, sessionMeta.projectId)
+          : getWorkspaceSkillsDir(workspaceSlug))
+        : undefined
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
@@ -1828,8 +1839,8 @@ ${workContext}` : '')
         piAgentDir: getSdkConfigDir(),
         piSessionDir: join(getSdkConfigDir(), 'sessions'),
         ...(allAdditionalDirectories.length > 0 && { additionalDirectories: allAdditionalDirectories }),
-        ...(workspaceSlug ? {
-          additionalSkillPaths: [getWorkspaceSkillsDir(workspaceSlug)],
+        ...(workspaceSlug && effectiveSkillsDir ? {
+          additionalSkillPaths: [effectiveSkillsDir],
           skillWorkspaceSlug: workspaceSlug,
         } : {}),
         ...(optimizedCodingEnabled ? { optimizedCoding: true } : {}),
@@ -2019,7 +2030,7 @@ ${workContext}` : '')
                 collectSkillActivations(
                   [...accumulatedMessages, msg],
                   workspaceSlug
-                    ? { workspaceSlug, workspaceSkillsRoot: getWorkspaceSkillsDir(workspaceSlug) }
+                    ? { workspaceSlug, workspaceSkillsRoot: effectiveSkillsDir ?? getWorkspaceSkillsDir(workspaceSlug) }
                     : undefined,
                 ),
               )

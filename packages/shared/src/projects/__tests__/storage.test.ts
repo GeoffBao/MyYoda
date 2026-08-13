@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, sep } from 'path';
 import type { ProjectConfig } from '@myyoda/shared/projects';
@@ -66,14 +66,21 @@ describe('projects package contracts', () => {
       'deleteProject',
       'deleteProjectAsset',
       'ensureProjectAssetsDir',
+      'ensureProjectInactiveSkillsDir',
+      'ensureProjectSkillsDir',
       'ensureProjectWorkdir',
       'ensureProjectsDir',
       'generateProjectSlug',
       'getProjectAssetsPath',
+      'getProjectInactiveSkillsPath',
+      'getProjectMcpConfigPath',
       'getProjectMemoryPath',
       'getProjectPath',
+      'getProjectSkillsPath',
       'getProjectWorkdirPath',
       'getWorkspaceProjectsPath',
+      'hasProjectMcpServers',
+      'hasProjectSkills',
       'listProjectAssets',
       'loadProject',
       'loadProjectById',
@@ -81,11 +88,13 @@ describe('projects package contracts', () => {
       'loadProjectMemory',
       'loadWorkspaceProjects',
       'projectExists',
+      'readProjectMcpConfigRaw',
       'readProjectMemory',
       'sanitizeAssetFilename',
       'saveProjectConfig',
       'updateProject',
       'uploadProjectAsset',
+      'writeProjectMcpConfigRaw',
       'writeProjectMemory',
     ]);
   });
@@ -343,5 +352,68 @@ describe('workspace project storage', () => {
     expect(projectStorage.getProjectMemoryPath(workspaceRoot, project.slug)).toBe(
       join(projectStorage.getProjectPath(workspaceRoot, project.slug), 'MEMORY.md'),
     );
+  });
+
+  test('托管项目的 Skills/MCP 路径落在 projects/{slug}/ 下，与 MEMORY.md 同级策略', () => {
+    const workspaceRoot = createTempWorkspaceRoot();
+    const project = projectStorage.createProject(workspaceRoot, { name: 'Hosted' });
+
+    expect(projectStorage.getProjectSkillsPath(workspaceRoot, project.slug)).toBe(
+      join(projectStorage.getProjectPath(workspaceRoot, project.slug), 'skills'),
+    );
+    expect(projectStorage.getProjectMcpConfigPath(workspaceRoot, project.slug)).toBe(
+      join(projectStorage.getProjectPath(workspaceRoot, project.slug), 'mcp.json'),
+    );
+  });
+
+  test('本地目录项目的 Skills/MCP 路径落在 <workingDirectory>/.context/ 下，跟随真实文件夹', () => {
+    const workspaceRoot = createTempWorkspaceRoot();
+    const externalDir = mkdtempSync(join(tmpdir(), 'myyoda-project-skills-mcp-'));
+    tempRoots.push(externalDir);
+
+    const project = projectStorage.createProject(workspaceRoot, {
+      name: 'Local Repo With Skills',
+      workingDirectory: externalDir,
+    });
+
+    expect(projectStorage.getProjectSkillsPath(workspaceRoot, project.slug)).toBe(
+      join(externalDir, '.context', 'skills'),
+    );
+    expect(projectStorage.getProjectInactiveSkillsPath(workspaceRoot, project.slug)).toBe(
+      join(externalDir, '.context', 'skills-inactive'),
+    );
+    expect(projectStorage.getProjectMcpConfigPath(workspaceRoot, project.slug)).toBe(
+      join(externalDir, '.context', 'mcp.json'),
+    );
+  });
+
+  test('hasProjectSkills / hasProjectMcpServers：项目未自己配置时为 false，配置后为 true', () => {
+    const workspaceRoot = createTempWorkspaceRoot();
+    const project = projectStorage.createProject(workspaceRoot, { name: 'Empty Then Configured' });
+
+    expect(projectStorage.hasProjectSkills(workspaceRoot, project.slug)).toBe(false);
+    expect(projectStorage.hasProjectMcpServers(workspaceRoot, project.slug)).toBe(false);
+
+    const skillsDir = projectStorage.ensureProjectSkillsDir(workspaceRoot, project.slug);
+    mkdirSync(join(skillsDir, 'my-skill'), { recursive: true });
+    writeFileSync(join(skillsDir, 'my-skill', 'SKILL.md'), '---\nname: my-skill\n---\n');
+    expect(projectStorage.hasProjectSkills(workspaceRoot, project.slug)).toBe(true);
+
+    projectStorage.writeProjectMcpConfigRaw(workspaceRoot, project.slug, {
+      servers: { demo: { type: 'stdio', command: 'demo', enabled: true } },
+    });
+    expect(projectStorage.hasProjectMcpServers(workspaceRoot, project.slug)).toBe(true);
+    expect(projectStorage.readProjectMcpConfigRaw(workspaceRoot, project.slug).servers).toHaveProperty('demo');
+  });
+
+  test('禁用中的 Skill（skills-inactive/ 下）也计入 hasProjectSkills，避免误判 fallback 到工作区级', () => {
+    const workspaceRoot = createTempWorkspaceRoot();
+    const project = projectStorage.createProject(workspaceRoot, { name: 'Inactive Only' });
+
+    const inactiveDir = projectStorage.ensureProjectInactiveSkillsDir(workspaceRoot, project.slug);
+    mkdirSync(join(inactiveDir, 'disabled-skill'), { recursive: true });
+    writeFileSync(join(inactiveDir, 'disabled-skill', 'SKILL.md'), '---\nname: disabled-skill\n---\n');
+
+    expect(projectStorage.hasProjectSkills(workspaceRoot, project.slug)).toBe(true);
   });
 });

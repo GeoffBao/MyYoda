@@ -13,12 +13,14 @@ interface McpDetailSheetProps {
   open: boolean
   server: { name: string; entry: McpServerEntry } | null
   workspaceSlug: string
+  /** 嵌套 Project id；传入时新增/编辑的 MCP 服务器保存到该 Project 自己的配置 */
+  projectId?: string | null
   onOpenChange: (open: boolean) => void
   onSaved: () => void
   onChanged?: () => void
 }
 
-export function McpDetailSheet({ open, server, workspaceSlug, onOpenChange, onSaved, onChanged }: McpDetailSheetProps): React.ReactElement {
+export function McpDetailSheet({ open, server, workspaceSlug, projectId, onOpenChange, onSaved, onChanged }: McpDetailSheetProps): React.ReactElement {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent hideClose side="right" className="w-[560px] sm:max-w-[560px] overflow-y-auto scrollbar-thin pt-5" aria-describedby={undefined}>
@@ -28,6 +30,7 @@ export function McpDetailSheet({ open, server, workspaceSlug, onOpenChange, onSa
             key={server?.name ?? '__new__'}
             server={server}
             workspaceSlug={workspaceSlug}
+            projectId={projectId}
             onSaved={onSaved}
             onChanged={onChanged}
             onCancel={() => onOpenChange(false)}

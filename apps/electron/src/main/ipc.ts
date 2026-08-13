@@ -344,6 +344,14 @@ import {
   getWorkspaceCapabilities,
   getAgentWorkspace,
   deleteWorkspaceSkill,
+  hasProjectSkills,
+  getProjectSkills,
+  getProjectSkillsDir,
+  deleteProjectSkill,
+  toggleProjectSkill,
+  hasProjectMcpServers,
+  getProjectMcpConfig,
+  saveProjectMcpConfig,
   importSkillFromWorkspace,
   batchImportSkillsFromWorkspaces,
   updateSkillFromSource,
@@ -3003,6 +3011,64 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.GET_DEFAULT_SKILL_SLUGS,
     async () => {
       return getDefaultSkillSlugs()
+    }
+  )
+
+  // ===== 项目级 Skills / MCP（嵌套 Project 可选覆盖工作区级，不影响上述工作区级通道） =====
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.HAS_PROJECT_SKILLS,
+    async (_, workspaceSlug: string, projectId: string): Promise<boolean> => {
+      return hasProjectSkills(workspaceSlug, projectId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_PROJECT_SKILLS,
+    async (_, workspaceSlug: string, projectId: string): Promise<SkillMeta[]> => {
+      return getProjectSkills(workspaceSlug, projectId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_PROJECT_SKILLS_DIR,
+    async (_, workspaceSlug: string, projectId: string): Promise<string> => {
+      return getProjectSkillsDir(workspaceSlug, projectId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.DELETE_PROJECT_SKILL,
+    async (_, workspaceSlug: string, projectId: string, skillSlug: string): Promise<void> => {
+      return deleteProjectSkill(workspaceSlug, projectId, skillSlug)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TOGGLE_PROJECT_SKILL,
+    async (_, workspaceSlug: string, projectId: string, skillSlug: string, enabled: boolean): Promise<void> => {
+      return toggleProjectSkill(workspaceSlug, projectId, skillSlug, enabled)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.HAS_PROJECT_MCP_SERVERS,
+    async (_, workspaceSlug: string, projectId: string): Promise<boolean> => {
+      return hasProjectMcpServers(workspaceSlug, projectId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_PROJECT_MCP_CONFIG,
+    async (_, workspaceSlug: string, projectId: string): Promise<WorkspaceMcpConfig> => {
+      return getProjectMcpConfig(workspaceSlug, projectId)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SAVE_PROJECT_MCP_CONFIG,
+    async (_, workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig): Promise<void> => {
+      return saveProjectMcpConfig(workspaceSlug, projectId, config)
     }
   )
 

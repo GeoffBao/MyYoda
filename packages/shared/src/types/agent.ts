@@ -2066,6 +2066,24 @@ export const AGENT_IPC_CHANNELS = {
   TOGGLE_SKILL: 'agent:toggle-skill',
   /** 获取其他工作区的 Skill 列表 */
   GET_OTHER_WORKSPACE_SKILLS: 'agent:get-other-workspace-skills',
+
+  // 项目级 Skills / MCP（嵌套 Project 可选覆盖工作区级，未配置时 UI 层面 fallback 到工作区级）
+  /** 获取项目级 Skill 列表 */
+  GET_PROJECT_SKILLS: 'agent:get-project-skills',
+  /** 项目是否已配置自己的 Skills */
+  HAS_PROJECT_SKILLS: 'agent:has-project-skills',
+  /** 获取项目 Skills 目录绝对路径（仅解析，不自动创建） */
+  GET_PROJECT_SKILLS_DIR: 'agent:get-project-skills-dir',
+  /** 删除项目 Skill */
+  DELETE_PROJECT_SKILL: 'agent:delete-project-skill',
+  /** 切换项目 Skill 启用/禁用 */
+  TOGGLE_PROJECT_SKILL: 'agent:toggle-project-skill',
+  /** 获取项目级 MCP 配置 */
+  GET_PROJECT_MCP_CONFIG: 'agent:get-project-mcp-config',
+  /** 保存项目级 MCP 配置 */
+  SAVE_PROJECT_MCP_CONFIG: 'agent:save-project-mcp-config',
+  /** 项目是否已配置自己的 MCP 服务器 */
+  HAS_PROJECT_MCP_SERVERS: 'agent:has-project-mcp-servers',
   /** 获取默认 Skills 的 slug 列表（来自 ~/.myyoda/default-skills/） */
   GET_DEFAULT_SKILL_SLUGS: 'agent:get-default-skill-slugs',
   /** 从其他工作区导入 Skill 到当前工作区 */

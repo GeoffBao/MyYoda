@@ -891,6 +891,94 @@ export function getOtherWorkspaceSkills(currentSlug: string): OtherWorkspaceSkil
   return result
 }
 
+// ===== 项目级 Skills / MCP（嵌套 Project 可选覆盖工作区级，不影响上述工作区级函数的任何现有行为） =====
+
+/** 项目是否已配置自己的 Skills；用于 UI 判断切换器展示、运行时判断是否用项目级覆盖工作区级 */
+export function hasProjectSkills(workspaceSlug: string, projectId: string): boolean {
+  return projectRepository.hasProjectSkills(getAgentWorkspacePath(workspaceSlug), projectId)
+}
+
+/** 获取项目所有 Skills（含活跃和不活跃），用于 Yoda 插件切到该项目时的 Skills Tab */
+export function getProjectSkills(workspaceSlug: string, projectId: string): SkillMeta[] {
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, projectId)
+  const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, projectId)
+  if (!activeDir || !inactiveDir) return []
+  return [...scanSkillsInDir(activeDir, true), ...scanSkillsInDir(inactiveDir, false)]
+}
+
+/**
+ * 获取项目 Skills 目录路径（仅解析，**不自动创建**）。
+ *
+ * 注意：不能用 ensureProjectSkillsDirAtRoot——本函数被 useAgentSkillsData 在仅“查看”项目 Skills
+ * 标签页时就会无条件调用，如果自动建目录会导致“仅仅点开某个本地目录绑定项目的 Skills 标签页”
+ * 就在用户真实代码仓库里静默创建空的 .context/skills/ 目录（与 readProjectMemory 只读不写的原则不一致）。
+ * 真正需要写入的操作（toggleProjectSkill/deleteProjectSkill 的目录移动）仍用 ensureProjectSkillsDirAtRoot。
+ */
+export function getProjectSkillsDir(workspaceSlug: string, projectId: string): string {
+  return projectRepository.getProjectSkillsDirPath(getAgentWorkspacePath(workspaceSlug), projectId) ?? ''
+}
+
+/** 删除项目 Skill（active 或 inactive 目录均可） */
+export function deleteProjectSkill(workspaceSlug: string, projectId: string, skillSlug: string): void {
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const activeDir = projectRepository.ensureProjectSkillsDirAtRoot(workspaceRoot, projectId)
+  const inactiveDir = projectRepository.ensureProjectInactiveSkillsDirAtRoot(workspaceRoot, projectId)
+  const activePath = join(activeDir, skillSlug)
+  const inactivePath = join(inactiveDir, skillSlug)
+  const skillPath = existsSync(activePath) ? activePath : inactivePath
+
+  if (!existsSync(skillPath)) {
+    throw new Error(`Skill 不存在: ${skillSlug}`)
+  }
+
+  rmSyncWithRetry(skillPath, { recursive: true, force: true })
+  console.log(`[项目 Skills] 已删除: ${workspaceSlug}/${projectId}/${skillSlug}`)
+}
+
+/** 在项目 skills/ 与 skills-inactive/ 之间移动来切换启用/禁用 */
+export function toggleProjectSkill(workspaceSlug: string, projectId: string, skillSlug: string, enabled: boolean): void {
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const activeDir = projectRepository.ensureProjectSkillsDirAtRoot(workspaceRoot, projectId)
+  const inactiveDir = projectRepository.ensureProjectInactiveSkillsDirAtRoot(workspaceRoot, projectId)
+
+  const srcDir = enabled ? inactiveDir : activeDir
+  const destDir = enabled ? activeDir : inactiveDir
+  const srcPath = join(srcDir, skillSlug)
+  const destPath = join(destDir, skillSlug)
+
+  if (!existsSync(srcPath)) {
+    throw new Error(`Skill 不存在: ${skillSlug}`)
+  }
+  if (existsSync(destPath)) {
+    throw new Error(`目标目录已存在同名 Skill: ${skillSlug}`)
+  }
+
+  renameWithRetry(srcPath, destPath)
+  console.log(`[项目 Skills] ${enabled ? '启用' : '禁用'}: ${workspaceSlug}/${projectId}/${skillSlug}`)
+}
+
+/** 项目是否已配置自己的 MCP 服务器；用于 UI 判断切换器展示、运行时判断是否用项目级覆盖工作区级 */
+export function hasProjectMcpServers(workspaceSlug: string, projectId: string): boolean {
+  return projectRepository.hasProjectMcpServers(getAgentWorkspacePath(workspaceSlug), projectId)
+}
+
+/** 获取项目级 MCP 配置（未配置时返回空 servers） */
+export function getProjectMcpConfig(workspaceSlug: string, projectId: string): WorkspaceMcpConfig {
+  const raw = projectRepository.getProjectMcpConfigRaw(getAgentWorkspacePath(workspaceSlug), projectId)
+  return normalizeWorkspaceMcpConfig(raw as Partial<WorkspaceMcpConfig>)
+}
+
+/** 保存项目级 MCP 配置 */
+export function saveProjectMcpConfig(workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig): void {
+  projectRepository.saveProjectMcpConfigRaw(
+    getAgentWorkspacePath(workspaceSlug),
+    projectId,
+    normalizeWorkspaceMcpConfig(config),
+  )
+  console.log(`[项目 MCP] 已保存配置: ${workspaceSlug}/${projectId}`)
+}
+
 class SkillAlreadyExistsError extends Error {
   readonly code = 'SKILL_ALREADY_EXISTS' as const
 
