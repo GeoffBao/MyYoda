@@ -207,6 +207,10 @@ export class BrowserController {
 
   private emit(browserSession: BrowserSessionRecord): void {
     if (!this.owner || this.owner.isDestroyed()) return
+    // WebContents 的关闭/导航事件可能晚于 disposeTab 到达；已移除的 session
+    // 不再发布状态，避免把正常的生命周期竞态升级为主进程未捕获异常。
+    if (this.sessions.get(browserSession.sessionId) !== browserSession) return
+    if (browserSession.tabs.size === 0 || !browserSession.tabs.has(browserSession.activeTabId)) return
     this.owner.webContents.send(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, this.buildState(browserSession))
   }
 
@@ -291,16 +295,20 @@ export class BrowserController {
   }
 
   private updateNavigationState(browserSession: BrowserSessionRecord, tab: BrowserTabRecord): void {
+    // Navigation callbacks can arrive after the tab was closed or its session removed.
+    if (this.sessions.get(browserSession.sessionId) !== browserSession) return
+    if (browserSession.tabs.get(tab.tabId) !== tab || tab.view.webContents.isDestroyed()) return
+
     const contents = tab.view.webContents
-    tab.state.url = contents.getURL()
-    tab.state.title = contents.getTitle() || '未命名页面'
-    tab.state.loading = contents.isLoading()
     try {
+      tab.state.url = contents.getURL()
+      tab.state.title = contents.getTitle() || '未命名页面'
+      tab.state.loading = contents.isLoading()
       tab.state.canGoBack = contents.canGoBack()
       tab.state.canGoForward = contents.canGoForward()
     } catch {
-      tab.state.canGoBack = false
-      tab.state.canGoForward = false
+      // The WebContents may be destroyed between the lifecycle check and the read.
+      return
     }
     this.emit(browserSession)
   }
