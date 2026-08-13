@@ -1409,25 +1409,26 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
   }, [setActiveView, setCurrentWorkspaceId, setWorkspaces])
 
-  /** Project 分组模式下全局「+」新建项目（KanbanProject，不是 AgentWorkspace） */
-  const handleCreateKanbanProject = React.useCallback(async (input: Parameters<typeof window.electronAPI.projects.create>[1]): Promise<void> => {
-    if (!workspaceRoot) return
+  /** 侧栏「+」新建项目（对齐 Proma：项目 = 工作区；可选绑定本地工程目录） */
+  const handleCreateWorkspaceFromDialog = React.useCallback(async (input: { name: string; workingDirectory?: string }): Promise<void> => {
     setCreatingProject(true)
     try {
-      const project = await window.electronAPI.projects.create(workspaceRoot, input)
-      setKanbanProjects((prev) => [project, ...prev.filter((existing) => existing.id !== project.id)])
+      const workspace = await window.electronAPI.createAgentWorkspace({
+        name: input.name,
+        projectRootPath: input.workingDirectory?.trim() || undefined,
+      })
+      setWorkspaces((prev) => [workspace, ...prev.filter((existing) => existing.id !== workspace.id)])
+      setCurrentWorkspaceId(workspace.id)
+      window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
       setCreateProjectOpen(false)
-      toast.success('项目已创建')
-      // 新建后进入唯一任务看板并按该 Project 筛选。
-      setSelectedProjectId(project.id)
-      setCodeMainView('tasks')
+      toast.success(`已创建项目「${workspace.name}」`)
       setActiveView('conversations')
     } catch (cause) {
       toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
     } finally {
       setCreatingProject(false)
     }
-  }, [setActiveView, setCodeMainView, setKanbanProjects, setSelectedProjectId, workspaceRoot])
+  }, [setActiveView, setCurrentWorkspaceId, setWorkspaces])
 
   const handleMoveToGroup = React.useCallback(async (sessionId: string, groupId?: string): Promise<void> => {
     try {
@@ -3847,7 +3848,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         open={createProjectOpen}
         busy={creatingProject}
         onOpenChange={setCreateProjectOpen}
-        onSubmit={(input) => { void handleCreateKanbanProject(input) }}
+        onSubmit={(input) => { void handleCreateWorkspaceFromDialog(input) }}
       />
     </div>
   )

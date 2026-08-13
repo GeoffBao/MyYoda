@@ -106,6 +106,8 @@ export function KanbanBoardContainer({
   const clearFilters = useSetAtom(clearTaskBoardFiltersAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const setWorkspaces = useSetAtom(agentWorkspacesAtom)
+  const setCurrentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const workspace = workspaces.find((candidate) => candidate.id === currentWorkspaceId) ?? null
   const channels = useAtomValue(channelsAtom)
   const channelsLoaded = useAtomValue(channelsLoadedAtom)
@@ -586,13 +588,17 @@ export function KanbanBoardContainer({
         busy={creatingProject}
         onOpenChange={setCreateProjectOpen}
         onSubmit={(input) => {
-          if (!workspaceRoot || creatingProject) return
+          if (creatingProject) return
           setCreatingProject(true)
-          void window.electronAPI.projects.create(workspaceRoot, input).then((project) => {
-            setProjects((current) => [project, ...current.filter((candidate) => candidate.id !== project.id)])
-            setScope({ kind: 'project', projectId: project.id })
+          void window.electronAPI.createAgentWorkspace({
+            name: input.name,
+            projectRootPath: input.workingDirectory?.trim() || undefined,
+          }).then((workspace) => {
+            setWorkspaces((current) => [workspace, ...current.filter((candidate) => candidate.id !== workspace.id)])
+            setCurrentWorkspaceId(workspace.id)
+            void window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id })
             setCreateProjectOpen(false)
-            toast.success(`已创建项目「${project.name}」`)
+            toast.success(`已创建项目「${workspace.name}」`)
           }).catch((cause: unknown) => {
             toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
           }).finally(() => setCreatingProject(false))
