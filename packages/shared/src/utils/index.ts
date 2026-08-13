@@ -49,6 +49,13 @@ export {
   type PathPlatform,
 } from './project-path'
 export {
+  findBestSearchMatch,
+  insertTopSearchResult,
+  type SearchMatch,
+  type SearchMatchKind,
+  type SearchResultRank,
+} from './search-matching'
+export {
   getSDKCompactStatus,
   isPersistableSDKSystemMessage,
   type SDKCompactStatus,
