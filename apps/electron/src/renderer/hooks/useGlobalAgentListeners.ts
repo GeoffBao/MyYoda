@@ -559,7 +559,7 @@ export function useGlobalAgentListeners(): void {
         message: { content: [{ type: 'text', text: payload.rawText }] },
         parent_tool_use_id: null,
         _createdAt: streamStartedAt,
-        _promaLiveRunStartedAt: streamStartedAt,
+        _myyodaLiveRunStartedAt: streamStartedAt,
       } as unknown as SDKMessage
       store.set(liveMessagesMapAtom, (prev) => {
         const map = new Map(prev)
@@ -966,7 +966,7 @@ export function useGlobalAgentListeners(): void {
             // 标记每条实时消息所属 run，渲染层即可把上一轮立即视为完成并自动收起过程块。
             const activeRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
             if (activeRunStartedAt != null) {
-              msgRecord._promaLiveRunStartedAt = activeRunStartedAt
+              msgRecord._myyodaLiveRunStartedAt = activeRunStartedAt
             }
 
             // 为 assistant 消息注入渠道信息，确保流式期间就绑定正确模型与 Agent SDK 窗口

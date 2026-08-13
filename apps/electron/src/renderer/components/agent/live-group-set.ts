@@ -10,7 +10,7 @@ interface BuildLiveGroupSetOptions {
 }
 
 type RunScopedLiveMessage = SDKMessage & {
-  _promaLiveRunStartedAt?: number
+  _myyodaLiveRunStartedAt?: number
 }
 
 const EMPTY_LIVE_GROUPS: ReadonlySet<MessageGroup> = new Set<MessageGroup>()
@@ -33,7 +33,7 @@ export function buildLiveGroupSet({
   const activeLiveMessages = activeRunStartedAt == null
     ? liveMessages
     : liveMessages.filter((message) => (
-      (message as RunScopedLiveMessage)._promaLiveRunStartedAt === activeRunStartedAt
+      (message as RunScopedLiveMessage)._myyodaLiveRunStartedAt === activeRunStartedAt
     ))
   const liveSet = new Set<SDKMessage>(activeLiveMessages)
   const result = new Set<MessageGroup>()
