@@ -37,6 +37,7 @@ import {
   serverKanbanProjectsAtom,
 } from '@/atoms/project-atoms'
 import { buildProjectPageNavigation } from './code-main-view-model'
+import { resolveSearchScope } from './search-dialog-model'
 import { appModeAtom } from '@/atoms/app-mode'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useCreateSession } from '@/hooks/useCreateSession'
@@ -329,18 +330,20 @@ export function SearchDialog(): React.ReactElement {
     setLoading(true)
     setSelectedIndex(0)
 
-    const isChatMode = appMode === 'chat'
-    const isAgentMode = appMode === 'agent'
+    const { includeChatScope, includeAgentScope } = resolveSearchScope(appMode)
     const matchesTitle = (title: string): boolean => findBestSearchMatch(title, q) !== null
-    const titles: TitleResult[] = (isChatMode
-      ? conversations
-        .filter((c) => matchesTitle(c.title))
-        .map((c) => ({ id: c.id, title: c.title, type: 'chat' as const, archived: c.archived, updatedAt: c.updatedAt }))
-      : isAgentMode
+    const titles: TitleResult[] = [
+      ...(includeChatScope
+        ? conversations
+          .filter((c) => matchesTitle(c.title))
+          .map((c) => ({ id: c.id, title: c.title, type: 'chat' as const, archived: c.archived, updatedAt: c.updatedAt }))
+        : []),
+      ...(includeAgentScope
         ? agentSessions
           .filter((s) => matchesTitle(s.title))
           .map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt }))
-        : [])
+        : []),
+    ]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 20)
 
@@ -362,8 +365,8 @@ export function SearchDialog(): React.ReactElement {
 
     try {
       const [chatResults, agentResults] = await Promise.all([
-        isChatMode ? window.electronAPI.searchConversationMessages(q) : Promise.resolve([]),
-        isAgentMode ? window.electronAPI.searchAgentSessionMessages(q) : Promise.resolve([]),
+        includeChatScope ? window.electronAPI.searchConversationMessages(q) : Promise.resolve([]),
+        includeAgentScope ? window.electronAPI.searchAgentSessionMessages(q) : Promise.resolve([]),
       ])
       if (token !== searchTokenRef.current) return
 
