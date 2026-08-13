@@ -1065,8 +1065,11 @@ export class BrowserController {
     const tab = this.getAgentTab(browserSession, tabId)
     return this.runTabOperation(browserSession, tab, signal ?? browserSession.agentAbortController.signal, async (operationSignal) => {
       if (action.kind === 'key') {
-        await this.cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', key: action.key }, undefined, operationSignal)
-        await this.cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', key: action.key }, undefined, operationSignal)
+        // rawKeyDown 与 windowsVirtualKeyCode 让 Chromium 识别非字符导航键并触发
+        // 默认行为（PageDown 滚动、Enter 提交、Tab 移动焦点），只传 key 不会滚动。
+        const keyEvent = { key: action.key, code: action.code, windowsVirtualKeyCode: action.windowsVirtualKeyCode }
+        await this.cdp(tab, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', ...keyEvent }, undefined, operationSignal)
+        await this.cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...keyEvent }, undefined, operationSignal)
         this.trace(browserSession, tab, 'press', `按下 ${action.key}`, 'dispatched')
       } else {
         await this.cdp(tab, 'Input.insertText', { text: action.text }, undefined, operationSignal)
