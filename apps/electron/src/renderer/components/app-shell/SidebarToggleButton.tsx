@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 
 export function SidebarToggleButton({ className }: { className?: string }): React.ReactElement {
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
-  const shortcutLabel = navigator.platform.includes('Mac') ? '⌘B' : 'Ctrl+B'
+  const shortcutLabel = navigator.platform.includes('Mac') ? '⌘B' : 'Ctrl+Shift+E'
 
   return (
     <Tooltip>

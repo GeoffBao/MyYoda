@@ -2678,6 +2678,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             折叠/展开切换按钮固定放在 TabBar（紧邻第一个标签），这里不重复渲染。 */}
         <div className={cn('w-full flex-shrink-0 titlebar-drag-region', isMac ? 'h-[50px]' : 'h-2')} />
 
+
         <div className="my-3 h-px w-8 bg-border/70" />
 
         {/* 模式切换 */}
