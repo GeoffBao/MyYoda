@@ -275,6 +275,8 @@ const AUTOMATION_GROUP_ID = '__automations__'
 const PINNED_AGENT_GROUP_KEY = '__pinned-agent__'
 /** 置顶会话默认最多展示数量，超出部分折叠为「显示更多」 */
 const PINNED_SESSION_VISIBLE_LIMIT = 5
+/** 自动任务组默认最多展示的会话数，超出部分折叠为「显示更多」，交互对齐置顶区 */
+const AUTOMATION_SESSION_VISIBLE_LIMIT = 4
 /** 供合成组复用 AgentProjectGroupItem 时填充无意义的 workspace 专属回调 */
 const noopVoid = (): void => {}
 const noopAsync = async (): Promise<void> => {}
@@ -2370,6 +2372,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   /** 置顶溢出数量：Chat 模式按置顶对话数，Agent 模式按置顶会话树数 */
   const pinnedChatOverflow = Math.max(0, pinnedConversations.length - PINNED_SESSION_VISIBLE_LIMIT)
   const pinnedAgentOverflow = Math.max(0, pinnedAgentSessionTrees.length - PINNED_SESSION_VISIBLE_LIMIT)
+  /** 自动任务组溢出部分是否展开（超过 AUTOMATION_SESSION_VISIBLE_LIMIT 的部分），交互对齐置顶区 */
+  const [automationOverflowExpanded, setAutomationOverflowExpanded] = React.useState(false)
+  /** 自动任务组溢出数量（超出默认上限的会话数） */
+  const automationOverflow = automationGroup ? Math.max(0, automationGroup.sessions.length - AUTOMATION_SESSION_VISIBLE_LIMIT) : 0
   /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组 */
   const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(new Set())
   // 项目模式下「新建项目」弹窗（状态已在顶层声明 creatingProject/setCreatingProject）
@@ -3093,7 +3099,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       <AgentProjectGroupItem
         key={group.workspace.id}
         group={isAuto
-          ? group
+          ? {
+              ...group,
+              sessions: automationOverflow > 0 && !automationOverflowExpanded
+                ? group.sessions.slice(0, AUTOMATION_SESSION_VISIBLE_LIMIT)
+                : group.sessions,
+            }
           : {
               ...group,
               sessions: buildRecentSessionList(group.sessions),
@@ -3320,6 +3331,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       {mode === 'agent' && automationGroup && (
         <div className="pt-1 pb-0.5 flex-shrink-0 titlebar-no-drag">
           {renderWorkspaceGroupItem(automationGroup)}
+          {automationOverflow > 0 && (
+            <button
+              type="button"
+              onClick={() => setAutomationOverflowExpanded((prev) => !prev)}
+              className="ml-4 px-1.5 py-1 rounded-md text-left text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
+            >
+              {automationOverflowExpanded ? '收起' : `显示更多 (${automationOverflow})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -4291,10 +4311,17 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
     ? treeItems.find((item) => treeContainsSessionId(item, activeSessionId)) ?? null
     : null
   const pinnedCurrent = currentSession ? [currentSession] : []
-  const sessions = pinnedCurrent.length > 0
+  let sessions = pinnedCurrent.length > 0
     ? [...activeSessions, ...pinnedCurrent, ...fillSessions, ...extraSessions]
     : sessionsWithoutPinned
-  const hiddenCount = Math.max(0, treeItems.length - sessions.length)
+  let hiddenCount = Math.max(0, treeItems.length - sessions.length)
+
+  // 自动任务组：由父组件统一「最多 4 个 + 显示更多/收起」折叠，内部不再做活跃/时间窗/分页的二次筛选，
+  // 按 recency 平铺渲染，避免组内出现活跃优先排序或额外的「显示更多」按钮造成双重折叠。
+  if (isAutomationGroup) {
+    sessions = treeItems
+    hiddenCount = 0
+  }
 
   return (
     <section
