@@ -39,10 +39,13 @@ import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkP
 import { parseThinkTagsFromText } from './thinking-tag-parser'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
+import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
 import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@myyoda/shared'
 import { getSDKCompactStatus } from '@myyoda/shared'
-import type { AgentStreamState } from '@/atoms/agent-atoms'
+import { agentLiveMessagesAtomFamily, agentSessionStreamingStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
 import type { AgentSessionFileRoots } from '@myyoda/shared'
+
+const EMPTY_SDK_MESSAGES: SDKMessage[] = []
 
 function stableStringify(value: unknown): string {
   if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? String(value)
@@ -189,10 +192,6 @@ interface AgentMessagesProps {
   messagesLoaded?: boolean
   /** Phase 4: 持久化的 SDKMessage（新格式） */
   persistedSDKMessages?: SDKMessage[]
-  streaming: boolean
-  streamState?: AgentStreamState
-  /** Phase 2: 实时 SDKMessage 列表（流式期间累积） */
-  liveMessages?: SDKMessage[]
   /** 当前会话 sandbox，用于历史兼容和会话文件解析 */
   sessionPath?: string | null
   /** 主进程解析的实际执行目录与 Project/Outbox 文件根 */
@@ -499,7 +498,11 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
-export const AgentMessages = React.memo(function AgentMessages({ sessionId, projectId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+export const AgentMessages = React.memo(function AgentMessages({ sessionId, projectId, sessionModelId, messagesLoaded, persistedSDKMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+  // 高频 token/live message 状态在历史区内闭环，避免唤醒 AgentView 输入框和工具栏。
+  const streamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
+  const liveMessages = useAtomValue(agentLiveMessagesAtomFamily(sessionId))
+  const streaming = streamState?.running ?? false
   const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
@@ -597,7 +600,7 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
 
   const transitioning = needsInstant || transitioningCooldown
 
-  // 合并持久化 + 实时 SDKMessage（供 ContentBlock 内查找工具结果）
+  // 合并持久化 + 实时 SDKMessage；历史 group 后续仅接收本 turn 消息，避免全历史依赖扩散。
   const allSDKMessages = React.useMemo(() => {
     const persisted = persistedSDKMessages ?? []
     const live = liveMessages ?? []
@@ -638,6 +641,14 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
     ]
   }, [persistedSDKMessages, liveMessages, streaming])
   const hasContent = allSDKMessages.length > 0
+  // 跨 turn task_notification 是历史 Task 卡片唯一需要追踪的外部元数据。
+  // 普通 token/live snapshot 不改变此签名，MessageGroupRenderer comparator 因而可忽略全消息数组新引用。
+  const taskNotificationSignature = React.useMemo(() => (
+    allSDKMessages
+      .filter((message) => message.type === 'system' && message.subtype === 'task_notification')
+      .map((message) => getSDKMessageStableKey(message))
+      .join('\u0000')
+  ), [allSDKMessages])
 
   // 仅扫描当前 live turn；不从持久化历史恢复任务，避免跨 turn 显示旧进度。
   const liveTaskActivities = React.useMemo(() => {
@@ -657,10 +668,19 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
   const suppressAgentRunning = streamState?.isCompacting
     || (streamState?.compactInFlight && contextCompaction != null)
 
-  // 统一分组：将持久化 + 实时消息合并后再分组，确保 system 消息（如压缩分割线）出现在正确位置
+  // 流式更新只重新分组当前 turn；已完成历史复用 group 引用，使 memoized renderer
+  // 跳过历史 Markdown/代码高亮/工具结果树。非流式刷新仍保持完整 groupIntoTurns 语义。
+  const messageGroupCacheRef = React.useRef(createMessageGroupRenderCache())
   const allGroups = React.useMemo(() => {
-    return groupIntoTurns(allSDKMessages, sessionModelId)
-  }, [allSDKMessages, sessionModelId])
+    const result = groupMessagesForRendering(
+      allSDKMessages,
+      sessionModelId,
+      streaming,
+      messageGroupCacheRef.current,
+    )
+    messageGroupCacheRef.current = result.cache
+    return result.groups
+  }, [allSDKMessages, sessionModelId, streaming])
 
   // 压缩过程由底部 Progress Overlay 独立承载，不占用对话历史、迷你地图或用户锚点。
   const visibleGroups = React.useMemo(
@@ -734,6 +754,17 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
     ...(attachedDirs ?? []),
   ].filter((path): path is string => Boolean(path))))
 
+  // turn 在消息渲染时一次性标注到 DOM；历史划选只需读取锚点属性，绝不回扫全部消息。
+  const groupHistoryTurns = React.useMemo(() => {
+    let turn = 0
+    const turns = new Map<MessageGroup, number>()
+    for (const group of visibleGroups) {
+      if (group.type === 'user') turn += 1
+      turns.set(group, Math.max(turn, 1))
+    }
+    return turns
+  }, [visibleGroups])
+
   return (
     <BasePathsProvider basePaths={messageBasePaths}>
     <div ref={historySelectionRootRef} className="relative flex min-h-0 flex-1 flex-col">
@@ -757,13 +788,15 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
                 const renderer = (
                   <MessageGroupRenderer
                     group={group}
-                    allMessages={allSDKMessages}
+                    allMessages={group.type === 'assistant-turn' ? allSDKMessages : EMPTY_SDK_MESSAGES}
+                    externalMetadataSignature={group.type === 'assistant-turn' ? taskNotificationSignature : ''}
                     basePath={messageBasePath}
                     onFork={shouldDisableActions ? undefined : onFork}
                     onRewind={shouldDisableActions ? undefined : onRewind}
                     onRetry={shouldDisableActions ? undefined : onRetry}
                     onRetryInNewSession={shouldDisableActions ? undefined : onRetryInNewSession}
                     onCompact={shouldDisableActions ? undefined : onCompact}
+                    historyTurn={groupHistoryTurns.get(group)}
                     isStreaming={isLive || undefined}
                     stoppedByUser={isLastAssistantTurn || undefined}
                     sessionModelId={sessionModelId}

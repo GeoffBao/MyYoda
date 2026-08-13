@@ -1000,6 +1000,10 @@ export interface ElectronAPI {
   /** 授权 Agent 主动维护工作区/项目 AGENTS.md 知识 */
   approveWorkspaceProjectKnowledgeMaintenance: (workspaceSlug: string) => Promise<void>
 
+
+  /** renderer 报告当前可见的 Agent 会话，用于提升其流式更新频率。 */
+  setVisibleAgentStreamSession: (sessionId: string | null) => Promise<void>
+
   /** 订阅 Agent 流式事件（返回清理函数） */
   onAgentStreamEvent: (callback: (event: AgentStreamEvent) => void) => () => void
 
@@ -2597,6 +2601,10 @@ const electronAPI: ElectronAPI = {
 
   approveWorkspaceProjectKnowledgeMaintenance: (workspaceSlug: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.APPROVE_WORKSPACE_PROJECT_KNOWLEDGE_MAINTENANCE, workspaceSlug)
+  },
+
+  setVisibleAgentStreamSession: (sessionId: string | null) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_VISIBLE_STREAM_SESSION, sessionId)
   },
 
   onAgentStreamEvent: (callback: (event: AgentStreamEvent) => void) => {
