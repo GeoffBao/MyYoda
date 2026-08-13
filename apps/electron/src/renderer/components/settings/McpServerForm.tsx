@@ -30,6 +30,8 @@ interface McpServerFormProps {
   server: EditingServer | null
   /** 当前工作区 slug */
   workspaceSlug: string
+  /** 嵌套 Project id；传入时读写路由到该 Project 自己的 MCP 配置，不传则仍为工作区级（今天的行为） */
+  projectId?: string | null
   onSaved: () => void
   onChanged?: () => void
   onCancel: () => void
@@ -120,7 +122,15 @@ function buildEntryFromValues(values: McpFormValues, includeTestResult = false):
   return base
 }
 
-export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCancel }: McpServerFormProps): React.ReactElement {
+export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onChanged, onCancel }: McpServerFormProps): React.ReactElement {
+  const readMcpConfig = React.useCallback(
+    () => (projectId ? window.electronAPI.getProjectMcpConfig(workspaceSlug, projectId) : window.electronAPI.getWorkspaceMcpConfig(workspaceSlug)),
+    [workspaceSlug, projectId],
+  )
+  const writeMcpConfig = React.useCallback(
+    (config: WorkspaceMcpConfig) => (projectId ? window.electronAPI.saveProjectMcpConfig(workspaceSlug, projectId, config) : window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, config)),
+    [workspaceSlug, projectId],
+  )
   const isEdit = server !== null
   const isBuiltin = server?.entry.isBuiltin === true
 
@@ -210,11 +220,11 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
   const doSaveEntry = React.useCallback(async (serverName: string, entry: McpServerEntry) => {
     const generation = ++saveGenerationRef.current
     try {
-      const config = await window.electronAPI.getWorkspaceMcpConfig(workspaceSlug)
+      const config = await readMcpConfig()
       const newConfig: WorkspaceMcpConfig = {
         servers: { ...config.servers, [serverName]: entry },
       }
-      await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
+      await writeMcpConfig(newConfig)
       if (generation === saveGenerationRef.current && mountedRef.current) {
         if (entry.enabled !== lastSavedEnabledRef.current) {
           lastSavedEnabledRef.current = entry.enabled
@@ -234,7 +244,7 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
         setSaveStatus('error')
       }
     }
-  }, [workspaceSlug, onChanged])
+  }, [readMcpConfig, writeMcpConfig, onChanged])
 
   const doSaveEntryRef = React.useRef(doSaveEntry)
   React.useEffect(() => { doSaveEntryRef.current = doSaveEntry }, [doSaveEntry])
@@ -339,7 +349,7 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
     setSaving(true)
     try {
       // 读取现有配置
-      const config = await window.electronAPI.getWorkspaceMcpConfig(workspaceSlug)
+      const config = await readMcpConfig()
       const entry = buildEntry(true) // 保存时包含测试结果
 
       console.log(`[MCP 表单] 保存 MCP: ${serverName}, enabled: ${entry.enabled}, testResult: ${testResult?.success ?? '未测试'}`)
@@ -350,7 +360,7 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
           [serverName]: entry,
         },
       }
-      await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
+      await writeMcpConfig(newConfig)
       onSaved()
     } catch (error) {
       console.error('[MCP 表单] 保存失败:', error)

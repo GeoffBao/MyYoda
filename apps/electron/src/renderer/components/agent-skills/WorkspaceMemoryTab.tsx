@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { BookOpen, Brain, ChevronDown, ChevronRight, Code2, Eye, FileText, FolderOpen, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react'
+import { AlertTriangle, BookOpen, Brain, ChevronDown, ChevronRight, Code2, Eye, FileText, FolderOpen, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react'
 import type { SkillFileNode, WorkspaceMemorySummary } from '@myyoda/shared'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -14,6 +14,13 @@ import { agentPendingPromptAtom } from '@/atoms/agent-atoms'
 import { memoryFileNavigationAtom, workspaceMemoryChangesAtom } from '@/atoms/memory-change-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { cn } from '@/lib/utils'
+import {
+  buildWorkspaceKnowledgeBootstrapPrompt,
+  buildWorkspaceMemoryInitPrompt,
+  buildWorkspaceSessionEvidencePrompt,
+  MEMORY_HISTORY_RANGE_OPTIONS,
+  type MemoryHistoryRange,
+} from './workspaceMemoryInitPrompt'
 
 type SelectedMemoryFile =
   | { kind: 'agents'; relativePath: 'AGENTS.md'; title: string; absolutePath: string }
@@ -25,51 +32,8 @@ interface WorkspaceMemoryTabProps {
 }
 
 const AUTO_MEMORY_INDEX = 'MEMORY.md'
-
-type MemoryHistoryRange = '1m' | '2m' | '3m' | 'all'
-
-const MEMORY_HISTORY_RANGE_OPTIONS: Array<{ value: MemoryHistoryRange; label: string; promptLabel: string }> = [
-  { value: '1m', label: '近 1 个月', promptLabel: '最近 1 个月内' },
-  { value: '2m', label: '近 2 个月', promptLabel: '最近 2 个月内' },
-  { value: '3m', label: '近 3 个月', promptLabel: '最近 3 个月内' },
-  { value: 'all', label: '全部', promptLabel: '全部可用历史' },
-]
-
-function getMemoryHistoryRangeLabel(value: MemoryHistoryRange): string {
-  return MEMORY_HISTORY_RANGE_OPTIONS.find((option) => option.value === value)?.promptLabel ?? '最近 1 个月内'
-}
-
-function buildWorkspaceMemoryInitPrompt(historyRange: MemoryHistoryRange): string {
-  const rangeLabel = getMemoryHistoryRangeLabel(historyRange)
-  const rangeGuidance = historyRange === 'all'
-    ? '这次处理全部可用历史；如果历史很多，请优先最新、最有代表性和用户实际完成工作的会话，避免把临时过程写入长期记忆。'
-    : `如果你认为需要覆盖超过${rangeLabel.replace('最近', '')}的历史，请先在最终回复里建议用户扩大范围；这次默认只处理${rangeLabel}。`
-
-  return `请帮我初始化并沉淀当前工作区的长期记忆。
-
-目标：
-1. 读取当前工作区${rangeLabel}的 Agent 工作会话，优先关注最新、最有代表性、用户实际完成工作的会话。如果证据不足，请说明而不是编造。
-2. 同时检查当前工作区下所有项目的项目知识（Project Knowledge，各项目 MEMORY.md）、项目资产、项目级 plan/spec/design 文档，以及会话级 Context（各会话 cwd 下的 .context/）和工作区级 Context（workspace-files/.context/ 及相关本地文档）；必须保留来源项目，区分项目专属事实、工作区内跨项目通用知识、当前任务临时产物与跨会话长期资料。
-3. 工作区记忆要吸收项目知识中对整个工作区有长期价值的稳定知识，而不是只总结工作区根目录文件；项目专属事实仍保留在对应项目知识中，并在汇总内容中注明来源，避免丢失上下文。
-4. 从这些会话、项目知识、工作区资料和 Context 中提炼工作区级别的稳定知识，包括工作区结构、跨项目常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
-5. 更新工作区根目录的 AGENTS.md：只写稳定、跨会话有价值的工作区指令和工作方式，避免写临时过程和聊天流水账。
-6. 更新工作区 memory/MEMORY.md，必要时创建主题文件：MEMORY.md 只放主题索引和路由，详细内容拆到主题文件；只记录应该长期回忆的经验。
-7. 沉淀并持续迭代一份「用户画像」记忆，写入 memory/user-profile.md（并在 MEMORY.md 索引中登记）。这份画像用于让未来的 Agent 越来越懂用户，应包含：
-   - 用户的角色、技术背景与擅长领域
-   - 稳定的工作方式与协作偏好（沟通风格、语言、颗粒度、对确认/自动化的偏好等）
-   - 反复出现的关注点、常用工具链和技术栈倾向
-   - 明确表达过的好恶、约束和"下次请这样做"的要求
-   迭代原则：这是一份会被反复更新的活文档——基于已有内容做增量合并，只在有新证据时新增或修订对应条目，保留仍然成立的旧结论，不要整体推倒重写；对不确定或仅出现一次的信号，标注为"待确认"而非当成稳定画像。
-8. 写入长期记忆前先做筛选：只有明确重复出现、用户明确要求记住，或删掉后未来 Agent 明显会犯错的信息才写入；单次弱信号、临时过程和证据不足的判断不要写入，放到最终回复的待确认点里。若记忆时间敏感、会随状态更新，或记录具有后续判断价值的阶段性进展，须在对应正文相邻标注事实/状态的发生、生效或截至时间（至少日期；日内顺序、截止点或时区会影响判断时写明时间和时区），不能用文件修改时间替代；稳定事实无需额外添加时间戳。
-9. ${rangeGuidance}
-
-要求：
-- 先查看当前工作区可用的会话和文件（包括已有的 user-profile.md），再决定如何写。
-- 写入内容要简洁、可维护、方便用户审阅；用户画像要条目化、可追溯，避免笼统空话。
-- 优先小幅增量修改，不要为了显得完整而重写已有记忆；MEMORY.md 保持短索引，避免承载长正文。
-- 不要删除用户已有的有效内容；发现过时内容时先保守修订或标注。
-- 完成后回复：读取了哪些范围、更新了哪些文件、沉淀了哪些关键主题、用户画像这次有哪些新增或修订、还有哪些建议用户确认的点。`
-}
+/** user-profile.md 存在时才视为已有初步协作画像，才允许启用“授权会话补证据” */
+const USER_PROFILE_FILE = 'user-profile.md'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -147,6 +111,9 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
   const [isDirty, setIsDirty] = React.useState(false)
   const [viewMode, setViewMode] = React.useState<'preview' | 'edit'>('preview')
   const [initializing, setInitializing] = React.useState(false)
+  const [bootstrapping, setBootstrapping] = React.useState(false)
+  const [scanningHistory, setScanningHistory] = React.useState(false)
+  const [showQuickGenerate, setShowQuickGenerate] = React.useState(false)
   const [historyRange, setHistoryRange] = React.useState<MemoryHistoryRange>('1m')
   const [defaultWorkingDirectory, setDefaultWorkingDirectory] = React.useState('')
   const [savingDefaultWorkingDirectory, setSavingDefaultWorkingDirectory] = React.useState(false)
@@ -292,7 +259,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       }
     } catch (err) {
       console.error('[Workspace Context] 刷新失败:', err)
-      toast.error('刷新 Yoda 记忆失败')
+      toast.error('刷新记忆失败')
     } finally {
       setLoading(false)
     }
@@ -348,7 +315,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         setIsDirty(false)
       } catch (err) {
         console.error('[Workspace Context] 加载失败:', err)
-        toast.error('加载 Yoda 记忆失败')
+        toast.error('加载记忆失败')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -433,7 +400,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         sessionId,
         message: buildWorkspaceMemoryInitPrompt(historyRange),
       })
-      toast.success('已创建 Yoda 记忆初始化会话')
+      toast.success('已创建记忆初始化会话')
     } catch (err) {
       console.error('[Workspace Context] 创建初始化会话失败:', err)
       toast.error(err instanceof Error ? err.message : '创建初始化会话失败')
@@ -442,86 +409,200 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
     }
   }
 
+  /** 引导会话公共创建逻辑：建地图与画像 / 会话补证据 两段式共用 */
+  const startGuidedSession = async (message: string, kind: 'bootstrap' | 'history'): Promise<void> => {
+    const setLoadingState = kind === 'bootstrap' ? setBootstrapping : setScanningHistory
+    setLoadingState(true)
+    try {
+      const sessionId = await createAgent()
+      if (!sessionId) {
+        toast.error('创建 Agent 会话失败')
+        return
+      }
+      setPendingPrompt({ sessionId, message })
+      toast.success(kind === 'bootstrap' ? '已创建工作区地图与协作画像引导会话' : '已创建会话补证据任务')
+    } catch (err) {
+      console.error('[Workspace Context] 创建引导会话失败:', err)
+      toast.error(err instanceof Error ? err.message : '创建引导会话失败')
+    } finally {
+      setLoadingState(false)
+    }
+  }
+
+  /** 第一步：建立工作区地图与协作画像（不扫历史）；附带授权记录，后端存储已就绪 */
+  const handleBootstrapKnowledge = async (): Promise<void> => {
+    if (bootstrapping) return
+    try {
+      await window.electronAPI.approveWorkspaceProjectKnowledgeMaintenance(workspaceSlug)
+      await startGuidedSession(buildWorkspaceKnowledgeBootstrapPrompt(), 'bootstrap')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '记录工作区知识维护授权失败')
+    }
+  }
+
+  /** 第二步：授权后分批、限量地用历史会话补证据；需先有 user-profile.md（已完成初步协作画像） */
+  const handleScanSessionEvidence = async (): Promise<void> => {
+    if (scanningHistory || !hasProfile) return
+    await startGuidedSession(buildWorkspaceSessionEvidencePrompt(historyRange), 'history')
+  }
+
   const visibleAutoFiles = React.useMemo(
     () => filterNodes(withVirtualMemoryIndex(autoFiles), search),
     [autoFiles, search],
   )
+  const hasProfile = autoFiles.some((node) => node.relativePath === USER_PROFILE_FILE)
+  const migrationIssues = [
+    summary?.legacyAutoMemory ? '长期记忆迁移' : null,
+    summary?.instructionConflict ? '工作区规则迁移' : null,
+  ].filter((issue): issue is string => issue !== null)
+  const migrationReminderTitle = [
+    summary?.legacyAutoMemory ? `长期记忆：${summary.legacyAutoMemory.directory}` : null,
+    summary?.instructionConflict ? `工作区规则：${summary.instructionConflict.legacyPath}` : null,
+  ].filter((detail): detail is string => detail !== null).join('\n')
 
   if (loading || !summary) {
-    return <div className="py-20 text-center text-sm text-muted-foreground">加载 Yoda 记忆中...</div>
+    return <div className="py-20 text-center text-sm text-muted-foreground">加载记忆中...</div>
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <MemoryStatCard
-          icon={<BookOpen size={18} />}
-          title="工作区指令"
-          subtitle="工作区根目录 AGENTS.md"
-          value={summary.agentsMd.exists ? formatBytes(summary.agentsMd.size) : '尚未创建'}
-          detail={`更新于 ${formatTime(summary.agentsMd.updatedAt)}`}
-          active={selected?.kind === 'agents'}
+      {/* 紧凑摘要行：代替原来 2 张大统计卡，对齐 Proma 的视觉密度；仍可点击切换选中文件 */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1">
+        <button
+          type="button"
           onClick={() => void openClaude(summary)}
-        />
-        <MemoryStatCard
-          icon={<Brain size={18} />}
-          title="长期记忆"
-          subtitle="memory/MEMORY.md 与主题文件"
-          value={`${summary.autoMemory.fileCount} 个文件`}
-          detail={`${formatBytes(summary.autoMemory.totalSize)} · 更新于 ${formatTime(summary.autoMemory.updatedAt)}`}
-          active={selected?.kind === 'auto'}
+          className={cn(
+            'flex items-center gap-1.5 text-xs transition-colors',
+            selected?.kind === 'agents' ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <BookOpen size={13} />
+          <span>工作区指令 {summary.agentsMd.exists ? formatBytes(summary.agentsMd.size) : '尚未创建'} · 更新于 {formatTime(summary.agentsMd.updatedAt)}</span>
+        </button>
+        <span className="text-border">·</span>
+        <button
+          type="button"
           onClick={() => void openAutoFile(AUTO_MEMORY_INDEX, summary)}
-        />
+          className={cn(
+            'flex items-center gap-1.5 text-xs transition-colors',
+            selected?.kind === 'auto' ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Brain size={13} />
+          <span>长期记忆 {summary.autoMemory.fileCount} 个文件 · {formatBytes(summary.autoMemory.totalSize)} · 更新于 {formatTime(summary.autoMemory.updatedAt)}</span>
+        </button>
       </div>
 
       <SettingsCard divided={false}>
-        <div className="flex flex-col gap-2 p-4">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">默认工作目录</div>
+            <div className="text-sm font-medium text-foreground">建立工作区地图与协作画像</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              新会话未选择或新建项目时，Agent 会把这里作为工程代码目录的回退位置（不改变会话隔离目录本身）。
+              点击即授权 Agent 基于可验证证据维护工作区根目录的 AGENTS.md；随后在真实协作中逐步校准你的偏好。不会扫描历史会话，也不会触及 Project 自己工作目录下只读的 AGENTS.md/CLAUDE.md。
             </div>
           </div>
-          <WorkingDirectoryField
-            value={defaultWorkingDirectory}
-            onChange={(path) => { void handleDefaultWorkingDirectoryChange(path) }}
-            className={savingDefaultWorkingDirectory ? 'opacity-60' : undefined}
-          />
+          <Button onClick={() => void handleBootstrapKnowledge()} disabled={bootstrapping}>
+            <Sparkles size={14} className="mr-1.5" />
+            {bootstrapping ? '创建中...' : '同意并开始建立'}
+          </Button>
         </div>
       </SettingsCard>
 
       <SettingsCard divided={false}>
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">从历史会话生成 Yoda 记忆</div>
+            <div className="text-sm font-medium text-foreground">授权会话补证据</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              新建一个 Agent 会话，读取当前工作区{historyRangeLabel}的工作会话，沉淀并更新 AGENTS.md 与长期记忆文件。
+              {hasProfile
+                ? '仅在你授权的范围内，分批选择少量高信号工作会话补充证据；不会全量扫描，协作记忆仍须确认后写入。'
+                : '先在真实协作中建立初步协作画像（先点上方“同意并开始建立”），再决定是否用历史会话补充证据。'}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Select
-              value={historyRange}
-              onValueChange={(value) => setHistoryRange(value as MemoryHistoryRange)}
-              disabled={initializing}
-            >
-              <SelectTrigger className="h-9 w-[116px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
+            <Select value={historyRange} onValueChange={(value) => setHistoryRange(value as MemoryHistoryRange)} disabled={scanningHistory || !hasProfile}>
+              <SelectTrigger className="h-9 w-[116px] text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MEMORY_HISTORY_RANGE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleInitializeMemory} disabled={initializing}>
-              <Sparkles size={14} className="mr-1.5" />
-              {initializing ? '创建中...' : '生成 Yoda 记忆'}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button onClick={() => void handleScanSessionEvidence()} disabled={scanningHistory || !hasProfile}>
+                    <Sparkles size={14} className="mr-1.5" />
+                    {scanningHistory ? '创建中...' : '授权整理'}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!hasProfile && <TooltipContent side="bottom">请先建立协作画像</TooltipContent>}
+            </Tooltip>
           </div>
         </div>
       </SettingsCard>
+
+      {/* 一键生成：从整卡收进小链接，与 Proma 两段式对齐；点开才展开范围选择 + 生成按钮，不占用常驻空间 */}
+      <div className="px-1">
+        <button
+          type="button"
+          onClick={() => setShowQuickGenerate((v) => !v)}
+          className="text-xs font-medium text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
+        >
+          或者：跳过分步，一次性快速生成记忆 {showQuickGenerate ? '▲' : '→'}
+        </button>
+      </div>
+      {showQuickGenerate && (
+        <SettingsCard divided={false}>
+          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">从历史会话一次性生成记忆</div>
+              <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                无需分步，单个会话内直接读取当前工作区{historyRangeLabel}的工作会话与项目知识，一次性沉淀并更新 AGENTS.md 与长期记忆文件。
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Select
+                value={historyRange}
+                onValueChange={(value) => setHistoryRange(value as MemoryHistoryRange)}
+                disabled={initializing}
+              >
+                <SelectTrigger className="h-9 w-[116px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEMORY_HISTORY_RANGE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleInitializeMemory} disabled={initializing}>
+                <Sparkles size={14} className="mr-1.5" />
+                {initializing ? '创建中...' : '生成记忆'}
+              </Button>
+            </div>
+          </div>
+        </SettingsCard>
+      )}
+
+      {/* 默认工作目录：降权为紧凑单行，不再占用整张卡片的视觉重量 */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0 text-xs text-muted-foreground">默认工作目录</span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[260px]">新会话未选择或新建项目时，Agent 会把这里作为工程代码目录的回退位置（不改变会话隔离目录本身）。</TooltipContent>
+        </Tooltip>
+        <div className="min-w-0 max-w-md flex-1">
+          <WorkingDirectoryField
+            value={defaultWorkingDirectory}
+            onChange={(path) => { void handleDefaultWorkingDirectoryChange(path) }}
+            className={savingDefaultWorkingDirectory ? 'opacity-60' : undefined}
+          />
+        </div>
+      </div>
 
       <div className="grid min-h-[520px] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <SettingsCard divided={false} className="min-h-0 overflow-hidden">
@@ -537,6 +618,16 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
                 <RefreshCw size={14} />
               </button>
             </div>
+            {migrationIssues.length > 0 && (
+              <div
+                role="status"
+                title={migrationReminderTitle}
+                className="mx-2 mt-2 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1.5 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300"
+              >
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>待处理：{migrationIssues.join('、')}，请检查旧文件。</span>
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <FileButton
                 active={selected?.kind === 'agents'}
@@ -681,47 +772,6 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         </SettingsCard>
       </div>
     </div>
-  )
-}
-
-function MemoryStatCard({
-  icon,
-  title,
-  subtitle,
-  value,
-  detail,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  subtitle: string
-  value: string
-  detail: string
-  active: boolean
-  onClick: () => void
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 rounded-lg border bg-content-area p-4 text-left shadow-sm transition-colors',
-        active ? 'border-primary/50 bg-primary/[0.04]' : 'border-border/60 hover:bg-foreground/[0.03]',
-      )}
-    >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium text-foreground">{title}</div>
-          <div className="text-xs font-medium tabular-nums text-foreground/65">{value}</div>
-        </div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</div>
-        <div className="mt-1 text-[11px] text-muted-foreground/80">{detail}</div>
-      </div>
-    </button>
   )
 }
 

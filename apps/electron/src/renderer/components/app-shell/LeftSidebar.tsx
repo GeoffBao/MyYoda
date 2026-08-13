@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, Brain } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -1050,15 +1050,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
     setActiveView('agent-skills')
   }, [activeView, setActiveView, setAgentSkillsTab])
-
-  /** 打开/关闭 Yoda 记忆视图（工作区自动记忆管理，独立左栏视图，非设置面板） */
-  const handleOpenWorkspaceContext = React.useCallback((): void => {
-    if (activeView === 'workspace-context') {
-      setActiveView('conversations')
-      return
-    }
-    setActiveView('workspace-context')
-  }, [activeView, setActiveView])
 
   /** 打开/关闭 Yoda 知识库 视图（Project 模式知识库入口） */
   const handleOpenRepoWiki = React.useCallback((): void => {
@@ -2899,28 +2890,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </Tooltip>
           )}
 
-          {/* Yoda 记忆：工作区自动记忆管理（独立左栏视图） */}
-          {mode === 'agent' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Yoda 记忆"
-                  onClick={handleOpenWorkspaceContext}
-                  className={cn(
-                    'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
-                    activeView === 'workspace-context'
-                      ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
-                      : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
-                  )}
-                >
-                  <Brain size={16} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Yoda 记忆</TooltipContent>
-            </Tooltip>
-          )}
-
           {/* Yoda 知识库：Project 模式 LLM 知识库入口（待开发） */}
           {mode === 'agent' && (
             <Tooltip>
@@ -3327,19 +3296,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             active={activeView === 'agent-skills'}
             onClick={() => handleOpenSkills()}
             ariaLabel="Yoda 插件"
-          />
-        </div>
-      )}
-
-      {/* Yoda 记忆：工作区自动记忆管理（独立左栏视图） */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={Brain}
-            title="Yoda 记忆"
-            active={activeView === 'workspace-context'}
-            onClick={handleOpenWorkspaceContext}
-            ariaLabel="Yoda 记忆"
           />
         </div>
       )}

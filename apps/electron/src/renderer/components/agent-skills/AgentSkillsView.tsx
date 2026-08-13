@@ -1,39 +1,50 @@
 /**
- * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / Skills / MCP / API 统一配置）
+ * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / Skills / MCP / API / Memory 统一配置）
  *
  * 全屏模式（activeView='agent-skills'）：左侧栏「Yoda 插件」独立入口，Home / Code 共享；
  * `embedded` prop 保留供未来嵌入其他容器复用，当前无消费者。
  *
  * 结构：
- * - 标题栏（全屏模式）：Yoda 插件
- * - 工具条：专家 / 专家团 / Skills / MCP / API 切换 + 搜索 + 新建/导入入口
- * - 内容：各能力 tab 卡片/列表，点击打开详情抽屉
+ * - 标题栏（全屏模式）：Yoda 插件 + 当前工作区切换器（多工作区时显示，复用 useWorkspaceActions）
+ * - 工具条：专家 / 专家团 / Skills / MCP / API / Memory 切换 + 搜索 + 新建/导入入口
+ * - 内容：各能力 tab 卡片/列表，点击打开详情抽屉；Memory 复用 WorkspaceMemoryTab
+ *
+ * 注意：此处“工作区”对应 Proma 上游 UI 中的“项目”概念（同一个 AgentWorkspace 实体，Proma 仅在展示层重命名）；
+ * MyYoda 另有一层嵌套的真正“项目”（KanbanProject，自带目录绑定与独立 Project Knowledge），与此处切换器无关，不要混淆。
  */
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, ChevronRight, Search, Plus, Store, Sparkles, Loader2, Building2 } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2, ArrowRightLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
-import { agentSkillsTabAtom } from '@/atoms/active-view'
+import { agentSkillsTabAtom, pendingAgentSkillsProjectIdAtom } from '@/atoms/active-view'
 import { toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
+import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
+import { filterPickableKanbanProjects } from '@/components/app-shell/kanban/types'
 import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta } from '@myyoda/shared'
 import { useAgentSkillsData } from './useAgentSkillsData'
+import { LocalProjectBadge } from './LocalProjectBadge'
 import { SkillCard } from './SkillCard'
 import { McpCard } from './McpCard'
 import { SkillDetailSheet } from './SkillDetailSheet'
 import { McpDetailSheet } from './McpDetailSheet'
 import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
+import { ImportProjectSkillDialog } from './ImportProjectSkillDialog'
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
 import { EnhancedToolsPanel } from '@/components/settings/ToolSettings'
 import { AgentExpertsView } from '@/components/agent-experts/AgentExpertsView'
+import { ProjectKnowledgeTab } from '@/components/project/ProjectKnowledgeTab'
+import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
 
 function buildSkillClassificationPrompt(input: {
@@ -85,7 +96,36 @@ version: "1.0.0"
 }
 
 export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): React.ReactElement {
-  const data = useAgentSkillsData()
+  const { workspaces, currentWorkspaceId, selectWorkspace } = useWorkspaceActions()
+  const kanbanProjects = useAtomValue(serverKanbanProjectsAtom)
+  // 当前范围：null = 工作区默认（跨 Project 共享），否则为嵌套 Project id；工作区切换后自动重置为默认
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null)
+  React.useEffect(() => { setSelectedProjectId(null) }, [currentWorkspaceId])
+  const pickableProjects = React.useMemo(() => filterPickableKanbanProjects(kanbanProjects), [kanbanProjects])
+  const selectedProject = selectedProjectId ? pickableProjects.find((p) => p.id === selectedProjectId) ?? null : null
+
+  // 消费从 Project 设置页“管理 Skills/MCP”跳转过来的预选信号：一旦在当前工作区的可选 Project 列表里找到匹配项（包括数据晚于本组件挂载才到位的情况）就自动选中并清空，避免影响之后的手动切换
+  const [pendingProjectId, setPendingProjectId] = useAtom(pendingAgentSkillsProjectIdAtom)
+  React.useEffect(() => {
+    if (!pendingProjectId) return
+    const match = pickableProjects.find((p) => p.id === pendingProjectId)
+    if (!match) return
+    setSelectedProjectId(pendingProjectId)
+    setPendingProjectId(null)
+  }, [pendingProjectId, pickableProjects, setPendingProjectId])
+
+  const data = useAgentSkillsData(selectedProjectId)
+
+  // Memory tab 切到项目范围时，需要实际工作区根目录路径来复用 ProjectKnowledgeTab（与 ProjectPage 同样的取数方式）
+  const [memoryWorkspaceRoot, setMemoryWorkspaceRoot] = React.useState('')
+  React.useEffect(() => {
+    if (!data.workspaceSlug) { setMemoryWorkspaceRoot(''); return }
+    let cancelled = false
+    window.electronAPI.getWorkspaceRootPath(data.workspaceSlug)
+      .then((root) => { if (!cancelled) setMemoryWorkspaceRoot(root) })
+      .catch((error) => console.error('[Yoda 插件] 获取工作区根路径失败:', error))
+    return () => { cancelled = true }
+  }, [data.workspaceSlug])
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const setToolSettingsFocus = useSetAtom(toolSettingsFocusAtom)
@@ -116,6 +156,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
   const [showImport, setShowImport] = React.useState(false)
+  const [showProjectImport, setShowProjectImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [showCommunityMarket, setShowCommunityMarket] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -123,6 +164,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [isDeletingSkill, setIsDeletingSkill] = React.useState(false)
   const [isDeletingMcp, setIsDeletingMcp] = React.useState(false)
   const [classifyingSkills, setClassifyingSkills] = React.useState(false)
+  const [wsPopoverOpen, setWsPopoverOpen] = React.useState(false)
 
   const q = search.trim().toLowerCase()
 
@@ -163,6 +205,19 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   )
   // API（增强工具）Tab 计数：已启用的增强工具数量（联网搜索 / Nano Banana / 自定义工具）
   const apiToolCount = chatTools.filter((t) => t.enabled).length
+  // Memory Tab 计数：工作区范围是 AGENTS.md + 长期记忆文件数；项目范围是它自己的 Project Knowledge 有内容时为 1，避免展示工作区数字造成误导
+  const workspaceMemoryCount = (data.capabilities?.memory.agentsMd.exists ? 1 : 0) + (data.capabilities?.memory.autoMemory.fileCount ?? 0)
+  const [projectMemoryHasContent, setProjectMemoryHasContent] = React.useState(false)
+  React.useEffect(() => {
+    // readMemory 需要真实 URL-safe slug（不接受 id）；pickableProjects 里的正常项目都有 slug，缺失时保守跳过不发请求
+    if (!selectedProject?.slug || !memoryWorkspaceRoot) { setProjectMemoryHasContent(false); return }
+    let cancelled = false
+    window.electronAPI.projects.readMemory(memoryWorkspaceRoot, selectedProject.slug)
+      .then((content) => { if (!cancelled) setProjectMemoryHasContent(content.trim().length > 0) })
+      .catch(() => { if (!cancelled) setProjectMemoryHasContent(false) })
+    return () => { cancelled = true }
+  }, [selectedProject, memoryWorkspaceRoot])
+  const memoryCount = selectedProject ? (projectMemoryHasContent ? 1 : 0) : workspaceMemoryCount
 
   const selectedSkill = data.skills.find((s) => s.slug === selectedSkillSlug) ?? null
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
@@ -220,26 +275,113 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     <div className={embedded ? 'flex flex-col' : 'flex h-full flex-col overflow-hidden'}>
       {/* 标题栏：全屏模式保留；embedded（设置面板内）由设置面板导航提供标题，隐藏以免重复 */}
       {!embedded && (
-        <div className="titlebar-no-drag mx-auto flex w-full max-w-6xl shrink-0 items-center px-8 pt-14 pb-4">
+        <div className="titlebar-no-drag mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
           <div className="flex items-center gap-2.5">
             <Blocks className="size-6 text-foreground/70" />
             <h1 className="text-2xl font-semibold text-foreground">Yoda 插件</h1>
           </div>
+
+          {/* 范围切换：当前工作区默认（跨 Project 共享，今天的行为）+ 该工作区下嵌套的 Project（Skills/MCP 项目级覆盖），
+              以及切换到其他工作区。Memory 不受此处项目选择影响，始终还是工作区级。 */}
+          <Popover open={wsPopoverOpen} onOpenChange={setWsPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="titlebar-no-drag flex items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 py-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-foreground/[0.04]"
+              >
+                <FolderOpen size={14} className="text-foreground/45" />
+                <span className="max-w-[180px] truncate">{selectedProject ? selectedProject.name : (data.workspaceName || '选择工作区')}</span>
+                <LocalProjectBadge workingDirectory={selectedProject?.workingDirectory} />
+                <ChevronDown size={14} className="text-foreground/45" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="max-h-[440px] w-72 overflow-y-auto scrollbar-thin p-1">
+              {/* 当前工作区上下文标题——明确标明下面这段选项都属于哪个工作区，避免跟下方“共享”选项的措辞撞词 */}
+              <div className="px-2 pb-1.5 pt-1.5 text-[11px] font-medium text-muted-foreground/70">
+                当前工作区：{data.workspaceName || '未选择'}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelectedProjectId(null); setWsPopoverOpen(false) }}
+                className={cn(
+                  'flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-[13px] transition-colors',
+                  !selectedProjectId ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
+                )}
+              >
+                <Blocks size={15} className="mt-0.5 shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">全部项目共享</span>
+                  <span className="block text-[11px] text-muted-foreground">不限定具体项目，这个工作区下所有 Project 都能用</span>
+                </span>
+                {!selectedProjectId && <Check size={14} className="mt-0.5 shrink-0 text-primary" />}
+              </button>
+
+              {pickableProjects.length > 0 && (
+                <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/70">项目（只对当前项目生效）</div>
+              )}
+              {pickableProjects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  onClick={() => { setSelectedProjectId(project.id); setWsPopoverOpen(false) }}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors',
+                    selectedProjectId === project.id ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
+                  )}
+                >
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <FolderOpen size={14} className="shrink-0 text-foreground/35" />
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <LocalProjectBadge workingDirectory={project.workingDirectory} />
+                    {selectedProjectId === project.id && <Check size={14} className="shrink-0 text-primary" />}
+                  </div>
+                </button>
+              ))}
+
+              {workspaces.length > 1 && (
+                <>
+                  <div className="my-1 border-t border-border/50" />
+                  <div className="flex items-center gap-1.5 px-2 pb-1 pt-1 text-[11px] font-medium text-muted-foreground/70">
+                    <ArrowRightLeft size={11} />
+                    切换到其他工作区（离开当前工作区）
+                  </div>
+                  {workspaces.filter((w) => w.id !== currentWorkspaceId).map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => {
+                        selectWorkspace(w.id, { resetView: false })
+                        toast.success(`已切换到工作区「${w.name}」`)
+                        setWsPopoverOpen(false)
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-accent/50"
+                    >
+                      <ArrowRightLeft size={13} className="shrink-0 text-foreground/35" />
+                      <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
       {/* 工具条 */}
       <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-6xl px-8 pb-4')}>
-        {/* 专家 / 专家团 / Skills / MCP / API 切换（Context 已升级为 Code 左侧模块） */}
+        {/* 专家 / 专家团 / Skills / MCP / API / Memory 切换（Memory 已由左栏独立视图并入） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
             className={cn(
-              'absolute bottom-0.5 top-0.5 w-[calc(20%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
+              'absolute bottom-0.5 top-0.5 w-[calc(16.666%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
               tab === 'experts' && 'translate-x-0',
               tab === 'teams' && 'translate-x-full',
               tab === 'skills' && 'translate-x-[200%]',
               tab === 'mcp' && 'translate-x-[300%]',
               tab === 'api' && 'translate-x-[400%]',
+              tab === 'memory' && 'translate-x-[500%]',
             )}
           />
           {([
@@ -248,6 +390,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             { value: 'skills' as const, label: 'Skills', count: data.skills.length },
             { value: 'mcp' as const, label: 'MCP', count: mcpCount },
             { value: 'api' as const, label: 'API', count: apiToolCount },
+            { value: 'memory' as const, label: 'Memory', count: memoryCount },
           ]).map(({ value, label, count }) => (
             <button
               key={value}
@@ -263,14 +406,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           ))}
         </div>
 
-        {/* 搜索框（API 占位 Tab 无搜索逻辑，隐藏） */}
-        {tab !== 'api' && (
+        {/* 搜索框（API 占位 Tab 无搜索逻辑；Memory Tab 切到项目范围时是单文件 Project Knowledge，无列表可搜，同样隐藏） */}
+        {tab !== 'api' && !(tab === 'memory' && selectedProject) && (
           <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 transition-colors focus-within:border-primary/40">
             <Search size={14} className="shrink-0 text-foreground/40" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索 Skills...' : '搜索 MCP 服务器...'}
+              placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索 Skills...' : tab === 'mcp' ? '搜索 MCP 服务器...' : '搜索记忆文件...'}
               className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
             />
           </div>
@@ -288,8 +431,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </button>
         )}
 
-        {/* 社区市场 */}
-        {tab === 'skills' && (
+        {/* 社区市场、AI 分类、导入类入口目前只操作工作区级 Skills（对话框/导入流程都直接用 workspaceSlug），切到项目范围时隐藏，避免误导入到错误位置 */}
+        {tab === 'skills' && !selectedProjectId && (
           <button
             type="button"
             onClick={() => setShowCommunityMarket(true)}
@@ -300,40 +443,46 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </button>
         )}
 
-        {/* Skills：从其他工作区导入 */}
+        {/* Skills：AI 分类 / 从企业组织导入仅操作工作区级 Skills（对话框/导入流程都直接用 workspaceSlug），切到项目范围时隐藏，避免误导入到错误位置 */}
+        {tab === 'skills' && !selectedProjectId && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => void handleClassifySkills()}
+                disabled={classifyingSkills || data.skills.length === 0}
+                className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {classifyingSkills ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                <span>AI 分类</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">创建 Agent 会话，读取 SKILL.md 内容并补全 group</TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Skills：导入——工作区范围时从其他工作区导入，项目范围时改为从工作区默认/其他嵌套 Project 导入（两套独立弹窗+IPC，同一个入口按当前 scope 分流） */}
         {tab === 'skills' && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void handleClassifySkills()}
-                  disabled={classifyingSkills || data.skills.length === 0}
-                  className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {classifyingSkills ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  <span>AI 分类</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">创建 Agent 会话，读取 SKILL.md 内容并补全 group</TooltipContent>
-            </Tooltip>
-            <button
-              type="button"
-              onClick={() => setShowImport(true)}
-              className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
-            >
-              <Plus size={14} />
-              <span>导入</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowOrgImport(true)}
-              className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 text-[13px] font-medium text-indigo-600 shadow-sm transition-colors hover:bg-indigo-500/20 dark:text-indigo-400"
-            >
-              <Building2 size={14} />
-              <span>从企业组织导入</span>
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => (selectedProjectId ? setShowProjectImport(true) : setShowImport(true))}
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
+          >
+            <Plus size={14} />
+            <span>导入</span>
+          </button>
+        )}
+
+        {/* Skills：从企业组织导入（仅工作区范围） */}
+        {tab === 'skills' && !selectedProjectId && (
+          <button
+            type="button"
+            onClick={() => setShowOrgImport(true)}
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 text-[13px] font-medium text-indigo-600 shadow-sm transition-colors hover:bg-indigo-500/20 dark:text-indigo-400"
+          >
+            <Building2 size={14} />
+            <span>从企业组织导入</span>
+          </button>
         )}
 
         {/* 新增 MCP */}
@@ -373,7 +522,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}
               title="未选择工作区"
-              hint="请先选择或创建一个工作区，再来管理它的 Skills 与 MCP。"
+              hint="请先选择或创建一个工作区，再来管理它的 Skills、MCP 与 Memory。"
             />
           ) : tab === 'skills' ? (
             <SkillsTab
@@ -382,10 +531,12 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               total={data.skills.length}
               updateCount={updateCount}
               updatingSkill={data.updatingSkill}
+              isProjectScope={!!selectedProjectId}
               isBuiltin={(slug) => data.defaultSkillSlugs.has(slug)}
               onOpen={setSelectedSkillSlug}
               onToggle={data.toggleSkill}
               onUpdate={data.updateSkill}
+              onImport={() => (selectedProjectId ? setShowProjectImport(true) : setShowImport(true))}
             />
           ) : tab === 'mcp' ? (
             <McpTab
@@ -399,6 +550,19 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onRequestDelete={setPendingDeleteMcpName}
               onAdd={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
             />
+          ) : tab === 'memory' && selectedProject ? (
+            // 项目范围下的记忆是已有的 Project Knowledge（单文件），不是工作区那套 AGENTS.md+树+两段式引导
+            memoryWorkspaceRoot ? (
+              <ProjectKnowledgeTab
+                workspaceRoot={memoryWorkspaceRoot}
+                project={selectedProject}
+                onError={(message) => { if (message) toast.error(message) }}
+              />
+            ) : (
+              <div className="py-20 text-center text-sm text-muted-foreground">加载中...</div>
+            )
+          ) : tab === 'memory' ? (
+            <WorkspaceMemoryTab workspaceSlug={data.workspaceSlug} search={search} />
           ) : null}
         </div>
       </div>
@@ -458,6 +622,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         open={mcpSheetOpen}
         server={editingMcp}
         workspaceSlug={data.workspaceSlug}
+        projectId={selectedProjectId}
         onOpenChange={(open) => { setMcpSheetOpen(open); if (!open) bumpCapabilities((v) => v + 1) }}
         onSaved={() => setMcpSheetOpen(false)}
         onChanged={() => bumpCapabilities((v) => v + 1)}
@@ -477,6 +642,17 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         installedSkills={data.skills}
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
+
+      {selectedProjectId && (
+        <ImportProjectSkillDialog
+          open={showProjectImport}
+          onOpenChange={setShowProjectImport}
+          workspaceSlug={data.workspaceSlug}
+          projectId={selectedProjectId}
+          installedSkills={data.skills}
+          onImported={() => bumpCapabilities((v) => v + 1)}
+        />
+      )}
 
       <OrgSkillImportDialog
         open={showOrgImport}
@@ -505,10 +681,14 @@ interface SkillsTabProps {
   total: number
   updateCount: number
   updatingSkill: string | null
+  /** 当前是否处于嵌套 Project 范围（仅影响空列表提示文案中“其他工作区”/“其他项目”的描述） */
+  isProjectScope: boolean
   isBuiltin: (slug: string) => boolean
   onOpen: (slug: string) => void
   onToggle: (slug: string, enabled: boolean) => void
   onUpdate: (slug: string) => void
+  /** 打开导入弹窗（按当前 scope 已在上层路由好），空列表下直接给一个可点击的入口，不再只用文字描述 */
+  onImport: () => void
 }
 
 function SkillsTab({
@@ -517,13 +697,31 @@ function SkillsTab({
   total,
   updateCount,
   updatingSkill,
+  isProjectScope,
   isBuiltin,
   onOpen,
   onToggle,
   onUpdate,
+  onImport,
 }: SkillsTabProps): React.ReactElement {
   if (total === 0) {
-    return <EmptyState icon={<Blocks className="size-8 text-foreground/30" />} title="暂无 Skill" hint="可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或从其他工作区导入。" />
+    return (
+      <EmptyState
+        icon={<Blocks className="size-8 text-foreground/30" />}
+        title="暂无 Skill"
+        hint={isProjectScope ? '可以让 MyYoda 帮你联网查找并安装 Skill，或点击下方按钮从工作区共享配置/其他项目导入。' : '可以在 Project 模式下让 MyYoda 帮你联网查找并安装 Skill，或点击下方按钮从其他工作区导入。'}
+        action={
+          <button
+            type="button"
+            onClick={onImport}
+            className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <Plus size={14} />
+            <span>{isProjectScope ? '从工作区默认/其他项目导入' : '从其他工作区导入'}</span>
+          </button>
+        }
+      />
+    )
   }
   if (customSkills.length === 0 && builtinSkills.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 Skill" hint="试试更换搜索关键词。" />

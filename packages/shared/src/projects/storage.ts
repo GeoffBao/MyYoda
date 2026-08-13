@@ -143,6 +143,104 @@ export function ensureProjectWorkdir(workspaceRootPath: string, projectSlug: str
 }
 
 // ============================================================
+// 项目级 Skills / MCP（可选覆盖：项目未自己配置时，调用方应 fallback 到工作区级，本文件不负责 fallback 决策）
+// ============================================================
+
+const PROJECT_SKILLS_DIRNAME = 'skills';
+const PROJECT_MCP_FILENAME = 'mcp.json';
+
+/**
+ * 项目 Skills 目录路径。物理位置策略与 MEMORY.md 一致（跟随 `memoryLocation` 判定）：
+ * 本地目录项目落在 `workingDirectory/.context/skills/`，托管项目落在 `projects/{slug}/skills/`。
+ */
+export function getProjectSkillsPath(workspaceRootPath: string, projectSlug: string): string {
+  const config = loadProjectConfig(workspaceRootPath, projectSlug);
+  const workingDirectory = config?.workingDirectory?.trim();
+  if (config?.memoryLocation === 'project' && workingDirectory) {
+    return join(workingDirectory, PROJECT_CONTEXT_DIRNAME, PROJECT_SKILLS_DIRNAME);
+  }
+  return join(getProjectPath(workspaceRootPath, projectSlug), PROJECT_SKILLS_DIRNAME);
+}
+
+/** 确保项目 Skills 目录存在并返回路径；仅在明确要管理该项目 Skills时调用，避免对未使用过该能力的项目静默新建空目录 */
+export function ensureProjectSkillsDir(workspaceRootPath: string, projectSlug: string): string {
+  const dir = getProjectSkillsPath(workspaceRootPath, projectSlug);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** 项目级停用 Skills 目录路径，与活跃 Skills 目录同级；对齐工作区级 skills/skills-inactive 双目录开关机制 */
+export function getProjectInactiveSkillsPath(workspaceRootPath: string, projectSlug: string): string {
+  const config = loadProjectConfig(workspaceRootPath, projectSlug);
+  const workingDirectory = config?.workingDirectory?.trim();
+  if (config?.memoryLocation === 'project' && workingDirectory) {
+    return join(workingDirectory, PROJECT_CONTEXT_DIRNAME, 'skills-inactive');
+  }
+  return join(getProjectPath(workspaceRootPath, projectSlug), 'skills-inactive');
+}
+
+/** 确保项目停用 Skills 目录存在并返回路径 */
+export function ensureProjectInactiveSkillsDir(workspaceRootPath: string, projectSlug: string): string {
+  const dir = getProjectInactiveSkillsPath(workspaceRootPath, projectSlug);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function hasNonHiddenEntries(dir: string): boolean {
+  if (!existsSync(dir)) return false;
+  try {
+    return readdirSync(dir).some((entry) => !entry.startsWith('.'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 项目是否已配置自己的 Skills（active 或 inactive 目录任一非空即算，停用中的 Skill 也算已配置）；
+ * 运行时/UI 据此判断是否用项目级覆盖工作区级。
+ */
+export function hasProjectSkills(workspaceRootPath: string, projectSlug: string): boolean {
+  return (
+    hasNonHiddenEntries(getProjectSkillsPath(workspaceRootPath, projectSlug)) ||
+    hasNonHiddenEntries(getProjectInactiveSkillsPath(workspaceRootPath, projectSlug))
+  );
+}
+
+/**
+ * 项目级 MCP 配置文件路径。物理位置策略与 MEMORY.md 一致：
+ * 本地目录项目落在 `workingDirectory/.context/mcp.json`，托管项目落在 `projects/{slug}/mcp.json`。
+ */
+export function getProjectMcpConfigPath(workspaceRootPath: string, projectSlug: string): string {
+  const config = loadProjectConfig(workspaceRootPath, projectSlug);
+  const workingDirectory = config?.workingDirectory?.trim();
+  if (config?.memoryLocation === 'project' && workingDirectory) {
+    return join(workingDirectory, PROJECT_CONTEXT_DIRNAME, PROJECT_MCP_FILENAME);
+  }
+  return join(getProjectPath(workspaceRootPath, projectSlug), PROJECT_MCP_FILENAME);
+}
+
+/** 读取项目级 MCP 配置原始 JSON（不做类型校验，由调用方按 WorkspaceMcpConfig 归一化）；不存在时返回空 servers */
+export function readProjectMcpConfigRaw(workspaceRootPath: string, projectSlug: string): { servers: Record<string, unknown> } {
+  const filePath = getProjectMcpConfigPath(workspaceRootPath, projectSlug);
+  const parsed = readJsonFileSafe<{ servers: Record<string, unknown> }>(filePath);
+  return parsed ?? { servers: {} };
+}
+
+/** 项目是否已配置自己的 MCP 服务器 */
+export function hasProjectMcpServers(workspaceRootPath: string, projectSlug: string): boolean {
+  const config = readProjectMcpConfigRaw(workspaceRootPath, projectSlug);
+  return Object.keys(config.servers ?? {}).length > 0;
+}
+
+/** 原子写入项目级 MCP 配置 */
+export function writeProjectMcpConfigRaw(workspaceRootPath: string, projectSlug: string, config: { servers: Record<string, unknown> }): void {
+  const filePath = getProjectMcpConfigPath(workspaceRootPath, projectSlug);
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  atomicWriteFileSync(filePath, JSON.stringify(config, null, 2));
+}
+
+// ============================================================
 // Config CRUD
 // ============================================================
 

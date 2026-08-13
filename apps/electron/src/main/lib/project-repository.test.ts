@@ -147,6 +147,32 @@ describe('ProjectRepository', () => {
     expect(promptContext?.memoryPath).toBe(join(external, '.context', 'MEMORY.md'))
   })
 
+  test('项目级 Skills/MCP 封装方法：未配置时为空，创建后可读写，支持用 id 或 slug 寻址', () => {
+    const root = createTempWorkspaceRoot()
+    const repository = createRepository({ 'ws-alpha': root })
+    const created = repository.createProjectAtRoot(root, { name: 'Hosted Skills Proj' })
+
+    // 未配置时：不自动创建目录，且为空
+    expect(repository.hasProjectSkills(root, created.config.id)).toBe(false)
+    expect(repository.hasProjectMcpServers(root, created.config.id)).toBe(false)
+    expect(repository.getProjectMcpConfigRaw(root, created.config.id)).toEqual({ servers: {} })
+
+    // 写入后可读，且支持用 slug 寻址（与 id 等价）
+    repository.saveProjectMcpConfigRaw(root, created.config.id, {
+      servers: { demo: { type: 'stdio', command: 'demo', enabled: true } },
+    })
+    expect(repository.hasProjectMcpServers(root, created.config.slug)).toBe(true)
+    expect(repository.getProjectMcpConfigRaw(root, created.config.slug).servers).toHaveProperty('demo')
+
+    const skillsDir = repository.ensureProjectSkillsDirAtRoot(root, created.config.id)
+    expect(skillsDir).toBe(repository.getProjectSkillsDirPath(root, created.config.slug) ?? '')
+
+    // 不存在的项目：各方法安全返回默认值而非招异
+    expect(repository.hasProjectSkills(root, 'not-exist')).toBe(false)
+    expect(repository.getProjectSkillsDirPath(root, 'not-exist')).toBeNull()
+    expect(repository.getProjectMcpConfigRaw(root, 'not-exist')).toEqual({ servers: {} })
+  })
+
   test('本地目录 Project 的记忆经 readProjectMemory/writeProjectMemory 全链路落在项目真实目录下', () => {
     const root = createTempWorkspaceRoot()
     const external = join(createTempWorkspaceRoot(), 'repo')

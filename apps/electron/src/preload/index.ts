@@ -876,6 +876,28 @@ export interface ElectronAPI {
   /** 获取默认 Skills 的 slug 列表（来自 ~/.myyoda/default-skills/） */
   getDefaultSkillSlugs: () => Promise<string[]>
 
+  // 项目级 Skills / MCP（嵌套 Project 可选覆盖工作区级）
+  /** 项目是否已配置自己的 Skills */
+  hasProjectSkills: (workspaceSlug: string, projectId: string) => Promise<boolean>
+  /** 获取项目所有 Skills（含活跃和不活跃） */
+  getProjectSkills: (workspaceSlug: string, projectId: string) => Promise<SkillMeta[]>
+  /** 获取项目 Skills 目录绝对路径（仅解析，不自动创建） */
+  getProjectSkillsDir: (workspaceSlug: string, projectId: string) => Promise<string>
+  /** 删除项目 Skill */
+  deleteProjectSkill: (workspaceSlug: string, projectId: string, skillSlug: string) => Promise<void>
+  /** 切换项目 Skill 启用/禁用 */
+  toggleProjectSkill: (workspaceSlug: string, projectId: string, skillSlug: string, enabled: boolean) => Promise<void>
+  /** 项目是否已配置自己的 MCP 服务器 */
+  hasProjectMcpServers: (workspaceSlug: string, projectId: string) => Promise<boolean>
+  /** 获取项目级 MCP 配置 */
+  getProjectMcpConfig: (workspaceSlug: string, projectId: string) => Promise<WorkspaceMcpConfig>
+  /** 保存项目级 MCP 配置 */
+  saveProjectMcpConfig: (workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig) => Promise<void>
+  /** 获取同工作区内可导入到当前 Project 的 Skill 来源（工作区默认 + 其他嵌套 Project） */
+  getOtherProjectSkills: (workspaceSlug: string, currentProjectId: string) => Promise<import('@myyoda/shared').OtherProjectSkillsGroup[]>
+  /** 从工作区默认或其他嵌套 Project 批量导入 Skill 到当前 Project */
+  batchImportSkillsToProject: (workspaceSlug: string, targetProjectId: string, selections: import('@myyoda/shared').BulkImportProjectSelection[]) => Promise<import('@myyoda/shared').BulkImportSkillsResult>
+
   /** 从其他工作区导入 Skill */
   importSkillFromWorkspace: (targetSlug: string, sourceSlug: string, skillSlug: string) => Promise<SkillMeta>
 
@@ -2348,6 +2370,51 @@ const electronAPI: ElectronAPI = {
 
   getDefaultSkillSlugs: () => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_DEFAULT_SKILL_SLUGS)
+  },
+
+  hasProjectSkills: (workspaceSlug: string, projectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.HAS_PROJECT_SKILLS, workspaceSlug, projectId)
+  },
+
+  getProjectSkills: (workspaceSlug: string, projectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_PROJECT_SKILLS, workspaceSlug, projectId)
+  },
+
+  getProjectSkillsDir: (workspaceSlug: string, projectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_PROJECT_SKILLS_DIR, workspaceSlug, projectId)
+  },
+
+  deleteProjectSkill: (workspaceSlug: string, projectId: string, skillSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_PROJECT_SKILL, workspaceSlug, projectId, skillSlug)
+  },
+
+  toggleProjectSkill: (workspaceSlug: string, projectId: string, skillSlug: string, enabled: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_PROJECT_SKILL, workspaceSlug, projectId, skillSlug, enabled)
+  },
+
+  hasProjectMcpServers: (workspaceSlug: string, projectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.HAS_PROJECT_MCP_SERVERS, workspaceSlug, projectId)
+  },
+
+  getProjectMcpConfig: (workspaceSlug: string, projectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_PROJECT_MCP_CONFIG, workspaceSlug, projectId)
+  },
+
+  saveProjectMcpConfig: (workspaceSlug: string, projectId: string, config: WorkspaceMcpConfig) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_PROJECT_MCP_CONFIG, workspaceSlug, projectId, config)
+  },
+
+  getOtherProjectSkills: (workspaceSlug: string, currentProjectId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_OTHER_PROJECT_SKILLS, workspaceSlug, currentProjectId)
+  },
+
+  batchImportSkillsToProject: (workspaceSlug: string, targetProjectId: string, selections: import('@myyoda/shared').BulkImportProjectSelection[]) => {
+    return ipcRenderer.invoke(
+      AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_TO_PROJECT,
+      workspaceSlug,
+      targetProjectId,
+      selections,
+    )
   },
 
   importSkillFromWorkspace: (targetSlug: string, sourceSlug: string, skillSlug: string) => {
