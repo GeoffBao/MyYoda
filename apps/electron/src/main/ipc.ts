@@ -525,6 +525,9 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
         workspaceSlugs.add(workspace.slug)
         // 有会话归属时，当前工作区的 agent-workspaces/{slug}/ 也是合法根。
         roots.push(getAgentWorkspacePath(workspace.slug))
+        // 工作区的工程目录（projectRootPath）也要授权：右侧栏「项目文件」根与
+        // 执行 cwd 就是它（workspace-root source），不授权会导致列表/打开/删除全被拒。
+        if (workspace.projectRootPath) roots.push(workspace.projectRootPath)
       }
       // 会话绑定的 Project（Git 项目）工作目录也要授权，否则新会话选择 Git 分支/创建
       // Worktree 时，ensurePathAllowedWithWorktree 永远无法通过校验——这里之前完全没有
@@ -4179,6 +4182,8 @@ export function registerIpcHandlers(): void {
         const workspace = meta?.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
         if (workspace) {
           forbiddenRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
+          // 工程目录本身不可作为删除目标（列表/打开已授权，删除受保护）
+          if (workspace.projectRootPath) forbiddenRoots.push(workspace.projectRootPath)
         }
       }
       if (!isSafeDeleteTarget(
