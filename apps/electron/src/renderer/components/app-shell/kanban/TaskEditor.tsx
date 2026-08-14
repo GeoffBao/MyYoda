@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TaskGeneratedEventPayload } from '@myyoda/shared'
+import { useAtomValue } from 'jotai'
+import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -211,6 +213,25 @@ export function TaskEditor({
   const [draft, setDraft] = React.useState<TaskEditorDraft>(() =>
     createTaskEditorDraft(target, defaultModel, initialExpertId ?? 'general'),
   )
+  // 任务归属工作区（新模型：项目=工作区）：默认当前工作区，创建时可选其他工作区
+  const workspaces = useAtomValue(agentWorkspacesAtom)
+  const [targetWorkspaceId, setTargetWorkspaceId] = React.useState(workspaceId)
+  React.useEffect(() => {
+    if (!draft.targetWorkspaceId) {
+      patchDraft({ targetWorkspaceId: workspaceId })
+      setTargetWorkspaceId(workspaceId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId])
+  const selectedWorkspace = workspaces.find((candidate) => candidate.id === targetWorkspaceId) ?? null
+  /** 解析任务实际归属的工作区 root + id（默认当前工作区；可选其他工作区） */
+  const resolveTargetWorkspace = React.useCallback(async (): Promise<{ root: string; id: string }> => {
+    if (!selectedWorkspace || selectedWorkspace.id === workspaceId) {
+      return { root: workspaceRoot, id: workspaceId }
+    }
+    const root = await window.electronAPI.getWorkspaceRootPath(selectedWorkspace.slug)
+    return { root, id: selectedWorkspace.id }
+  }, [selectedWorkspace, workspaceId, workspaceRoot])
   const [tab, setTab] = React.useState<EditorTab>('definition')
   const [mode, setMode] = React.useState<TaskEditorMode>('manual')
   const [loading, setLoading] = React.useState(target.mode === 'edit' && Boolean(target.taskSlug))
@@ -345,9 +366,10 @@ export function TaskEditor({
     setGenerating(true)
     try {
       earlyGeneratedEventRef.current = null
+      const targetWorkspace = await resolveTargetWorkspace()
       const orchModel = draft.orchModel.trim() || defaultModel.trim()
       const orchConnection = draft.orchConnection ?? (orchModel ? modelToConnection.get(orchModel) : undefined)
-      const ack = await window.electronAPI.tasks.generate(workspaceRoot, workspaceId, {
+      const ack = await window.electronAPI.tasks.generate(targetWorkspace.root, targetWorkspace.id, {
         goal,
         ...(draft.title.trim() ? { title: draft.title.trim() } : {}),
         ...(draft.projectId.trim() ? { projectId: draft.projectId.trim() } : {}),
@@ -382,8 +404,9 @@ export function TaskEditor({
     if (!validation.ok) { toast.error(validation.error); return }
     setBusy(true)
     try {
+      const targetWorkspace = await resolveTargetWorkspace()
       const submission = buildTaskEditorSubmission(draft, target, generatedDraftRef.current, modelToConnection)
-      const created = await window.electronAPI.tasks.create(workspaceRoot, workspaceId, submission.request)
+      const created = await window.electronAPI.tasks.create(targetWorkspace.root, targetWorkspace.id, submission.request)
       generatedDraftRef.current = null
       if (runAfterCreate) {
         try {
@@ -493,18 +516,22 @@ export function TaskEditor({
             <label className="block space-y-1.5 text-xs font-medium">验收标准<Textarea value={draft.acceptanceCriteria ?? ''} onChange={(event) => patchDraft({ acceptanceCriteria: event.target.value })} placeholder="可选：如何判断任务完成" rows={3} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1.5 text-xs font-medium">
-                项目
+                工作区
                 <select
-                  value={draft.projectId}
-                  onChange={(event) => patchDraft({ projectId: event.target.value })}
+                  value={targetWorkspaceId}
+                  onChange={(event) => {
+                    setTargetWorkspaceId(event.target.value)
+                    patchDraft({ targetWorkspaceId: event.target.value })
+                  }}
                   className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm"
                 >
-                  <option value="">不绑定项目（工作区级任务）</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}</option>
+                  {workspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.name}{ws.id === workspaceId ? '（当前）' : ''}
+                    </option>
                   ))}
                 </select>
-                <span className="block text-[11px] font-normal leading-4 text-muted-foreground">绑定后优先使用项目工作目录；不绑定时回退到工作区默认目录</span>
+                <span className="block text-[11px] font-normal leading-4 text-muted-foreground">任务归属的工作区（项目）；会话 cwd 与任务产物落在此工作区</span>
               </label>
               <label className="space-y-1.5 text-xs font-medium">权限<select value={draft.permissionMode ?? 'allow-all'} onChange={(event) => patchDraft({ permissionMode: event.target.value as 'safe' | 'ask' | 'allow-all' })} className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm"><option value="allow-all">自动执行</option><option value="ask">需要确认</option><option value="safe">安全模式</option></select></label>
               <div className="space-y-1.5 text-xs font-medium">
