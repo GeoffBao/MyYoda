@@ -3090,7 +3090,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               // relative z-20：scenic/haze 主题下本容器带 backdrop-filter（创建 stacking context，z=0），
               // 会把内部上弹面板（项目选择器等 z-50）困在消息区空状态内容（z-10）之下，
               // 导致面板顶部项目点不动。提升容器 stacking context 层级使内部弹层能覆盖消息区。
-              'agent-composer-polished relative z-20 rounded-[20px] border-[0.5px] border-border bg-background/70 transition-[border-color,box-shadow,background-color] duration-base ease-out',
+              // 上游 #1633：实时表面提高不透明度（/95）并去掉 backdrop-blur，减少合成开销；
+              // fork 保留 agent-composer-polished（backdrop-filter:none）与 z-20 层级修复。
+              'agent-composer-polished relative z-20 rounded-[20px] border-[0.5px] border-border bg-background/95 transition-[border-color,box-shadow,background-color] duration-base ease-out',
               (isPlanMode || isPermissionPlanMode) && !isDragOver && 'plan-mode-border',
               isDragOver && 'border-[2px] border-dashed border-[#2ecc71] bg-[#2ecc71]/[0.03]'
             )}
