@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Settings,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -42,7 +43,7 @@ import {
   codeMainViewAtom,
   projectPageTabAtom,
 } from '@/atoms/project-atoms'
-import { activeViewAtom } from '@/atoms/active-view'
+import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { MarqueeText } from '@/components/ui/marquee-text'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -142,6 +143,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
   const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)
   const setProjectPageTab = useSetAtom(projectPageTabAtom)
   const setActiveView = useSetAtom(activeViewAtom)
+  const setAgentSkillsTab = useSetAtom(agentSkillsTabAtom)
 
   const [collapsedIds, setCollapsedIds] = React.useState<Set<string>>(new Set())
   /** 用户手动展开的工作区（项目行）集合：默认都是折叠（空集合），展开后显示全部会话；
@@ -243,6 +245,13 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setCodeMainView('project')
     setActiveView('conversations')
   }, [currentWorkspaceId, selectWorkspace, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
+
+  /** 打开该工作区的 MCP 与 Skills 配置（对齐 Proma 项目菜单：先切到该工作区，再进插件视图的 MCP tab） */
+  const configureMcpAndSkills = React.useCallback((workspaceId: string) => {
+    if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
+    setAgentSkillsTab('mcp')
+    setActiveView('agent-skills')
+  }, [currentWorkspaceId, selectWorkspace, setAgentSkillsTab, setActiveView])
 
   /** 行菜单：重新关联本地项目目录 */
   const handleRelinkRoot = React.useCallback(async (workspaceId: string, name: string) => {
@@ -515,6 +524,10 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                                 <FolderOpen size={13} />
                                 项目资料
                               </DropdownMenuItem>
+                              <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
+                                <Settings size={13} />
+                                配置 MCP 与 Skills
+                              </DropdownMenuItem>
                               {ws.projectRootPath ? (
                                 ws.projectRootStatus === 'missing' ? (
                                   <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => void handleRestoreRoot(wsId, ws.name)}>
@@ -556,6 +569,10 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                       <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspaceBoard(wsId)}>
                         <LayoutDashboard size={13} />
                         查看任务
+                      </ContextMenuItem>
+                      <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
+                        <Settings size={13} />
+                        配置 MCP 与 Skills
                       </ContextMenuItem>
                       <ContextMenuSeparator className="my-0.5" />
                       <ContextMenuItem

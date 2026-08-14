@@ -77,10 +77,14 @@ export function formatRelativeUpdatedAt(updatedAt: number, now: number): string 
 export interface SessionItemActionsProps {
   updatedAt: number
   /**
-   * 行尾存在额外固定控件（如子会话展开/收起按钮）时，三点菜单需要向左让位，
+   * 行尾存在额外固定控件（如子会话展开/收起按钮）时，操作按钮需要向左让位，
    * 避免 absolute right-0 的 hover 菜单覆盖行内按钮。
    */
   reserveTrailingControl?: boolean
+  /** 当前会话是否已归档（决定归档按钮图标与文案） */
+  archived?: boolean
+  /** 悬停归档按钮回调；未传则不渲染归档按钮（保留原「仅三点菜单」形态） */
+  onToggleArchive?: () => void
   menuItems: (
     MenuItem: typeof DropdownMenuItem,
     MenuSeparator: typeof DropdownMenuSeparator,
@@ -182,12 +186,23 @@ function SessionQuickSwitchKeycap(): React.ReactElement {
 export function SessionItemActions({
   updatedAt,
   reserveTrailingControl = false,
+  archived = false,
+  onToggleArchive,
   menuItems,
   onMenuOpenChange,
 }: SessionItemActionsProps): React.ReactElement {
   // 菜单打开时强制保持触发按钮可见：按钮始终保留布局，只切换透明度和 pointer-events。
   // 这样 Radix Popper 不会在 hover 切换瞬间读到 display:none 的 0 尺寸 trigger。
   const [menuOpen, setMenuOpen] = React.useState(false)
+  // 归档二次确认：第一次点击进入确认态（红色高亮），3 秒内再次点击才真正归档；
+  // 已归档会话的「取消归档」无需确认，直接执行。
+  const [archiveConfirming, setArchiveConfirming] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!archiveConfirming) return
+    const timer = setTimeout(() => setArchiveConfirming(false), 3000)
+    return () => clearTimeout(timer)
+  }, [archiveConfirming])
 
   const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -214,28 +229,64 @@ export function SessionItemActions({
     }
   }, [])
 
-  const forceVisible = menuOpen
+  // 确认态或菜单打开时强制保持操作按钮可见
+  const actionsVisible = archiveConfirming || menuOpen
+
+  const handleArchiveClick = (): void => {
+    if (!onToggleArchive) return
+    if (archived) {
+      onToggleArchive()
+      return
+    }
+    if (archiveConfirming) {
+      setArchiveConfirming(false)
+      onToggleArchive()
+      return
+    }
+    setArchiveConfirming(true)
+  }
 
   return (
     <div
       className={cn(
-        'session-item-actions pointer-events-none absolute top-1/2 z-[7] flex h-[18px] -translate-y-1/2 items-center',
+        'session-item-actions pointer-events-none absolute top-1/2 z-[7] flex h-[22px] -translate-y-1/2 items-center gap-0.5',
         reserveTrailingControl ? 'right-6' : 'right-0',
       )}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* 置顶/星标/归档不再占用行内固定位置——全部收进这个「...」菜单（以及同一份
-          menuItems 供的右键/双指点按菜单），把行内空间留给标题。相对时间戳也不再常驻展示，
-          完整时间通过本容器的 title 属性 hover 呈现。按钮整体 absolute 悬浮在行右侧，
-          不占布局宽度——标题因此可以顶到行尾。 */}
+      {/* 置顶/星标等低频操作继续收进「...」菜单；归档作为高频操作回归独立按钮
+          （对齐 Proma：hover 显示，非归档会话二次点击确认），行内空间仍留给标题。
+          按钮整体 absolute 悬浮在行右侧，不占布局宽度——标题因此可以顶到行尾。 */}
       <div
         className={cn(
-          'flex items-center transition-opacity duration-fast',
-          forceVisible
+          'flex items-center gap-0.5 transition-opacity duration-fast',
+          actionsVisible
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto',
         )}
       >
+        {onToggleArchive && (
+          <SafeTooltip
+            content={archiveConfirming ? '再次点击确认归档' : archived ? '取消归档' : '归档'}
+            side="top"
+          >
+            <button
+              type="button"
+              aria-label={archiveConfirming ? '再次点击确认归档' : archived ? '取消归档' : '归档'}
+              className={cn(
+                'flex size-[22px] items-center justify-center rounded-md transition-colors',
+                archiveConfirming
+                  ? 'bg-destructive/10 text-destructive'
+                  : archived
+                    ? 'text-foreground/60 hover:bg-foreground/[0.08]'
+                    : 'text-foreground/35 hover:bg-foreground/[0.08] hover:text-foreground/70',
+              )}
+              onClick={handleArchiveClick}
+            >
+              {archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+            </button>
+          </SafeTooltip>
+        )}
         <DropdownMenu onOpenChange={handleMenuOpenChange}>
           <DropdownMenuTrigger asChild>
             <button
@@ -666,6 +717,8 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
               <SessionItemActions
                 updatedAt={session.updatedAt}
                 reserveTrailingControl={!!childSummary?.onToggle}
+                archived={!!session.archived}
+                onToggleArchive={() => onToggleArchive(session.id)}
                 onMenuOpenChange={setMenuOpen}
                 menuItems={menuItems}
               />
