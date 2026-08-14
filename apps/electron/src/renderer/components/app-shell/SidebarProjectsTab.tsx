@@ -210,12 +210,11 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [setActiveView, setCodeMainView])
 
-  /** 当前激活会话所属工作区 id（历史会话无归属时为 null） */
+  /** 当前激活会话所属工作区 id；直接从全量会话列表查（draft/置顶/自动任务会话也在），历史会话无归属时为 null */
   const activeSessionWorkspaceId = React.useMemo(() => {
     if (!activeSessionId) return null
-    const tree = allSessionTrees.find((item) => treeContainsSessionId(item, activeSessionId))
-    return tree?.session.workspaceId ?? null
-  }, [activeSessionId, allSessionTrees])
+    return agentSessions.find((session) => session.id === activeSessionId)?.workspaceId ?? null
+  }, [activeSessionId, agentSessions])
 
   /** 点击工作区行：切换为当前工作区 + 聚焦展开/折叠 */
   const handleSelectWorkspace = React.useCallback((workspaceId: string) => {
@@ -224,14 +223,15 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
       toggleCollapsed(workspaceId)
       return
     }
-    // 切换到新项目：当前右侧会话在此项目 → 只展开此项目（单独显示）；
-    // 不在此项目 → 全部折叠，保持列表干净
+    // 切换到新项目：
+    // - 当前右侧会话在此项目（或无法判定归属）→ 只展开此项目（聚焦显示），其他折叠
+    // - 当前右侧会话明确在其他项目 → 全部折叠
     selectWorkspace(workspaceId)
     setCollapsedIds((prev) => {
-      const shouldKeepExpanded = activeSessionWorkspaceId === workspaceId
+      const focusThisWorkspace = activeSessionWorkspaceId === null || activeSessionWorkspaceId === workspaceId
       const next = new Set<string>()
       for (const ws of visibleWorkspaces) {
-        if (shouldKeepExpanded && ws.id === workspaceId) continue
+        if (focusThisWorkspace && ws.id === workspaceId) continue
         next.add(ws.id)
       }
       // 自动任务合成组保持原状
