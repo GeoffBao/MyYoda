@@ -1371,11 +1371,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     await createAgentSessionInWorkspace()
   }, [createAgentSessionInWorkspace, setActiveView])
 
-  /** 在项目行新建 Draft 会话；workspace=项目后 projectId 语义已收敛为 workspaceId */
+  /** 在项目行新建 Draft 会话；workspace=项目后 projectId 语义已收敛为 workspaceId（对齐 Proma：切到目标工作区） */
   const createAgentSessionInProject = React.useCallback(async (workspaceId: string): Promise<void> => {
     setActiveView('conversations')
     if (workspaceId) {
       setCollapsedWorkspaceIds((prev) => deleteSetEntry(prev, workspaceId))
+      if (workspaceId !== currentWorkspaceId) {
+        setCurrentWorkspaceId(workspaceId)
+        window.electronAPI.updateSettings({ agentWorkspaceId: workspaceId }).catch(console.error)
+      }
     }
     await createAgent({
       draft: true,
@@ -1383,7 +1387,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       channelId: agentChannelId || undefined,
       modelId: agentModelId || undefined,
     })
-  }, [agentChannelId, agentModelId, createAgent, setActiveView])
+  }, [agentChannelId, agentModelId, createAgent, currentWorkspaceId, setActiveView])
 
   /** 迁移会话进/出项目 */
   const handleMoveToProject = React.useCallback(async (sessionId: string, projectId?: string): Promise<void> => {

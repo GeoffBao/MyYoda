@@ -5,6 +5,7 @@ import {
   groupSessionTreesByProject,
   groupSessionsByProject,
   resolveProjectAttention,
+  resolveProjectFocusCollapsedIds,
   resolveProjectTreeAttention,
   sortProjectsByActivity,
   sortProjectsByTreeActivity,
@@ -123,5 +124,32 @@ describe('sortProjectsByActivity', () => {
       'empty-new',
       'empty-old',
     ])
+  })
+})
+
+describe('resolveProjectFocusCollapsedIds', () => {
+  test('聚焦目标工作区：目标不折叠，其余全部折叠', () => {
+    const collapsed = resolveProjectFocusCollapsedIds(['a', 'b', 'c'], 'b')
+    expect(collapsed.has('a')).toBe(true)
+    expect(collapsed.has('b')).toBe(false)
+    expect(collapsed.has('c')).toBe(true)
+    expect(collapsed.size).toBe(2)
+  })
+
+  test('无法判定归属（null）：全部折叠', () => {
+    const collapsed = resolveProjectFocusCollapsedIds(['a', 'b', 'c'], null)
+    expect(collapsed.size).toBe(3)
+    expect(collapsed.has('a') && collapsed.has('b') && collapsed.has('c')).toBe(true)
+  })
+
+  test('空工作区列表：返回空集合', () => {
+    expect(resolveProjectFocusCollapsedIds([], 'a').size).toBe(0)
+    expect(resolveProjectFocusCollapsedIds([], null).size).toBe(0)
+  })
+
+  test('不修改入参数组', () => {
+    const ids = ['a', 'b']
+    resolveProjectFocusCollapsedIds(ids, 'a')
+    expect(ids).toEqual(['a', 'b'])
   })
 })

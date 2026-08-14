@@ -79,6 +79,7 @@ import {
 } from './sidebar-session-tree'
 import {
   filterGroupableSessions,
+  resolveProjectFocusCollapsedIds,
   resolveProjectTreeAttention,
 } from './sidebar-projects-model'
 
@@ -229,11 +230,10 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     selectWorkspace(workspaceId)
     setCollapsedIds((prev) => {
       const focusThisWorkspace = activeSessionWorkspaceId === null || activeSessionWorkspaceId === workspaceId
-      const next = new Set<string>()
-      for (const ws of visibleWorkspaces) {
-        if (focusThisWorkspace && ws.id === workspaceId) continue
-        next.add(ws.id)
-      }
+      const next = resolveProjectFocusCollapsedIds(
+        visibleWorkspaces.map((ws) => ws.id),
+        focusThisWorkspace ? workspaceId : null,
+      )
       // 自动任务合成组保持原状
       if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
       return next
@@ -423,6 +423,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                       <div
                         role="button"
                         tabIndex={0}
+                        aria-expanded={expanded}
                         onClick={() => handleSelectWorkspace(wsId)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
