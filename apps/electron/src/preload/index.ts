@@ -252,6 +252,18 @@ interface TaskResults {
   spec: TaskSpec | null
   log: RunLogEntry[]
   runId: string
+  /** 实际执行目录（Run context 快照，可能不存在） */
+  effectiveCwd?: string
+  effectiveCwdSource?: 'task' | 'project' | 'workspace'
+}
+
+/** 任务运行目录解析结果（与主进程 TaskWorkingDirectoryResult 同构） */
+interface TaskWorkingDirectoryResult {
+  status: 'resolved' | 'blocked'
+  cwd?: string
+  source?: 'task' | 'project' | 'workspace'
+  reason?: string
+  attemptedPath?: string
 }
 
 /** 渲染进程项目 DTO：透传 ProjectConfig（含 workingDirectory）；不泄露 LoadedProject 运行时路径（folderPath 等）。 */
@@ -1621,6 +1633,7 @@ export interface ElectronAPI {
     analyzeDeleteImpact: (workspaceRoot: string, slug: string) => Promise<TaskDeleteImpact>
     delete: (workspaceRoot: string, workspaceId: string, slug: string, confirmationToken?: string) => Promise<void>
     getResults: (workspaceRoot: string, slug: string, runId?: string) => Promise<TaskResults | null>
+    resolveWorkingDirectory: (workspaceRoot: string, workspaceId: string, spec: { cwd?: string; project?: string }) => Promise<TaskWorkingDirectoryResult>
   }
   labels: {
     list: (workspaceRoot: string) => Promise<WorkspaceLabel[]>
@@ -3668,6 +3681,8 @@ const electronAPI: ElectronAPI = {
       invokeTyped<void>(TASK_IPC_CHANNELS.DELETE, workspaceRoot, workspaceId, slug, confirmationToken),
     getResults: (workspaceRoot: string, slug: string, runId?: string): Promise<TaskResults | null> =>
       invokeTyped<TaskResults | null>(TASK_IPC_CHANNELS.GET_RESULTS, workspaceRoot, slug, runId),
+    resolveWorkingDirectory: (workspaceRoot: string, workspaceId: string, spec: { cwd?: string; project?: string }): Promise<TaskWorkingDirectoryResult> =>
+      invokeTyped<TaskWorkingDirectoryResult>(TASK_IPC_CHANNELS.RESOLVE_WORKING_DIRECTORY, workspaceRoot, workspaceId, spec),
   },
   labels: {
     list: (workspaceRoot: string): Promise<WorkspaceLabel[]> =>

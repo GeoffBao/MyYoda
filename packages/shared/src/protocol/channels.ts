@@ -42,6 +42,7 @@ export const TASK_IPC_CHANNELS = {
   DELETE:       'tasks:delete',
   ANALYZE_DELETE_IMPACT: 'tasks:analyzeDeleteImpact',
   GET_RESULTS:  'tasks:getResults',
+  RESOLVE_WORKING_DIRECTORY: 'tasks:resolveWorkingDirectory',
 } as const;
 
 export const LABEL_IPC_CHANNELS = {

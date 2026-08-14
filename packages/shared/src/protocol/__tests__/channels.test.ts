@@ -105,6 +105,7 @@ describe('kanban protocol contracts', () => {
       DELETE: 'tasks:delete',
       ANALYZE_DELETE_IMPACT: 'tasks:analyzeDeleteImpact',
       GET_RESULTS: 'tasks:getResults',
+      RESOLVE_WORKING_DIRECTORY: 'tasks:resolveWorkingDirectory',
     });
 
     expect(SESSION_KANBAN_IPC_CHANNELS).toEqual({

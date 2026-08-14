@@ -43,6 +43,7 @@ import {
   listTaskSlugs,
   loadTaskSpec,
   parseTaskYaml,
+  readRunContextSnapshot,
   readRunLog,
   readRunSpecSnapshot,
 } from '@myyoda/shared/tasks/storage'
@@ -1071,11 +1072,30 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
     const context = requireProjectWorkspaceRoot(workspaceRoot)
     const selectedRunId = runId ?? getLatestRunId(context.workspaceRoot, slug)
     if (!selectedRunId) return null
+    const runContext = readRunContextSnapshot(context.workspaceRoot, slug, selectedRunId)
     return {
       spec: readRunSpecSnapshot(context.workspaceRoot, slug, selectedRunId),
       log: readRunLog(context.workspaceRoot, slug, selectedRunId),
       runId: selectedRunId,
+      ...(runContext?.effectiveCwd
+        ? { effectiveCwd: runContext.effectiveCwd }
+        : {}),
+      ...(runContext?.effectiveCwdSource
+        ? { effectiveCwdSource: runContext.effectiveCwdSource }
+        : {}),
     }
+  })
+
+  // 解析任务运行目录（单一事实源：与运行时 TaskRunner 完全一致的解析链路），
+  // 供任务编辑器在「执行」前展示实际运行目录，缺失时给出重新关联入口。
+  ipcMain.handle(TASK_IPC_CHANNELS.RESOLVE_WORKING_DIRECTORY, (
+    _event,
+    workspaceRoot: string,
+    workspaceId: string,
+    spec: { cwd?: string; project?: string },
+  ) => {
+    const context = requireProjectWorkspaceRoot(workspaceRoot, workspaceId)
+    return resolveTaskWorkingDirectoryResult(context.workspaceRoot, spec)
   })
 
   ipcMain.handle(SESSION_GROUP_IPC_CHANNELS.LIST, (_event, workspaceSlug: string) => {

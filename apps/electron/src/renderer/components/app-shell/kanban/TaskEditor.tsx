@@ -1,7 +1,9 @@
 import * as React from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   ExternalLink,
+  FolderCheck,
   LoaderCircle,
   Play,
   Plus,
@@ -34,12 +36,29 @@ import {
 import { canDependOn, uid, type EditorSubtask } from './task-spec-form'
 import type { KanbanModelProviderGroup, KanbanProject, TaskEditorTarget } from './types'
 import { useExpertOptions } from '@/components/agent-experts/useExpertOptions'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 
 const GENERATE_TIMEOUT_MS = 200_000
 
 type EditorTab = 'definition' | 'results'
 
 type TaskResults = Awaited<ReturnType<typeof window.electronAPI.tasks.getResults>>
+
+type TaskWorkingDirectoryResult = Awaited<ReturnType<typeof window.electronAPI.tasks.resolveWorkingDirectory>>
+
+/** 运行目录 blocked 原因 → 用户可读文案（与主进程 describeTaskWorkingDirectoryBlock 同构） */
+const WORKING_DIRECTORY_BLOCKED_LABEL: Record<string, string> = {
+  'missing-cwd': '未解析到运行目录：请绑定项目目录，或在插件 → 工作区设置里配置默认工作目录',
+  'invalid-task-cwd': '任务配置的工作目录不可用',
+  'missing-project': '任务绑定的项目不存在',
+  'invalid-project-cwd': '项目工作目录不可用',
+  'invalid-workspace-cwd': '工作区默认目录/本地项目根不可用',
+}
+
+function describeWorkingDirectoryBlock(result: TaskWorkingDirectoryResult): string {
+  const base = WORKING_DIRECTORY_BLOCKED_LABEL[result.reason ?? ''] ?? '运行目录不可用'
+  return result.attemptedPath ? `${base}：${result.attemptedPath}` : base
+}
 
 export interface TaskEditorProps {
   workspaceRoot: string
@@ -170,6 +189,15 @@ function ResultsPanel({
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />刷新
         </Button>
       </div>
+      {results?.effectiveCwd && (
+        <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+          <FolderCheck className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-500" />
+          <span className="min-w-0">
+            运行目录：<span className="break-all font-medium text-foreground/80">{results.effectiveCwd}</span>
+            {results.effectiveCwdSource === 'task' ? '（任务配置）' : results.effectiveCwdSource === 'project' ? '（项目目录）' : results.effectiveCwdSource ? '（工作区）' : ''}
+          </span>
+        </p>
+      )}
       {!results || results.log.length === 0 ? (
         <div className="rounded-xl bg-muted/40 p-10 text-center text-sm text-muted-foreground">任务尚未运行，暂无结果。</div>
       ) : (
@@ -232,6 +260,46 @@ export function TaskEditor({
     const root = await window.electronAPI.getWorkspaceRootPath(selectedWorkspace.slug)
     return { root, id: selectedWorkspace.id }
   }, [selectedWorkspace, workspaceId, workspaceRoot])
+
+  // -------------------------------------------------------------------------
+  // 运行目录预览：与主进程 TaskRunner 完全同一套解析链路（tasks.resolveWorkingDirectory），
+  // 在「执行」前展示实际运行目录；目录缺失时给出重新关联入口，避免运行被 hard-block 后才知道原因。
+  // -------------------------------------------------------------------------
+  const { relinkWorkspaceProjectRoot } = useWorkspaceActions()
+  const [wdResolution, setWdResolution] = React.useState<TaskWorkingDirectoryResult | null>(null)
+  const [wdResolving, setWdResolving] = React.useState(false)
+
+  React.useEffect(() => {
+    const targetWs = workspaces.find((candidate) => candidate.id === targetWorkspaceId) ?? null
+    if (!targetWs) { setWdResolution(null); return }
+    let cancelled = false
+    setWdResolving(true)
+    const resolveWd = async (): Promise<void> => {
+      const root = targetWs.id === workspaceId
+        ? workspaceRoot
+        : await window.electronAPI.getWorkspaceRootPath(targetWs.slug)
+      const result = await window.electronAPI.tasks.resolveWorkingDirectory(root, targetWs.id, {
+        ...(draft.cwd?.trim() ? { cwd: draft.cwd.trim() } : {}),
+        ...(draft.projectId?.trim() ? { project: draft.projectId.trim() } : {}),
+      })
+      if (!cancelled) setWdResolution(result)
+    }
+    void resolveWd().catch(() => {
+      if (!cancelled) setWdResolution(null)
+    }).finally(() => {
+      if (!cancelled) setWdResolving(false)
+    })
+    return () => { cancelled = true }
+  }, [targetWorkspaceId, workspaceId, workspaceRoot, draft.cwd, draft.projectId, workspaces])
+
+  /** 重新关联所选工作区的本地项目根目录；成功后 workspaces atom 更新会触发重新解析 */
+  const handleRelinkProjectRoot = React.useCallback(async () => {
+    if (!selectedWorkspace) return
+    const result = await window.electronAPI.openFolderDialog()
+    if (!result?.path) return
+    const updated = await relinkWorkspaceProjectRoot(selectedWorkspace.id, result.path)
+    if (updated) toast.success(`已重新关联「${selectedWorkspace.name}」的本地项目目录`)
+  }, [selectedWorkspace, relinkWorkspaceProjectRoot])
   const [tab, setTab] = React.useState<EditorTab>('definition')
   const [mode, setMode] = React.useState<TaskEditorMode>('manual')
   const [loading, setLoading] = React.useState(target.mode === 'edit' && Boolean(target.taskSlug))
@@ -532,6 +600,38 @@ export function TaskEditor({
                   ))}
                 </select>
                 <span className="block text-[11px] font-normal leading-4 text-muted-foreground">任务归属的工作区（项目）；会话 cwd 与任务产物落在此工作区</span>
+                {/* 运行目录预览：与运行时同一套解析链路 */}
+                <span className="block pt-1">
+                  {wdResolving ? (
+                    <span className="flex items-center gap-1.5 text-[11px] font-normal leading-4 text-muted-foreground">
+                      <LoaderCircle className="h-3 w-3 animate-spin" />解析运行目录…
+                    </span>
+                  ) : wdResolution?.status === 'resolved' && wdResolution.cwd ? (
+                    <span className="flex items-start gap-1.5 text-[11px] font-normal leading-4 text-emerald-600 dark:text-emerald-500">
+                      <FolderCheck className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span className="min-w-0">
+                        将在 <span className="break-all font-medium">{wdResolution.cwd}</span> 运行
+                        {wdResolution.source === 'task' ? '（任务配置目录）' : wdResolution.source === 'project' ? '（项目目录）' : '（工作区目录）'}
+                      </span>
+                    </span>
+                  ) : wdResolution?.status === 'blocked' ? (
+                    <span className="flex items-start gap-1.5 text-[11px] font-normal leading-4 text-destructive">
+                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="break-all">{describeWorkingDirectoryBlock(wdResolution)}</span>
+                        {selectedWorkspace?.projectRootPath && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRelinkProjectRoot()}
+                            className="ml-1 font-medium underline underline-offset-2 hover:text-destructive/80"
+                          >
+                            重新关联目录
+                          </button>
+                        )}
+                      </span>
+                    </span>
+                  ) : null}
+                </span>
               </label>
               <label className="space-y-1.5 text-xs font-medium">权限<select value={draft.permissionMode ?? 'allow-all'} onChange={(event) => patchDraft({ permissionMode: event.target.value as 'safe' | 'ask' | 'allow-all' })} className="h-9 w-full rounded-md border border-border/60 bg-background px-2 text-sm"><option value="allow-all">自动执行</option><option value="ask">需要确认</option><option value="safe">安全模式</option></select></label>
               <div className="space-y-1.5 text-xs font-medium">

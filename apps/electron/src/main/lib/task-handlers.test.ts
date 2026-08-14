@@ -234,6 +234,30 @@ describe('task handler Kanban payloads', () => {
     expect(() => taskHandler(undefined, workspaceRoot, 'workspace-test', 'task-1', ['unknown'])).toThrow(/不存在/)
   })
 
+  test('resolveWorkingDirectory handler：无 cwd/项目/默认目录时返回 blocked missing-cwd', () => {
+    const handler = registeredHandlers.get(TASK_IPC_CHANNELS.RESOLVE_WORKING_DIRECTORY)
+    expect(handler).toBeInstanceOf(Function)
+    const workspaceRoot = registeredWorkspaceRoot
+    expect(workspaceRoot).toBeString()
+    if (typeof handler !== 'function' || !workspaceRoot) return
+
+    // 注册的测试工作区根无 config.json、无 projectRootPath → missing-cwd
+    expect(handler(undefined, workspaceRoot, 'workspace-test', {})).toEqual({
+      status: 'blocked',
+      reason: 'missing-cwd',
+    })
+  })
+
+  test('resolveWorkingDirectory handler：workspaceId 与 root 不匹配时拒绝', () => {
+    const handler = registeredHandlers.get(TASK_IPC_CHANNELS.RESOLVE_WORKING_DIRECTORY)
+    expect(handler).toBeInstanceOf(Function)
+    const workspaceRoot = registeredWorkspaceRoot
+    expect(workspaceRoot).toBeString()
+    if (typeof handler !== 'function' || !workspaceRoot) return
+
+    expect(() => handler(undefined, workspaceRoot, 'other-workspace', {})).toThrow(/不匹配/)
+  })
+
   test('set_kanban_column 返回更新后的 AgentSessionMeta', () => {
     const setKanbanColumn = Reflect.get(taskHandlers, 'setSessionKanbanColumn')
     expect(setKanbanColumn).toBeInstanceOf(Function)
