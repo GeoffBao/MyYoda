@@ -250,6 +250,38 @@ export const FAQ_GROUPS: FaqGroup[] = [
     ],
   },
   {
+    id: 'coding-boost',
+    topic: 'Coding 加强与代码图谱',
+    description: '了解编码增强开关与 Graphify 代码知识图谱。',
+    items: [
+      {
+        question: 'Coding 加强是什么？开启后有哪些变化？',
+        answer: 'Coding 加强（设置 → 通用）是一键开启全部编码增强的总开关：模型专属编码规范（DeepSeek）、Chat 输出预算提升至 64K、新会话思考深度默认 max、编码预置技能（code-review / ultraqa / deep-interview / ai-slop-cleaner）、仓库代码地图（repo map）自动注入，以及 Graphify 代码图谱。开启后对话栏会出现图谱按钮。',
+        keywords: ['编码优化', 'Coding', '开关', '编码增强'],
+      },
+      {
+        question: '代码图谱（Graphify）怎么创建？',
+        answer: '开启 Coding 加强后，在代码会话对话栏点击图谱按钮（网络图标）即可一键创建，纯本地 AST 分析约 40 秒，代码不出本机。图谱建在当前项目的主仓库（graphify-out/，已自动加入 .gitignore），所有 worktree 会话共享。',
+        keywords: ['图谱', 'Graphify', '建图', 'repo map'],
+      },
+      {
+        question: '图谱需要更新吗？改完代码怎么同步？',
+        answer: '需要。图谱不会自动跟随代码变化，改完代码后在会话里告诉 AI「更新图谱」（AI 会跑 graphify update 做增量重提取），或直接重新点击图谱按钮。图谱过期时查询结果可能滞后，关键判断建议再用 Read/Grep 核实。',
+        keywords: ['更新', '重建', '同步', '增量'],
+      },
+      {
+        question: '图谱按钮为什么是灰色的？',
+        answer: '两种可能：① 当前会话不在 git 项目里——图谱只支持 git 仓库（会在仓库主目录建图）；② Graphify 未安装——到设置 → 通用 → Graphify 环境一键安装（Python 生态，也可让 AI 帮你装）。悬停按钮可以看到具体原因，点击灰色按钮会直接跳转设置。',
+        keywords: ['不可用', '灰色', '安装', '非 git'],
+      },
+      {
+        question: 'Agent 是怎么用图谱的？',
+        answer: '图谱就绪后，Agent 会话会自动获得一组图谱工具（mcp__graphify__*）。问「改 X 会影响什么」「谁调用了这个函数」「A 到 B 的依赖路径」时，Agent 会直接查图谱而不是反复 grep 文件；也可以在会话里让它用 graphify 命令查询依赖、影响面和结构。',
+        keywords: ['MCP', '工具', '影响面', '依赖'],
+      },
+    ],
+  },
+  {
     id: 'troubleshooting',
     topic: '故障排查',
     description: '先定位问题所在层级，再决定是重试还是调整配置。',
