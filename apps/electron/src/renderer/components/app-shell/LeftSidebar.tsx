@@ -1371,17 +1371,19 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     await createAgentSessionInWorkspace()
   }, [createAgentSessionInWorkspace, setActiveView])
 
-  /** 在项目下新建 Draft 会话（预绑定 projectId；看板默认落「待办」列） */
-  const createAgentSessionInProject = React.useCallback(async (projectId: string): Promise<void> => {
+  /** 在项目行新建 Draft 会话；workspace=项目后 projectId 语义已收敛为 workspaceId */
+  const createAgentSessionInProject = React.useCallback(async (workspaceId: string): Promise<void> => {
     setActiveView('conversations')
+    if (workspaceId) {
+      setCollapsedWorkspaceIds((prev) => deleteSetEntry(prev, workspaceId))
+    }
     await createAgent({
       draft: true,
-      workspaceId: currentWorkspaceId ?? undefined,
+      workspaceId,
       channelId: agentChannelId || undefined,
       modelId: agentModelId || undefined,
-      projectId,
     })
-  }, [agentChannelId, agentModelId, createAgent, currentWorkspaceId, setActiveView])
+  }, [agentChannelId, agentModelId, createAgent, setActiveView])
 
   /** 迁移会话进/出项目 */
   const handleMoveToProject = React.useCallback(async (sessionId: string, projectId?: string): Promise<void> => {

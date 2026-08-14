@@ -92,8 +92,8 @@ export interface ProjectSessionHandlers {
   onToggleStar: (id: string) => Promise<void>
   onToggleArchive: (id: string) => Promise<void>
   onMoveToProject: (sessionId: string, projectId?: string) => void | Promise<void>
-  /** 在项目下新建会话（draft，预绑定 projectId） */
-  onNewSessionInProject: (projectId: string) => void | Promise<void>
+  /** 在工作区/项目下新建会话（draft；workspace=项目后 projectId 语义收敛为 workspaceId） */
+  onNewSessionInProject: (workspaceId: string) => void | Promise<void>
   sessionGroups: SessionGroup[]
   onMoveToGroup: (sessionId: string, groupId?: string) => void | Promise<void>
   onCreateGroup: (sessionId: string) => void
@@ -212,15 +212,37 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
 
   /** 点击工作区行：切换为当前工作区 + 展开/折叠 */
   const handleSelectWorkspace = React.useCallback((workspaceId: string) => {
+    if (workspaceId === currentWorkspaceId) {
+      // 点击当前工作区 → 折叠/展开切换
+      toggleCollapsed(workspaceId)
+      return
+    }
+    // 切换到新项目时：展开目标，折叠其他所有工作区
     selectWorkspace(workspaceId)
-    // 展开该组（除非用户显式折叠过）
     setCollapsedIds((prev) => {
-      if (prev.has(workspaceId)) return prev
-      const next = new Set(prev)
-      next.delete(workspaceId)
+      const next = new Set<string>()
+      for (const ws of visibleWorkspaces) {
+        if (ws.id !== workspaceId) next.add(ws.id)
+      }
+      // 自动任务合成组保持原状
+      if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
       return next
     })
-  }, [selectWorkspace])
+  }, [currentWorkspaceId, selectWorkspace, visibleWorkspaces])
+
+  /** 当前激活会话所属工作区始终展开，方便定位 */
+  React.useEffect(() => {
+    if (!activeSessionId) return
+    const activeTree = allSessionTrees.find((tree) => treeContainsSessionId(tree, activeSessionId))
+    const wsId = activeTree?.session.workspaceId
+    if (!wsId) return
+    setCollapsedIds((prev) => {
+      if (!prev.has(wsId)) return prev
+      const next = new Set(prev)
+      next.delete(wsId)
+      return next
+    })
+  }, [activeSessionId, allSessionTrees])
 
   /** 打开该工作区的任务看板 */
   const openWorkspaceBoard = React.useCallback((workspaceId: string) => {
@@ -417,11 +439,18 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                           isCurrent ? 'bg-foreground/[0.05]' : 'hover:bg-foreground/[0.04]',
                         )}
                       >
-                        {/* 项目图标：绑定本地目录的工作区用文件夹图标 */}
+                        {/* 项目图标：默认文件夹；hover 显示展开/折叠 chevron（对齐 Proma） */}
                         <span className="grid size-5 shrink-0 place-items-center rounded-md bg-foreground/[0.045] text-foreground/45">
-                          <FolderOpen size={13} />
+                          <FolderOpen size={13} className="group-hover:hidden" />
+                          <ChevronRight
+                            size={13}
+                            className={cn(
+                              'hidden transition-transform duration-fast group-hover:block',
+                              expanded ? 'rotate-90' : '-rotate-90',
+                            )}
+                          />
                         </span>
-                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="flex min-w-0 items-center gap-1.5">
                           <MarqueeText text={ws.name} className="min-w-0 flex-1 text-[13px] font-medium" />
                           {isCurrent && (
                             <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
@@ -459,15 +488,18 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                           </span>
                         )}
 
-                        {/* hover 操作：新会话（切到该工作区）+ 更多菜单 + 折叠 */}
+                        {/* 占位 spacer，把 hover 操作按钮顶到右侧，避免徽章/计数被覆盖 */}
+                        <span className="min-w-[4px] flex-1" aria-hidden="true" />
+
+                        {/* hover 操作：新会话 + 更多菜单（对齐 Proma：无独立折叠按钮） */}
                         <span className="absolute right-1.5 top-1/2 flex shrink-0 -translate-y-1/2 items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto">
                           <button
                             type="button"
-                            title={`切换到「${ws.name}」并新建会话`}
+                            title={`在「${ws.name}」下新建会话`}
                             aria-label={`在「${ws.name}」下新建会话`}
                             onClick={(event) => {
                               event.stopPropagation()
-                              handleSelectWorkspace(wsId)
+                              void sessionHandlers.onNewSessionInProject(wsId)
                             }}
                             className="grid size-5 place-items-center rounded text-foreground/50 hover:bg-foreground/[0.08] hover:text-foreground/80"
                           >
@@ -528,21 +560,6 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          {/* 折叠按钮 */}
-                          <button
-                            type="button"
-                            aria-label={expanded ? `折叠${ws.name}` : `展开${ws.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              toggleCollapsed(wsId)
-                            }}
-                            className="grid size-5 place-items-center rounded text-foreground/50 hover:bg-foreground/[0.08] hover:text-foreground/80"
-                          >
-                            <ChevronRight
-                              size={12}
-                              className={cn('transition-transform duration-fast', expanded && 'rotate-90')}
-                            />
-                          </button>
                         </span>
                       </div>
                     </ContextMenuTrigger>
