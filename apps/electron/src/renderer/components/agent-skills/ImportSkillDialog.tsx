@@ -95,11 +95,13 @@ export function ImportSkillDialog({
 
   const installedSlugs = React.useMemo(() => new Set(installedSkills.map((s) => s.slug)), [installedSkills])
 
+  /** 全部其他工作区（含同名全过滤的），可导入项数用于标注与置灰 */
   const availableWorkspaces = React.useMemo(
     () =>
-      otherWorkspaces
-        .map((w) => ({ ...w, skills: w.skills.filter((s) => !installedSlugs.has(s.slug)) }))
-        .filter((w) => w.skills.length > 0),
+      otherWorkspaces.map((w) => {
+        const importable = w.skills.filter((s) => !installedSlugs.has(s.slug))
+        return { ...w, skills: importable, remainingCount: importable.length }
+      }),
     [otherWorkspaces, installedSlugs],
   )
 
@@ -109,11 +111,11 @@ export function ImportSkillDialog({
       if (!loadingWorkspaces) setSelectedWorkspaceSlug('')
       return
     }
-    setSelectedWorkspaceSlug((current) =>
-      availableWorkspaces.some((w) => w.workspaceSlug === current)
-        ? current
-        : availableWorkspaces[0]!.workspaceSlug,
-    )
+    setSelectedWorkspaceSlug((current) => {
+      if (availableWorkspaces.some((w) => w.workspaceSlug === current)) return current
+      const firstImportable = availableWorkspaces.find((w) => w.remainingCount > 0)
+      return firstImportable?.workspaceSlug ?? ''
+    })
   }, [availableWorkspaces, loadingWorkspaces, open])
 
   const selectedWorkspace = React.useMemo(
@@ -221,7 +223,7 @@ export function ImportSkillDialog({
           ) : availableWorkspaces.length === 0 ? (
             <SettingsCard divided={false}>
               <div className="py-10 text-center text-sm text-muted-foreground">
-                没有可导入的 Skill。其他工作区暂无 Skill，或者它们都已经安装到当前工作区了。
+                没有其他工作区可导入 Skill。
               </div>
             </SettingsCard>
           ) : (
@@ -233,8 +235,12 @@ export function ImportSkillDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableWorkspaces.map((w) => (
-                    <SelectItem key={w.workspaceSlug} value={w.workspaceSlug}>
-                      {w.workspaceName}
+                    <SelectItem
+                      key={w.workspaceSlug}
+                      value={w.workspaceSlug}
+                      disabled={w.remainingCount === 0}
+                    >
+                      {w.workspaceName}{w.remainingCount === 0 ? '（无可导入 Skill）' : `（${w.remainingCount} 个可导入）`}
                     </SelectItem>
                   ))}
                 </SelectContent>
