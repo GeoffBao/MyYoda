@@ -366,18 +366,6 @@ export function resolveWorkspaceFilesDir(slug: string): string {
   return join(getConfigDir(), 'agent-workspaces', slug, 'workspace-files')
 }
 
-/** 获取并创建 Workspace 级会话 Outbox。 */
-export function getAgentSessionOutboxPath(workspaceSlug: string, sessionId: string): string {
-  const dir = join(getWorkspaceFilesDir(workspaceSlug), 'Outbox', sessionId)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-/** 解析 Workspace 级会话 Outbox 路径，不创建目录。 */
-export function resolveAgentSessionOutboxPath(workspaceSlug: string, sessionId: string): string {
-  return join(resolveWorkspaceFilesDir(workspaceSlug), 'Outbox', sessionId)
-}
-
 /**
  * 解析 Agent 会话工作目录路径（只读，不创建目录）
  *

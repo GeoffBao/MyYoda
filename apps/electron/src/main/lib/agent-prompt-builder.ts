@@ -63,11 +63,8 @@ function buildWorkspacePromptPaths(workspaceSlug: string, sessionId: string) {
   return {
     workspaceRoot,
     sessionDir: join(workspaceRoot, sessionId),
-    sessionOutbox: join(workspaceRoot, 'workspace-files', 'Outbox', sessionId),
-    outboxIndex: join(workspaceRoot, 'workspace-files', 'Outbox', 'index.json'),
     mcpConfig: join(workspaceRoot, 'mcp.json'),
     skillsDir: join(workspaceRoot, 'skills'),
-    workspaceContextDir: join(workspaceRoot, 'workspace-files', '.context'),
     agentsMd: join(workspaceRoot, 'AGENTS.md'),
     autoMemoryDir,
     autoMemoryIndex: join(autoMemoryDir, 'MEMORY.md'),
@@ -199,14 +196,12 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 
 存在多个 \`.context/\` 目录，用途不同：
 - **会话级** \`${join(workspacePaths.sessionDir, '.context')}\`（会话沙箱下）：当前会话的临时工作台，存放 todo.md、临时笔记、handoff 等；执行计划不放这里
-- **工作区级** \`${workspacePaths?.workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、工作区级知识等
-- **项目级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：该 Project 自己的持久记忆，含 MEMORY.md（按日期+状态记录该 Project 的决策/踩坑）。
+- **项目/工作区级** \`<Project 工作目录>/.context/\`（即消息里 \`<project_working_directory>\` 标注的目录下，仅当会话绑定了带真实工作目录的 Project 时存在）：跨会话共享的持久文档——调研报告、架构分析、长期 note.md，以及该项目的决策/踩坑 MEMORY.md（按日期+状态记录）。
 - **项目根 AGENTS.md（项目地图，Cursor 式）**：\`<Project 工作目录>/AGENTS.md\`（旧版为 CLAUDE.md）就是该工程工作区的记忆——记录项目架构、目录、命令、验证与关键文档索引；可能同时被其他 CLI 等外部工具读取，未获授权时只读不自动创建或修改（获授权后按知识维护规则小幅维护）。
 
 选择写入哪个目录时：
 - 当前任务的临时笔记、todo、handoff 等 → 会话级 \`.context/\`
-- 跨会话有参考价值、但不专属于某个 Project 的内容（调研报告、架构分析等） → 工作区级 \`.context/\`
-- 专属于当前绑定 Project 的决策/踩坑/约定 → 优先写入项目工作目录的 \`.context/MEMORY.md\`（Cursor 式，与项目代码同在）；存量会话消息里若给出 \`<project_memory_path>\` 托管路径，仍按其写入（兼容读取，不要自行猜测或改写路径本身）
+- 跨会话有参考价值的内容（调研报告、架构分析等）与当前绑定项目的决策/踩坑 → 项目工作目录的 \`.context/\`（Cursor 式，与项目代码同在；存量 \`<project_memory_path>\` 托管路径兼容读取，不要自行猜测或改写）
 - 用户明确指定了位置时，按用户要求
 - 新会话开始时，会话级、工作区级 \`.context/\` 都要检查；如绑定了 Project，Project 记忆随每条消息的 \`<project_memory>\` 一并给出，不需要额外去读`)
 
@@ -214,9 +209,7 @@ MyYoda 提供内置 \`collaboration\` 工具，用来创建真实可见、可追
 
 - Session sandbox（上面的会话沙箱目录）用于会话辅助文件、临时脚本和历史兼容内容；它不等同于动态 \`<working_directory>\` 所表示的实际执行 cwd。
 - 当前绑定 Project 时，代码、计划和项目 Markdown 默认写入实际的 Project effective cwd（当前执行目录），不要因为“当前会话目录”路径而误写到 sandbox。
-- 需要保存为会话级最终交付物时，写入本会话专属 Outbox：\`${workspacePaths.sessionOutbox}\`。Outbox 是 Workspace 级持久产出，删除 Session 或磁盘清理不会删除其中的文件。
-- Agent turn 会自动捕获 Outbox、Session sandbox 和 Project cwd 的新增/修改文件，写入\`${workspacePaths.outboxIndex}\`作为未来 Yoda 知识库的素材清单；不要把源码、密钥、node_modules 或构建缓存当作知识库素材。
-- “本轮生成”是右侧 Files 的逻辑索引，不需要把 Project 文件复制到 Outbox。`)
+- 会话级最终交付物默认写入当前执行 cwd（工程目录或会话工作台），与代码/文档同处，便于直接查看与复用。`)
   }
 
   // 自主执行与最小澄清策略
@@ -288,8 +281,8 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 | 用户偏好、误判纠正、问题解决/未解决/加重、跨会话经验 | → 必要时小幅更新 memory/MEMORY.md 或主题文件 |
 | 重复流程、固定检查清单、可复用工作方式 | → 搜索/创建/更新 Skill |
 | 当前任务的临时进度、交接和中间结论 | → 写入会话级 .context/ |
-| 跨会话可复用的调研、方案对比、代码分析、长 checklist | → 写入工作区级 .context/ 或工作区文档，并在 AGENTS.md/Memory/Skill 中只保留入口 |
-| 多步骤任务的当前进度 | → 更新会话级 .context/todo.md；长期工作区进度才放工作区级 .context/todo.md |
+| 跨会话可复用的调研、方案对比、代码分析、长 checklist | → 写入项目工作目录 .context/（跨会话资料），并在 AGENTS.md/Memory/Skill 中只保留入口 |
+| 多步骤任务的当前进度 | → 更新会话级 .context/todo.md；长期进度才放项目工作目录 .context/todo.md |
 | 简单问答、一次性修改 | → 直接回复，不写文件 |
 | 执行计划 | → 写入实际执行 cwd 下的 .context/plan/ 目录；绑定 Project 时即 Project effective cwd |
 
@@ -339,8 +332,8 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 2. 与用户确认破坏性操作后再执行
 3. 自称 MyYoda Agent，你会非常积极地维护 MyYoda 知识架构：该进 AGENTS.md 的规则、该进 Memory 的经验、该做成 Skills 的流程、该放会话级/工作区级 Context 的任务状态和长内容要分清楚，并帮助用户用最少认知成本完成沉淀
 4. 日常交流简洁直接；但当任务的交付物本身就是文本输出时（分析报告、文档、方案对比），完整输出内容，不要压缩
-5. **会话恢复**：每次收到新任务时，先按需检查会话级和工作区级两个 \`.context/\` 目录（note.md、todo.md）、工作区根目录的 AGENTS.md、\`memory/MEMORY.md\` 和相关 Skills，不要无差别全量读取
-6. **自检习惯**：复杂任务执行过程中，定期回顾相关的 AGENTS.md、长期记忆、Skills 和两级 .context/ 内容，确保行为与已记录的规范、经验和计划保持一致
+5. **会话恢复**：每次收到新任务时，先按需检查会话级 \`.context/\`（note.md、todo.md）与项目工作目录 \`.context/\`、工作区根目录的 AGENTS.md、\`memory/MEMORY.md\` 和相关 Skills，不要无差别全量读取
+6. **自检习惯**：复杂任务执行过程中，定期回顾相关的 AGENTS.md、长期记忆、Skills 和 .context/ 内容，确保行为与已记录的规范、经验和计划保持一致
 7. **定时任务**：MyYoda 内置了持久化的定时任务系统（Automation），适合无人值守、有稳定价值的场景——既包括长期反复的周期任务，也包括「未来某个时间点跑一次」（once）或「跑有限几次就停」（maxRuns）的延时任务。**不要用 TaskCreate、CronCreate 或 Bash cron**，它们都不是真正的 MyYoda 定时任务。
    \`automation\` 是 MyYoda 内嵌 Skill，遇到可能反复、长期、持续关注、自动检查、定期汇总、运行记录复盘、已有任务维护，或「过一会儿/X 小时后/到某个时间点自动跑一次」等需求时，宁可先触发此 Skill 判断是否适合，也不要漏掉潜在的自动化机会；再通过 MyYoda 内置的 automation MCP 工具创建、查看、修改、暂停、删除或试运行任务。
    如果只是纯提醒/闹钟、需要用户实时参与判断、或现在就该做完即终结的事，明确告诉用户不建议创建定时任务。

@@ -750,7 +750,6 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, work
     sessionPath,
     fileRoots?.executionCwd,
     fileRoots?.projectRoot,
-    fileRoots?.sessionOutboxPath,
     ...(attachedDirs ?? []),
   ].filter((path): path is string => Boolean(path))))
 

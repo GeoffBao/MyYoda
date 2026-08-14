@@ -870,7 +870,6 @@ export function useGlobalAgentListeners(): void {
         sessionPath,
         roots?.executionCwd,
         roots?.projectRoot,
-        roots?.sessionOutboxPath,
         workspaceFilesPath,
         dirPath,
         ...sessionAttachedDirs,

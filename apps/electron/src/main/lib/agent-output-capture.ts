@@ -45,7 +45,6 @@ const SKIP_DIRS = new Set([
  */
 export function buildOutputCaptureRoots(roots: AgentSessionFileRoots): OutputCaptureRoot[] {
   return [
-    { root: roots.sessionOutboxPath, scope: 'outbox' },
     { root: roots.sessionDir, scope: 'session' },
     ...(roots.projectRoot ? [{ root: roots.projectRoot, scope: 'project' as const }] : []),
     ...(roots.projectAssetsPath ? [{ root: roots.projectAssetsPath, scope: 'project' as const }] : []),
@@ -57,7 +56,6 @@ const MAX_DEPTH = 12
 const OUTPUT_INDEX_VERSION = 1
 
 function scopePriority(scope: AgentOutputRecord['scope']): number {
-  if (scope === 'outbox') return 3
   if (scope === 'project') return 2
   return 1
 }
@@ -177,26 +175,10 @@ export function captureAgentTurnOutputs(
     turnStartedAt: context.turnStartedAt,
   } satisfies AgentOutputRecord))
 
-  if (records.length === 0) return records
-
-  const indexPath = join(roots.workspaceFilesPath, 'Outbox', 'index.json')
-  mkdirSync(join(roots.workspaceFilesPath, 'Outbox'), { recursive: true })
-  const existing = readOutputIndex(indexPath)
-  const dedupe = new Map(existing.map((record) => [record.id, record]))
-  for (const record of records) dedupe.set(record.id, record)
-  const next: AgentOutputIndexFile = {
-    version: OUTPUT_INDEX_VERSION,
-    records: [...dedupe.values()].slice(-10_000),
-  }
-  const tempPath = `${indexPath}.tmp`
-  writeFileSync(tempPath, JSON.stringify(next, null, 2))
-  renameSync(tempPath, indexPath)
   return records
 }
 
-export function listSessionOutputs(workspaceFilesPath: string, sessionId: string): AgentOutputRecord[] {
-  const indexPath = join(workspaceFilesPath, 'Outbox', 'index.json')
-  return readOutputIndex(indexPath)
-    .filter((record) => record.sessionId === sessionId)
-    .sort((a, b) => b.capturedAt - a.capturedAt)
+export function listSessionOutputs(_workspaceFilesPath: string, _sessionId: string): AgentOutputRecord[] {
+  // 素材索引（Outbox/index.json）已随 Outbox 概念移除；保留空实现兼容 IPC 通道
+  return []
 }

@@ -1712,8 +1712,6 @@ export interface AgentSessionFileRoots {
   projectUnavailablePath?: string
   /** Workspace Files 根目录。 */
   workspaceFilesPath: string
-  /** 持久化的 Workspace 级会话 Outbox。 */
-  sessionOutboxPath: string
 }
 
 /** Agent turn 捕获到的文件变化。 */
@@ -1725,7 +1723,7 @@ export interface AgentOutputRecord {
   projectId?: string
   path: string
   relativePath: string
-  scope: 'outbox' | 'session' | 'project'
+  scope: 'session' | 'project'
   change: 'created' | 'modified'
   capturedAt: number
   turnStartedAt: number

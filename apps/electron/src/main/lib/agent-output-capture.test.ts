@@ -34,13 +34,13 @@ describe('Agent turn output capture', () => {
 
   test('deduplicates overlapping roots and does not fail for missing roots', () => {
     reset()
-    const outbox = join(tempRoot, 'Outbox', 'session-1')
+    const outbox = join(tempRoot, 'session-outputs', 'session-1')
     mkdirSync(outbox, { recursive: true })
     writeFileSync(join(outbox, 'report.md'), 'report')
 
     const snapshot = snapshotOutputFiles([
-      { root: outbox, scope: 'outbox' },
-      { root: outbox, scope: 'outbox' },
+      { root: outbox, scope: 'session' },
+      { root: outbox, scope: 'session' },
       { root: join(tempRoot, 'missing'), scope: 'project' },
     ])
 
@@ -80,12 +80,11 @@ describe('Agent turn output capture', () => {
       executionCwd: '/ws/s-1',
       executionSource: 'sandbox' as const,
       workspaceFilesPath: '/ws/workspace-files',
-      sessionOutboxPath: '/ws/workspace-files/Outbox/s-1',
     }
-    expect(buildOutputCaptureRoots(base)).toHaveLength(2)
+    expect(buildOutputCaptureRoots(base)).toHaveLength(1)
 
     const withAssets = { ...base, projectRoot: '/ws/p', projectId: 'p1', projectAssetsPath: '/ws/p/assets' }
     const roots = buildOutputCaptureRoots(withAssets)
-    expect(roots.map((r) => r.root).sort()).toEqual(['/ws/p', '/ws/p/assets', '/ws/s-1', '/ws/workspace-files/Outbox/s-1'])
+    expect(roots.map((r) => r.root).sort()).toEqual(['/ws/p', '/ws/p/assets', '/ws/s-1'])
   })
 })
