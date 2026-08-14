@@ -34,8 +34,8 @@ interface GuideFeature {
 
 const GUIDE_FEATURES: GuideFeature[] = [
   { title: 'Agent / Code', description: '把复杂目标交给 Agent，读取文件、调用工具并完成可验证的工作。', image: agentPreview, icon: Sparkles },
-  { title: 'Project 工作台', description: '用 Project 绑定目录，组织会话、Task、资料和长期项目上下文。', image: projectPreview, icon: FolderKanban },
-  { title: 'Yoda 记忆', description: '把稳定规则、技术约定和项目经验沉淀为可复用的上下文。', image: memoryPreview, icon: BrainCircuit },
+  { title: 'Project 工作台', description: '每个项目就是一个工作区：绑定工程目录，组织会话、Task、资料和长期项目上下文。', image: projectPreview, icon: FolderKanban },
+  { title: '工作区记忆', description: 'AGENTS.md 项目地图 + 长期记忆文件，把稳定规则、技术约定和项目经验沉淀为可复用的上下文。', image: memoryPreview, icon: BrainCircuit },
   { title: 'Skills 与 MCP', description: '按工作区组合 Skills、MCP 和专家，让 Agent 获得适合当前工作的能力。', image: skillsPreview, icon: Wrench },
   { title: '自动任务', description: '将重复工作安排为定时任务，并保留每次运行的状态和结果。', image: automationPreview, icon: Layers3 },
   { title: '用量统计', description: '查看会话、消息、Token、模型和活跃时间，了解工作投入。', image: usagePreview, icon: BarChart3 },
@@ -43,7 +43,7 @@ const GUIDE_FEATURES: GuideFeature[] = [
 
 const QUICK_START = [
   ['配置一个模型渠道', '进入设置 → 模型配置，添加可用的 API 或订阅渠道。'],
-  ['创建一个 Project', '选择工作目录，让会话、文件、任务和记忆拥有明确的归属。'],
+  ['新建一个项目（工作区）', '可选绑定本地工程目录，让会话、文件、任务和记忆拥有明确的归属。'],
   ['从一个真实任务开始', '告诉 Agent 目标、范围、限制和验收标准，先做小任务再逐步沉淀方法。'],
 ] as const
 
@@ -61,8 +61,8 @@ const GUIDE_SECTIONS = [
     eyebrow: 'Keep context clean',
     title: '文件、记忆和会话，各自承担不同的上下文',
     summary: '好的工作流不是把所有资料都塞给 Agent，而是让每类信息放在正确的位置。',
-    steps: ['当前任务临时材料放在会话文件', '多个会话共享的资料放在 Project 文件', '稳定规则和结论写入 Project 记忆', '跨项目通用偏好放入 Yoda 记忆'],
-    example: '请先读取 Project 资料中的接口约定，再修改当前会话中的实现；完成后把稳定的约定补充到 Project 记忆。',
+    steps: ['当前任务临时材料放在会话文件', '项目内多个会话共享的资料放在项目工作目录', '稳定规则写入项目根 AGENTS.md，决策与踩坑写入 .context/MEMORY.md', '跨工作区通用能力在「插件」中按工作区切换管理'],
+    example: '请先读取项目资料中的接口约定，再修改当前会话中的实现；完成后把稳定的约定补充到项目的 .context/MEMORY.md。',
   },
   {
     id: 'capabilities',
@@ -77,7 +77,7 @@ const GUIDE_SECTIONS = [
     eyebrow: 'When blocked',
     title: '遇到问题时，先定位在哪一层',
     summary: '模型、权限、工具、工作目录和任务状态是不同问题，按层排查比反复重试更快。',
-    steps: ['模型不可用：检查渠道、模型和网络代理', 'Agent 不执行：检查权限模式与工具是否启用', '找不到文件：检查 Project 工作目录', '任务失败：查看运行记录后从对应会话继续'],
+    steps: ['模型不可用：检查渠道、模型和网络代理', 'Agent 不执行：检查权限模式与工具是否启用', '找不到文件：检查项目（工作区）绑定的工程目录', '任务失败：查看运行记录后从对应会话继续'],
     example: 'Agent 没有修改文件时，先查看工具活动和权限提示，再确认当前会话绑定的 Project 与工作目录。',
   },
 ] as const
@@ -98,10 +98,10 @@ export function GuideView(): React.ReactElement {
             </div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] md:text-5xl">从一个真实问题开始。</h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-muted-foreground md:text-base">
-              MyYoda 是本地优先的 AI 工作台。Chat 负责思考与表达，Project 负责执行与交付，Agent 会把你的目标转化为可追踪的工作过程。
+              MyYoda 是本地优先的 AI 工作台。Chat 负责思考与表达，Code 负责执行与交付，项目（工作区）组织长期上下文，Agent 会把你的目标转化为可追踪的工作过程。
             </p>
             <div className="mt-7 flex flex-wrap gap-2.5 text-xs text-muted-foreground">
-              {['Chat 思考', 'Code 执行', 'Project 组织', 'Yoda 沉淀'].map((item) => (
+              {['Chat 思考', 'Code 执行', '项目/工作区', '记忆沉淀'].map((item) => (
                 <span key={item} className="rounded-full border border-border/70 bg-background/55 px-3 py-1.5">{item}</span>
               ))}
             </div>

@@ -25,8 +25,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         question: 'Chat、Code 和 Project 分别是什么？',
-        answer: 'Chat 适合快速问答，Code 适合让 Agent 规划并执行任务，Project 是长期工作的容器，负责组织会话、工作目录、文件和项目记忆。',
-        keywords: ['模式', '项目', '会话'],
+        answer: 'Chat 适合快速问答，Code 适合让 Agent 规划并执行任务，Project 是长期工作的容器，负责组织会话、工作目录、文件和项目记忆。v0.10.0 起 Project 与工作区合并：每个项目就是一个工作区，可绑定本地工程目录。',
+        keywords: ['模式', '项目', '会话', '工作区'],
       },
       {
         question: '第一次使用应该从哪里开始？',
@@ -35,7 +35,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '我可以只使用自己的模型 API 吗？',
-        answer: '可以。MyYoda 支持配置 Anthropic、OpenAI、Google、DeepSeek、智谱、MiniMax、通义千问等渠道，也支持自定义 OpenAI 兼容端点。',
+        answer: '可以。MyYoda 支持配置 Anthropic、OpenAI、Google、DeepSeek、智谱、MiniMax、通义千问、火山方舟（豆包）等渠道，也支持自定义 OpenAI 兼容端点。',
         keywords: ['Provider', '模型', '自定义端点'],
       },
       {
@@ -45,8 +45,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '什么时候应该新建 Project？',
-        answer: '当工作需要固定目录、持续积累文件和记忆，或者会反复执行同一类流程时，就应该创建 Project；一次性问答不必创建。',
-        keywords: ['新建项目', '长期工作', '工作流'],
+        answer: '当工作需要固定目录、持续积累文件和记忆，或者会反复执行同一类流程时，就应该创建 Project（即新建工作区，可选绑定本地工程目录）；一次性问答不必创建。',
+        keywords: ['新建项目', '长期工作', '工作流', '工作区'],
+      },
+      {
+        question: '旧版 Project 数据怎么迁移到新的工作区？',
+        answer: '设置 → 连接与数据 → 工作区，点击「项目 → 工作区迁移」手动触发：旧托管项目会迁移为独立工作区，会话、任务、定时任务自动重绑定；迁移前自动备份，同名同目录的工作区自动复用，可重复执行（幂等）。',
+        keywords: ['迁移', '旧项目', '数据迁移', '工作区'],
       },
     ],
   },
@@ -94,27 +99,27 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         question: 'Project 和工作目录是什么关系？',
-        answer: 'Project 是 MyYoda 内的组织和上下文容器，工作目录是它实际读写文件的本地目录。一个 Project 可以绑定一个明确的代码库或资料目录。',
-        keywords: ['工作目录', 'cwd', '文件夹'],
+        answer: 'Project（工作区）是 MyYoda 内的组织和上下文容器，工作目录是它实际读写文件的本地目录。新建项目时可选择本地文件夹绑定为工程目录（会话 cwd 与项目记忆落在此目录）；留空则为托管目录的空白项目。',
+        keywords: ['工作目录', 'cwd', '文件夹', '工程目录'],
       },
       {
         question: '会话文件和 Project 文件有什么区别？',
-        answer: '会话文件服务于当前会话，适合临时附件和一次性材料；Project 文件属于整个 Project，适合共享资料、规则、脚本和长期产物。',
+        answer: '会话文件服务于当前会话，适合临时附件和一次性材料；Project 文件属于整个项目工作目录，适合共享资料、规则、脚本和长期产物，所有归属该工作区的会话都能访问。',
         keywords: ['附件', '项目文件', '共享'],
       },
       {
         question: 'Project 记忆会保存什么？',
-        answer: 'Project 记忆用于沉淀稳定规则、技术约定、偏好和已确认结论。它会随 Project 注入相关 Agent 会话，不等同于完整的聊天记录。',
-        keywords: ['MEMORY.md', '上下文', '规则'],
+        answer: '项目根目录的 AGENTS.md 是项目地图（记录工作方式与入口）；稳定的决策、踩坑和约定写入项目工作目录的 .context/MEMORY.md。左侧「插件 → 记忆」统一管理 AGENTS.md 与长期记忆文件，会随工作区注入相关 Agent 会话，不等同于完整的聊天记录。',
+        keywords: ['MEMORY.md', 'AGENTS.md', '上下文', '规则'],
       },
       {
-        question: '会话文件、Project 文件和 Workspace 文件怎么区分？',
-        answer: '当前任务的临时材料放会话文件；项目内多个会话共享的资料放 Project 文件；跨 Project 通用的资料和规则放 Workspace 文件。',
-        keywords: ['文件组织', 'Workspace', '附件'],
+        question: '会话文件、Project 文件和工作区怎么区分？',
+        answer: '当前任务的临时材料放会话文件；项目内多个会话共享的资料放项目工作目录（含 .context/ 下的项目记忆）；v0.10.0 起每个项目就是一个工作区，不再有独立的工作区级文件层——跨项目通用的能力通过「插件」按工作区切换管理。',
+        keywords: ['文件组织', '工作区', '附件'],
       },
       {
         question: '什么时候应该把内容写进记忆？',
-        answer: '只有稳定、反复有用且已经确认的规则、偏好和结论才适合写入记忆。临时想法、未验证结论和一次性任务记录应留在会话或 Project 文件中。',
+        answer: '只有稳定、反复有用且已经确认的规则、偏好和结论才适合写入记忆（AGENTS.md 或 .context/MEMORY.md）。临时想法、未验证结论和一次性任务记录应留在会话或项目文件中。',
         keywords: ['记忆', 'MEMORY.md', '最佳实践'],
       },
     ],
@@ -145,14 +150,14 @@ export const FAQ_GROUPS: FaqGroup[] = [
         keywords: ['创建', '分享', '贡献'],
       },
       {
-        question: 'Skills 和 MCP 能不能按 Project 单独配置？',
-        answer: '可以。Yoda 插件右上角的切换器默认是“全部项目共享”（工作区级），切到具体 Project 后可以单独为它添加/删除 Skill 或 MCP 服务器。一旦这个 Project 有了自己的配置，就不再回退展示工作区默认。Memory（记忆）不走这套机制，始终是工作区级。',
-        keywords: ['Project', '项目级', '隔离', '切换器'],
+        question: 'Skills 和 MCP 按什么范围配置？',
+        answer: 'v0.10.0 起 Skills 与 MCP 统一为工作区级：项目 = 工作区，每个工作区独立拥有自己的 Skills 和 MCP 列表。在「插件」顶部切换工作区，即切换整套能力；未单独配置过的工作区使用创建时的默认内容。Memory（记忆）同样是工作区级。',
+        keywords: ['工作区', '隔离', '切换器', 'MCP'],
       },
       {
-        question: '怎么在不同 Project 之间共享 Skill？',
-        answer: '切到目标 Project 后，Skills 页点“导入”会弹出“从工作区默认/其他项目批量导入 Skill”，可以从同一工作区下的其他 Project 或工作区默认里批量勾选。这个入口与旋转页面上方“社区市场”旁边的“导入”（跨工作区导入）不是同一个；导入进 Project 的 Skill 不支持一键更新，需要时重新导入一次即可。',
-        keywords: ['导入', 'Project', '共享', '批量'],
+        question: '怎么在不同工作区之间共享 Skill？',
+        answer: '在「插件 → Skills」点“导入”，会弹出“从其他工作区批量导入 Skill”，可以从其他工作区勾选批量导入，重复项自动跳过。导入的 Skill 是副本，不跟随来源更新，需要时重新导入一次即可。',
+        keywords: ['导入', '工作区', '共享', '批量'],
       },
     ],
   },
@@ -163,8 +168,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         question: 'Task 看板和普通会话是什么关系？',
-        answer: 'Task 是 Project 中可追踪的工作项，可以绑定专家、列状态和执行结果；运行时仍然通过 Code Agent 完成，过程可在对应会话中查看。',
-        keywords: ['Task', 'Kanban', '看板'],
+        answer: 'Task 是工作区（项目）中可追踪的工作项，可以绑定专家、列状态和执行结果；运行时仍然通过 Code Agent 完成，过程可在对应会话中查看。',
+        keywords: ['Task', 'Kanban', '看板', '工作区'],
       },
       {
         question: '自动任务需要 MyYoda 一直运行吗？',
@@ -190,12 +195,12 @@ export const FAQ_GROUPS: FaqGroup[] = [
   },
   {
     id: 'knowledge',
-    topic: 'Yoda 知识库',
+    topic: '知识库',
     description: '让项目产物逐渐变成可检索的团队知识。',
     items: [
       {
-        question: 'Yoda 知识库现在适合放什么？',
-        answer: '适合沉淀已经确认的项目文档、研究结论、操作规范和可复用经验。原始材料仍建议保留在本地 Raw 或 Project 文件中。',
+        question: '知识库现在适合放什么？',
+        answer: '适合沉淀已经确认的项目文档、研究结论、操作规范和可复用经验。原始材料仍建议保留在本地或项目工作目录中。',
         keywords: ['知识库', 'Wiki', '文档'],
       },
       {
@@ -223,6 +228,28 @@ export const FAQ_GROUPS: FaqGroup[] = [
     ],
   },
   {
+    id: 'feedback',
+    topic: '反馈与更新',
+    description: '反馈使用体验，跟进版本更新。',
+    items: [
+      {
+        question: '怎么向开发者报告 Bug 或提建议？',
+        answer: '打开设置 → 帮助 → 意见反馈（或「更新日志与帮助」弹窗右下角入口）：选择 Bug 报告 / 功能建议，填写最多 5000 字描述，可附加最多 5 张截图和联系方式，提交后直达开发者的 Notion 反馈库。提交失败会自动保存为本地草稿，不会丢失。',
+        keywords: ['反馈', 'Bug', '建议', '意见反馈'],
+      },
+      {
+        question: '反馈功能怎么配置？',
+        answer: '在「意见反馈」设置页填写反馈 token 与数据库 ID，点“测试连接”验证可用。token 经系统安全存储加密，界面不回显明文。普通用户不需要自己配置，使用默认分发配置即可。',
+        keywords: ['token', 'Notion', '测试连接', '配置'],
+      },
+      {
+        question: '怎么查看更新内容和历史版本？',
+        answer: '设置 → 帮助 → 关于/更新可查看当前版本与更新日志；「更新日志与帮助」弹窗展示完整历史版本列表，全部离线可用。检测到新版本后可前往 GitHub Releases 下载安装包。',
+        keywords: ['版本', '更新日志', 'Release Notes', '升级'],
+      },
+    ],
+  },
+  {
     id: 'privacy',
     topic: '数据与权限',
     description: '知道数据在哪里，以及每一步谁在做决定。',
@@ -244,8 +271,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '为什么 Agent 没有直接执行某个操作？',
-        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再到左侧栏“Yoda 插件”里检查 MCP 与 Skills 是否启用——注意页面右上角的切换器，当前看的是“全部项目共享”还是某个具体 Project 自己的配置，两者不互通。',
-        keywords: ['MCP', '权限模式', '工具', 'Project'],
+        answer: '可能是权限模式、工具未启用、MCP 未连接，或当前渠道不支持该能力。先查看工具活动和权限提示，再到左侧栏“插件”里检查 MCP 与 Skills 是否启用——注意页面顶部的工作区切换器，当前看的是哪个工作区的配置。',
+        keywords: ['MCP', '权限模式', '工具', '工作区'],
       },
     ],
   },
@@ -266,7 +293,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: '图谱需要更新吗？改完代码怎么同步？',
-        answer: '需要。图谱不会自动跟随代码变化，改完代码后在会话里告诉 AI「更新图谱」（AI 会跑 graphify update 做增量重提取），或直接重新点击图谱按钮。图谱过期时查询结果可能滞后，关键判断建议再用 Read/Grep 核实。',
+        answer: '需要。图谱不会自动跟随代码变化，改完代码后在会话里告诉 AI「更新图谱」（AI 会跑 graphify update 做增量重提取），或直接点击图谱按钮（建图完成后点击即增量更新）。图谱过期时查询结果可能滞后，关键判断建议再用 Read/Grep 核实。',
         keywords: ['更新', '重建', '同步', '增量'],
       },
       {
@@ -303,8 +330,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'MCP 或 Skill 没有生效怎么办？',
-        answer: '先确认当前 Workspace 已启用对应能力。如果在 Project 中使用，还要确认 Yoda 插件右上角切换器选对了范围——某个 Project 一旦自己配置过 Skills/MCP，就不再回退展示工作区默认内容，可能让人误以为“失效了”。再检查工具活动里是否出现调用记录。变更 MCP 或 Skill 后，必要时重新打开会话让能力上下文刷新。',
-        keywords: ['MCP', 'Skill', 'Workspace', 'Project', '工具'],
+        answer: '先确认当前工作区已启用对应能力：在「插件」顶部检查工作区切换器，每个工作区拥有独立的 Skills / MCP 配置，切错工作区可能让人误以为“失效了”。再检查工具活动里是否出现调用记录。变更 MCP 或 Skill 后，必要时重新打开会话让能力上下文刷新。',
+        keywords: ['MCP', 'Skill', '工作区', '工具'],
       },
     ],
   },
