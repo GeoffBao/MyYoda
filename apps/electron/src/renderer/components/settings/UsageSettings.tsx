@@ -20,6 +20,7 @@ import {
 import { Button } from '../ui/button'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs'
+import { ChannelBalanceSection } from './ChannelBalanceSection'
 
 /** 时间范围 */
 type UsageRange = 'all' | '30d' | '7d' | 'month'
@@ -683,6 +684,11 @@ export function UsageSettings(): React.ReactElement {
               )}
             </TabsContent>
           </Tabs>
+        </div>
+
+        {/* 底部：当前模型供应商余额 */}
+        <div className="pt-2 border-t border-border/60">
+          <ChannelBalanceSection />
         </div>
       </SettingsSection>
     </div>

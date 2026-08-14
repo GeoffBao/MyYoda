@@ -47,6 +47,7 @@ import { refreshXaiOAuth } from './xai-oauth-service'
 import { refreshXaiOAuthCredentialsSerial, rememberXaiOAuthCredentials } from './xai-oauth-credentials'
 import { parseCodexPlanQuotaResponse } from './codex-plan-quota'
 import { getKimiApiBalanceUrl, parseKimiApiBalanceResponse } from './kimi-api-balance'
+import { getOpenRouterKeyUrl, parseOpenRouterKeyResponse } from './openrouter-balance'
 import { listCodexModels, listXaiModels } from './adapters/pi-model-registry'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
@@ -1321,6 +1322,37 @@ async function queryDeepSeekBalance(apiKey: string, baseUrl: string, proxyUrl?: 
   }
 }
 
+async function queryOpenRouterBalance(apiKey: string, baseUrl: string, proxyUrl?: string): Promise<ChannelPlanQuotaResult> {
+  const fetchFn = getFetchFn(proxyUrl)
+  const requestUrl = getOpenRouterKeyUrl(baseUrl)
+
+  const response = await fetchFn(requestUrl, withTimeout({
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+      'User-Agent': getAppUserAgent(pkg.version),
+    },
+  }))
+  const responseText = await response.text()
+  if (!response.ok) {
+    return createUnsupportedPlanQuota('openrouter', `OpenRouter 余额查询失败: HTTP ${response.status}`)
+  }
+
+  let data: unknown
+  try {
+    data = JSON.parse(responseText)
+  } catch {
+    return createUnsupportedPlanQuota('openrouter', 'OpenRouter 余额响应格式错误')
+  }
+
+  const error = (data as { error?: { message?: string } } | null)?.error
+  if (error?.message) {
+    return createUnsupportedPlanQuota('openrouter', error.message)
+  }
+  return parseOpenRouterKeyResponse(data)
+}
+
 interface ZhipuQuotaLimitItem {
   type: 'TIME_LIMIT' | 'TOKENS_LIMIT'
   unit?: number
@@ -1627,6 +1659,9 @@ export async function getChannelPlanQuota(channelId: string): Promise<ChannelPla
     }
     if (provider === 'kimi-api') {
       return await queryKimiApiBalance(apiKey, channel.baseUrl, proxyUrl)
+    }
+    if (provider === 'openrouter') {
+      return await queryOpenRouterBalance(apiKey, channel.baseUrl, proxyUrl)
     }
     if (provider === 'kimi-coding' || channel.baseUrl.includes('api.kimi.com/coding')) {
       return await queryKimiPlanQuota(apiKey, proxyUrl)

@@ -10,6 +10,7 @@ const PLAN_QUOTA_PROVIDERS = new Set<ProviderType>([
   'zhipu-coding-team',
   'openai-codex',
   'kimi-api',
+  'openrouter',
   'anthropic-oauth',
 ])
 

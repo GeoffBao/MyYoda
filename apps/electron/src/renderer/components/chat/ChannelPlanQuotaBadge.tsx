@@ -12,7 +12,8 @@ function formatWindow(window: ChannelPlanQuotaWindow): string {
   return `${label} ${window.remainingLabel ?? `${window.remainingPercent}%`}`
 }
 
-function buildSummary(result: ChannelPlanQuotaResult): string {
+/** 余额摘要：优先 5h/周/月窗口，否则取前两个窗口或自定义窗口 */
+export function buildQuotaSummary(result: ChannelPlanQuotaResult): string {
   const fiveHour = result.windows.find((window) => window.type === '5h')
   const weekly = result.windows.find((window) => window.type === 'weekly')
   const monthly = result.windows.find((window) => window.type === 'monthly')
@@ -23,7 +24,8 @@ function buildSummary(result: ChannelPlanQuotaResult): string {
   return windows.map(formatWindow).join(' · ')
 }
 
-function buildTitle(result: ChannelPlanQuotaResult): string {
+/** 完整标题：计划名 + 各窗口剩余 + 重置时间 + 附加信息（tooltip 用） */
+export function buildQuotaTitle(result: ChannelPlanQuotaResult): string {
   if (!result.supported) return result.message ?? '订阅额度不可用'
   const detail = result.windows.map((window) => {
     const reset = window.resetAt
@@ -108,8 +110,8 @@ export function ChannelPlanQuotaBadge({ channel }: { channel: Channel }): React.
 
   if (!isUsable) return null
 
-  const summary = buildSummary(quota)
-  const title = buildTitle(quota)
+  const summary = buildQuotaSummary(quota)
+  const title = buildQuotaTitle(quota)
 
   return (
     <span
