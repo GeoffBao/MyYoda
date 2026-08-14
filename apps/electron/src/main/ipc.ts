@@ -3824,7 +3824,7 @@ export function registerIpcHandlers(): void {
   // 幂等创建（对话栏按钮唯一主动入口；构建异步完成，经 STATUS 推送）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_ENSURE,
-    (_event, cwd: string) => repoMapToolsService.ensureMapTools(cwd)
+    (_event, cwd: string, forceUpdate?: boolean) => repoMapToolsService.ensureMapTools(cwd, { forceUpdate: forceUpdate === true })
   )
 
   // 一键安装 graphify（进度经 INSTALL_PROGRESS 推送）

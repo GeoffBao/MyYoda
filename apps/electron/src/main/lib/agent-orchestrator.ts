@@ -391,7 +391,7 @@ export class AgentOrchestrator {
 
   /**
    * 注入 Graphify MCP stdio server（P3，2026-08-14）。
-   * 条件：主仓库图存在 + graphifyy[mcp] 已装（isGraphifyMcpAvailable 含 30s 缓存）。
+   * 条件：主仓库图存在 + graphifyy[mcp] 已装（isGraphifyMcpAvailable 含 10 分钟缓存）。
    * 用户自配同名 'graphify' server 时不覆盖。project_path 参数的安全剥离在 pi-mcp-tools 桥接层。
    * 主仓库解析用 resolveMainRepoRootCached（5 分钟缓存，避免每轮 execSync git）。
    */

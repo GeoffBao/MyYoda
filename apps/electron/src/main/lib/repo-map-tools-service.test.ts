@@ -90,3 +90,69 @@ describe('repo-map-tools-service', () => {
     expect(state.mainRepo).toBeDefined()
   })
 })
+
+describe('PR #56 review 回归（2026-08-14）', () => {
+  const { execSync } = require('node:child_process')
+
+  function makeGitRepo(prefix: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix))
+    execSync('git init -q', { cwd: dir })
+    return dir
+  }
+
+  test('ensureMapTools：graphify 未装且无图 → 立即 failed 终态（running 死锁修复）', () => {
+    const service = new RepoMapToolsService()
+    const repo = makeGitRepo('gf-noinstall-')
+    try {
+      ;(service as unknown as { isGraphifyInstalled: () => boolean }).isGraphifyInstalled = () => false
+      const state = service.ensureMapTools(repo)
+      expect(state.status).toBe('failed')
+      expect(state.error).toContain('未安装 graphify')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  test('getState：running 但无待决构建时重算，不返回卡死缓存（死锁修复）', () => {
+    const service = new RepoMapToolsService()
+    const repo = makeGitRepo('gf-stale-')
+    try {
+      // 直接塞一个无 pendingBuilds 支撑的 running 缓存
+      ;(service as unknown as { states: Map<string, unknown> }).states.set(repo, {
+        status: 'running',
+        mapReady: false,
+        graphReady: false,
+        graphifyInstalled: false,
+        mainRepo: repo,
+      })
+      const state = service.getState(repo)
+      expect(state.status).not.toBe('running')
+      expect(['idle', 'done', 'failed']).toContain(state.status)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  test('ensureMapTools forceUpdate：图就绪但 graphify 未装 → failed（不卡 running）', async () => {
+    const { repoMapService } = await import('./repo-map/repo-map-service')
+    const service = new RepoMapToolsService()
+    const repo = makeGitRepo('gf-forceupdate-')
+    try {
+      // 伪造 graph.json（图就绪）+ 伪造 mapReady
+      fs.mkdirSync(path.join(repo, 'graphify-out'), { recursive: true })
+      fs.writeFileSync(path.join(repo, 'graphify-out', 'graph.json'), '{}')
+      const original = repoMapService.getRepoMapForPromptReadOnly
+      repoMapService.getRepoMapForPromptReadOnly = () => 'fake-map' as never
+      ;(service as unknown as { isGraphifyInstalled: () => boolean }).isGraphifyInstalled = () => false
+      try {
+        const state = service.ensureMapTools(repo, { forceUpdate: true })
+        expect(state.status).toBe('failed')
+        expect(state.error).toContain('未安装 graphify')
+      } finally {
+        repoMapService.getRepoMapForPromptReadOnly = original
+      }
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})

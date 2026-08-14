@@ -503,8 +503,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       setSettingsOpen(true)
       return
     }
-    // done → rebuild；failed → 重试；idle → 首建
-    void window.electronAPI.ensureRepoMapTools(repoMapToolsCwd).then(setRepoMapToolsState).catch(() => { /* ignore */ })
+    // done → 增量更新（graphify update .）；failed → 重试；idle → 首建
+    void window.electronAPI.ensureRepoMapTools(repoMapToolsCwd, state?.status === "done").then(setRepoMapToolsState).catch(() => { /* ignore */ })
   }, [repoMapToolsEnabled, repoMapToolsState, repoMapToolsCwd, setSettingsOpen])
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
@@ -2791,7 +2791,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const tooltip = isRunning
           ? `创建中… ${state?.progress ?? ''}`
           : isDone
-            ? '图谱已就绪（点击重建）'
+            ? '图谱已就绪（点击增量更新）'
             : isFailed
               ? `图谱创建失败（点击重试）${state?.error ? `：${state.error}` : ''}`
               : isUnavailable
