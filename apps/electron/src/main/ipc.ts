@@ -2888,10 +2888,13 @@ export function registerIpcHandlers(): void {
   )
 
   // 创建 Agent 工作区（支持绑定本地项目根目录：从本地文件夹创建项目）
+  // deferSkillsCopy: 交互式入口总是后台拷贝默认 Skills，避免同步 cpSync 阻塞主线程导致创建项目时 UI 卡顿；
+  // 迁移等内部同进程调用不走这个 handler，不受影响。
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_WORKSPACE,
     async (_event, input: string | { name: string; projectRootPath?: string }): Promise<AgentWorkspace> => {
-      return createAgentWorkspace(input)
+      const normalized = typeof input === 'string' ? { name: input } : input
+      return createAgentWorkspace({ ...normalized, deferSkillsCopy: true })
     }
   )
 

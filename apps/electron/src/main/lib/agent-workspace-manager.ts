@@ -257,9 +257,45 @@ function copyDefaultSkills(workspaceSlug: string, options: { throwOnError?: bool
   }
 }
 
+/**
+ * copyDefaultSkills 的异步版本：用 fs/promises.cp 走 libuv 线程池，不占用 Electron 主进程主线程。
+ * 仅供交互式创建入口后台补齐使用（default-skills 约 63MB/674 文件，同步 cpSync 实测 ~0.2-0.5s，
+ * 刚好撞上计划模块的 EventKit 对账窗口时会叠加成明显 UI 卡顿）。
+ * 失败仅记日志，不回滚工作区（工作区已提前写入索引并可能已被渲染层引用，无法因 Skills
+ * 补齐失败而整个删除），与同目录内 upgradeDefaultSkillsInWorkspaces 对失败的容忍策略一致。
+ */
+async function copyDefaultSkillsAsync(workspaceSlug: string): Promise<void> {
+  const defaultDir = getDefaultSkillsDir()
+  const targetDir = getWorkspaceSkillsDir(workspaceSlug)
+
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(defaultDir, { withFileTypes: true })
+  } catch (err) {
+    console.error(`[Agent 工作区] 读取默认 Skills 模板失败 (${workspaceSlug}):`, err)
+    return
+  }
+  if (entries.length === 0) {
+    console.warn(`[Agent 工作区] 默认 Skills 模板为空，工作区 Skills 未初始化: ${workspaceSlug}`)
+    return
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || isRetiredDefaultSkill(entry.name)) continue
+    const source = join(defaultDir, entry.name)
+    const target = join(targetDir, entry.name)
+    try {
+      await cpAsync(source, target, { recursive: true, filter: skillCopyFilter })
+    } catch (err) {
+      console.warn(`[Agent 工作区] 后台复制默认 Skill 失败 (${workspaceSlug}/${entry.name}):`, err)
+    }
+  }
+  console.log(`[Agent 工作区] 已在后台复制默认 Skills 到: ${workspaceSlug}`)
+}
+
 export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput): AgentWorkspace {
-  const { name, projectRootPath } = typeof input === 'string'
-    ? { name: input, projectRootPath: undefined }
+  const { name, projectRootPath, deferSkillsCopy } = typeof input === 'string'
+    ? { name: input, projectRootPath: undefined, deferSkillsCopy: false }
     : input
   const index = readIndex()
 
@@ -300,7 +336,7 @@ export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput):
   try {
     getAgentWorkspacePath(slug)
     ensurePluginManifest(slug, name)
-    copyDefaultSkills(slug, { throwOnError: true })
+    if (!deferSkillsCopy) copyDefaultSkills(slug, { throwOnError: true })
   } catch (error) {
     const workspacesRoot = resolve(getAgentWorkspacesDir())
     const workspaceDir = resolve(join(workspacesRoot, slug))
@@ -318,6 +354,13 @@ export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput):
 
   index.workspaces.unshift(workspace)
   writeIndex(index)
+
+  if (deferSkillsCopy) {
+    // 工作区已可用，默认 Skills 在后台补齐，不阻塞本次 IPC 返回。
+    void copyDefaultSkillsAsync(slug).catch((err) => {
+      console.error(`[Agent 工作区] 后台补齐默认 Skills 失败 (${slug}):`, err)
+    })
+  }
 
   console.log(`[Agent 工作区] 已创建工作区: ${name} (slug: ${slug})`)
   return workspace

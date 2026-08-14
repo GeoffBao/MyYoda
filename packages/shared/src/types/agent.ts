@@ -45,6 +45,12 @@ export interface CreateAgentWorkspaceInput {
   name: string
   /** 可选的用户本地项目根目录 */
   projectRootPath?: string
+  /**
+   * 仅供主进程交互式创建入口（CREATE_WORKSPACE IPC handler）使用：默认 Skills 模板后台异步拷贝，
+   * 工作区立即可用，不阻塞 cpSync 同步拷贝导致主线程卡顿。迁移等需要同步完成后立即读
+   * Skills 目录的内部调用方不传，保持原有同步语义。还原为未设置时等同 false（同步）。
+   */
+  deferSkillsCopy?: boolean
 }
 
 // ===== SDK 新增类型声明（0.2.52 ~ 0.2.63） =====

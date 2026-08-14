@@ -12,7 +12,14 @@ let lastExternalReconcileAt = 0
 let lastManagedCalendarReconcileAt = 0
 let nativeChangeDebounce: ReturnType<typeof setTimeout> | null = null
 // EventKit 不提供可靠的跨账户变更增量 token；仅轮询用户明确连接的集合。
-const EXTERNAL_RECONCILE_INTERVAL_MS = POLL_INTERVAL_MS
+//
+// 与 POLL_INTERVAL_MS 解耦（曾经两者相等，等于「每 30s 全量对账」）：全量对账要把已绑定的每一条
+// 提醒事项逐条 calendarItemWithIdentifier 拉回来核对是否被外部删除/改动，这些原生调用全部串行发生在
+// Electron 主进程主线程（addon 用 dispatch_async(dispatch_get_main_queue()) 调度），几百条绑定就会让
+// 主线程卡顿几百毫秒；曾实测：428 条绑定每 30s 一次 burst，与「新建项目」等交互操作撞车会让 UI 明显卡顿。
+// 外部变更仍然会被感知——EventKit 存储变化会走 subscribeMacEventKitNativeChanges 的 800ms 防抖强制对账，
+// 本地 Todo/日程编辑走 outbox（POLL_INTERVAL_MS 内即时同步），这里只降低「定期兜底全量核对」的频率。
+const EXTERNAL_RECONCILE_INTERVAL_MS = 5 * 60_000
 
 /** Todo 日期选择器把“仅日期”持久化为当地 23:59；同步时恢复为 EventKit 的无时分 DateComponents。 */
 function isTodoDueDateOnly(dueAt: number | undefined): boolean {

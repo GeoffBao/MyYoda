@@ -123,6 +123,27 @@ describe('Agent 工作区创建', () => {
     expect(existsSync(join(copiedSkillDir, '.git'))).toBe(false)
     expect(existsSync(join(copiedSkillDir, 'node_modules'))).toBe(false)
   })
+
+  test('Given deferSkillsCopy:true（交互式创建入口） When 创建工作区 Then 立即返回且不同步拷贝 Skills，后台异步补齐后与同步路径结果一致', async () => {
+    const defaultSkillDir = join(configPaths.getDefaultSkillsDir(), 'async-sample-skill')
+    mkdirSync(defaultSkillDir, { recursive: true })
+    writeFileSync(join(defaultSkillDir, 'SKILL.md'), '---\nname: Async Sample\n---\n', 'utf-8')
+
+    const workspace = manager.createAgentWorkspace({ name: '异步拷贝测试', deferSkillsCopy: true })
+    const copiedSkillMd = join(configPaths.getWorkspaceSkillsDir(workspace.slug), 'async-sample-skill', 'SKILL.md')
+
+    // 关键断言：createAgentWorkspace 本身是同步函数且已返回，但异步拷贝还没跑完（fs/promises.cp 走
+    // libuv 线程池，不占用当前同步栈）——这里不对未完成状态做强时序断言（避免 flaky），
+    // 只验证最终一致性：轮询等待到后台拷贝完成。
+    let settled = false
+    for (let i = 0; i < 50 && !settled; i++) {
+      if (existsSync(copiedSkillMd)) settled = true
+      else await new Promise((r) => setTimeout(r, 20))
+    }
+
+    expect(settled).toBe(true)
+    expect(readFileSync(copiedSkillMd, 'utf-8')).toContain('Async Sample')
+  })
 })
 
 describe('隐藏容器 Project 已移除', () => {
