@@ -330,15 +330,38 @@ interface AdoptableTaskSpec {
   }
 }
 
-/** 解析 Task cwd 的结构化结果；配置失效时保留 blocked 原因，供 Run/UI 使用。 */
+/** 由工作区根目录解析其本地项目根（工程目录）；测试可注入替代实现。 */
+export type WorkspaceProjectRootResolver = (workspaceRoot: string) => string | undefined
+
+/** 默认实现：按根目录匹配索引中的工作区，返回 workspace.projectRootPath。 */
+const defaultWorkspaceProjectRootResolver: WorkspaceProjectRootResolver = (workspaceRoot) => {
+  const normalizedRoot = resolve(workspaceRoot)
+  const workspace = listAgentWorkspaces().find(
+    (candidate) => resolve(getAgentWorkspacePath(candidate.slug)) === normalizedRoot,
+  )
+  return workspace?.projectRootPath
+}
+
+/**
+ * 解析 Task cwd 的结构化结果；配置失效时保留 blocked 原因，供 Run/UI 使用。
+ *
+ * 兜底链（工作区=项目模型，对齐 resolveSessionCwd）：
+ * spec.cwd → spec.project → 工作区 config.json defaultWorkingDirectory
+ * → workspace.projectRootPath（本地项目工程目录）。
+ * 本地项目的工程目录缺失/不可达时 hard-block（运行前硬阻断），不静默降级。
+ */
 export function resolveTaskWorkingDirectoryResult(
   workspaceRoot: string,
   spec: Pick<AdoptableTaskSpec, 'cwd' | 'project'>,
+  resolveWorkspaceProjectRoot: WorkspaceProjectRootResolver = defaultWorkspaceProjectRootResolver,
 ): TaskWorkingDirectoryResult {
+  const configuredDefault = getWorkspaceDefaultWorkingDirectoryAtRoot(workspaceRoot)
+  // 显式配置的工作区默认目录优先；未配置时回退到本地项目根（工程目录）。
+  const workspaceDefaultCwd = configuredDefault ?? resolveWorkspaceProjectRoot(workspaceRoot)
   return resolveTaskWorkingDirectoryWithPolicy({
     explicitCwd: spec.cwd,
     projectId: spec.project,
-    workspaceDefaultCwd: getWorkspaceDefaultWorkingDirectoryAtRoot(workspaceRoot),
+    workspaceDefaultCwd,
     resolveProjectCwd: (projectId) => {
       const result = projectRepository.resolveEffectiveCwdForProject(workspaceRoot, projectId)
       if (!result) return null

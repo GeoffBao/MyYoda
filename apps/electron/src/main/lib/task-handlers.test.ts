@@ -306,6 +306,84 @@ describe('task handler Kanban payloads', () => {
     }
   })
 
+  test('Workspace Task 无 cwd/项目时回退到工作区本地项目根（工程目录）', () => {
+    const resolveCwd = Reflect.get(taskHandlers, 'resolveTaskWorkingDirectoryResult')
+    expect(resolveCwd).toBeInstanceOf(Function)
+    if (typeof resolveCwd !== 'function') return
+
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-proj-root-'))
+    const projectRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-proj-target-'))
+    try {
+      // 无 config.json：仅靠 workspace.projectRootPath 兜底（工作区=项目模型）
+      expect(resolveCwd(workspaceRoot, {}, () => projectRoot)).toEqual({
+        status: 'resolved',
+        cwd: realpathSync(projectRoot),
+        source: 'workspace',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+      rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('config.json 默认目录优先于工作区本地项目根', () => {
+    const resolveCwd = Reflect.get(taskHandlers, 'resolveTaskWorkingDirectoryResult')
+    expect(resolveCwd).toBeInstanceOf(Function)
+    if (typeof resolveCwd !== 'function') return
+
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-cfg-priority-root-'))
+    const configuredCwd = mkdtempSync(join(tmpdir(), 'myyoda-workspace-cfg-priority-cwd-'))
+    const projectRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-cfg-priority-proj-'))
+    try {
+      writeFileSync(join(workspaceRoot, 'config.json'), JSON.stringify({ defaultWorkingDirectory: configuredCwd }))
+      expect(resolveCwd(workspaceRoot, {}, () => projectRoot)).toEqual({
+        status: 'resolved',
+        cwd: realpathSync(configuredCwd),
+        source: 'workspace',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+      rmSync(configuredCwd, { recursive: true, force: true })
+      rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('本地项目根缺失时 hard-block，不静默降级为 missing-cwd', () => {
+    const resolveCwd = Reflect.get(taskHandlers, 'resolveTaskWorkingDirectoryResult')
+    expect(resolveCwd).toBeInstanceOf(Function)
+    if (typeof resolveCwd !== 'function') return
+
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-proj-missing-root-'))
+    const missingProjectRoot = join(workspaceRoot, 'gone-project-dir')
+    try {
+      const result = resolveCwd(workspaceRoot, {}, () => missingProjectRoot)
+      expect(result.status).toBe('blocked')
+      expect(result).toEqual(expect.objectContaining({
+        status: 'blocked',
+        reason: 'invalid-workspace-cwd',
+        attemptedPath: missingProjectRoot,
+      }))
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('空白工作区（无 projectRootPath）且无 cwd/项目时仍为 missing-cwd', () => {
+    const resolveCwd = Reflect.get(taskHandlers, 'resolveTaskWorkingDirectoryResult')
+    expect(resolveCwd).toBeInstanceOf(Function)
+    if (typeof resolveCwd !== 'function') return
+
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'myyoda-workspace-blank-root-'))
+    try {
+      expect(resolveCwd(workspaceRoot, {}, () => undefined)).toEqual({
+        status: 'blocked',
+        reason: 'missing-cwd',
+      })
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   test('set_project_id 有有效 cwd 时写入 workingDirectory，解绑不清除', () => {
     const buildUpdates = Reflect.get(taskHandlers, 'buildSetProjectIdUpdates')
     expect(buildUpdates).toBeInstanceOf(Function)
