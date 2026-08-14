@@ -27,6 +27,7 @@ import {
   Building2,
   BarChart3,
   CircleHelp,
+  MessageSquareHeart,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { activeViewAtom } from "@/atoms/active-view";
@@ -66,6 +67,7 @@ import { ToolSettings } from "./ToolSettings";
 import { BotHubSettings } from "./BotHubSettings";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { VoiceInputSettings } from "./VoiceInputSettings";
+import { FeedbackSettings } from "./FeedbackSettings";
 import { MigrationSettings } from "./MigrationSettings";
 import { StorageSettings } from "./StorageSettings";
 import { UsageSettings } from "./UsageSettings";
@@ -121,6 +123,7 @@ const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: "tutorial", label: "使用指南", icon: <CircleHelp size={16} /> },
       { id: "faq", label: "常见问题 FAQ", icon: <BookOpen size={16} /> },
+      { id: "feedback", label: "意见反馈", icon: <MessageSquareHeart size={16} /> },
       { id: "about", label: "关于/更新", icon: <Info size={16} /> },
     ],
   },
@@ -167,6 +170,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <UsageSettings />;
     case "workspace":
       return <WorkspaceSettings />;
+    case "feedback":
+      return <FeedbackSettings />;
     default:
       // 使用指南和 FAQ 都由 handleTabChange 处理，不在设置内容区重复渲染。
       return <GeneralSettings />;
