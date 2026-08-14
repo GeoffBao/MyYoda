@@ -41,6 +41,8 @@ import { WorkBoardView } from '@/components/work/WorkBoardView'
 import { ProjectPageRoute } from '@/components/project/ProjectPageRoute'
 import { browserPanelOpenMapAtom, browserPendingNavigationMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 import { BrowserPanel } from '@/components/browser/BrowserPanel'
+import { terminalPanelOpenMapAtom, terminalStateMapAtom } from '@/atoms/terminal-atoms'
+import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 
 export function MainArea(): React.ReactElement {
   // 记录每个会话上次停留的视图（对话 / 预览），供切回时重建预览 Tab
@@ -70,6 +72,8 @@ export function MainArea(): React.ReactElement {
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const [browserStateMap, setBrowserStateMap] = useAtom(browserStateMapAtom)
   const setPendingNavigationMap = useSetAtom(browserPendingNavigationMapAtom)
+  const [terminalOpenMap, setTerminalOpenMap] = useAtom(terminalPanelOpenMapAtom)
+  const [terminalStateMap, setTerminalStateMap] = useAtom(terminalStateMapAtom)
   const [splitRatio, setSplitRatio] = useAtom(previewSplitRatioAtom)
   const [rightWorkspaceRatio, setRightWorkspaceRatio] = useAtom(rightWorkspaceSplitRatioAtom)
   const previewDragging = React.useRef(false)
@@ -103,8 +107,39 @@ export function MainArea(): React.ReactElement {
     return () => { cancelled = true }
   }, [browserSessionId, publishBrowserState])
 
+  // 终端状态推送（主进程 → 渲染）：打开/退出时更新 state map（key = terminalId）。
+  const publishTerminalState = React.useCallback((event: { state: import('@myyoda/shared').TerminalViewState }) => {
+    setTerminalStateMap((previous) => { const next = new Map(previous); next.set(event.state.terminalId, event.state); return next })
+    setTerminalOpenMap((previous) => { const next = new Map(previous); next.set(event.state.sessionId, true); return next })
+  }, [setTerminalOpenMap, setTerminalStateMap])
+
+  React.useEffect(() => {
+    const subscribe = (window.electronAPI as Partial<typeof window.electronAPI>).onAgentTerminalStateChanged
+    if (typeof subscribe !== 'function') return
+    return subscribe(publishTerminalState)
+  }, [publishTerminalState])
+
   const showBrowserPanel = !!browserSessionId && (browserOpenMap.get(browserSessionId) ?? false) && activeView === 'conversations'
   const browserState = browserSessionId ? browserStateMap.get(browserSessionId) ?? null : null
+  // 终端抽屉：仅 agent 会话、打开状态、会话视图下显示（底部弹出，不占用右侧工作区）
+  const terminalSessionId = activeTab?.type === 'agent' ? activeTab.sessionId : null
+
+  // 会话激活时预启动终端（warmup）：后台 spawn shell，用户点开终端面板时
+  // open 复用 running pty + 回放输出缓冲 → 立即显示 prompt（对齐 synara 体验）。
+  // 延迟 400ms 再 spawn：避免快速连续切换 tab 时的 spawn 风暴（切换离开即取消）。
+  React.useEffect(() => {
+    if (!terminalSessionId) return
+    const open = (window.electronAPI as Partial<typeof window.electronAPI>).openAgentTerminal
+    if (typeof open !== 'function') return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      void open({ sessionId: terminalSessionId, instanceId: 0, cols: 80, rows: 24, warmup: true })
+        .catch(() => undefined)
+    }, 400)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [terminalSessionId])
+  const showTerminalPanel = !!terminalSessionId && (terminalOpenMap.get(terminalSessionId) ?? false) && activeView === 'conversations'
   const previewOpen =
     activeTab?.type === 'agent' && (previewOpenMap.get(activeTab.sessionId) ?? false) && !showBrowserPanel
   const previewSessionId = activeTab?.type === 'agent' ? activeTab.sessionId : null
@@ -306,6 +341,16 @@ export function MainArea(): React.ReactElement {
                     <TabContent tabId={deferredActiveTabId} />
                   </div>
                 ) : null}
+                {showTerminalPanel && terminalSessionId && (
+                  <div className="relative shrink-0">
+                    <TerminalPanel
+                      sessionId={terminalSessionId}
+                      onClose={() => {
+                        setTerminalOpenMap((previous) => { const next = new Map(previous); next.delete(terminalSessionId); return next })
+                      }}
+                    />
+                  </div>
+                )}
               </>
             )}
           </div>

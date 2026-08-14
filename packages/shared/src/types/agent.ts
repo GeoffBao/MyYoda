@@ -2312,6 +2312,26 @@ export const AGENT_IPC_CHANNELS = {
   SHOW_IN_FOLDER: 'agent:show-in-folder',
   /** 使用系统终端打开文件夹（仅 macOS） */
   OPEN_FOLDER_IN_TERMINAL: 'agent:open-folder-in-terminal',
+
+  // 内嵌终端（PTY，2026-08-14）
+  /** 打开/创建会话终端（渲染 → 主） */
+  TERMINAL_OPEN: 'agent:terminal:open',
+  /** 写入终端输入（渲染 → 主） */
+  TERMINAL_WRITE: 'agent:terminal:write',
+  /** 调整终端尺寸（渲染 → 主） */
+  TERMINAL_RESIZE: 'agent:terminal:resize',
+  /** 关闭并销毁终端（渲染 → 主） */
+  TERMINAL_CLOSE: 'agent:terminal:close',
+  /** 关闭并销毁会话的全部终端实例（渲染 → 主；面板整体关闭时） */
+  TERMINAL_CLOSE_SESSION: 'agent:terminal:close-session',
+  /** 拉取并清空终端输出缓冲（渲染 → 主；面板挂载时回放预启动期间的历史输出） */
+  TERMINAL_BUFFER: 'agent:terminal:buffer',
+  /** 获取终端状态（渲染 → 主） */
+  TERMINAL_GET_STATE: 'agent:terminal:get-state',
+  /** 终端输出推送（主 → 渲染） */
+  TERMINAL_DATA: 'agent:terminal:data',
+  /** 终端状态变更推送（主 → 渲染；打开/退出/错误） */
+  TERMINAL_STATE_CHANGED: 'agent:terminal:state-changed',
   /** 重命名文件/目录 */
   RENAME_FILE: 'agent:rename-file',
   /** 移动文件/目录到目标目录 */

@@ -2998,3 +2998,20 @@ html.theme-custom body {
     animation-duration: 1.3s !important;
   }
 }
+
+/* ===== 终端运行指示器（synara 风格跳动点） ===== */
+@keyframes terminal-running-dot-blink {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+
+.terminal-running-dot {
+  animation: terminal-running-dot-blink 1.2s ease-in-out infinite;
+}
+
+/* ===== 终端 xterm 滚动条隐藏 =====
+ * xterm 6 右侧自定义滚动条（右下角小方块）；滚动功能保留（滚轮/触摸板），
+ * 对齐 synara/VS Code 终端体验。 */
+.xterm .xterm-scrollable-element > .scrollbar {
+  display: none !important;
+}

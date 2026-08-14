@@ -171,6 +171,7 @@ import type { ExpertManifest, ExpertPackage } from '@myyoda/shared/experts'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { browserController } from './lib/browser-controller'
+import { agentTerminalController } from './lib/agent-terminal'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
 import {
   getUnstagedChanges,
@@ -4364,6 +4365,74 @@ export function registerIpcHandlers(): void {
           resolvePromise()
         })
       })
+    }
+  )
+
+  // ===== 会话内嵌终端（PTY） =====
+  // 所有 Agent 会话可用；cwd 复用 resolveAgentSessionFileRoots（= resolveSessionCwd）：
+  // 绑定 project/worktree 时为其目录，未绑定项目时回退会话沙箱目录，与 Agent 执行上下文一致。
+  // 多终端：terminalId = `<sessionId>#<instanceId>`，实例级操作按 terminalId 路由。
+
+  // 打开（或复用）终端实例
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_OPEN,
+    async (_, input: import('@myyoda/shared').TerminalOpenInput): Promise<import('@myyoda/shared').TerminalViewState> => {
+      const session = getAgentSessionMeta(input.sessionId)
+      if (!session) throw new Error('会话不存在')
+      const ws = session.workspaceId ? getAgentWorkspace(session.workspaceId) : undefined
+      if (!ws) throw new Error('会话未绑定工作区，无法启动终端')
+      const roots = resolveAgentSessionFileRoots(session, ws.slug)
+      const cwd = roots.executionCwd
+      if (!cwd) throw new Error('无法解析会话工作目录')
+      return agentTerminalController.open({ ...input, cwd })
+    }
+  )
+
+  // 写入终端输入
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_WRITE,
+    (_event, input: import('@myyoda/shared').TerminalWriteInput): void => {
+      agentTerminalController.write(input)
+    }
+  )
+
+  // 调整终端尺寸
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_RESIZE,
+    (_event, input: import('@myyoda/shared').TerminalResizeInput): void => {
+      agentTerminalController.resize(input)
+    }
+  )
+
+  // 关闭单个终端实例
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_CLOSE,
+    (_event, input: import('@myyoda/shared').TerminalCloseInput): import('@myyoda/shared').TerminalViewState | null => {
+      return agentTerminalController.close(input)
+    }
+  )
+
+  // 关闭会话全部终端实例（面板整体关闭）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_CLOSE_SESSION,
+    (_event, sessionId: string): void => {
+      agentTerminalController.closeSession(sessionId)
+    }
+  )
+
+  // 拉取并清空输出缓冲（面板挂载时回放预启动期间的历史输出）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_BUFFER,
+    (_event, terminalId: string): string => {
+      return agentTerminalController.drainBuffer(terminalId)
+    }
+  )
+
+  // 获取终端状态
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TERMINAL_GET_STATE,
+    (_event, terminalId: string): import('@myyoda/shared').TerminalViewState | null => {
+      return agentTerminalController.getState(terminalId)
     }
   )
 

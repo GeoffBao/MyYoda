@@ -51,6 +51,8 @@ export const EXTERNAL_RUNTIME_PACKAGES: readonly string[] = [
   'sharp',
   // Repo Map 引擎（build:main 标为 external，运行时 require；同步失败 → 打包版找不到模块）
   'web-tree-sitter',
+  // 会话内嵌终端 PTY 原生模块（build:main external；含 prebuilds/spawn-helper）
+  'node-pty',
 ]
 
 const appDir = resolve(import.meta.dir, '..')

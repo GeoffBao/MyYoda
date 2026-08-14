@@ -440,6 +440,26 @@ export interface ElectronAPI {
   closeAgentBrowser: (sessionId: string) => Promise<void>
   onAgentBrowserStateChanged: (callback: (state: import('@myyoda/shared').BrowserViewState) => void) => () => void
 
+  // ===== 会话内嵌终端（PTY） =====
+  /** 打开（或复用）终端实例 */
+  openAgentTerminal: (input: import('@myyoda/shared').TerminalOpenInput) => Promise<import('@myyoda/shared').TerminalViewState>
+  /** 写入终端输入 */
+  writeAgentTerminal: (input: import('@myyoda/shared').TerminalWriteInput) => Promise<void>
+  /** 调整终端尺寸 */
+  resizeAgentTerminal: (input: import('@myyoda/shared').TerminalResizeInput) => Promise<void>
+  /** 关闭单个终端实例 */
+  closeAgentTerminal: (input: import('@myyoda/shared').TerminalCloseInput) => Promise<import('@myyoda/shared').TerminalViewState | null>
+  /** 关闭会话全部终端实例（面板整体关闭） */
+  closeAgentTerminalSession: (sessionId: string) => Promise<void>
+  /** 拉取并清空终端输出缓冲（面板挂载时回放预启动期间的历史输出） */
+  getAgentTerminalBuffer: (terminalId: string) => Promise<string>
+  /** 获取终端状态 */
+  getAgentTerminalState: (terminalId: string) => Promise<import('@myyoda/shared').TerminalViewState | null>
+  /** 订阅终端输出（onData 推送） */
+  onAgentTerminalData: (callback: (event: import('@myyoda/shared').TerminalDataEvent) => void) => () => void
+  /** 订阅终端状态变更（打开/退出/错误） */
+  onAgentTerminalStateChanged: (callback: (event: import('@myyoda/shared').TerminalStateEvent) => void) => () => void
+
   // ===== 通用工具 =====
 
   /** 在系统默认浏览器中打开外部链接 */
@@ -1865,6 +1885,39 @@ const electronAPI: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, state: import('@myyoda/shared').BrowserViewState) => callback(state)
     ipcRenderer.on(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
     return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
+  },
+
+  // 会话内嵌终端（PTY）
+  openAgentTerminal: (input: import('@myyoda/shared').TerminalOpenInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_OPEN, input) as Promise<import('@myyoda/shared').TerminalViewState>
+  },
+  writeAgentTerminal: (input: import('@myyoda/shared').TerminalWriteInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_WRITE, input) as Promise<void>
+  },
+  resizeAgentTerminal: (input: import('@myyoda/shared').TerminalResizeInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_RESIZE, input) as Promise<void>
+  },
+  closeAgentTerminal: (input: import('@myyoda/shared').TerminalCloseInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_CLOSE, input) as Promise<import('@myyoda/shared').TerminalViewState | null>
+  },
+  closeAgentTerminalSession: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_CLOSE_SESSION, sessionId) as Promise<void>
+  },
+  getAgentTerminalBuffer: (terminalId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_BUFFER, terminalId) as Promise<string>
+  },
+  getAgentTerminalState: (terminalId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TERMINAL_GET_STATE, terminalId) as Promise<import('@myyoda/shared').TerminalViewState | null>
+  },
+  onAgentTerminalData: (callback: (event: import('@myyoda/shared').TerminalDataEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: import('@myyoda/shared').TerminalDataEvent) => callback(data)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.TERMINAL_DATA, listener)
+    return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.TERMINAL_DATA, listener)
+  },
+  onAgentTerminalStateChanged: (callback: (event: import('@myyoda/shared').TerminalStateEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: import('@myyoda/shared').TerminalStateEvent) => callback(data)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.TERMINAL_STATE_CHANGED, listener)
+    return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.TERMINAL_STATE_CHANGED, listener)
   },
 
   // 通用工具

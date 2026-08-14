@@ -10,7 +10,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
-import { Globe2, PanelRight } from 'lucide-react'
+import { Globe2, PanelRight, SquareTerminal } from 'lucide-react'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -46,7 +46,8 @@ import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
 // 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
 import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
-// 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
+// 终端入口：所有 Agent 会话开放（warmup 预启动 + 多实例）。
+import { terminalPanelOpenMapAtom } from '@/atoms/terminal-atoms'
 
 /**
  * macOS 原生全屏检测（非 HTML fullscreen，而是 Electron 原生全屏）。
@@ -271,12 +272,15 @@ function TabBarInner({
     : undefined
   const showBrowserButton = Boolean(activeAgentSession)
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
+  // 终端对所有 Agent 会话开放；cwd 由主进程 resolveSessionCwd 解析（project/worktree/沙箱回退）
+  const showTerminalButton = Boolean(activeAgentSession)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
+  const [terminalOpenMap, setTerminalOpenMap] = useAtom(terminalPanelOpenMapAtom)
   const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
-  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton, showBrowserButton)
+  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton, showBrowserButton, showTerminalButton)
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
@@ -296,6 +300,19 @@ function TabBarInner({
     setBrowserStateMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, state); return next })
     setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, true); return next })
   }, [activeAgentSession, setBrowserOpenMap, setBrowserStateMap])
+
+  // 终端按钮：点击打开面板；再点一次收起（VS Code 式折叠：pty 保留，重开零延迟）。
+  // 彻底销毁请用面板右上角 X（或关闭会话 tab）。
+  const openTerminal = React.useCallback(() => {
+    if (!activeAgentSession) return
+    const sessionId = activeAgentSession.id
+    if (terminalOpenMap.get(sessionId) === true) {
+      setTerminalOpenMap((previous) => { const next = new Map(previous); next.delete(sessionId); return next })
+    } else {
+      // 面板挂载后由 TerminalViewport 内部完成 open IPC（先订阅再 spawn，避免丢输出）
+      setTerminalOpenMap((previous) => { const next = new Map(previous); next.set(sessionId, true); return next })
+    }
+  }, [activeAgentSession, setTerminalOpenMap, terminalOpenMap])
 
   React.useEffect(() => {
     const sessionId = activeAgentSession?.id ?? null
@@ -512,7 +529,10 @@ function TabBarInner({
       <ShortcutGuideButton
         positionClassName={actionLayout.shortcutPositionClassName}
         showBrowserButton={showBrowserButton}
+        showTerminalButton={showTerminalButton}
+        isTerminalOpen={activeAgentSession ? terminalOpenMap.get(activeAgentSession.id) === true : false}
         onOpenBrowser={openBrowser}
+        onOpenTerminal={openTerminal}
       />
 
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
@@ -527,11 +547,17 @@ function TabBarInner({
 function ShortcutGuideButton({
   positionClassName,
   showBrowserButton,
+  showTerminalButton,
+  isTerminalOpen,
   onOpenBrowser,
+  onOpenTerminal,
 }: {
   positionClassName: string
   showBrowserButton: boolean
+  showTerminalButton: boolean
+  isTerminalOpen: boolean
   onOpenBrowser: () => void
+  onOpenTerminal: () => void
 }): React.ReactElement {
   if (!showBrowserButton) return <></>
   return (
@@ -541,6 +567,25 @@ function ShortcutGuideButton({
         positionClassName,
       )}
     >
+      {showTerminalButton && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn('h-7 w-7', isTerminalOpen && 'bg-accent text-accent-foreground')}
+              onClick={() => void onOpenTerminal()}
+            >
+              <SquareTerminal className="size-3.5" />
+              <span className="sr-only">打开终端</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{isTerminalOpen ? '关闭终端' : '打开终端'}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

@@ -118,6 +118,11 @@ export function useCloseTab(): UseCloseTabReturn {
           next.delete(closingTab.sessionId)
           return next
         })
+        // 关闭会话 Tab 时销毁该会话的后台终端 pty（warmup 预启动的 shell）
+        const closeTerminalSession = (window.electronAPI as Partial<typeof window.electronAPI>).closeAgentTerminalSession
+        if (typeof closeTerminalSession === 'function') {
+          void closeTerminalSession(closingTab.sessionId).catch(() => undefined)
+        }
         // atomFamily 按 string key 强引用缓存。关闭 Tab 不清除运行态 base map，
         // 以免后台 Agent 失去状态；但释放派生 atom 实例，避免频繁打开历史会话长期累积。
         agentSessionStreamingStateAtomFamily.remove(closingTab.sessionId)
