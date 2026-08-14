@@ -1059,6 +1059,21 @@ export interface ElectronAPI {
   /** 获取所有待处理的交互请求快照（渲染进程重载后恢复状态） */
   getPendingRequests: () => Promise<PendingRequestsSnapshot>
 
+  // ===== 代码图谱工具（repo map + Graphify） =====
+
+  /** 查询图谱工具状态（纯读） */
+  getRepoMapToolsState: (cwd: string) => Promise<import('@myyoda/shared').RepoMapToolsState>
+  /** 幂等创建（对话栏按钮唯一主动入口） */
+  ensureRepoMapTools: (cwd: string) => Promise<import('@myyoda/shared').RepoMapToolsState>
+  /** 订阅状态变更推送（不轮询） */
+  onRepoMapToolsStatus: (callback: (state: import('@myyoda/shared').RepoMapToolsState) => void) => () => void
+  /** 一键安装 graphify（进度经 onRepoMapToolsInstallProgress 推送） */
+  installGraphify: () => Promise<import('@myyoda/shared').RepoMapToolsInstallResult>
+  /** 卸载 graphify */
+  uninstallGraphify: () => Promise<import('@myyoda/shared').RepoMapToolsInstallResult>
+  /** 安装/卸载进度推送（原始输出行） */
+  onRepoMapToolsInstallProgress: (callback: (line: string) => void) => () => void
+
   // ===== Agent 附件 =====
 
   /** 保存文件到 Agent session 工作目录 */
@@ -2681,6 +2696,30 @@ const electronAPI: ElectronAPI = {
   // 待处理请求恢复
   getPendingRequests: () => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_PENDING_REQUESTS)
+  },
+
+  // 代码图谱工具（repo map + Graphify）
+  getRepoMapToolsState: (cwd: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_GET_STATE, cwd)
+  },
+  ensureRepoMapTools: (cwd: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_ENSURE, cwd)
+  },
+  onRepoMapToolsStatus: (callback: (state: import('@myyoda/shared').RepoMapToolsState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: import('@myyoda/shared').RepoMapToolsState): void => callback(state)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_STATUS, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_STATUS, listener) }
+  },
+  installGraphify: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_INSTALL)
+  },
+  uninstallGraphify: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_UNINSTALL)
+  },
+  onRepoMapToolsInstallProgress: (callback: (line: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, line: string): void => callback(line)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_INSTALL_PROGRESS, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_INSTALL_PROGRESS, listener) }
   },
 
   // 工作区文件变化通知

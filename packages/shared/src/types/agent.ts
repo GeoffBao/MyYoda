@@ -2335,6 +2335,20 @@ export const AGENT_IPC_CHANNELS = {
   // 待处理请求恢复（渲染进程重载后查询主进程状态）
   /** 获取所有待处理的交互请求快照 */
   GET_PENDING_REQUESTS: 'agent:get-pending-requests',
+
+  // 代码图谱工具（repo map + Graphify，2026-08-13）
+  /** 查询图谱工具状态（渲染进程 → 主进程） */
+  REPO_MAP_TOOLS_GET_STATE: 'agent:repo-map-tools:get-state',
+  /** 幂等创建（对话栏按钮唯一主动入口；渲染进程 → 主进程） */
+  REPO_MAP_TOOLS_ENSURE: 'agent:repo-map-tools:ensure',
+  /** 状态变更推送（主进程 → 渲染进程，不轮询） */
+  REPO_MAP_TOOLS_STATUS: 'agent:repo-map-tools:status',
+  /** 一键安装 graphify（渲染进程 → 主进程；进度经 REPO_MAP_TOOLS_INSTALL_PROGRESS 推送） */
+  REPO_MAP_TOOLS_INSTALL: 'agent:repo-map-tools:install',
+  /** 卸载 graphify（渲染进程 → 主进程） */
+  REPO_MAP_TOOLS_UNINSTALL: 'agent:repo-map-tools:uninstall',
+  /** 安装/卸载进度推送（主进程 → 渲染进程） */
+  REPO_MAP_TOOLS_INSTALL_PROGRESS: 'agent:repo-map-tools:install-progress',
 } as const
 
 /**
@@ -2347,4 +2361,33 @@ export interface PendingRequestsSnapshot {
   askUsers: AskUserRequest[]
   /** 待处理的 ExitPlanMode 请求 */
   exitPlans: ExitPlanModeRequest[]
+}
+
+// ===== 代码图谱工具（repo map + Graphify，2026-08-13） =====
+
+/** 图谱工具状态机 */
+export type RepoMapToolsStatus = 'idle' | 'running' | 'done' | 'failed' | 'unavailable'
+
+/** 图谱工具状态（按主仓库） */
+export interface RepoMapToolsState {
+  /** 整体状态 */
+  status: RepoMapToolsStatus
+  /** repo map 已就绪（主仓库 .git/repo-map/maps/ 有缓存或内存命中） */
+  mapReady: boolean
+  /** Graphify 图谱已就绪（主仓库 graphify-out/graph.json 存在） */
+  graphReady: boolean
+  /** graphify 命令可用 */
+  graphifyInstalled: boolean
+  /** 主仓库路径（worktree 会话解析到真实仓库根；非 git 为 undefined） */
+  mainRepo?: string
+  /** 失败信息（status=failed/unavailable 时） */
+  error?: string
+  /** 进行中阶段描述（status=running 时） */
+  progress?: string
+}
+
+/** graphify 安装/卸载结果 */
+export interface RepoMapToolsInstallResult {
+  ok: boolean
+  error?: string
 }

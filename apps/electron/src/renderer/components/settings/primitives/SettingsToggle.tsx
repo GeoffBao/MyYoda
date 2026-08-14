@@ -5,22 +5,26 @@
  * 用于布尔值设置项。
  */
 
-import * as React from 'react'
-import { Switch } from '@/components/ui/switch'
-import { LABEL_CLASS, DESCRIPTION_CLASS, ROW_CLASS } from './SettingsUIConstants'
-import { cn } from '@/lib/utils'
+import * as React from "react";
+import { Switch } from "@/components/ui/switch";
+import {
+  LABEL_CLASS,
+  DESCRIPTION_CLASS,
+  ROW_CLASS,
+} from "./SettingsUIConstants";
+import { cn } from "@/lib/utils";
 
 interface SettingsToggleProps {
   /** 标签文本 */
-  label: string
-  /** 描述文本（可选） */
-  description?: string
+  label: string;
+  /** 描述文本或节点（可选，支持多行分类说明） */
+  description?: React.ReactNode;
   /** 是否选中 */
-  checked: boolean
+  checked: boolean;
   /** 变更回调 */
-  onCheckedChange: (checked: boolean) => void
+  onCheckedChange: (checked: boolean) => void;
   /** 是否禁用 */
-  disabled?: boolean
+  disabled?: boolean;
 }
 
 export function SettingsToggle({
@@ -35,7 +39,7 @@ export function SettingsToggle({
       <div className="flex-1 min-w-0 mr-4">
         <div className={LABEL_CLASS}>{label}</div>
         {description && (
-          <div className={cn(DESCRIPTION_CLASS, 'mt-0.5')}>{description}</div>
+          <div className={cn(DESCRIPTION_CLASS, "mt-0.5")}>{description}</div>
         )}
       </div>
       <Switch
@@ -44,5 +48,5 @@ export function SettingsToggle({
         disabled={disabled}
       />
     </div>
-  )
+  );
 }

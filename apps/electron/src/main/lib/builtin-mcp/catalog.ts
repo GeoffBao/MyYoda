@@ -8,7 +8,6 @@
  */
 
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
-import { spawnSync } from 'node:child_process'
 import { getToolCredentials, getToolState } from '../chat-tool-config'
 import { getBuiltinMcpDefinitions, type BuiltinMcpDefinition } from './baseline'
 import { isBuiltinMcpDefaultDisabled, isBuiltinMcpUserEnabled } from './settings'
@@ -59,40 +58,7 @@ function resolveAvailability(
     }
   }
 
-  if (item.id === 'code-review-graph') {
-    const available = isCommandAvailable('code-review-graph')
-    return {
-      enabled: true,
-      available,
-      availabilityReason: available
-        ? undefined
-        : '需要安装 code-review-graph：把此提示发给 Agent，让 AI 帮你安装并验证；或手动 pip install code-review-graph。首次使用请在**主仓库根**运行 code-review-graph build（worktree 会话共享同一图谱，避免每个 worktree 重复建图）',
-    }
-  }
-
   return { enabled: true, available: true }
-}
-
-// ===== 命令可用性检测（供依赖外部命令的内置 MCP 使用） =====
-
-const commandAvailabilityCache = new Map<string, { available: boolean; checkedAt: number }>()
-const COMMAND_CHECK_TTL_MS = 30_000
-
-/** 检测命令是否可用（PATH 解析 + 版本探测），结果短时缓存避免频繁 spawn */
-function isCommandAvailable(command: string): boolean {
-  const now = Date.now()
-  const cached = commandAvailabilityCache.get(command)
-  if (cached && now - cached.checkedAt < COMMAND_CHECK_TTL_MS) return cached.available
-
-  let available = false
-  try {
-    const result = spawnSync(command, ['--version'], { stdio: 'ignore', timeout: 5_000, shell: process.platform === 'win32' })
-    available = result.error === undefined
-  } catch {
-    available = false
-  }
-  commandAvailabilityCache.set(command, { available, checkedAt: now })
-  return available
 }
 
 export function listBuiltinMcpServers(ctx: BuiltinMcpListContext = {}): BuiltinMcpServerSummary[] {

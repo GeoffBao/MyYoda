@@ -143,18 +143,6 @@
       "tools": [
         { "name": "create_task", "description": "创建一个 todo 状态的看板任务，不自动运行。" }
       ]
-    },
-    {
-      "id": "code-review-graph",
-      "name": "code_review_graph",
-      "displayName": "代码库知识图谱",
-      "description": "本地优先的代码智能图谱（code-review-graph，tree-sitter + 知识图谱）：查询调用链/依赖/影响面，用于代码审查与库结构分析。需要先安装 code-review-graph（pip install code-review-graph）并保证命令行可用。",
-      "category": "knowledge",
-      "kind": "internal",
-      "deletable": false,
-      "defaultEnabled": false,
-      "toggleable": true,
-      "tools": [ {"name": "get_minimal_context", "description": "获取超紧凑的代码库上下文（图谱统计/风险/社区）。", "readOnly": true}, {"name": "detect_changes", "description": "检测变更并生成风险评分的审查指引。", "readOnly": true}, {"name": "query_graph", "description": "查询代码关系（调用方/被调用/导入/继承等）。", "readOnly": true}, {"name": "get_impact_radius", "description": "分析改动的影响半径（爆炸半径）。", "readOnly": true}, {"name": "get_review_context", "description": "生成聚焦的代码审查上下文。", "readOnly": true} ]
     }
   ]
 }

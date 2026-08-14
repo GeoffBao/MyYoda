@@ -31,15 +31,37 @@ describe('repo-map vendor smoke', () => {
     expect(map).toContain('├──')
   })
 
-  test('maxLines 极小时降级为文件列表', async () => {
+  test('maxLines 极小时降级为目录树（2026-08-13：平铺路径列表 → 目录树）', async () => {
     const map = await getRepoMap(sampleDir, {
       maxLines: 3,
       excludePatterns: [],
     })
 
-    // 文件数 > maxLines 时只列文件名
-    expect(map.split('\n').length).toBeLessThanOrEqual(4)
+    // 文件数 > maxLines 时输出目录树：目录行含 "(N files)"，且含重点文件段
+    expect(map).toContain('files)')
+    expect(map).toContain('重点文件')
   })
+
+  test('大仓库目录树：多级目录聚合 + Top 符号', async () => {
+    // packages/shared/src 多子目录（utils/types/tasks/projects/experts）触发目录树分支
+    const sharedSrc = path.join(workspaceRoot, 'packages', 'shared', 'src')
+    const map = await getRepoMap(sharedSrc, {
+      maxLines: 40,
+      excludePatterns: [
+        'node_modules/**',
+        'dist/**',
+        '.git/**',
+        '**/*.test.ts',
+        '**/__tests__/**',
+      ],
+    })
+
+    expect(map.length).toBeGreaterThan(100)
+    // 目录树特征：缩进目录行 + 文件计数
+    expect(map).toContain('files)')
+    // Top 符号段特征
+    expect(map).toContain('重点文件')
+  }, 30_000)
 
   test('mention 感知：提到标识符后地图仍可生成', async () => {
     const map = await getRepoMap(sampleDir, {

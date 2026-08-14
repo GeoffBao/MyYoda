@@ -18,7 +18,7 @@ version: "1.0.0"
 ### 1. 理解改动
 - 获取 diff（`git diff` / `git show` / PR 变更文件）
 - 明确改动意图：改了什么、为什么改、影响哪些调用方
-- 用 code_review_graph（如可用）查影响面：`detect_changes` / `get_impact_radius`
+- 用 graphify 知识图谱（如已构建）查影响面：`graphify explain <文件> --graph <主仓库>/graphify-out/graph.json`（行号级依赖关系 + 置信标签）
 
 ### 2. 分轴审查（对照本仓库规范）
 | 轴 | 检查点 |

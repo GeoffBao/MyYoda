@@ -434,6 +434,9 @@ export interface AppSettings {
   optimizedCoding?: boolean
   /** Coding 模式（遗留字段，兼容读取：optimizedCoding 未设置时回退到此值） */
   codingMode?: boolean
+  /** 代码图谱工具开关（repo map 注入 + Graphify 知识图谱，2026-08-13）：
+   * 默认关闭；首次创建仅由对话栏按钮主动触发；关闭只停注入不删产物 */
+  repoMapTools?: boolean
   /** Agent 最大预算（美元/次） */
   agentMaxBudgetUsd?: number
   /** Agent 最大轮次（0 或 undefined = SDK 默认） */

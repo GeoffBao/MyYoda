@@ -15,7 +15,6 @@
 import { execSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { getRepoMap } from './vendor/src/index'
@@ -70,21 +69,50 @@ interface CachedMapEntry {
  * 地图盘上缓存（跨进程/会话共享）：同一仓库的多个 worktree 会话（同 HEAD）复用同一份 map，
  * 避免每个会话各自全量扫描（解析 3 万符号 ~25-36s/次 → N 会话卡顿）。
  * - key = git HEAD（HEAD 变化 → 不同文件，自然失效）
- * - 文件：~/.myyoda/cache/repo-map/maps/<sha1(key)>.map
+ * - 存储位置（方案 B 2026-08-13）：**主仓库** `.git/repo-map/maps/<sha1(key)>.map`
+ *   （worktree 经 --git-common-dir 解析主仓库，所有 worktree 共享；
+ *   **非 git 目录不落盘**——严格不支持，无全局回退；旧全局缓存忽略不迁移）
  * - 安全写：唯一 tmp + 目录锁（与符号缓存同款并发保护）
  */
-const MAPS_CACHE_DIR = path.join(os.homedir(), '.myyoda', 'cache', 'repo-map', 'maps')
 /** 盘上 map 数量上限（LRU 按 mtime 淘汰，防无界膨胀） */
 const MAX_MAP_CACHE_FILES = 200
+
+/** 解析主仓库的 maps 缓存目录；非 git 目录返回 undefined（不落盘） */
+const mapCacheDirCache = new Map<string, { dir: string | undefined; at: number }>()
+const MAP_CACHE_DIR_TTL_MS = 30_000
+
+function mapCacheDirFor(cwd: string): string | undefined {
+  const now = Date.now()
+  const hit = mapCacheDirCache.get(cwd)
+  if (hit && now - hit.at < MAP_CACHE_DIR_TTL_MS) return hit.dir
+  let dir: string | undefined
+  try {
+    const common = execSync('git rev-parse --path-format=absolute --git-common-dir', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5_000,
+    }).trim()
+    if (common) dir = path.join(path.dirname(common), '.git', 'repo-map', 'maps')
+  } catch {
+    dir = undefined
+  }
+  // 简单 LRU 防多项目长进程无界增长
+  if (mapCacheDirCache.size > 200) mapCacheDirCache.clear()
+  mapCacheDirCache.set(cwd, { dir, at: now })
+  return dir
+}
 
 function mapCacheKeyFor(cwd: string, head: string | undefined): string {
   // 同 HEAD 的所有 worktree/主仓库共享一份 map；非 git 目录退化为 cwd
   return head ?? cwd
 }
 
-function mapCacheFileFor(key: string): string {
+function mapCacheFileFor(key: string, cwd: string): string | undefined {
+  const dir = mapCacheDirFor(cwd)
+  if (!dir) return undefined
   const hash = createHash('sha1').update(key).digest('hex')
-  return path.join(MAPS_CACHE_DIR, `${hash}.map`)
+  return path.join(dir, `${hash}.map`)
 }
 
 /**
@@ -166,7 +194,7 @@ export class RepoMapService {
     }
 
     // 盘上缓存（其他进程/会话生成过）：命中回填内存并直接返回，跳过全量扫描
-    const disk = this.loadMapFromDisk(key)
+    const disk = this.loadMapFromDisk(key, cwd)
     if (disk !== undefined) {
       this.mapCache.set(key, { head, map: disk, generatedAt: Date.now() })
       this.recordRecentMap(cwd, head, disk)
@@ -214,6 +242,18 @@ export class RepoMapService {
     ])
   }
 
+  /**
+   * 纯读获取地图（供 prompt 注入，设计决策 2026-08-13「首次创建仅主动」）：
+   * 只读缓存（内存 + 盘上 + SWR 旧图兜底），**不触发生成**——无缓存返回 undefined。
+   * SWR 分支保留：HEAD 变化但有最近地图 → 后台重扫（被动差异同步）+ 返回旧图。
+   * 注入链路必须用本方法，防止会话消息被动创建（创建入口只有对话栏按钮）。
+   */
+  getRepoMapForPromptReadOnly(cwd: string): string | undefined {
+    if (!cwd || !this.isSuitableDirectory(cwd)) return undefined
+    if (this.isInCooldown(cwd)) return undefined
+    return this.getCachedMap(cwd)
+  }
+
   /** 后台预热（fire-and-forget），不阻塞调用方。 */
   warmUp(cwd: string, mention?: RepoMapMentionContext): void {
     if (!cwd || !this.isSuitableDirectory(cwd)) return
@@ -233,7 +273,7 @@ export class RepoMapService {
     if (exact && (head === undefined || head === exact.head)) {
       return exact.map
     }
-    const disk = this.loadMapFromDisk(key)
+    const disk = this.loadMapFromDisk(key, cwd)
     if (disk !== undefined) {
       this.mapCache.set(key, { head, map: disk, generatedAt: Date.now() })
       this.recordRecentMap(cwd, head, disk)
@@ -288,7 +328,7 @@ export class RepoMapService {
       this.recordRecentMap(cwd, head, map)
       // 无 mention 聚焦的结果才落盘（聚焦版会因对话上下文变化而不同，落盘会污染共享缓存）
       if (!mention?.mentionedFiles?.size && !mention?.mentionedIdents?.size) {
-        this.saveMapToDisk(key, map)
+        this.saveMapToDisk(key, map, cwd)
       }
       this.cooldownUntil.delete(cwd)
       console.log(`[RepoMap] 已生成代码地图 ${cwd} (${map.length} chars, ${this.mapCache.size} 个目录缓存, key=${key.slice(0, 12)})`)
@@ -317,9 +357,10 @@ export class RepoMapService {
   }
 
   /** 读盘上 map 缓存（跨进程共享）；不存在/过短返回 undefined */
-  private loadMapFromDisk(key: string): string | undefined {
+  private loadMapFromDisk(key: string, cwd: string): string | undefined {
+    const file = mapCacheFileFor(key, cwd)
+    if (!file) return undefined
     try {
-      const file = mapCacheFileFor(key)
       const raw = fs.readFileSync(file, 'utf-8')
       if (!raw || raw.length < 120) return undefined
       return raw
@@ -329,10 +370,13 @@ export class RepoMapService {
   }
 
   /** 安全写盘上 map 缓存（唯一 tmp + 目录锁；锁残留 >10s 自愈）；LRU 清理旧文件 */
-  private saveMapToDisk(key: string, map: string): void {
+  private saveMapToDisk(key: string, map: string, cwd: string): void {
+    const target = mapCacheFileFor(key, cwd)
+    if (!target) return
+    const dir = mapCacheDirFor(cwd)
+    if (!dir) return
     try {
-      fs.mkdirSync(MAPS_CACHE_DIR, { recursive: true })
-      const target = mapCacheFileFor(key)
+      fs.mkdirSync(dir, { recursive: true })
       const lock = `${target}.lock`
       let acquired = false
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -357,22 +401,22 @@ export class RepoMapService {
       } finally {
         fs.rmdirSync(lock)
       }
-      this.trimMapDiskCache()
+      this.trimMapDiskCache(dir)
     } catch {
       // 盘上缓存失败不影响主流程
     }
   }
 
   /** 盘上 map LRU：超过上限按 mtime 淘汰最旧 */
-  private trimMapDiskCache(): void {
+  private trimMapDiskCache(dir: string): void {
     try {
-      const files = fs.readdirSync(MAPS_CACHE_DIR)
+      const files = fs.readdirSync(dir)
         .filter((name) => name.endsWith('.map'))
-        .map((name) => ({ name, mtime: fs.statSync(path.join(MAPS_CACHE_DIR, name)).mtimeMs }))
+        .map((name) => ({ name, mtime: fs.statSync(path.join(dir, name)).mtimeMs }))
         .sort((a, b) => a.mtime - b.mtime)
       while (files.length > MAX_MAP_CACHE_FILES) {
         const oldest = files.shift()
-        if (oldest) fs.rmSync(path.join(MAPS_CACHE_DIR, oldest.name), { force: true })
+        if (oldest) fs.rmSync(path.join(dir, oldest.name), { force: true })
       }
     } catch {
       // ignore

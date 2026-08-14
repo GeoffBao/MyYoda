@@ -17,7 +17,7 @@ import * as React from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Box, CornerDownLeft, Square, Settings, X, Copy, Check, Brain, Sparkles, ChevronDown, ListTodo, Paperclip, UserPlus } from 'lucide-react'
+import { Box, CornerDownLeft, Square, Settings, X, Copy, Check, Brain, Sparkles, ChevronDown, ListTodo, Paperclip, UserPlus, Network, Loader2 } from 'lucide-react'
 import { AgentMessages } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { CoworkTeamStrip } from './CoworkTeamStrip'
@@ -109,7 +109,7 @@ import {
 } from '@/atoms/agent-atoms'
 import type { AgentContextStatus } from '@/atoms/agent-atoms'
 import { projectOnboardingSessionIdsAtom } from '@/atoms/project-onboarding-atoms'
-import { settingsOpenAtom } from '@/atoms/settings-tab'
+import { repoMapToolsAtom, settingsOpenAtom } from '@/atoms/settings-tab'
 import { longTextPasteAsAttachmentEnabledAtom } from '@/atoms/ui-preferences'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
@@ -398,6 +398,57 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       .catch(() => { if (!cancelled) setSessionFileRoots(null) })
     return () => { cancelled = true }
   }, [currentWorkspaceId, sessionId, sessionMeta?.projectId])
+  // ===== 代码图谱工具（repo map + Graphify，2026-08-13） =====
+  const [repoMapToolsEnabled, setRepoMapToolsEnabled] = useAtom(repoMapToolsAtom)
+  const [repoMapToolsState, setRepoMapToolsState] = React.useState<import('@myyoda/shared').RepoMapToolsState | null>(null)
+  const repoMapToolsCwd = sessionFileRoots?.executionCwd
+
+  // 读开关（写入共享 atom，与设置页联动）+ 订阅状态推送
+  React.useEffect(() => {
+    window.electronAPI.getSettings().then((s) => {
+      setRepoMapToolsEnabled(s.repoMapTools ?? false)
+    }).catch(() => { /* ignore */ })
+    return window.electronAPI.onRepoMapToolsStatus((state) => {
+      setRepoMapToolsState(state)
+    })
+  }, [setRepoMapToolsEnabled])
+
+  // cwd 变化时查询状态（纯读）
+  React.useEffect(() => {
+    if (!repoMapToolsCwd) {
+      setRepoMapToolsState(null)
+      return
+    }
+    let cancelled = false
+    window.electronAPI.getRepoMapToolsState(repoMapToolsCwd)
+      .then((state) => { if (!cancelled) setRepoMapToolsState(state) })
+      .catch(() => { if (!cancelled) setRepoMapToolsState(null) })
+    return () => { cancelled = true }
+  }, [repoMapToolsCwd, sessionId])
+
+  /** 图谱按钮点击：关→开+首建 / done→rebuild / failed→重试 / running→忽略 / unavailable→跳设置 */
+  const handleRepoMapToolsClick = React.useCallback(() => {
+    const state = repoMapToolsState
+    if (!repoMapToolsEnabled) {
+      setRepoMapToolsEnabled(true)
+      void window.electronAPI.updateSettings({ repoMapTools: true }).catch((error) => {
+        console.warn('[AgentView] 开启代码图谱失败:', error)
+        setRepoMapToolsEnabled(false)
+      })
+      if (repoMapToolsCwd) {
+        void window.electronAPI.ensureRepoMapTools(repoMapToolsCwd).then(setRepoMapToolsState).catch(() => { /* ignore */ })
+      }
+      return
+    }
+    if (!repoMapToolsCwd) return
+    if (state?.status === 'running') return
+    if (state?.status === 'unavailable') {
+      setSettingsOpen(true)
+      return
+    }
+    // done → rebuild；failed → 重试；idle → 首建
+    void window.electronAPI.ensureRepoMapTools(repoMapToolsCwd).then(setRepoMapToolsState).catch(() => { /* ignore */ })
+  }, [repoMapToolsEnabled, repoMapToolsState, repoMapToolsCwd, setSettingsOpen])
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const [queuedMessages, setQueuedMessages] = useAtom(agentMessageQueueAtomFamily(sessionId))
@@ -2685,6 +2736,52 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         </Tooltip>
       ),
     },
+    ...(repoMapToolsEnabled ? [{
+      key: 'repo-map-tools',
+      node: (() => {
+        const state = repoMapToolsState
+        const isRunning = state?.status === 'running'
+        const isDone = state?.status === 'done'
+        const isFailed = state?.status === 'failed'
+        const isUnavailable = state?.status === 'unavailable'
+        const iconClass = isDone
+          ? 'text-emerald-500'
+          : isFailed
+            ? 'text-red-500'
+            : isUnavailable
+              ? 'text-foreground/40'
+              : 'text-foreground/60'
+        const tooltip = isRunning
+          ? `创建中… ${state?.progress ?? ''}`
+          : isDone
+            ? '图谱已就绪（点击重建）'
+            : isFailed
+              ? `图谱创建失败（点击重试）${state?.error ? `：${state.error}` : ''}`
+              : isUnavailable
+                ? '当前项目不可用（非 git 或 graphify 未安装），点击前往设置'
+                : '创建代码图谱（repo map + 知识图谱）'
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={inputToolbarButtonClass}
+                onClick={handleRepoMapToolsClick}
+                aria-label="代码图谱"
+                aria-pressed={isDone}
+              >
+                {isRunning
+                  ? <Loader2 className="size-[17px] animate-spin" />
+                  : <Network className={`size-[17px] ${iconClass}`} />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top"><p>{tooltip}</p></TooltipContent>
+          </Tooltip>
+        )
+      })(),
+    }] : []),
     ...(isCodexFastModeAvailable ? [{
       key: 'codex-fast-mode',
       kind: 'context' as const,
@@ -2790,6 +2887,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     handleAttachContent,
     handleCompact,
     agentVoiceInputId,
+    repoMapToolsEnabled,
+    repoMapToolsState,
+    handleRepoMapToolsClick,
   ])
 
   const stopControl = (
