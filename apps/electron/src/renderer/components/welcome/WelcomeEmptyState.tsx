@@ -28,10 +28,10 @@ import {
 } from 'lucide-react'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { appModeAtom } from '@/atoms/app-mode'
-import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
+import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { normalizeAppModeForUi, type PrimaryUiMode } from '@/components/app-shell/code-main-view-model'
 import { ProjectContextPicker } from '@/components/app-shell/ProjectContextPicker'
-import { useBindSessionProject } from '@/hooks/useBindSessionProject'
+import { useBindSessionWorkspace } from '@/hooks/useBindSessionWorkspace'
 import { getPlatform, type Platform } from '@/lib/tips'
 import welcomeHeroUrl from '@/assets/brand/welcome-hero.avif'
 import spidermanHeroUrl from '@/assets/brand/spiderman-hero.avif'
@@ -77,25 +77,25 @@ function getGuideItems(uiMode: PrimaryUiMode, platform: Platform): GuideItem[] {
 }
 
 export interface WelcomeEmptyStateProps {
-  /** Agent 模式当前草稿会话 ID；用于问候语里内联的项目切换器改绑项目 */
+  /** Agent 模式当前草稿会话 ID；用于问候语里内联的工作区切换器改绑归属 */
   sessionId?: string
-  /** 当前草稿会话已绑定的 Project ID */
-  projectId?: string
+  /** 当前草稿会话归属的工作区 ID */
+  workspaceId?: string
 }
 
-export function WelcomeEmptyState({ sessionId, projectId }: WelcomeEmptyStateProps = {}): React.ReactElement {
+export function WelcomeEmptyState({ sessionId, workspaceId }: WelcomeEmptyStateProps = {}): React.ReactElement {
   const userProfile = useAtomValue(userProfileAtom)
   const mode = useAtomValue(appModeAtom)
   const uiMode = normalizeAppModeForUi(mode)
   const platform = getPlatform()
-  const projects = useAtomValue(serverKanbanProjectsAtom)
-  const bindProject = useBindSessionProject(sessionId ?? '')
+  const workspaces = useAtomValue(agentWorkspacesAtom)
+  const bindWorkspace = useBindSessionWorkspace(sessionId ?? '')
 
   const hour = new Date().getHours()
   const greeting = getGreeting(hour)
   const displayName = userProfile.userName || '用户'
   const items = getGuideItems(uiMode, platform)
-  const projectName = projectId ? projects.find((project) => project.id === projectId)?.name : undefined
+  const workspaceName = workspaceId ? workspaces.find((workspace) => workspace.id === workspaceId)?.name : undefined
 
   // Chat 模式使用蜘蛛侠 hero 图，Project / Scratch 保持默认 hero 图；布局完全一致
   const heroUrl = uiMode === 'chat' ? spidermanHeroUrl : welcomeHeroUrl
@@ -126,8 +126,8 @@ export function WelcomeEmptyState({ sessionId, projectId }: WelcomeEmptyStatePro
               <ProjectContextPicker
                 mode="session"
                 variant="inline"
-                selectedProjectId={projectId}
-                onSelect={bindProject}
+                selectedWorkspaceId={workspaceId}
+                onSelect={bindWorkspace}
               />
               {' '}
               里，一起做点什么？

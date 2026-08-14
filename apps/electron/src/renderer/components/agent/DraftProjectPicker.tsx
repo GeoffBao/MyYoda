@@ -1,16 +1,17 @@
 /**
- * DraftProjectPicker — Draft 会话首条发送前可选/改绑 Project
+ * DraftProjectPicker — Draft 会话首条发送前可选/改绑工作区（项目=工作区）
  * 复用共享 ProjectContextPicker（session 模式可跳过）
  */
 
 import * as React from 'react'
 import { ProjectContextPicker } from '@/components/app-shell/ProjectContextPicker'
-import { useBindSessionProject } from '@/hooks/useBindSessionProject'
+import { useBindSessionWorkspace } from '@/hooks/useBindSessionWorkspace'
 import { canBindProjectBeforeSend } from './draft-session-lifecycle'
 
 export interface DraftProjectPickerProps {
   sessionId: string
-  projectId?: string
+  /** 会话当前归属的工作区 ID */
+  workspaceId?: string
   isDraft: boolean
   className?: string
   /** 挂载时自动展开一次「新建项目」表单（整个工作区首次建会话的引导） */
@@ -20,21 +21,21 @@ export interface DraftProjectPickerProps {
 
 export function DraftProjectPicker({
   sessionId,
-  projectId,
+  workspaceId,
   isDraft,
   className,
   autoOpenCreate,
   onAutoOpenHandled,
 }: DraftProjectPickerProps): React.ReactElement | null {
-  const bindProject = useBindSessionProject(sessionId)
+  const bindWorkspace = useBindSessionWorkspace(sessionId)
 
-  if (!canBindProjectBeforeSend({ projectId, isDraft })) return null
+  if (!canBindProjectBeforeSend({ projectId: workspaceId, isDraft })) return null
 
   return (
     <ProjectContextPicker
       mode="session"
-      selectedProjectId={projectId}
-      onSelect={bindProject}
+      selectedWorkspaceId={workspaceId}
+      onSelect={bindWorkspace}
       className={className}
       autoOpenCreate={autoOpenCreate}
       onAutoOpenHandled={onAutoOpenHandled}

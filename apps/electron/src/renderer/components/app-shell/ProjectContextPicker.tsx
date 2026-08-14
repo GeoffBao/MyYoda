@@ -1,5 +1,8 @@
 /**
- * ProjectContextPicker — 新会话 / 新任务流内共享的项目上下文选择器
+ * ProjectContextPicker — 新会话 / 新任务流内共享的工作区（项目）上下文选择器
+ *
+ * 对齐 Proma「工作区 = 项目」：选择器展示工作区列表（绑定工程目录的工作区带目录徽标），
+ * 选中即把会话/任务归属到该工作区；动作支持「新建项目（工作区）」「使用现有项目文件夹」。
  */
 
 import * as React from 'react'
@@ -10,6 +13,7 @@ import {
   ChevronDown,
   FolderKanban,
   FolderPlus,
+  FolderOpen,
   Search,
   type LucideIcon,
 } from 'lucide-react'
@@ -20,10 +24,9 @@ import {
   currentAgentWorkspaceIdAtom,
 } from '@/atoms/agent-atoms'
 import { projectContextBrowseRequestAtom } from '@/atoms/project-context-picker'
-import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
+import { LocalProjectBadge } from '@/components/agent-skills/LocalProjectBadge'
 import { cn } from '@/lib/utils'
-import type { KanbanProject } from '@/components/app-shell/kanban/types'
 import {
   buildPickerSections,
   shouldHonorBrowseRequest,
@@ -32,10 +35,10 @@ import {
 
 export interface ProjectContextPickerProps {
   mode: ProjectContextPickerMode
-  /** 当前已绑定项目（session 模式） */
-  selectedProjectId?: string
-  /** 选中/绑定项目；null 表示无项目（仅 session） */
-  onSelect: (projectId: string | null) => void | Promise<void>
+  /** 当前已绑定工作区（session 模式） */
+  selectedWorkspaceId?: string
+  /** 选中/绑定工作区；null 表示不改变归属（仅 session 的「清除」语义，保持当前工作区） */
+  onSelect: (workspaceId: string | null) => void | Promise<void>
   className?: string
   /** 强制展开面板（新任务流对话框） */
   defaultOpen?: boolean
@@ -52,40 +55,12 @@ export interface ProjectContextPickerProps {
   onAutoOpenHandled?: () => void
 }
 
-/** 项目数超过这个数量才显示搜索框——项目少时多一行筛选框纯属噪音 */
+/** 工作区数超过这个数量才显示搜索框——工作区少时多一行筛选框纯属噪音 */
 const SEARCH_THRESHOLD = 8
-
-function toKanbanProject(project: {
-  id: string
-  slug: string
-  name: string
-  description?: string
-  workingDirectory?: string
-  details?: string
-  color?: string
-  updatedAt: number
-  archivedAt?: number
-  defaultExpertId?: string
-  workspaceId?: string
-}): KanbanProject {
-  return {
-    id: project.id,
-    slug: project.slug,
-    name: project.name,
-    description: project.description,
-    workingDirectory: project.workingDirectory,
-    details: project.details,
-    color: project.color,
-    updatedAt: project.updatedAt,
-    archivedAt: project.archivedAt,
-    defaultExpertId: project.defaultExpertId,
-    workspaceId: project.workspaceId,
-  }
-}
 
 export function ProjectContextPicker({
   mode,
-  selectedProjectId,
+  selectedWorkspaceId,
   onSelect,
   className,
   defaultOpen = false,
@@ -94,10 +69,9 @@ export function ProjectContextPicker({
   autoOpenCreate = false,
   onAutoOpenHandled,
 }: ProjectContextPickerProps): React.ReactElement {
-  const projects = useAtomValue(serverKanbanProjectsAtom)
-  const setProjects = useSetAtom(serverKanbanProjectsAtom)
-  const sessions = useAtomValue(agentSessionsAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const setWorkspaces = useSetAtom(agentWorkspacesAtom)
+  const sessions = useAtomValue(agentSessionsAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const browseRequest = useAtomValue(projectContextBrowseRequestAtom)
 
@@ -117,79 +91,86 @@ export function ProjectContextPicker({
     onAutoOpenHandled?.()
   }, [autoOpenCreate, onAutoOpenHandled])
 
-  const workspace = workspaces.find((item) => item.id === currentWorkspaceId) ?? workspaces[0]
+  const currentWorkspace = workspaces.find((item) => item.id === currentWorkspaceId) ?? workspaces[0] ?? null
 
-  const recentProjectIds = React.useMemo(() => {
+  /** 最近活跃的工作区（按会话 updatedAt 推导），排前面 */
+  const recentWorkspaceIds = React.useMemo(() => {
     const ids: string[] = []
     const seen = new Set<string>()
     for (const session of [...sessions].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt))) {
-      const projectId = session.projectId
-      if (!projectId || seen.has(projectId)) continue
-      seen.add(projectId)
-      ids.push(projectId)
+      const workspaceId = session.workspaceId
+      if (!workspaceId || seen.has(workspaceId)) continue
+      seen.add(workspaceId)
+      ids.push(workspaceId)
       if (ids.length >= 5) break
     }
     return ids
   }, [sessions])
 
-  const activeProjects = React.useMemo(
-    () => projects.filter((project) => !project.archivedAt),
-    [projects],
+  const activeWorkspaces = React.useMemo(
+    () => workspaces.slice(),
+    [workspaces],
   )
 
   const sections = React.useMemo(
     () =>
       buildPickerSections({
         mode,
-        projects: activeProjects.map((project) => ({
-          id: project.id,
-          name: project.name,
-          workingDirectory: project.workingDirectory,
-          updatedAt: project.updatedAt ?? 0,
-          archivedAt: project.archivedAt,
+        projects: activeWorkspaces.map((workspace) => ({
+          id: workspace.id,
+          name: workspace.name,
+          workingDirectory: workspace.projectRootPath,
+          updatedAt: workspace.updatedAt ?? 0,
         })),
-        recentProjectIds,
-        selectedProjectId,
+        recentProjectIds: recentWorkspaceIds,
+        selectedProjectId: selectedWorkspaceId,
       }),
-    [mode, activeProjects, recentProjectIds, selectedProjectId],
+    [mode, activeWorkspaces, recentWorkspaceIds, selectedWorkspaceId],
   )
 
   const showSearch = sections.projects.length > SEARCH_THRESHOLD
-  const visibleProjects = React.useMemo(() => {
+  const visibleWorkspaces = React.useMemo(() => {
     if (!showSearch || !filterText.trim()) return sections.projects
     const needle = filterText.trim().toLowerCase()
-    return sections.projects.filter((project) => project.name.toLowerCase().includes(needle))
+    return sections.projects.filter((workspace) => workspace.name.toLowerCase().includes(needle))
   }, [sections.projects, showSearch, filterText])
 
   React.useEffect(() => {
     if (!open) setFilterText('')
   }, [open])
 
-  const selectedName = projects.find((project) => project.id === selectedProjectId)?.name
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
+  const selectedName = selectedWorkspace?.name
 
-  const upsertProject = React.useCallback((project: KanbanProject): void => {
-    setProjects((prev) => {
-      const without = prev.filter((item) => item.id !== project.id)
-      return [project, ...without]
+  const upsertWorkspace = React.useCallback((workspace: { id: string; name: string; slug: string; projectRootPath?: string }): void => {
+    setWorkspaces((prev) => {
+      const without = prev.filter((item) => item.id !== workspace.id)
+      return [{ ...workspace, createdAt: Date.now(), updatedAt: Date.now() }, ...without]
     })
-  }, [setProjects])
+  }, [setWorkspaces])
 
+  /** 使用现有项目文件夹：同名同目录工作区复用（直接切换），否则创建并绑定 */
   const openOrCreateByPath = React.useCallback(async (folderPath: string): Promise<void> => {
-    if (!workspace) {
-      toast.error('请先选择工作区')
-      return
-    }
     setBusy(true)
     try {
-      const workspaceRoot = await window.electronAPI.getWorkspaceRootPath(workspace.slug)
-      const result = await window.electronAPI.projects.openOrCreateByPath(workspaceRoot, folderPath)
-      const kanban = toKanbanProject(result.project)
-      upsertProject(kanban)
-      await onSelect(kanban.id)
-      setOpen(false)
-      if (result.created) {
-        toast.success(`已创建项目「${kanban.name}」`)
+      const existing = workspaces.find((ws) => {
+        if (!ws.projectRootPath) return false
+        const normalize = (p: string): string => p.replace(/[\\/]+$/, '')
+        return normalize(ws.projectRootPath) === normalize(folderPath)
+      })
+      let workspaceId: string
+      if (existing) {
+        workspaceId = existing.id
+        toast.success(`已切换到「${existing.name}」`)
+      } else {
+        const name = folderPath.trim().replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean).pop() ?? '项目'
+        const created = await window.electronAPI.createAgentWorkspace({ name, projectRootPath: folderPath })
+        upsertWorkspace(created)
+        workspaceId = created.id
+        toast.success(`已创建项目「${created.name}」`)
       }
+      await onSelect(workspaceId)
+      setOpen(false)
     } catch (error) {
       console.error('[ProjectContextPicker] 打开路径失败:', error)
       toast.error('打开文件夹失败', {
@@ -198,7 +179,7 @@ export function ProjectContextPicker({
     } finally {
       setBusy(false)
     }
-  }, [onSelect, upsertProject, workspace])
+  }, [onSelect, upsertWorkspace, workspaces])
 
   const handleBrowse = React.useCallback(async (): Promise<void> => {
     try {
@@ -222,23 +203,21 @@ export function ProjectContextPicker({
     void handleBrowse()
   }, [browseRequest, handleBrowse])
 
+  /** 新建项目（工作区）：CreateProjectDialog 已改为创建 AgentWorkspace（可选绑定工程目录） */
   const handleCreate = React.useCallback(async (
-    input: Parameters<typeof window.electronAPI.projects.create>[1],
+    input: { name: string; workingDirectory?: string },
   ): Promise<void> => {
-    if (!workspace) {
-      toast.error('请先选择工作区')
-      return
-    }
     setBusy(true)
     try {
-      const workspaceRoot = await window.electronAPI.getWorkspaceRootPath(workspace.slug)
-      const project = await window.electronAPI.projects.create(workspaceRoot, input)
-      const kanban = toKanbanProject(project)
-      upsertProject(kanban)
+      const workspace = await window.electronAPI.createAgentWorkspace({
+        name: input.name,
+        projectRootPath: input.workingDirectory?.trim() || undefined,
+      })
+      upsertWorkspace(workspace)
       setCreateOpen(false)
-      await onSelect(kanban.id)
+      await onSelect(workspace.id)
       setOpen(false)
-      toast.success(`已创建项目「${kanban.name}」`)
+      toast.success(`已创建项目「${workspace.name}」`)
     } catch (error) {
       console.error('[ProjectContextPicker] 新建项目失败:', error)
       toast.error('创建项目失败', {
@@ -247,12 +226,12 @@ export function ProjectContextPicker({
     } finally {
       setBusy(false)
     }
-  }, [onSelect, upsertProject, workspace])
+  }, [onSelect, upsertWorkspace])
 
-  const handlePick = React.useCallback(async (projectId: string | null): Promise<void> => {
+  const handlePick = React.useCallback(async (workspaceId: string | null): Promise<void> => {
     setBusy(true)
     try {
-      await onSelect(projectId)
+      await onSelect(workspaceId)
       setOpen(false)
     } finally {
       setBusy(false)
@@ -264,13 +243,13 @@ export function ProjectContextPicker({
       className={cn(
         'flex flex-col overflow-hidden rounded-xl border border-border/60 bg-background/95 shadow-lg backdrop-blur-sm',
         // 固定宽度而非跟随触发器宽度百分比：触发器（尤其 inline 变体）宽度随文字内容变化，
-        // 用 100% 算面板宽会导致面板被压得很窄，装不下筛选框/长项目名
+        // 用 100% 算面板宽会导致面板被压得很窄，装不下筛选框/长工作区名
         defaultOpen ? 'w-full' : 'w-[280px]',
       )}
       role="listbox"
-      aria-label="选择项目上下文"
+      aria-label="选择工作区"
     >
-      {/* 项目多起来后才出现的筛选框，项目少的常见场景下不占地方 */}
+      {/* 工作区多起来后才出现的筛选框，常见场景不占地方 */}
       {showSearch && (
         <div className="shrink-0 border-b border-border/40 p-1.5">
           <div className="flex items-center gap-1.5 rounded-lg bg-foreground/[0.04] px-2 py-1">
@@ -279,32 +258,35 @@ export function ProjectContextPicker({
               autoFocus
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="筛选项目…"
+              placeholder="筛选工作区…"
               className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-foreground/35"
             />
           </div>
         </div>
       )}
 
-      {/* 列表：只显示项目名，完整路径进 title（对齐 Cursor/Codex）。
-          最近使用的项目排前面，同一项目只出现一次。 */}
+      {/* 列表：最近活跃的工作区排前面；绑定目录的工作区带「本地项目」徽标 */}
       <div className="max-h-[220px] space-y-2 overflow-y-auto p-1.5">
         <Section title="最近">
-          {visibleProjects.length === 0 ? (
+          {visibleWorkspaces.length === 0 ? (
             <p className="px-2 py-1.5 text-[11px] text-foreground/40">
-              {sections.projects.length === 0 ? '暂无项目' : '没有匹配的项目'}
+              {sections.projects.length === 0 ? '暂无项目，点下方新建' : '没有匹配的工作区'}
             </p>
           ) : (
-            visibleProjects.map((project) => (
-              <PickRow
-                key={project.id}
-                label={project.name}
-                title={project.workingDirectory}
-                active={project.id === selectedProjectId}
-                disabled={busy}
-                onClick={() => { void handlePick(project.id) }}
-              />
-            ))
+            visibleWorkspaces.map((workspace) => {
+              const ws = workspaces.find((candidate) => candidate.id === workspace.id)
+              return (
+                <PickRow
+                  key={workspace.id}
+                  label={workspace.name}
+                  title={workspace.workingDirectory}
+                  badge={ws?.projectRootPath ? '本地项目' : undefined}
+                  active={workspace.id === selectedWorkspaceId}
+                  disabled={busy}
+                  onClick={() => { void handlePick(workspace.id) }}
+                />
+              )
+            })
           )}
         </Section>
       </div>
@@ -317,11 +299,17 @@ export function ProjectContextPicker({
           disabled={busy}
           onClick={() => setCreateOpen(true)}
         />
+        <ActionRow
+          icon={FolderOpen}
+          label="使用现有项目文件夹…"
+          disabled={busy}
+          onClick={() => { void handleBrowse() }}
+        />
         {sections.actions.some((action) => action.id === 'skip') ? (
           <ActionRow
             icon={FolderKanban}
-            label="清除项目"
-            disabled={busy}
+            label="保持当前工作区"
+            disabled={busy || !currentWorkspace}
             onClick={() => { void handlePick(null) }}
           />
         ) : null}
@@ -430,6 +418,7 @@ function Section({
 function PickRow({
   label,
   title,
+  badge,
   active,
   disabled,
   onClick,
@@ -437,6 +426,8 @@ function PickRow({
   label: string
   /** 完整路径等，仅作 tooltip，不占行高 */
   title?: string
+  /** 可选徽标文案（如「本地项目」） */
+  badge?: string
   active?: boolean
   disabled?: boolean
   onClick: () => void
@@ -455,6 +446,9 @@ function PickRow({
     >
       <FolderKanban size={12} className="shrink-0 text-foreground/35" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge ? (
+        <LocalProjectBadge workingDirectory={title} className="bg-foreground/[0.05] text-foreground/40" />
+      ) : null}
       {active ? <Check size={12} className="shrink-0 text-primary" /> : null}
     </button>
   )
