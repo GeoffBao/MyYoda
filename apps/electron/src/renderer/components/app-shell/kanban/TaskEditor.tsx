@@ -492,7 +492,7 @@ export function TaskEditor({
         <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(320px,0.9fr)_minmax(420px,1.4fr)]">
           <section className="space-y-4 overflow-y-auto rounded-2xl bg-card p-4 shadow-sm">
             <div className="space-y-3">
-              <div><h2 className="font-semibold">任务定义</h2><p className="text-xs text-muted-foreground">描述目标，并选择项目与执行策略。</p></div>
+              <div><h2 className="font-semibold">任务定义</h2><p className="text-xs text-muted-foreground">描述目标，并选择归属工作区与执行策略。</p></div>
               <div className="inline-flex w-fit rounded-lg bg-muted/70 p-1">
                 {(['manual', 'generate'] as TaskEditorMode[]).map((value) => (
                   <button

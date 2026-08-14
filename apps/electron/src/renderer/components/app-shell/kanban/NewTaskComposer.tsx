@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { useAtomValue } from 'jotai'
-import { ArrowRight, LoaderCircle, Play, X } from 'lucide-react'
+import { ArrowRight, FolderKanban, LoaderCircle, Play, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
+import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import {
   EMPTY_QUICK_TASK_DRAFT,
   submitQuickTask,
@@ -43,7 +43,7 @@ export function NewTaskComposer({
   onMoreSettings,
   onCreated,
 }: NewTaskComposerProps): React.ReactElement | null {
-  const projects = useAtomValue(serverKanbanProjectsAtom)
+  const workspaces = useAtomValue(agentWorkspacesAtom)
   const [draft, setDraft] = React.useState<QuickTaskDraft>(EMPTY_QUICK_TASK_DRAFT)
   const [submitting, setSubmitting] = React.useState<'create' | 'run' | null>(null)
   const wasOpenRef = React.useRef(false)
@@ -57,9 +57,7 @@ export function NewTaskComposer({
     wasOpenRef.current = open
   }, [initialProjectId, open])
 
-  const scopeName = draft.projectId
-    ? projects.find((project) => project.id === draft.projectId)?.name ?? '所选项目'
-    : 'Workspace'
+  const scopeName = workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? '当前工作区'
 
   const closeAndReset = (): void => {
     setDraft(EMPTY_QUICK_TASK_DRAFT)
@@ -123,18 +121,13 @@ export function NewTaskComposer({
       className="titlebar-no-drag mb-4 rounded-xl border border-border/50 bg-card/80 p-3 shadow-sm"
     >
       <div className="flex items-center gap-2">
-        <select
-          aria-label="任务归属"
-          value={draft.projectId}
-          disabled={submitting !== null}
-          onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value }))}
-          className="h-9 max-w-[200px] rounded-md border border-border/60 bg-background px-2 text-xs font-medium"
+        <span
+          title="快速任务归属当前工作区；需要其他工作区请在完整编辑器里切换"
+          className="inline-flex h-9 max-w-[200px] items-center gap-1.5 rounded-md border border-border/60 bg-background px-2 text-xs font-medium text-foreground/70"
         >
-          <option value="">不绑定项目（工作区级任务）</option>
-          {projects.filter((project) => !project.archivedAt).map((project) => (
-            <option key={project.id} value={project.id}>{project.name}</option>
-          ))}
-        </select>
+          <FolderKanban className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+          <span className="truncate">{scopeName}</span>
+        </span>
         <Input
           autoFocus
           value={draft.title}

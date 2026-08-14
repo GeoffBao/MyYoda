@@ -289,14 +289,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               >
                 <Blocks size={15} className="mt-0.5 shrink-0 text-foreground/45" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">全部项目共享</span>
-                  <span className="block text-[11px] text-muted-foreground">不限定具体项目，这个工作区下所有 Project 都能用</span>
+                  <span className="block truncate font-medium">当前工作区</span>
+                  <span className="block text-[11px] text-muted-foreground">Skills / MCP 作用于当前工作区（项目=工作区）</span>
                 </span>
                 {!selectedProjectId && <Check size={14} className="mt-0.5 shrink-0 text-primary" />}
               </button>
 
               {pickableProjects.length > 0 && (
-                <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/70">项目（只对当前项目生效）</div>
+                <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/70">存量项目（仅对选中项目生效）</div>
               )}
               {pickableProjects.map((project) => (
                 <button
