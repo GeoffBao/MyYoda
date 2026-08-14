@@ -76,6 +76,7 @@ import {
   initializeSessionListPreference,
 } from './atoms/session-list-preference-atoms'
 import { useGlobalAgentListeners } from './hooks/useGlobalAgentListeners'
+import { mergeActiveAgentSessions } from './lib/agent-session-list'
 import { useGlobalChatListeners } from './hooks/useGlobalChatListeners'
 import { tabsAtom, activeTabIdAtom, ensureScratchPadTab, getPersistableTabState, scratchPadContentAtom, scratchPadLoadedAtom, SCRATCH_PAD_ID } from './atoms/tab-atoms'
 import type { TabItem } from './atoms/tab-atoms'
@@ -84,7 +85,7 @@ import { dingtalkBotStatesAtom } from './atoms/dingtalk-atoms'
 import { currentConversationIdAtom, channelsAtom, channelsLoadedAtom, selectedModelAtom } from './atoms/chat-atoms'
 import { chatToolsAtom } from './atoms/chat-tool-atoms'
 import { appModeAtom } from './atoms/app-mode'
-import type { FeishuBotBridgeState, FeishuBridgeState, DingTalkBotBridgeState, DingTalkBridgeState } from '@myyoda/shared'
+import type { AgentSessionMeta, FeishuBotBridgeState, FeishuBridgeState, DingTalkBotBridgeState, DingTalkBridgeState } from '@myyoda/shared'
 import { Toaster } from './components/ui/sonner'
 import { toast } from 'sonner'
 import { ArrowUpRight } from 'lucide-react'
@@ -574,16 +575,25 @@ function UpdaterInitializer(): React.ReactElement | null {
  */
 function AutomationInitializer(): null {
   const setAutomations = useSetAtom(automationsAtom)
+function AutomationInitializer(): null {
+  const setAutomations = useSetAtom(automationsAtom)
   const setAgentSessions = useSetAtom(agentSessionsAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
   const workspaceScope = useAtomValue(planningWorkspaceScopeAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const store = useStore()
 
   useEffect(() => {
     const load = (): void => {
       window.electronAPI.listAutomations(workspaceScope, currentWorkspaceId ?? undefined).then(setAutomations).catch(console.error)
-      window.electronAPI.listAgentSessions().then((sessions) => {
-        setAgentSessions(sessions)
+      window.electronAPI.listAgentSessions('active').then((sessions) => {
+        // 所有 active scope 刷新统一保留仍被 Tab 引用的归档 metadata（upstream #1627）
+        const openSessionIds = new Set(
+          store.get(tabsAtom)
+            .filter((tab) => tab.type === 'agent' || tab.type === 'preview')
+            .map((tab) => tab.sessionId),
+        )
+        setAgentSessions((prev) => mergeActiveAgentSessions(prev, sessions, openSessionIds))
         // 双向对账 draft 集合（防漂移，自愈历史脏数据）：
         // 1) 补入：真空会话（未发消息、无 SDK 运行痕迹、标题仍为默认）补入 draft；
         // 2) 移除：已真正发过消息 / 已绑定 SDK 运行 / 已重命名的会话从 draft 移除。
@@ -592,7 +602,7 @@ function AutomationInitializer(): null {
         // 路径可能漏掉移除，导致已发消息的会话被持久化 draft 标记永久隐藏（重启也无效）。
         // 此处以索引权威状态为准双向收敛：不用 createdAt !== updatedAt 判定（历史空会话
         // 的 updatedAt 可能被 touch，仅凭时间差会误移出 draft），改用 messageCount/sdkSessionId/
-        // piSessionFile/title 等“确已发消息”信号。
+        // piSessionFile/title 等"确已发消息"信号。
         setDraftSessionIds((prev) => {
           const next = new Set(prev)
           let changed = false
@@ -616,7 +626,7 @@ function AutomationInitializer(): null {
     load()
     const unsub = window.electronAPI.onAutomationChanged(load)
     return unsub
-  }, [setAutomations, setAgentSessions, setDraftSessionIds, workspaceScope, currentWorkspaceId])
+  }, [setAutomations, setAgentSessions, setDraftSessionIds, workspaceScope, currentWorkspaceId, store])
 
   return null
 }
@@ -643,6 +653,9 @@ function PlanningInitializer(): null {
     })
     return unsub
   }, [setTodos, setCalendarEvents, workspaceScope, currentWorkspaceId])
+
+  return null
+}
 
   return null
 }
@@ -971,9 +984,19 @@ function TabStatePersistenceInitializer(): null {
     Promise.all([
       window.electronAPI.getSettings(),
       window.electronAPI.listConversations(),
-      window.electronAPI.listAgentSessions(),
-    ]).then(([settings, conversations, agentSessions]) => {
+      window.electronAPI.listAgentSessions('active'),
+    ]).then(async ([settings, conversations, activeAgentSessions]) => {
       const tabState = settings.tabState
+      const persistedAgentSessionIds = [...new Set(
+        (tabState?.tabs ?? [])
+          .filter((tab): tab is TabItem => typeof tab === 'object' && tab !== null && 'type' in tab && 'sessionId' in tab && tab.type === 'agent' && typeof tab.sessionId === 'string')
+          .map((tab) => tab.sessionId),
+      )]
+      // 启动恢复只读取持久化 Tab 对应的少量归档 metadata，避免重引入全量归档 IPC。
+      const restoredAgentSessions = (await Promise.all(
+        persistedAgentSessionIds.map((id) => window.electronAPI.getAgentSessionMeta(id)),
+      )).filter((session): session is AgentSessionMeta => session !== undefined)
+      const agentSessions = [...activeAgentSessions, ...restoredAgentSessions.filter((session) => session.archived)]
       if (!tabState?.tabs?.length) {
         restoredRef.current = true
         return
@@ -1021,6 +1044,20 @@ function TabStatePersistenceInitializer(): null {
       const activeTab = validTabs.find((t) => t.id === restoredActiveTabId) ?? validTabs[0] ?? null
       store.set(tabsAtom, ensureScratchPadTab(activeTab ? [activeTab] : []))
       store.set(activeTabIdAtom, restoredActiveTabId)
+
+      // 常规侧栏只持有 active metadata；恢复中的归档 Tab 仍需要会话级
+      // workspace/model/settings，故只合并这些少量已打开会话，不能丢回整份归档列表。
+      const restoredAgentSessionIds = new Set(
+        validTabs.filter((tab) => tab.type === 'agent').map((tab) => tab.sessionId),
+      )
+      if (restoredAgentSessionIds.size > 0) {
+        const restoredAgentSessions = agentSessions.filter((session) => restoredAgentSessionIds.has(session.id))
+        store.set(agentSessionsAtom, (prev) => {
+          const byId = new Map(prev.map((session) => [session.id, session]))
+          for (const session of restoredAgentSessions) byId.set(session.id, session)
+          return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+        })
+      }
 
       // 同步 appMode 和 currentSessionId
       if (activeTab) {

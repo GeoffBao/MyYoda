@@ -26,6 +26,7 @@ import type { AgentSendInput, MyYodaPermissionMode } from '@myyoda/shared'
 import { extractFinalText } from './agent-cowork-utils'
 import {
   createAgentSession,
+  getAgentSessionMessages,
   getAgentSessionMeta,
   updateAgentSessionMeta,
 } from './agent-session-manager'
@@ -129,8 +130,9 @@ function spawnChildSession(
         updateAgentSessionMeta(child.id, { delegationStatus: 'failed' })
         reject(new Error(error))
       },
-      onComplete: (messages) => {
-        const text = extractFinalText(messages)
+      onComplete: () => {
+        // upstream #1627 起 complete 不再经回调传输完整消息，改为从磁盘读取终态
+        const text = extractFinalText(getAgentSessionMessages(child.id))
         updateAgentSessionMeta(child.id, { delegationStatus: 'completed' })
         resolve({ sessionId: child.id, text })
       },

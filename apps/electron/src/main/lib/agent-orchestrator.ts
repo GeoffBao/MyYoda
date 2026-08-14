@@ -88,16 +88,7 @@ export interface SessionCallbacks {
   /** 发送流式错误 */
   onError: (error: string) => void
   /** 发送流式完成（携带已持久化的消息列表） */
-  onComplete: (
-    messages?: AgentMessage[],
-    opts?: {
-      stoppedByUser?: boolean
-      startedAt?: number
-      resultSubtype?: string
-      resultErrors?: string[]
-      backgroundTasksPending?: boolean
-    }
-  ) => void
+  onComplete: (opts?: { stoppedByUser?: boolean; startedAt?: number; resultSubtype?: string; resultErrors?: string[]; backgroundTasksPending?: boolean }) => void
   /** 发送标题更新 */
   onTitleUpdated: (title: string) => void
   /** 用户消息已持久化，外部入口可据此通知前端切到实时会话 */
@@ -873,7 +864,7 @@ export class AgentOrchestrator {
       // 后续消息会随每次点击重复落盘。
       console.warn(`[Agent 编排] 会话 ${sessionId} 正在处理中，拒绝新请求且不保存用户消息`)
       callbacks.onError(getActiveRunRejectionMessage())
-      callbacks.onComplete([], { startedAt: streamStartedAt })
+      callbacks.onComplete({ startedAt: streamStartedAt })
       return
     }
 
@@ -894,7 +885,7 @@ export class AgentOrchestrator {
         const message = error instanceof Error ? error.message : String(error)
         console.error('[Agent 编排] 持久化用户消息失败:', error)
         callbacks.onError(`消息保存失败：${message}`)
-        callbacks.onComplete([], { startedAt: streamStartedAt })
+        callbacks.onComplete({ startedAt: streamStartedAt })
         return
       }
     }
@@ -930,7 +921,7 @@ export class AgentOrchestrator {
         console.error('[Agent 编排] 持久化 preflight error 失败:', e)
       }
       callbacks.onError(errorContent)
-      callbacks.onComplete([], { startedAt: streamStartedAt })
+      callbacks.onComplete({ startedAt: streamStartedAt })
     }
 
     // 1. Windows 平台：检查 Shell 环境可用性
@@ -1084,7 +1075,6 @@ export class AgentOrchestrator {
       }
     }
     const completeRun = (
-      messages?: AgentMessage[],
       opts?: {
         stoppedByUser?: boolean
         startedAt?: number
@@ -1093,7 +1083,7 @@ export class AgentOrchestrator {
       }
     ): void => {
       releaseActiveRun()
-      callbacks.onComplete(messages, opts)
+      callbacks.onComplete(opts)
       // 用户中途打断的 turn 可能没有完整的最新回复，不适合作为标题重新生成的素材
       if (!opts?.stoppedByUser) {
         this.maybeRegenerateTitle(sessionId, channelId, resolvedModel, callbacks).catch((err) => console.warn('[Agent 编排] 中段标题重新生成未捕获异常:', err))
@@ -1104,28 +1094,21 @@ export class AgentOrchestrator {
     // 以便 ① adapter 保持的通道在任务完成时自动续轮 ② 用户在等待期手动注入消息能复用通道。
     // UI 侧通过 backgroundTasksPending 进入"空闲可输入"态（spinner 停、输入框启用）。
     const idleComplete = (
-      messages?: AgentMessage[],
       opts?: {
         startedAt?: number
         resultSubtype?: string
         resultErrors?: string[]
       }
     ): void => {
-      callbacks.onComplete(messages, { ...opts, backgroundTasksPending: true })
+      callbacks.onComplete({ ...opts, backgroundTasksPending: true })
     }
     const failRun = (
       error: string,
-      messages?: AgentMessage[],
-      opts?: {
-        stoppedByUser?: boolean
-        startedAt?: number
-        resultSubtype?: string
-        resultErrors?: string[]
-      }
+      opts?: { stoppedByUser?: boolean; startedAt?: number; resultSubtype?: string; resultErrors?: string[] },
     ): void => {
       releaseActiveRun()
       callbacks.onError(error)
-      callbacks.onComplete(messages, opts)
+      callbacks.onComplete(opts)
     }
 
     // 3. 构建环境变量
@@ -2005,7 +1988,7 @@ ${workContext}`
               } catch {
                 /* 会话可能已删除 */
               }
-              completeRun(getAgentSessionMessages(sessionId), {
+              completeRun({
                 stoppedByUser: wasStoppedByUser,
                 startedAt: streamStartedAt
               })
@@ -2286,7 +2269,7 @@ ${workContext}`
                 } catch {
                   /* 忽略 */
                 }
-                completeRun(getAgentSessionMessages(sessionId), {
+                completeRun({
                   startedAt: streamStartedAt
                 })
                 return
@@ -2377,7 +2360,7 @@ ${workContext}`
                 // 轻量完成：UI 置空闲可输入，但 host 保持运行态（不 releaseActiveRun、不 break、不启动 drain 超时），
                 // while 循环继续 park 在 queryIterator.next()，等待后台任务完成时 SDK 自动 yield 的新一轮消息。
                 awaitingBackgroundWake = true
-                idleComplete(getAgentSessionMessages(sessionId), {
+                idleComplete({
                   startedAt: streamStartedAt,
                   resultSubtype: capturedResultSubtype,
                   resultErrors: capturedResultErrors
@@ -2440,7 +2423,7 @@ ${workContext}`
 
           if (!wasStoppedByUser && visibleRunMessageCount === 0) {
             const errorContent = this.persistEmptyResponseError(sessionId, capturedResultSubtype, capturedResultErrors)
-            failRun(errorContent, getAgentSessionMessages(sessionId), {
+            failRun(errorContent, {
               startedAt: streamStartedAt,
               resultSubtype: EMPTY_RESPONSE_RESULT_SUBTYPE,
               resultErrors: [errorContent]
@@ -2461,7 +2444,7 @@ ${workContext}`
           }
 
           // 发送完成信号
-          completeRun(getAgentSessionMessages(sessionId), {
+          completeRun({
             stoppedByUser: wasStoppedByUser,
             startedAt: streamStartedAt,
             resultSubtype: capturedResultSubtype,
@@ -2492,7 +2475,7 @@ ${workContext}`
             } catch {
               /* 会话可能已删除 */
             }
-            completeRun(getAgentSessionMessages(sessionId), {
+            completeRun({
               stoppedByUser: wasStoppedByUser,
               startedAt: streamStartedAt
             })
@@ -2647,9 +2630,7 @@ ${workContext}`
             })
           }
 
-          failRun(userFacingError, getAgentSessionMessages(sessionId), {
-            startedAt: streamStartedAt
-          })
+          failRun(userFacingError, { startedAt: streamStartedAt })
 
           // 保留 sdkSessionId，确保下一轮能继续 resume（修复 #903）。
           // 此终止分支只会被「非 session-not-found」的错误命中（session 失效已在上文
@@ -2704,7 +2685,7 @@ ${workContext}`
         } as unknown as SDKMessage
         appendSDKMessages(sessionId, [retryErrorSDKMsg])
 
-        failRun(`${retryFailureMessage}: ${lastRetryableError}`, getAgentSessionMessages(sessionId), { startedAt: streamStartedAt })
+        failRun(`${retryFailureMessage}: ${lastRetryableError}`, { startedAt: streamStartedAt })
       }
     } finally {
       // 每轮终态统一捕获新增/修改文件；索引写入失败不得覆盖原有清理逻辑。
