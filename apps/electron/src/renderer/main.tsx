@@ -575,8 +575,6 @@ function UpdaterInitializer(): React.ReactElement | null {
  */
 function AutomationInitializer(): null {
   const setAutomations = useSetAtom(automationsAtom)
-function AutomationInitializer(): null {
-  const setAutomations = useSetAtom(automationsAtom)
   const setAgentSessions = useSetAtom(agentSessionsAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
   const workspaceScope = useAtomValue(planningWorkspaceScopeAtom)
@@ -653,9 +651,6 @@ function PlanningInitializer(): null {
     })
     return unsub
   }, [setTodos, setCalendarEvents, workspaceScope, currentWorkspaceId])
-
-  return null
-}
 
   return null
 }

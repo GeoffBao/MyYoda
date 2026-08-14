@@ -15,16 +15,13 @@ import type { AgentSessionMetaUpdates } from './agent-session-manager'
 
 export interface ConductorSessionCallbacks {
   onError: (error: string) => void
-  onComplete: (
-    messages?: AgentMessage[],
-    options?: {
-      stoppedByUser?: boolean
-      startedAt?: number
-      resultSubtype?: string
-      resultErrors?: string[]
-      backgroundTasksPending?: boolean
-    },
-  ) => void
+  onComplete: (options?: {
+    stoppedByUser?: boolean
+    startedAt?: number
+    resultSubtype?: string
+    resultErrors?: string[]
+    backgroundTasksPending?: boolean
+  }) => void
   onTitleUpdated: (title: string) => void
   onRunStarted?: (options: { startedAt: number }) => void
 }
@@ -160,14 +157,15 @@ export class MyYodaConductorSessionHost implements ConductorSessionHost {
         onError: () => {
           state.sawError = true
         },
-        onComplete: (messages, options) => {
+        onComplete: (options) => {
           if (options?.backgroundTasksPending) return
           const reason = state.sawError || isErrorCompletion(options)
             ? 'error'
             : options?.stoppedByUser
               ? 'interrupted'
               : 'complete'
-          dispatch(reason, messages)
+          // upstream #1627 起 complete 不再经回调传输完整 messages；dispatch 内部从磁盘读取
+          dispatch(reason)
         },
         onTitleUpdated: () => { /* Conductor 不消费标题事件 */ },
       }
@@ -269,7 +267,7 @@ export async function createMyYodaConductorSessionHost(): Promise<MyYodaConducto
     getOrchestrator: agentService.getOrchestrator,
     runAgent: (input, callbacks) => agentService.runAgentHeadless(input, {
       onError: callbacks.onError,
-      onComplete: callbacks.onComplete,
+      onComplete: (_messages, options) => callbacks.onComplete(options),
       onTitleUpdated: callbacks.onTitleUpdated,
       source: callbacks.source ?? 'work',
     }),

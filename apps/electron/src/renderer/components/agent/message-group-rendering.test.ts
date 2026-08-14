@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { AssistantTurn } from '@proma/session-core'
+import type { AssistantTurn } from '@myyoda/session-core'
 import { stabilizeMessageGroups } from './message-group-rendering'
 
 function assistantTurn(channelId: string): AssistantTurn {

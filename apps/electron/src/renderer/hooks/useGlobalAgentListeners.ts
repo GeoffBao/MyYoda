@@ -736,7 +736,7 @@ export function useGlobalAgentListeners(): void {
           title: event.title,
           workspaceId: event.workspaceId,
           modelId: event.modelId,
-          channelId: event.channelId ?? eventSession?.channelId,
+          channelId: event.channelId ?? event.session?.channelId,
           startedAt: event.startedAt,
           currentStreamState,
         })

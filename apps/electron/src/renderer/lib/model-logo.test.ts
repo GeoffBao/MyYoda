@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { Channel } from '@proma/shared'
+import type { Channel } from '@myyoda/shared'
 import { resolveModelDisplayName, resolveModelProvider } from './model-logo'
 
 const channels = [

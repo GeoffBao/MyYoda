@@ -1,4 +1,4 @@
-import type { SDKMessage } from '@proma/shared'
+import type { SDKMessage } from '@myyoda/shared'
 
 /**
  * 为可持久化的 Agent 输出保留本次运行实际使用的渠道身份。
