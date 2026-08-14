@@ -3,7 +3,8 @@
  *
  * 挂载于 LeftSidebar groupBy === 'project' 时：
  * - 每个工作区（项目）一个行：文件夹图标 + 名称 + 本地目录徽标 + 会话树（updatedAt 倒序）
- * - 点击行 = 切换到该工作区并展开/折叠；hover 菜单：新会话 / 看板 / 重命名 / 重新关联目录 / 删除
+ * - 自动跟随聚焦：右侧当前打开的会话（不论从何处打开）所属项目自动展开，其他全部折叠
+ * - 点击行 = 切换到该工作区并展开（浏览语义，不影响会话跟随）；再点当前项目 = 折叠/展开切换；hover 菜单：新会话 / 看板 / 重命名 / 重新关联目录 / 删除
  * - 行右侧聚合注意力点：取组内会话最高优先级状态（blocked > running > completed）
  * - 全部工作区均展示（含默认工作区）；KanbanProject 兼容层保留在看板内，不再作为侧栏分组源
  */
@@ -79,6 +80,7 @@ import {
 } from './sidebar-session-tree'
 import {
   filterGroupableSessions,
+  isHiddenAutomationSession,
   resolveProjectFocusCollapsedIds,
   resolveProjectTreeAttention,
 } from './sidebar-projects-model'
@@ -211,34 +213,52 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [setActiveView, setCodeMainView])
 
-  /** 当前激活会话所属工作区 id；直接从全量会话列表查（draft/置顶/自动任务会话也在），历史会话无归属时为 null */
-  const activeSessionWorkspaceId = React.useMemo(() => {
+  /** 当前激活会话对象（如有）；直接从全量会话列表查，draft/置顶/自动任务会话也能命中 */
+  const activeSession = React.useMemo(() => {
     if (!activeSessionId) return null
-    return agentSessions.find((session) => session.id === activeSessionId)?.workspaceId ?? null
+    return agentSessions.find((session) => session.id === activeSessionId) ?? null
   }, [activeSessionId, agentSessions])
+  /** 激活会话所属工作区 id，历史会话无归属时为 null */
+  const activeSessionWorkspaceId = activeSession?.workspaceId ?? null
+  /** 激活会话是否为自动任务会话（不属于任何工作区列表，展示在自动任务合成组中） */
+  const activeIsAutomationSession = !!activeSession && isHiddenAutomationSession(activeSession)
 
-  /** 点击工作区行：切换为当前工作区 + 聚焦展开/折叠 */
+  /**
+   * 自动跟随聚焦：右侧当前打开的会话所属项目自动展开，其他全部折叠（对齐参考截图效果）。
+   * 不依赖点击项目名——从搜索、会话行、自动任务等任何入口打开会话，只要 activeSessionId 变化就立即重新聚焦。
+   * 手动折叠（点击当前项目 toggle）不会被立即覆盖——只有 activeSessionId 再次变化时才重新锁定。
+   */
+  React.useEffect(() => {
+    if (activeIsAutomationSession) {
+      // 自动任务会话：展开自动任务合成组，其他工作区全部折叠
+      setCollapsedIds(resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), null))
+      return
+    }
+    setCollapsedIds((prev) => {
+      const next = resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), activeSessionWorkspaceId)
+      // 自动任务合成组保持原状，不被工作区聚焦影响
+      if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
+      return next
+    })
+  }, [activeSessionWorkspaceId, activeIsAutomationSession, visibleWorkspaces])
+
+  /** 点击工作区行：切换为当前工作区 + 展开此项目（浏览语义，与上述会话跟随聚焦独立） */
   const handleSelectWorkspace = React.useCallback((workspaceId: string) => {
     if (workspaceId === currentWorkspaceId) {
       // 点击当前工作区 → 折叠/展开切换
       toggleCollapsed(workspaceId)
       return
     }
-    // 切换到新项目：
-    // - 当前右侧会话在此项目（或无法判定归属）→ 只展开此项目（聚焦显示），其他折叠
-    // - 当前右侧会话明确在其他项目 → 全部折叠
+    // 切换到新项目：总是展开点击的项目，折叠其他（不依赖右侧会话归属，
+    // 供用户无需打开会话即可浏览项目；一旦切换会话，上述自动跟随聚焦会重新接管）
     selectWorkspace(workspaceId)
     setCollapsedIds((prev) => {
-      const focusThisWorkspace = activeSessionWorkspaceId === null || activeSessionWorkspaceId === workspaceId
-      const next = resolveProjectFocusCollapsedIds(
-        visibleWorkspaces.map((ws) => ws.id),
-        focusThisWorkspace ? workspaceId : null,
-      )
+      const next = resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), workspaceId)
       // 自动任务合成组保持原状
       if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
       return next
     })
-  }, [activeSessionWorkspaceId, currentWorkspaceId, selectWorkspace, visibleWorkspaces])
+  }, [currentWorkspaceId, selectWorkspace, visibleWorkspaces])
 
   /** 打开该工作区的任务看板 */
   const openWorkspaceBoard = React.useCallback((workspaceId: string) => {
