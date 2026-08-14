@@ -21,7 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AgentSessionMeta, SessionGroup, SessionListSortBy, SessionListStatusFilter, LocalProjectRootStatus } from '@myyoda/shared'
+import type { AgentSessionMeta, SessionGroup, LocalProjectRootStatus } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import {
   agentSessionsAtom,
@@ -99,12 +99,7 @@ export interface ProjectSessionHandlers {
 }
 
 interface SidebarProjectsTabProps {
-  workspaceRoot: string | null
   sessionHandlers: ProjectSessionHandlers
-  /** 状态筛选：控制归档项目是否可见（复用侧边栏统一的「状态」筛选，语义对齐原 showArchivedProjectsAtom） */
-  status: SessionListStatusFilter
-  /** 排序方式：只影响每个项目内会话行的顺序，项目本身仍按活跃度排序 */
-  sortBy: SessionListSortBy
 }
 
 /** 项目行聚合注意力点的优先级：blocked > running > completed（学 Synara/Superset 聚合指示） */
@@ -125,7 +120,7 @@ const PROJECT_ROOT_STATUS_LABEL: Record<LocalProjectRootStatus, string> = {
   unavailable: '不可访问',
 }
 
-export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sortBy }: SidebarProjectsTabProps): React.ReactElement {
+export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps): React.ReactElement {
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const { selectWorkspace, relinkWorkspaceProjectRoot, restoreWorkspaceProjectRoot } = useWorkspaceActions()

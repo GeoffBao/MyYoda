@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -3660,12 +3660,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       ) : mode === 'agent' && agentGroupBy === 'project' ? (
         <div className="flex-1 flex flex-col min-h-0">
-          <SidebarProjectsTab
-            workspaceRoot={workspaceRoot}
-            sessionHandlers={projectTabSessionHandlers}
-            status={agentStatusFilter}
-            sortBy={agentSortBy}
-          />
+          <SidebarProjectsTab sessionHandlers={projectTabSessionHandlers} />
         </div>
       ) : mode === 'agent' ? (
         <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
