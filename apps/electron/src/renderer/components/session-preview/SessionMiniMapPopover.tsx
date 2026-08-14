@@ -424,9 +424,20 @@ function SessionMiniMapPopoverContent({
 
   if (!open || !position) return null
 
+  // 面板水平范围若覆盖到 anchor 行（窄窗口下空间不足、翻转到左侧并被钳制到窗口边缘时），
+  // 必须点击穿透（pointer-events-none）：否则用户在行上停留触发预览后直接点击，点击会落在
+  // 面板上（createPortal 到 body，事件不冒泡到行），表现为「会话点不开」。
+  const anchorRect = anchorRef.current?.getBoundingClientRect()
+  const coversAnchor = anchorRect !== undefined
+    ? position.left <= anchorRect.right && position.left + PANEL_WIDTH >= anchorRect.left
+    : false
+
   return createPortal(
     <div
-      className="fixed z-[9999] titlebar-no-drag transition-[top,height] duration-fast ease-out pointer-events-auto"
+      className={cn(
+        'fixed z-[9999] titlebar-no-drag transition-[top,height] duration-fast ease-out',
+        coversAnchor ? 'pointer-events-none' : 'pointer-events-auto',
+      )}
       style={{ top: position.top, left: position.left, width: PANEL_WIDTH, height: position.height }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}

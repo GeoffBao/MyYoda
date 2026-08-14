@@ -164,24 +164,23 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const projectFilesPath = sessionFileRoots?.projectRoot ?? null
   const projectUnavailablePath = sessionFileRoots?.projectUnavailablePath ?? null
   const projectAssetsPath = sessionFileRoots?.projectAssetsPath ?? null
-  const sessionOutboxPath = sessionFileRoots?.sessionOutboxPath ?? null
   // 文件面板授权由主进程根据会话与 Workspace 注册信息解析。
   const fileAccess = React.useMemo(() => ({ sessionId }), [sessionId])
 
-  // 项目目录不可用时跳转到该 Project 的设置页，那里已有可编辑的工作目录字段。
+  // 工程目录不可用时跳到工作区详情页的设置 tab（那里可重新关联目录）
   const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)
   const setProjectPageTab = useSetAtom(projectPageTabAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const openProjectSettings = React.useCallback(() => {
-    const boundProjectId = sessionFileRoots?.projectId
-    if (!boundProjectId) return
-    const navigation = buildProjectPageNavigation(boundProjectId, 'settings')
+    const boundWorkspaceId = currentSession?.workspaceId
+    if (!boundWorkspaceId) return
+    const navigation = buildProjectPageNavigation(boundWorkspaceId, 'settings')
     setActiveProjectPageId(navigation.activeProjectPageId)
     setProjectPageTab(navigation.projectPageTab)
     setCodeMainView(navigation.codeMainView)
     setActiveView(navigation.activeView)
-  }, [sessionFileRoots?.projectId, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
+  }, [currentSession?.workspaceId, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
 
   // 附加目录列表（会话级）
   const attachedDirsMap = useAtomValue(agentAttachedDirectoriesMapAtom)
@@ -450,7 +449,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     const path = autoRevealSignal.path
     const inSession =
       (!!sessionPath && (path === sessionPath || isPathUnderRoot(sessionPath, path)))
-      || (!!sessionOutboxPath && (path === sessionOutboxPath || isPathUnderRoot(sessionOutboxPath, path)))
       || attachedDirs.some((d) => isPathUnderRoot(d, path))
       || attachedFiles.includes(path)
     const inProject =
@@ -463,12 +461,12 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     consumedTabRevealTsRef.current = autoRevealSignal.ts
     setFileSourceFilter(nextSource)
     if (activeTab !== 'files' && activeTab !== 'session' && activeTab !== 'workspace') onTabChange('files')
-  }, [autoRevealSignal, sessionId, sessionPath, sessionOutboxPath, projectFilesPath, attachedDirs, attachedFiles, wsAttachedDirs, wsAttachedFiles, activeTab, onTabChange, setFileSourceFilter])
+  }, [autoRevealSignal, sessionId, sessionPath, projectFilesPath, attachedDirs, attachedFiles, wsAttachedDirs, wsAttachedFiles, activeTab, onTabChange, setFileSourceFilter])
 
   // RightSidePanel 完全由用户控制，不因 Agent 文件变更自动打开
 
   // 同步 basePaths ref（供 handleFilePreview 使用，避免 hooks 声明顺序问题）
-  basePathsRef.current = [sessionPath, sessionOutboxPath, projectFilesPath, projectAssetsPath, workspaceFilesPath, ...fileAccessPathsMemo].filter(Boolean) as string[]
+  basePathsRef.current = [sessionPath, projectFilesPath, projectAssetsPath, workspaceFilesPath, ...fileAccessPathsMemo].filter(Boolean) as string[]
   const hasSessionAttachedItems = attachedDirs.length > 0 || attachedFiles.length > 0
   const hasWorkspaceAttachedItems = wsAttachedDirs.length > 0 || wsAttachedFiles.length > 0
   const hasVisibleSessionAttachedItems = showSessionFiles && hasSessionAttachedItems
@@ -617,21 +615,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                         <div className="text-[11px] font-medium text-muted-foreground mb-1 px-3 pt-2">会话文件</div>
                         <FileBrowser rootPath={sessionPath} access={fileAccess} hideToolbar embedded hideEmpty={hasVisibleSessionAttachedItems} onAddToChat={handleAddToChat} onFilePreview={handleFilePreview} />
                       </>
-                    )}
-                    {showSessionFiles && sessionOutboxPath && (
-                      <div className="mb-1.5 mt-1 rounded-md bg-primary/[0.04] px-1 pb-1">
-                        <div className="px-2 pt-1.5 text-[11px] font-medium text-foreground/75">Outbox · 会话产出</div>
-                        <FileBrowser
-                          rootPath={sessionOutboxPath}
-                          access={fileAccess}
-                          hideToolbar
-                          embedded
-                          hideEmpty
-                          groupByType
-                          onAddToChat={handleAddToChat}
-                          onFilePreview={handleFilePreview}
-                        />
-                      </div>
                     )}
                     {showSessionFiles && attachedFiles.length > 0 && (
                       <AttachedFilesSection

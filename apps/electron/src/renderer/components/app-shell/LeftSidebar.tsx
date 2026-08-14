@@ -11,11 +11,10 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
-import { SearchDialog } from './SearchDialog'
 import { ReleaseNotesPopover } from '@/components/settings/ReleaseNotesPopover'
 import { useReleaseNotes } from '@/hooks/useReleaseNotes'
 import { SidebarToggleButton } from './SidebarToggleButton'
@@ -88,7 +87,7 @@ import {
   sessionViewStateMapAtom,
 } from '@/atoms/tab-atoms'
 import { userProfileAtom } from '@/atoms/user-profile'
-import { selectedProjectIdAtom, serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom } from '@/atoms/project-atoms'
+import { selectedProjectIdAtom, serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom, taskBoardScopeAtom } from '@/atoms/project-atoms'
 import { isHiddenKanbanProjectKind } from '@/components/app-shell/kanban/types'
 import { serverTaskSummariesAtom } from '@/atoms/kanban-atoms'
 import { sessionGroupsAtom } from '@/atoms/session-groups-atoms'
@@ -113,10 +112,8 @@ import {
   treeContainsSessionId,
   type AgentSessionTreeItem,
 } from './sidebar-session-tree'
-import { SessionListFilterMenu } from './SessionListFilterMenu'
 import { CreateSessionGroupDialog } from './CreateSessionGroupDialog'
 import { sidebarViewModeAtom, MIN_LEFT_SIDEBAR_WIDTH } from '@/atoms/sidebar-atoms'
-import { searchDialogOpenAtom } from '@/atoms/search-atoms'
 import { hasUpdateAtom, updateStatusAtom, type UpdateStatus } from '@/atoms/updater'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { hasEnvironmentIssuesAtom } from '@/atoms/environment'
@@ -696,6 +693,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const setSelectedProjectId = useSetAtom(selectedProjectIdAtom)
   const setPendingTaskEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const [codeMainView, setCodeMainView] = useAtom(codeMainViewAtom)
+  const [, setTaskBoardScope] = useAtom(taskBoardScopeAtom)
 
   // 当前工作区能力（MCP + Skill 计数）
   const [capabilities, setCapabilities] = React.useState<WorkspaceCapabilities | null>(null)
@@ -726,6 +724,18 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开
+  const anyFeatureActive =
+    activeView === 'planning'
+    || activeView === 'agent-skills'
+    || activeView === 'repo-wiki'
+    || activeView === 'excalidraw-gallery'
+    || activeView === 'excalidraw-editor'
+    || (mode === 'agent' && codeMainView === 'tasks' && activeView === 'conversations')
+  const [featuresCollapsed, setFeaturesCollapsed] = React.useState(true)
+  React.useEffect(() => {
+    if (anyFeatureActive) setFeaturesCollapsed(false)
+  }, [anyFeatureActive])
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
   const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
@@ -742,7 +752,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   // 归档 & 搜索状态
   const [viewMode, setViewMode] = useAtom(sidebarViewModeAtom)
-  const [searchDialogOpen, setSearchDialogOpen] = useAtom(searchDialogOpenAtom)
 
   // Code 侧边栏会话列表：状态筛选 / 分组方式 / 排序方式（取代原「会话|项目」大 Tab）
   const sessionListPreference = useAtomValue(sessionListPreferenceAtom)
@@ -1070,9 +1079,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const handleOpenTaskBoard = React.useCallback((): void => {
     if (codeMainView === 'tasks' && activeView === 'conversations') return
     setAutomationForm({ open: false, draft: null })
+    // 看板默认聚焦当前工作区（项目=工作区）；旧 project facet 由 WorkBoardView 挂载时清理
+    setTaskBoardScope({ kind: 'workspace' })
     setCodeMainView('tasks')
     setActiveView('conversations')
-  }, [activeView, codeMainView, setActiveView, setAutomationForm, setCodeMainView])
+  }, [activeView, codeMainView, setActiveView, setAutomationForm, setCodeMainView, setTaskBoardScope])
 
   /** 打开/关闭 Excalidraw 画布 */
   const handleOpenExcalidraw = React.useCallback((): void => {
@@ -1360,15 +1371,21 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     await createAgentSessionInWorkspace()
   }, [createAgentSessionInWorkspace, setActiveView])
 
-  /** 在项目下新建 Draft 会话（预绑定 projectId；看板默认落「待办」列） */
-  const createAgentSessionInProject = React.useCallback(async (projectId: string): Promise<void> => {
+  /** 在项目行新建 Draft 会话；workspace=项目后 projectId 语义已收敛为 workspaceId（对齐 Proma：切到目标工作区） */
+  const createAgentSessionInProject = React.useCallback(async (workspaceId: string): Promise<void> => {
     setActiveView('conversations')
+    if (workspaceId) {
+      setCollapsedWorkspaceIds((prev) => deleteSetEntry(prev, workspaceId))
+      if (workspaceId !== currentWorkspaceId) {
+        setCurrentWorkspaceId(workspaceId)
+        window.electronAPI.updateSettings({ agentWorkspaceId: workspaceId }).catch(console.error)
+      }
+    }
     await createAgent({
       draft: true,
-      workspaceId: currentWorkspaceId ?? undefined,
+      workspaceId,
       channelId: agentChannelId || undefined,
       modelId: agentModelId || undefined,
-      projectId,
     })
   }, [agentChannelId, agentModelId, createAgent, currentWorkspaceId, setActiveView])
 
@@ -1383,25 +1400,43 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
   }, [setAgentSessions])
 
-  /** Project 分组模式下全局「+」新建项目（KanbanProject，不是 AgentWorkspace） */
-  const handleCreateKanbanProject = React.useCallback(async (input: Parameters<typeof window.electronAPI.projects.create>[1]): Promise<void> => {
-    if (!workspaceRoot) return
+  /** 从本地文件夹创建项目（工作区，对齐 Proma）：选择文件夹 → 创建并切换到新工作区 */
+  const handleCreateProjectFromFolder = React.useCallback(async (): Promise<void> => {
+    const result = await window.electronAPI.openFolderDialog()
+    if (!result?.path) return
+    try {
+      const workspace = await window.electronAPI.createAgentWorkspace({ name: result.name, projectRootPath: result.path })
+      setWorkspaces((prev) => [workspace, ...prev.filter((existing) => existing.id !== workspace.id)])
+      setCurrentWorkspaceId(workspace.id)
+      setActiveView('conversations')
+      window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
+      toast.success(`已创建项目「${workspace.name}」`)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '创建失败'
+      toast.error(msg)
+    }
+  }, [setActiveView, setCurrentWorkspaceId, setWorkspaces])
+
+  /** 侧栏「+」新建项目（对齐 Proma：项目 = 工作区；可选绑定本地工程目录） */
+  const handleCreateWorkspaceFromDialog = React.useCallback(async (input: { name: string; workingDirectory?: string }): Promise<void> => {
     setCreatingProject(true)
     try {
-      const project = await window.electronAPI.projects.create(workspaceRoot, input)
-      setKanbanProjects((prev) => [project, ...prev.filter((existing) => existing.id !== project.id)])
+      const workspace = await window.electronAPI.createAgentWorkspace({
+        name: input.name,
+        projectRootPath: input.workingDirectory?.trim() || undefined,
+      })
+      setWorkspaces((prev) => [workspace, ...prev.filter((existing) => existing.id !== workspace.id)])
+      setCurrentWorkspaceId(workspace.id)
+      window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
       setCreateProjectOpen(false)
-      toast.success('项目已创建')
-      // 新建后进入唯一任务看板并按该 Project 筛选。
-      setSelectedProjectId(project.id)
-      setCodeMainView('tasks')
+      toast.success(`已创建项目「${workspace.name}」`)
       setActiveView('conversations')
     } catch (cause) {
       toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
     } finally {
       setCreatingProject(false)
     }
-  }, [setActiveView, setCodeMainView, setKanbanProjects, setSelectedProjectId, workspaceRoot])
+  }, [setActiveView, setCurrentWorkspaceId, setWorkspaces])
 
   const handleMoveToGroup = React.useCallback(async (sessionId: string, groupId?: string): Promise<void> => {
     try {
@@ -1489,7 +1524,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleSwitchWorkspace(workspaceId)
   }, [currentWorkspaceId, handleSwitchWorkspace])
 
-  /** 侧栏「新任务」：先经项目选择器再开 TaskEditor */
+  /** 侧栏「新任务」：先经工作区选择器（NewTaskProjectFlowDialog）再打开任务编辑器 */
   const handleNewTask = React.useCallback((): void => {
     setActiveView('conversations')
     setNewTaskProjectFlowOpen(true)
@@ -1957,7 +1992,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       if (processedQuickSwitchEventsRef.current.has(event)) return
       processedQuickSwitchEventsRef.current.add(event)
       if (event.isComposing) return
-      if (settingsOpen || searchDialogOpen) return
+      if (settingsOpen || activeView === 'yoda-search') return
 
       if (quickSwitchHintsVisible && !isPrimaryModifierKey(event, isMac) && !modifierActuallyHeld(event)) {
         hideHints()
@@ -2028,7 +2063,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   }, [
     isMac,
     settingsOpen,
-    searchDialogOpen,
+    activeView,
     handleSelectAgentSession,
     handleSelectConversation,
     refreshQuickSwitchTargets,
@@ -2381,7 +2416,25 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   /** 自动任务组溢出数量（超出默认上限的会话数） */
   const automationOverflow = automationGroup ? Math.max(0, automationGroup.sessions.length - AUTOMATION_SESSION_VISIBLE_LIMIT) : 0
   /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组 */
-  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(new Set())
+  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(() => new Set([PINNED_AGENT_GROUP_KEY]))
+  // 置顶区默认折叠；存在 running/blocked 的置顶任务族时自动展开（对齐「需要处理/进行中」优先可见）
+  React.useEffect(() => {
+    const hasActivePinned = pinnedAgentSessions.some((session) => {
+      const status = getSessionTreeStatus(
+        { session, childSessions: getDirectDelegatedChildren(agentSessions, session.id) },
+        agentIndicatorMap,
+      )
+      return status === 'running' || status === 'blocked'
+    })
+    if (hasActivePinned) {
+      setCollapsedFlatGroupIds((prev) => {
+        if (!prev.has(PINNED_AGENT_GROUP_KEY)) return prev
+        const next = new Set(prev)
+        next.delete(PINNED_AGENT_GROUP_KEY)
+        return next
+      })
+    }
+  }, [agentIndicatorMap, agentSessions, pinnedAgentSessions])
   // 项目模式下「新建项目」弹窗（状态已在顶层声明 creatingProject/setCreatingProject）
   const [createProjectOpen, setCreateProjectOpen] = React.useState(false)
 
@@ -2733,7 +2786,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <button
                 type="button"
                 aria-label="搜索"
-                onClick={() => setSearchDialogOpen(true)}
+                onClick={() => setActiveView('yoda-search')}
                 className="size-10 flex items-center justify-center rounded-[12px] text-foreground/45 hover:bg-foreground/[0.08] hover:text-foreground/80 transition-colors duration-fast titlebar-no-drag"
               >
                 <Search size={16} />
@@ -2761,7 +2814,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </TooltipContent>
           </Tooltip>
 
-          {mode === 'agent' ? (
+          {mode === 'agent' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -2770,21 +2823,21 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   onClick={handleNewTask}
                   className="size-10 flex items-center justify-center rounded-[12px] text-foreground/70 sidebar-control-surface hover:text-foreground transition-[background-color,color] duration-fast titlebar-no-drag"
                 >
-                  <Layers size={16} />
+                  <ClipboardList size={16} />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">
                 新任务 ({getAcceleratorDisplay(getActiveAccelerator('new-task'))})
               </TooltipContent>
             </Tooltip>
-          ) : null}
+          )}
 
           {mode === 'agent' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  aria-label={`Project 看板，${activeTaskCount} 个未完成`}
+                  aria-label={`看板，${activeTaskCount} 个未完成`}
                   onClick={handleOpenTaskBoard}
                   className={cn(
                     'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
@@ -2808,7 +2861,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Project 看板（{activeTaskCount} 个未完成）</TooltipContent>
+              <TooltipContent side="right">看板（{activeTaskCount} 个未完成）</TooltipContent>
             </Tooltip>
           )}
 
@@ -2850,7 +2903,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={`Task 日历，${automationCount} 个任务已创建`}
+                aria-label={`计划，${automationCount} 个任务已创建`}
                 onClick={handleOpenPlanning}
                 className={cn(
                   'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
@@ -2875,7 +2928,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              Task 日历（{automationCount} 个任务已创建）
+              计划（{automationCount} 个任务已创建）
             </TooltipContent>
           </Tooltip>
 
@@ -2991,7 +3044,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         {deleteDialog}
         {projectDeleteDialog}
         {moveDialog}
-        <SearchDialog />
       </div>
     )
   }
@@ -3178,29 +3230,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         height={isMac ? SIDEBAR_DRAG_STRIP_HEIGHT.expandedMac : SIDEBAR_DRAG_STRIP_HEIGHT.expanded}
       />
 
-      {/* 展开态顶部工具栏：全部留在左侧栏上方（折叠、搜索、后退、前进）。
-          SidebarWindowDragStrip 是 z-1 的原生窗口拖拽层；工具栏必须 z-10 + no-drag，
-          否则 Electron 会将点击吞为窗口拖拽，Tooltip 也不会触发。 */}
+      {/* 展开态顶部工具栏：折叠按钮 + Tab 导航（搜索入口已升级为左侧栏独立「搜索」模块，⌘⇧F 直达；
+          这里不再放重复的搜索图标）。SidebarWindowDragStrip 是 z-1 的原生窗口拖拽层；
+          工具栏必须 z-10 + no-drag，否则 Electron 会将点击吞为窗口拖拽，Tooltip 也不会触发。 */}
       <div className={cn('relative z-10 w-full flex-shrink-0 flex items-center justify-end gap-1 titlebar-no-drag', isMac ? 'h-[30px] pr-2' : 'h-7 pr-1.5')}>
         <SidebarToggleButton className="size-6" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="搜索"
-              onClick={() => setSearchDialogOpen(true)}
-              className={cn(
-                'size-6 flex items-center justify-center rounded-md text-foreground/50 transition-colors duration-fast',
-                isClassic
-                  ? 'sidebar-control-surface hover:text-foreground/70'
-                  : 'hover:bg-foreground/[0.08] hover:text-foreground/85'
-              )}
-            >
-              <Search size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">搜索 ({getAcceleratorDisplay(getActiveAccelerator('global-search'))})</TooltipContent>
-        </Tooltip>
         <TabNavigationControls className="h-7 gap-0" />
       </div>
 
@@ -3211,7 +3245,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       {/* 工作区切换器已按调研建议收起：默认单工作区，多工作区管理降级到设置 > 工作区（高级选项） */}
 
-      {/* 新对话/新会话 + 新任务 */}
+      {/* 新对话/新会话 + 新任务（看板工作区化完成后恢复快速入口） */}
       <div className="px-3 pt-2 flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -3257,95 +3291,133 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         />
       )}
 
-      {/* Task 日历入口：Todo / 日历 / 定时任务合一，作为任务中心入口排在侧栏最上方。 */}
+      {/* 搜索：左侧栏独立模块（⌘⇧F 直达），主区切换为搜索 + 最近会话按时间分组视图 */}
       <div className="sidebar-module-zone px-3 pt-2 pb-0.5">
         <SidebarModule
-          icon={CalendarDays}
-          title="Task 日历"
-          count={automationCount}
-          active={activeView === 'planning'}
-          onClick={handleOpenPlanning}
-          keycapShortcutId="open-planning"
-          ariaLabel={`Task 日历，${automationCount} 个任务已创建`}
-          classNames={{
-            row: cn('automation-entry', activeView === 'planning' && 'automation-entry-selected'),
-            icon: 'automation-entry-icon',
-            badge: 'automation-entry-badge',
-          }}
+          icon={Search}
+          title="搜索"
+          active={activeView === 'yoda-search'}
+          onClick={() => setActiveView('yoda-search')}
+          keycapShortcutId="global-search"
+          ariaLabel="搜索"
         />
       </div>
 
-      {/* 任务看板：Workspace 级正式工作项入口，与 Task 日历相邻。 */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={LayoutDashboard}
-            title="Project 看板"
-            count={activeTaskCount}
-            active={codeMainView === 'tasks' && activeView === 'conversations'}
-            onClick={handleOpenTaskBoard}
-            ariaLabel={`Project 看板，${activeTaskCount} 个未完成`}
-          />
-        </div>
-      )}
+      {/* 功能模块区：Task 日历 / 看板 / 画布 / 插件 / 知识库 收敛为可折叠「功能」组（默认折叠，回归 Proma 简洁样式） */}
+      <div className="sidebar-module-zone px-3 pt-1 pb-0.5">
+        <SidebarModule
+          icon={Layers}
+          title="功能"
+          collapsible
+          collapsed={featuresCollapsed}
+          onCollapsedChange={setFeaturesCollapsed}
+          ariaLabel="功能模块"
+        >
+          <div className="flex flex-col gap-0.5 pt-1">
+            {/* 计划：Todo / 日历 / 定时任务合一 */}
+            <button
+              type="button"
+              onClick={handleOpenPlanning}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                activeView === 'planning'
+                  ? 'bg-accent-foreground/[0.10] text-foreground'
+                  : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+              )}
+            >
+              <CalendarDays size={13} className="shrink-0 text-foreground/45" />
+              <span className="min-w-0 flex-1 truncate text-left">计划</span>
+              {automationCount > 0 && (
+                <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
+                  {formatSidebarModuleCount(automationCount)}
+                </span>
+              )}
+            </button>
 
-      {/* Yoda 画布：手绘风格白板，紧邻 Project 看板，仅 Project 模式可见（通用创作工具） */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={PenTool}
-            title="Yoda 画布"
-            count={excalidrawCount}
-            active={activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'}
-            onClick={handleOpenExcalidraw}
-            ariaLabel={`Yoda 画布，${excalidrawCount} 个画布`}
-          />
-        </div>
-      )}
+            {/* 任务看板：工作区级正式工作项入口（回归 Proma：看板按工作区展示） */}
+            {mode === 'agent' && (
+              <button
+                type="button"
+                onClick={handleOpenTaskBoard}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  codeMainView === 'tasks' && activeView === 'conversations'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <LayoutDashboard size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">看板</span>
+                {activeTaskCount > 0 && (
+                  <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
+                    {formatSidebarModuleCount(activeTaskCount)}
+                  </span>
+                )}
+              </button>
+            )}
 
-      {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置（独立左栏视图） */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={Blocks}
-            title="Yoda 插件"
-            active={activeView === 'agent-skills'}
-            onClick={() => handleOpenSkills()}
-            ariaLabel="Yoda 插件"
-          />
-        </div>
-      )}
+            {/* Yoda 画布：手绘风格白板 */}
+            {mode === 'agent' && (
+              <button
+                type="button"
+                onClick={handleOpenExcalidraw}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <PenTool size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">画布</span>
+                {excalidrawCount > 0 && (
+                  <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
+                    {formatSidebarModuleCount(excalidrawCount)}
+                  </span>
+                )}
+              </button>
+            )}
 
-      {/* Yoda 知识库：LLM 知识库（Karpathy raw→wiki 范式，待开发），Project 模式入口 */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pb-0.5">
-          <SidebarModule
-            icon={Library}
-            title="Yoda 知识库"
-            active={activeView === 'repo-wiki'}
-            onClick={handleOpenRepoWiki}
-            ariaLabel="Yoda 知识库（待开发）"
-          />
-        </div>
-      )}
+            {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置 */}
+            {mode === 'agent' && (
+              <button
+                type="button"
+                onClick={() => handleOpenSkills()}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'agent-skills'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <Blocks size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">插件</span>
+              </button>
+            )}
+
+            {/* Yoda 知识库：LLM 知识库入口（待开发） */}
+            {mode === 'agent' && (
+              <button
+                type="button"
+                onClick={handleOpenRepoWiki}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'repo-wiki'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <Library size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">知识库</span>
+              </button>
+            )}
+          </div>
+        </SidebarModule>
+      </div>
 
       {/* 项目中心入口已移除：Project 导航改由下方 Sessions | Projects Tab 承担 */}
 
-      {/* 自动任务组：聚合自动任务会话，常驻在置顶分类上方（跨所有分组模式可见，不进入下方列表区） */}
-      {mode === 'agent' && automationGroup && (
-        <div className="pt-1 pb-0.5 flex-shrink-0 titlebar-no-drag">
-          {renderWorkspaceGroupItem(automationGroup)}
-          {automationOverflow > 0 && (
-            <button
-              type="button"
-              onClick={() => setAutomationOverflowExpanded((prev) => !prev)}
-              className="ml-4 px-1.5 py-1 rounded-md text-left text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-            >
-              {automationOverflowExpanded ? '收起' : `显示更多 (${automationOverflow})`}
-            </button>
-          )}
-        </div>
-      )}
+      {/* 自动任务组已并入项目区（SidebarProjectsTab 顶部合成组，方案 A）；这里不再独立渲染 */}
 
       {/* 置顶区：常驻在会话/项目 Tab 切换器上方，跨 Tab 可见 */}
       {mode === 'chat' && viewMode === 'active' && pinnedConversations.length > 0 && (
@@ -3514,31 +3586,38 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       )}
 
-      {/* 会话列表筛选行：对标 Claude 的分组标题行（如「Today」右侧筛选图标），
-          不再是孤立的图标，而是左边带标签、右边带筛选的全宽标题行；
-          项目分组模式下额外包含「新建项目 +」按钮 */}
+      {/* 项目/会话列表标题行（回归 Proma：Agent 模式左侧以项目分组为主导，无筛选菜单；
+          右侧常驻「从本地文件夹创建项目」+「新建项目」入口） */}
       {mode === 'agent' && (
         <div className="flex items-center justify-between px-3 pt-1 pb-1 border-b border-border/50">
-          <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">
-            {agentGroupBy === 'project' ? '项目' : '会话'}
-          </span>
+          <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">项目</span>
           <span className="flex items-center gap-0.5">
-            {agentGroupBy === 'project' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="新建项目"
-                    onClick={() => setCreateProjectOpen(true)}
-                    className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">新建项目</TooltipContent>
-              </Tooltip>
-            )}
-            <SessionListFilterMenu />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="从本地文件夹创建项目"
+                  onClick={() => void handleCreateProjectFromFolder()}
+                  className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                >
+                  <FolderOpen size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">从本地文件夹创建项目</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="新建项目"
+                  onClick={() => setCreateProjectOpen(true)}
+                  className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                >
+                  <Plus size={14} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">新建项目</TooltipContent>
+            </Tooltip>
           </span>
         </div>
       )}
@@ -3591,12 +3670,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       ) : mode === 'agent' && agentGroupBy === 'project' ? (
         <div className="flex-1 flex flex-col min-h-0">
-          <SidebarProjectsTab
-            workspaceRoot={workspaceRoot}
-            sessionHandlers={projectTabSessionHandlers}
-            status={agentStatusFilter}
-            sortBy={agentSortBy}
-          />
+          <SidebarProjectsTab sessionHandlers={projectTabSessionHandlers} />
         </div>
       ) : mode === 'agent' ? (
         <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
@@ -3819,7 +3893,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         open={createProjectOpen}
         busy={creatingProject}
         onOpenChange={setCreateProjectOpen}
-        onSubmit={(input) => { void handleCreateKanbanProject(input) }}
+        onSubmit={(input) => { void handleCreateWorkspaceFromDialog(input) }}
       />
     </div>
   )

@@ -23,7 +23,7 @@ import {
 import { activeViewAtom } from '@/atoms/active-view'
 import { promptConfigAtom, selectedPromptIdAtom } from '@/atoms/system-prompt-atoms'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
-import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
+import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { projectOnboardingSessionIdsAtom } from '@/atoms/project-onboarding-atoms'
 import {
   findRecallableDraftSession,
@@ -133,8 +133,12 @@ export function useCreateSession(): CreateSessionActions {
     // 立刻写 localStorage 标记，哪怕用户之后取消对话框也不会再弹第二次。
     let shouldPromptOnboarding = false
     if (!defaultProjectId && input.recallDraft && workspaceId) {
-      const hasAnyProjectInWorkspace = store.get(serverKanbanProjectsAtom)
-        .some((project) => project.workspaceId === workspaceId && !project.archivedAt)
+      // workspace=项目 模型下「已有项目」= 工作区绑定了工程目录，或该工作区已有会话；
+      // 不再看 KanbanProject（UI 已不创建，恒空会误判为「首次」导致每次新会话都弹引导）。
+      const workspace = store.get(agentWorkspacesAtom).find((item) => item.id === workspaceId)
+      const hasAnyProjectInWorkspace =
+        !!workspace?.projectRootPath
+        || store.get(agentSessionsAtom).some((session) => session.workspaceId === workspaceId && !session.archived)
       const alreadySeen = localStorage.getItem(getProjectOnboardingStorageKey(workspaceId)) !== null
       shouldPromptOnboarding = shouldPromptProjectOnboarding({ workspaceId, hasAnyProjectInWorkspace, alreadySeen })
       if (shouldPromptOnboarding) {

@@ -185,7 +185,7 @@ export function getContextCompactionProgress(
 interface AgentMessagesProps {
   sessionId: string
   /** 当前会话已绑定的 Project ID（空态问候语内联项目切换器用） */
-  projectId?: string
+  workspaceId?: string
   /** 用户在前端选择的模型 ID（用于显示渠道配置的 Model Name） */
   sessionModelId?: string
   /** 消息是否已完成首次加载 */
@@ -208,8 +208,8 @@ interface AgentMessagesProps {
 }
 
 /** 空状态引导 — 使用 WelcomeEmptyState，绑定当前草稿会话以支持问候语内联切换项目 */
-function EmptyState({ sessionId, projectId }: { sessionId: string; projectId?: string }): React.ReactElement {
-  return <WelcomeEmptyState sessionId={sessionId} projectId={projectId} />
+function EmptyState({ sessionId, workspaceId }: { sessionId: string; workspaceId?: string }): React.ReactElement {
+  return <WelcomeEmptyState sessionId={sessionId} workspaceId={workspaceId} />
 }
 
 function AssistantLogo({ model }: { model?: string }): React.ReactElement {
@@ -498,7 +498,7 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
-export const AgentMessages = React.memo(function AgentMessages({ sessionId, projectId, sessionModelId, messagesLoaded, persistedSDKMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+export const AgentMessages = React.memo(function AgentMessages({ sessionId, workspaceId, sessionModelId, messagesLoaded, persistedSDKMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
   // 高频 token/live message 状态在历史区内闭环，避免唤醒 AgentView 输入框和工具栏。
   const streamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
   const liveMessages = useAtomValue(agentLiveMessagesAtomFamily(sessionId))
@@ -750,7 +750,6 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
     sessionPath,
     fileRoots?.executionCwd,
     fileRoots?.projectRoot,
-    fileRoots?.sessionOutboxPath,
     ...(attachedDirs ?? []),
   ].filter((path): path is string => Boolean(path))))
 
@@ -772,7 +771,7 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, proj
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
           {!hasContent && !streaming ? (
-            <EmptyState sessionId={sessionId} projectId={projectId} />
+            <EmptyState sessionId={sessionId} workspaceId={workspaceId} />
           ) : (
             <>
               {/* 统一消息渲染（持久化 + 实时合并为一个列表，确保 system 消息位置正确） */}

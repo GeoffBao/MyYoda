@@ -6,7 +6,7 @@
  * - 工作区目录：~/.myyoda/agent-workspaces/{slug}/（Agent 的 cwd）
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, cpSync, mkdirSync, statSync, openSync, readSync, closeSync, realpathSync, lstatSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync, cpSync, mkdirSync, statSync, openSync, readSync, closeSync, realpathSync, lstatSync, accessSync, constants } from 'node:fs'
 import { cp as cpAsync, readFile as readFileAsync, writeFile as writeFileAsync } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { rmSyncWithRetry, renameIfDestinationAbsentWithRetry, renameWithRetry } from './fs-retry'
@@ -17,6 +17,7 @@ import {
   getAgentWorkspacesIndexPath,
   getAgentWorkspacesDir,
   getAgentWorkspacePath,
+  getWorkspaceFilesDir,
   getWorkspaceMcpPath,
   getWorkspaceSkillsDir,
   getInactiveSkillsDir,
@@ -30,7 +31,7 @@ import { projectRepository } from './project-repository'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
-import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
+import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, KanbanColumnDef, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
 import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 
@@ -156,13 +157,51 @@ function slugify(name: string, existingSlugs: Set<string>): string {
 
 export function listAgentWorkspaces(): AgentWorkspace[] {
   const index = readIndex()
-  return index.workspaces.slice()
+  return index.workspaces.map(withProjectRootStatus)
 }
 
 /** 按 updatedAt 降序（桥接/飞书列表等与旧版内联 sort 一致；渲染进程仍用 listAgentWorkspaces） */
 export function listAgentWorkspacesByUpdatedAt(): AgentWorkspace[] {
   const index = readIndex()
-  return index.workspaces.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+  return index.workspaces.map(withProjectRootStatus).sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * 同步检查用户选择的本地项目根。该状态用于运行前硬阻断和工作区列表提示，
+ * 不依赖目录 watcher，避免把临时监听失败误报为项目根丢失。
+ * （对齐 upstream Proma：工作区 = 项目，projectRootPath 即用户工程目录）
+ */
+export function getLocalProjectRootStatus(projectRootPath: string | undefined): LocalProjectRootStatus | undefined {
+  if (!projectRootPath) return undefined
+  if (!existsSync(projectRootPath)) return 'missing'
+
+  try {
+    if (!statSync(projectRootPath).isDirectory()) return 'not_directory'
+    accessSync(projectRootPath, constants.R_OK | constants.W_OK | constants.X_OK)
+    return 'available'
+  } catch {
+    return 'unavailable'
+  }
+}
+
+/** 为 IPC/展示调用附加即时状态，绝不修改磁盘索引中的工作区记录。 */
+function withProjectRootStatus(workspace: AgentWorkspace): AgentWorkspace {
+  const projectRootStatus = getLocalProjectRootStatus(workspace.projectRootPath)
+  return projectRootStatus ? { ...workspace, projectRootStatus } : { ...workspace }
+}
+
+/** 按 slug 查找工作区（项目），供项目文件根解析使用。 */
+export function getAgentWorkspaceBySlug(slug: string): AgentWorkspace | undefined {
+  const index = readIndex()
+  return index.workspaces.find((w) => w.slug === slug)
+}
+
+/**
+ * 返回项目文件根。本地目录项目直接使用用户选择的目录；空白项目继续
+ * 使用 MyYoda 托管的 workspace-files/，以保持历史项目完全兼容。
+ */
+export function getProjectFilesPath(workspaceSlug: string): string {
+  return getAgentWorkspaceBySlug(workspaceSlug)?.projectRootPath ?? getWorkspaceFilesDir(workspaceSlug)
 }
 
 /** 按指定 ID 顺序重排工作区，未列出的追加到末尾 */
@@ -218,7 +257,10 @@ function copyDefaultSkills(workspaceSlug: string, options: { throwOnError?: bool
   }
 }
 
-export function createAgentWorkspace(name: string): AgentWorkspace {
+export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput): AgentWorkspace {
+  const { name, projectRootPath } = typeof input === 'string'
+    ? { name: input, projectRootPath: undefined }
+    : input
   const index = readIndex()
 
   const duplicate = index.workspaces.find((w) => w.name === name)
@@ -229,11 +271,28 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
   const existingSlugs = new Set(index.workspaces.map((w) => w.slug))
   const slug = slugify(name, existingSlugs)
   const now = Date.now()
+  let normalizedProjectRootPath: string | undefined
+
+  if (projectRootPath) {
+    try {
+      normalizedProjectRootPath = realpathSync(resolve(projectRootPath))
+      if (!statSync(normalizedProjectRootPath).isDirectory()) {
+        throw new Error('选择的路径不是文件夹')
+      }
+      if (getLocalProjectRootStatus(normalizedProjectRootPath) !== 'available') {
+        throw new Error('选择的文件夹不可访问')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '无法访问选择的文件夹'
+      throw new Error(`项目文件夹无效: ${message}`)
+    }
+  }
 
   const workspace: AgentWorkspace = {
     id: randomUUID(),
     name,
     slug,
+    projectRootPath: normalizedProjectRootPath,
     createdAt: now,
     updatedAt: now,
   }
@@ -264,10 +323,59 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
   return workspace
 }
 
+/** 重新关联本地项目根目录（对齐 upstream Proma relinkAgentWorkspaceProjectRoot） */
+export function relinkAgentWorkspaceProjectRoot(id: string, projectRootPath: string): AgentWorkspace {
+  const index = readIndex()
+  const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
+  if (idx === -1) throw new Error(`工作区不存在: ${id}`)
+
+  let normalizedProjectRootPath: string
+  try {
+    normalizedProjectRootPath = realpathSync(resolve(projectRootPath))
+    if (!statSync(normalizedProjectRootPath).isDirectory()) {
+      throw new Error('选择的路径不是文件夹')
+    }
+    if (getLocalProjectRootStatus(normalizedProjectRootPath) !== 'available') {
+      throw new Error('选择的文件夹不可访问')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '无法访问选择的文件夹'
+    throw new Error(`项目文件夹无效: ${message}`)
+  }
+
+  const updated: AgentWorkspace = {
+    ...index.workspaces[idx]!,
+    projectRootPath: normalizedProjectRootPath,
+    updatedAt: Date.now(),
+  }
+  index.workspaces[idx] = updated
+  writeIndex(index)
+  console.log(`[Agent 工作区] 已重新关联项目根: ${updated.name} → ${normalizedProjectRootPath}`)
+  return withProjectRootStatus(updated)
+}
+
+/** 在本地项目原路径恢复一个空目录。仅允许路径确实缺失时执行。 */
+export function restoreAgentWorkspaceProjectRoot(id: string): AgentWorkspace {
+  const index = readIndex()
+  const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
+  if (idx === -1) throw new Error(`工作区不存在: ${id}`)
+
+  const workspace = index.workspaces[idx]!
+  if (!workspace.projectRootPath) throw new Error('该工作区不是本地项目')
+  const status = getLocalProjectRootStatus(workspace.projectRootPath)
+  if (status !== 'missing') {
+    throw new Error('只能恢复已缺失的本地项目根目录')
+  }
+
+  mkdirSync(workspace.projectRootPath, { recursive: true })
+  console.log(`[Agent 工作区] 已在原路径恢复空项目根: ${workspace.projectRootPath}`)
+  return withProjectRootStatus(workspace)
+}
+
 /** 更新工作区名称（slug 和目录不变） */
 export function updateAgentWorkspace(
   id: string,
-  updates: { name: string },
+  updates: { name?: string; kanbanColumns?: KanbanColumnDef[] },
 ): AgentWorkspace {
   const index = readIndex()
   const idx = index.workspaces.findIndex((w) => w.id === id)
@@ -278,14 +386,17 @@ export function updateAgentWorkspace(
 
   const existing = index.workspaces[idx]!
 
-  const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
-  if (duplicate) {
-    throw new Error(`工作区名称「${updates.name}」已存在`)
+  if (updates.name !== undefined) {
+    const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
+    if (duplicate) {
+      throw new Error(`工作区名称「${updates.name}」已存在`)
+    }
   }
 
   const updated: AgentWorkspace = {
     ...existing,
-    name: updates.name,
+    ...(updates.name !== undefined ? { name: updates.name } : {}),
+    ...(updates.kanbanColumns !== undefined ? { kanbanColumns: updates.kanbanColumns } : {}),
     updatedAt: Date.now(),
   }
 

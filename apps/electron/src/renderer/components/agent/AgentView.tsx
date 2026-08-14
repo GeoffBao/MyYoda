@@ -3018,7 +3018,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         {/* 消息区域 */}
         <AgentMessages
           sessionId={sessionId}
-          projectId={sessionMeta?.projectId}
+          workspaceId={sessionMeta?.workspaceId}
           sessionModelId={agentModelId || undefined}
           messagesLoaded={messagesLoaded}
           persistedSDKMessages={persistedSDKMessages}
@@ -3068,7 +3068,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
             <div className="px-3 pt-2.5 pb-2 flex flex-wrap items-center gap-2 text-xs">
               <DraftProjectPicker
                 sessionId={sessionId}
-                projectId={sessionMeta?.projectId}
+                workspaceId={sessionMeta?.workspaceId}
                 isDraft={isDraftSession || isEmptySession}
                 autoOpenCreate={shouldAutoOpenProjectCreate}
                 onAutoOpenHandled={handleProjectOnboardingHandled}

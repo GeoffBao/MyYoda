@@ -829,11 +829,38 @@ export interface ElectronAPI {
   /** 获取 Agent 工作区列表 */
   listAgentWorkspaces: () => Promise<AgentWorkspace[]>
 
-  /** 创建 Agent 工作区 */
-  createAgentWorkspace: (name: string) => Promise<AgentWorkspace>
+  /** 创建 Agent 工作区（支持绑定本地项目根目录：从本地文件夹创建项目） */
+  createAgentWorkspace: (input: string | { name: string; projectRootPath?: string }) => Promise<AgentWorkspace>
+
+  /** 重新关联工作区本地项目根目录 */
+  relinkAgentWorkspaceProjectRoot: (id: string, projectRootPath: string) => Promise<AgentWorkspace>
+
+  /** 在缺失的原路径恢复空项目根目录 */
+  restoreAgentWorkspaceProjectRoot: (id: string) => Promise<AgentWorkspace>
+
+  /** 查询项目→工作区迁移状态 */
+  getProjectToWorkspaceMigrationStatus: (workspaceId: string) => Promise<{ done: boolean; pendingCount: number }>
+
+  /** 执行项目→工作区迁移（手动触发，含备份；幂等） */
+  runProjectToWorkspaceMigration: (workspaceId: string) => Promise<{
+    migrated: Array<{ projectId: string; projectName: string; workspaceId: string; workspaceName: string; migratedSessions: number; migratedTasks: number }>
+    skipped: Array<{ projectId: string; projectName: string; reason: string }>
+    migratedAutomationCount: number
+    backupPath: string
+    alreadyDone: boolean
+  }>
+
+  /** 列出工作区资产（workspace-files/assets/） */
+  listWorkspaceAssets: (workspaceSlug: string) => Promise<Array<{ filename: string; sizeBytes: number }>>
+
+  /** 上传工作区资产（base64） */
+  uploadWorkspaceAsset: (workspaceSlug: string, filename: string, base64: string) => Promise<{ filename: string; sizeBytes: number }>
+
+  /** 删除工作区资产 */
+  deleteWorkspaceAsset: (workspaceSlug: string, filename: string) => Promise<void>
 
   /** 更新 Agent 工作区 */
-  updateAgentWorkspace: (id: string, updates: { name: string }) => Promise<AgentWorkspace>
+  updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => Promise<AgentWorkspace>
 
   /** 删除 Agent 工作区 */
   deleteAgentWorkspace: (id: string) => Promise<void>
@@ -2330,11 +2357,39 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_WORKSPACES)
   },
 
-  createAgentWorkspace: (name: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_WORKSPACE, name)
+  createAgentWorkspace: (input: string | { name: string; projectRootPath?: string }) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_WORKSPACE, input)
   },
 
-  updateAgentWorkspace: (id: string, updates: { name: string }) => {
+  relinkAgentWorkspaceProjectRoot: (id: string, projectRootPath: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RELINK_WORKSPACE_PROJECT_ROOT, id, projectRootPath)
+  },
+
+  restoreAgentWorkspaceProjectRoot: (id: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RESTORE_WORKSPACE_PROJECT_ROOT, id)
+  },
+
+  getProjectToWorkspaceMigrationStatus: (workspaceId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_PROJECT_WORKSPACE_MIGRATION_STATUS, workspaceId)
+  },
+
+  runProjectToWorkspaceMigration: (workspaceId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION, workspaceId)
+  },
+
+  listWorkspaceAssets: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_WORKSPACE_ASSETS, workspaceSlug)
+  },
+
+  uploadWorkspaceAsset: (workspaceSlug: string, filename: string, base64: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPLOAD_WORKSPACE_ASSET, workspaceSlug, filename, base64)
+  },
+
+  deleteWorkspaceAsset: (workspaceSlug: string, filename: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_WORKSPACE_ASSET, workspaceSlug, filename)
+  },
+
+  updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_WORKSPACE, id, updates)
   },
 

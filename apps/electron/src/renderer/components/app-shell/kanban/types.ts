@@ -134,6 +134,8 @@ export interface KanbanItem {
   /** 正式 TaskRepository 投影；旧 Session 看板兼容项缺省。 */
   task?: TaskAggregateSummary
   project: KanbanProject | null
+  /** 跨工作区视图（scope=all）时的归属工作区名；当前工作区视图不设置 */
+  workspaceName?: string
   /** craft 对齐：卡片上展开的子任务行（spec nodes ∪ child sessions） */
   subtasks: KanbanSubtask[]
   /** Conductor 总节点数；进度分母在 subtasks 尚未填满时保持稳定 */

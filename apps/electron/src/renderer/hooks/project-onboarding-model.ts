@@ -13,7 +13,7 @@ export function getProjectOnboardingStorageKey(workspaceId: string): string {
 /**
  * 是否应该弹一次「创建项目」引导。
  * - 没有 workspaceId：无法定位标记，不弹
- * - 该工作区已经有项目：不是「首次」场景，不弹（不打扰已有的无项目通用会话工作流）
+ * - 该工作区已经有项目（workspace=项目 模型：绑定了工程目录，或已有会话）：不弹
  * - 已经弹过（alreadySeen 由调用方读 localStorage 传入）：不再弹
  */
 export function shouldPromptProjectOnboarding(input: {

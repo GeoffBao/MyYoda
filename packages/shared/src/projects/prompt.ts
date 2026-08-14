@@ -92,7 +92,7 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
   if (ctx.assets.length > 0) {
     lines.push('`<project_assets>` 列出用户提供的参考文件；仅在相关时按绝对路径按需读取，不必全部读完。');
   }
-  lines.push('`<project_assets_path>` 是项目资产库：可作为项目参考文件读取；不要把下载/生成产物写进去（该目录保留给用户提供的项目资产，会话级交付物写入当前会话的 Outbox，项目内文件写入 `<project_working_directory>` 对应目录）。');
+  lines.push('`<project_assets_path>` 是项目资产库：可作为项目参考文件读取；不要把下载/生成产物写进去（该目录保留给用户提供的项目资产，会话级交付物默认写入当前执行工作目录，项目内文件写入 `<project_working_directory>` 对应目录）。');
   lines.push('`<project_memory>` 是该项目的权威累积知识；学到项目专属的持久决策、约定或经验时，用 Write/Edit 写入 MEMORY.md（最新/重要优先，约 5000 token 内）。');
   lines.push('</project_context>');
   return lines.join('\n');

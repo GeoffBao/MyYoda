@@ -106,6 +106,8 @@ export function KanbanBoardContainer({
   const clearFilters = useSetAtom(clearTaskBoardFiltersAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const setWorkspaces = useSetAtom(agentWorkspacesAtom)
+  const setCurrentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const workspace = workspaces.find((candidate) => candidate.id === currentWorkspaceId) ?? null
   const channels = useAtomValue(channelsAtom)
   const channelsLoaded = useAtomValue(channelsLoadedAtom)
@@ -139,27 +141,38 @@ export function KanbanBoardContainer({
   })
 
   // ---------------------------------------------------------------------------
-  // 项目自定义列（对齐 craft）：仅聚焦到单个真实 Project 时使用/编辑该项目列；
-  // 跨项目/工作区视图始终用默认四列，避免语义混乱。
+  // 看板列（对齐 workspace=项目）：scope=workspace 时用当前工作区自定义列；
+  // 旧 project facet 兼容读 KanbanProject 列；跨视图（all）用默认四列。
   // ---------------------------------------------------------------------------
   const editingProject = scope.kind === 'project'
     ? projects.find((project) => project.id === scope.projectId) ?? null
     : null
-  const usingProjectColumns = Boolean(editingProject?.kanbanColumns?.length)
+  // 当前工作区自定义列（workspace.kanbanColumns，新模型主路径）
+  const workspaceColumns = workspace?.kanbanColumns
+  const usingWorkspaceColumns = Boolean(scope.kind === 'workspace' && workspaceColumns?.length)
   const activeColumns = React.useMemo<KanbanColumnDefinition[]>(() => {
-    if (!usingProjectColumns || !editingProject) return DEFAULT_KANBAN_COLUMNS
-    // 透传项目自定义列（含 dropStatusId），board-model 已具备去重/过滤/回退逻辑
-    return editingProject.kanbanColumns ?? DEFAULT_KANBAN_COLUMNS
-  }, [usingProjectColumns, editingProject])
+    if (usingWorkspaceColumns && workspaceColumns) return workspaceColumns
+    if (editingProject?.kanbanColumns?.length) return editingProject.kanbanColumns
+    return DEFAULT_KANBAN_COLUMNS
+  }, [usingWorkspaceColumns, workspaceColumns, editingProject])
 
-  // 持久化项目自定义列；projects:changed 广播会刷新 atom，无需本地乐观投影
-  const persistProjectColumns = React.useCallback((columns: KanbanColumnDef[]) => {
-    if (!workspaceRoot || !editingProject?.slug) return
-    void window.electronAPI.projects.update(workspaceRoot, editingProject.slug, { kanbanColumns: columns })
-      .catch((cause: unknown) => {
-        toast.error('保存看板列失败', { description: cause instanceof Error ? cause.message : String(cause) })
-      })
-  }, [workspaceRoot, editingProject])
+  // 持久化看板列：workspace scope → 工作区配置；旧 project facet → KanbanProject（兼容）
+  const persistBoardColumns = React.useCallback((columns: KanbanColumnDef[]) => {
+    if (scope.kind === 'workspace') {
+      if (!workspace) return
+      void window.electronAPI.updateAgentWorkspace(workspace.id, { kanbanColumns: columns })
+        .catch((cause: unknown) => {
+          toast.error('保存看板列失败', { description: cause instanceof Error ? cause.message : String(cause) })
+        })
+      return
+    }
+    if (scope.kind === 'project' && workspaceRoot && editingProject?.slug) {
+      void window.electronAPI.projects.update(workspaceRoot, editingProject.slug, { kanbanColumns: columns })
+        .catch((cause: unknown) => {
+          toast.error('保存看板列失败', { description: cause instanceof Error ? cause.message : String(cause) })
+        })
+    }
+  }, [scope.kind, workspace, workspaceRoot, editingProject])
 
   // 可编辑列：项目已有自定义列则直接改；首次定制时用当前活跃列作为种子
   // （保留内置 id，确保已有卡片位置不丢）
@@ -177,15 +190,15 @@ export function KanbanBoardContainer({
   const handleAddColumn = React.useCallback(() => {
     const base = resolveEditableColumns()
     const id = `col-${crypto.randomUUID().slice(0, 8)}`
-    persistProjectColumns([...base, { id, name: '新列' }])
-  }, [resolveEditableColumns, persistProjectColumns])
+    persistBoardColumns([...base, { id, name: '新列' }])
+  }, [resolveEditableColumns, persistBoardColumns])
 
   const handleUpdateColumn = React.useCallback((columnId: string, patch: Partial<KanbanColumnDef>) => {
     const next = resolveEditableColumns().map((column) =>
       column.id === columnId ? { ...column, ...patch } : column,
     )
-    persistProjectColumns(next)
-  }, [resolveEditableColumns, persistProjectColumns])
+    persistBoardColumns(next)
+  }, [resolveEditableColumns, persistBoardColumns])
 
   // 删除列：先把该列卡片逐个重分配到第一个剩余列（不丢卡片），再持久化列集合。
   const handleRemoveColumn = React.useCallback((columnId: string) => {
@@ -206,8 +219,8 @@ export function KanbanBoardContainer({
         })
       }
     }
-    persistProjectColumns(remaining)
-  }, [resolveEditableColumns, persistProjectColumns, items, workspaceRoot, workspace, setTaskSummaries])
+    persistBoardColumns(remaining)
+  }, [resolveEditableColumns, persistBoardColumns, items, workspaceRoot, workspace, setTaskSummaries])
 
   const { groups: modelGroups, modelToConnection } = React.useMemo(
     () => buildKanbanModelCatalog(channels),
@@ -442,6 +455,7 @@ export function KanbanBoardContainer({
               value={scope}
               onChange={setScope}
               onCreateProject={() => setCreateProjectOpen(true)}
+              workspaceName={workspace?.name}
             />
             <TaskBoardFilters />
           </div>
@@ -494,7 +508,7 @@ export function KanbanBoardContainer({
             columnId,
             ...(workspaceRoot ? { workspaceRoot } : {}),
             ...(workspace ? { workspaceId: workspace.id } : {}),
-            ...(usingProjectColumns
+            ...(usingWorkspaceColumns
               ? { columnPlacementMode: 'custom' as const, dropStatusId }
               : {}),
           }).then(() => {
@@ -574,13 +588,17 @@ export function KanbanBoardContainer({
         busy={creatingProject}
         onOpenChange={setCreateProjectOpen}
         onSubmit={(input) => {
-          if (!workspaceRoot || creatingProject) return
+          if (creatingProject) return
           setCreatingProject(true)
-          void window.electronAPI.projects.create(workspaceRoot, input).then((project) => {
-            setProjects((current) => [project, ...current.filter((candidate) => candidate.id !== project.id)])
-            setScope({ kind: 'project', projectId: project.id })
+          void window.electronAPI.createAgentWorkspace({
+            name: input.name,
+            projectRootPath: input.workingDirectory?.trim() || undefined,
+          }).then((workspace) => {
+            setWorkspaces((current) => [workspace, ...current.filter((candidate) => candidate.id !== workspace.id)])
+            setCurrentWorkspaceId(workspace.id)
+            void window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id })
             setCreateProjectOpen(false)
-            toast.success(`已创建项目「${project.name}」`)
+            toast.success(`已创建项目「${workspace.name}」`)
           }).catch((cause: unknown) => {
             toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
           }).finally(() => setCreatingProject(false))

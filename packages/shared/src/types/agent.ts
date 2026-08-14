@@ -1,4 +1,5 @@
 import type { ProviderType } from './channel'
+import type { KanbanColumnDef } from '../projects/types'
 
 /**
  * Agent 相关类型定义
@@ -19,10 +20,31 @@ export interface AgentWorkspace {
   name: string
   /** URL-safe 目录名（创建后不可变） */
   slug: string
+  /**
+   * 用户选择的本地项目根目录。未设置时，项目文件使用 MyYoda 托管的
+   * workspace-files/ 目录；设置后，项目文件直接指向该原始目录。
+   * （对齐 upstream Proma：工作区 = 项目，projectRootPath 即工程目录）
+   */
+  projectRootPath?: string
+  /** 本地项目根目录的运行时状态；Proma 托管项目不设置此字段。 */
+  projectRootStatus?: LocalProjectRootStatus
+  /** 工作区自定义看板列（对齐看板=工作区模型）；缺省用默认四列（待办/进行中/待验收/已完成） */
+  kanbanColumns?: KanbanColumnDef[]
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */
   updatedAt: number
+}
+
+/** 本地项目根目录的即时可用状态；仅在读取工作区列表时计算，不写入索引。 */
+export type LocalProjectRootStatus = 'available' | 'missing' | 'not_directory' | 'unavailable'
+
+/** 新建项目（工作区）的输入。 */
+export interface CreateAgentWorkspaceInput {
+  /** 项目显示名称 */
+  name: string
+  /** 可选的用户本地项目根目录 */
+  projectRootPath?: string
 }
 
 // ===== SDK 新增类型声明（0.2.52 ~ 0.2.63） =====
@@ -1679,7 +1701,7 @@ export interface AgentSessionFileRoots {
   /** Agent 本轮实际执行 cwd。 */
   executionCwd: string
   /** executionCwd 的来源。 */
-  executionSource: 'worktree' | 'project' | 'sandbox'
+  executionSource: 'worktree' | 'workspace-root' | 'project' | 'sandbox'
   /** 当前会话实际使用的 Project root；sandbox 会话为空。 */
   projectRoot?: string
   /** 绑定的 Project ID。 */
@@ -1690,8 +1712,6 @@ export interface AgentSessionFileRoots {
   projectUnavailablePath?: string
   /** Workspace Files 根目录。 */
   workspaceFilesPath: string
-  /** 持久化的 Workspace 级会话 Outbox。 */
-  sessionOutboxPath: string
 }
 
 /** Agent turn 捕获到的文件变化。 */
@@ -1703,7 +1723,7 @@ export interface AgentOutputRecord {
   projectId?: string
   path: string
   relativePath: string
-  scope: 'outbox' | 'session' | 'project'
+  scope: 'session' | 'project'
   change: 'created' | 'modified'
   capturedAt: number
   turnStartedAt: number
@@ -2032,6 +2052,20 @@ export const AGENT_IPC_CHANNELS = {
   DELETE_WORKSPACE: 'agent:delete-workspace',
   /** 重排工作区顺序 */
   REORDER_WORKSPACES: 'agent:reorder-workspaces',
+  /** 重新关联工作区本地项目根目录 */
+  RELINK_WORKSPACE_PROJECT_ROOT: 'agent:relink-workspace-project-root',
+  /** 在缺失的原路径恢复空项目根目录 */
+  RESTORE_WORKSPACE_PROJECT_ROOT: 'agent:restore-workspace-project-root',
+  /** 查询项目→工作区迁移状态 */
+  GET_PROJECT_WORKSPACE_MIGRATION_STATUS: 'agent:get-project-workspace-migration-status',
+  /** 列出工作区资产 */
+  LIST_WORKSPACE_ASSETS: 'agent:list-workspace-assets',
+  /** 上传工作区资产（base64） */
+  UPLOAD_WORKSPACE_ASSET: 'agent:upload-workspace-asset',
+  /** 删除工作区资产 */
+  DELETE_WORKSPACE_ASSET: 'agent:delete-workspace-asset',
+  /** 执行项目→工作区迁移（手动触发） */
+  RUN_PROJECT_WORKSPACE_MIGRATION: 'agent:run-project-workspace-migration',
 
   // 标题生成
   /** 生成 Agent 会话标题 */

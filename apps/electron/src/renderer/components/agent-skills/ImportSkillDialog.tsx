@@ -95,11 +95,15 @@ export function ImportSkillDialog({
 
   const installedSlugs = React.useMemo(() => new Set(installedSkills.map((s) => s.slug)), [installedSkills])
 
+  /** 只显示有可导入项的工作区（同名全过滤的不占用下拉，避免选项过多） */
   const availableWorkspaces = React.useMemo(
     () =>
       otherWorkspaces
-        .map((w) => ({ ...w, skills: w.skills.filter((s) => !installedSlugs.has(s.slug)) }))
-        .filter((w) => w.skills.length > 0),
+        .map((w) => {
+          const importable = w.skills.filter((s) => !installedSlugs.has(s.slug))
+          return { ...w, skills: importable, remainingCount: importable.length }
+        })
+        .filter((w) => w.remainingCount > 0),
     [otherWorkspaces, installedSlugs],
   )
 
@@ -234,7 +238,7 @@ export function ImportSkillDialog({
                 <SelectContent>
                   {availableWorkspaces.map((w) => (
                     <SelectItem key={w.workspaceSlug} value={w.workspaceSlug}>
-                      {w.workspaceName}
+                      {w.workspaceName}（{w.remainingCount} 个可导入）
                     </SelectItem>
                   ))}
                 </SelectContent>

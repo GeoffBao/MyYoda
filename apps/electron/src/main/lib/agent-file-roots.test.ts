@@ -19,7 +19,6 @@ describe('buildAgentSessionFileRoots', () => {
       executionSource: 'project',
       projectRoot: path.join('/myyoda','workspaces','default','projects/demo/workdir'),
       projectAssetsPath: path.join('/myyoda','workspaces','default','projects/demo/assets'),
-      sessionOutboxPath: path.join('/myyoda','workspaces','default','workspace-files/Outbox/session-1'),
     })
   })
 
@@ -34,7 +33,6 @@ describe('buildAgentSessionFileRoots', () => {
 
     expect(result.executionCwd).toBe(result.sessionDir)
     expect(result.projectRoot).toBeUndefined()
-    expect(result.sessionOutboxPath).toBe(path.join('/myyoda','workspaces','default','workspace-files/Outbox/session-2'))
   })
 
   test('Project 目录不可达时透传原始路径，供 UI 与"未绑定"区分', () => {

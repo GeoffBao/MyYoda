@@ -11,7 +11,7 @@ import {
   type KanbanTaskRun,
   type TeambitionBinding,
 } from '@/components/app-shell/kanban/types'
-import { agentModelIdAtom, agentStreamingStatesAtom } from './agent-atoms'
+import { agentModelIdAtom, agentStreamingStatesAtom, agentWorkspacesAtom } from './agent-atoms'
 import { serverKanbanProjectsAtom, taskBoardScopeAtom } from './project-atoms'
 
 /** 服务端会话快照，始终保持原始 AgentSessionMeta。 */
@@ -64,6 +64,10 @@ export const kanbanItemsAtom = atom<KanbanItem[]>((get) => {
       labelIds: get(taskBoardLabelFilterAtom),
       includeUnlabeled: get(taskBoardIncludeUnlabeledAtom),
     },
+    // 跨工作区视图（scope=all）时卡片携带工作区名徽标；当前工作区视图不冗余显示
+    workspaceNameById: get(taskBoardScopeAtom).kind === 'all'
+      ? new Map(get(agentWorkspacesAtom).map((workspace) => [workspace.id, workspace.name]))
+      : undefined,
     specNodesBySlug: get(kanbanSpecNodesAtom),
     expertIdsBySlug: get(kanbanTaskExpertIdsAtom),
     fallbackModel: get(agentModelIdAtom) ?? '',

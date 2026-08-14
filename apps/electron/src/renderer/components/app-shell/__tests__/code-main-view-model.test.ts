@@ -136,9 +136,10 @@ describe('shouldShowWorkViewInCode', () => {
 })
 
 describe('isOverlayActiveView', () => {
-  test('isOverlayActiveView 识别覆盖视图（planning / agent-skills）', () => {
+  test('isOverlayActiveView 识别覆盖视图（planning / agent-skills / yoda-search）', () => {
     expect(isOverlayActiveView('conversations')).toBe(false)
     expect(isOverlayActiveView('planning')).toBe(true)
     expect(isOverlayActiveView('agent-skills')).toBe(true)
+    expect(isOverlayActiveView('yoda-search')).toBe(true)
   })
 })

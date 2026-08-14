@@ -332,6 +332,8 @@ import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/s
 import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
+import { getProjectToWorkspaceMigrationStatus, runProjectToWorkspaceMigration, type ProjectToWorkspaceMigrationResult } from './lib/project-to-workspace-migration'
+import { listWorkspaceAssets, uploadWorkspaceAsset, deleteWorkspaceAsset, type WorkspaceAssetInfo } from './lib/workspace-assets'
 import {
   listAgentWorkspaces,
   createAgentWorkspace,
@@ -339,6 +341,8 @@ import {
   deleteAgentWorkspace,
   assertAgentWorkspaceDeletionSafe,
   reorderAgentWorkspaces,
+  relinkAgentWorkspaceProjectRoot,
+  restoreAgentWorkspaceProjectRoot,
   ensureDefaultWorkspace,
   getWorkspaceMcpConfig,
   saveWorkspaceMcpConfig,
@@ -522,6 +526,9 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
         workspaceSlugs.add(workspace.slug)
         // 有会话归属时，当前工作区的 agent-workspaces/{slug}/ 也是合法根。
         roots.push(getAgentWorkspacePath(workspace.slug))
+        // 工作区的工程目录（projectRootPath）也要授权：右侧栏「项目文件」根与
+        // 执行 cwd 就是它（workspace-root source），不授权会导致列表/打开/删除全被拒。
+        if (workspace.projectRootPath) roots.push(workspace.projectRootPath)
       }
       // 会话绑定的 Project（Git 项目）工作目录也要授权，否则新会话选择 Git 分支/创建
       // Worktree 时，ensurePathAllowedWithWorktree 永远无法通过校验——这里之前完全没有
@@ -2880,18 +2887,18 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 创建 Agent 工作区
+  // 创建 Agent 工作区（支持绑定本地项目根目录：从本地文件夹创建项目）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_WORKSPACE,
-    async (_, name: string): Promise<AgentWorkspace> => {
-      return createAgentWorkspace(name)
+    async (_event, input: string | { name: string; projectRootPath?: string }): Promise<AgentWorkspace> => {
+      return createAgentWorkspace(input)
     }
   )
 
   // 更新 Agent 工作区
   ipcMain.handle(
     AGENT_IPC_CHANNELS.UPDATE_WORKSPACE,
-    async (_, id: string, updates: { name: string }): Promise<AgentWorkspace> => {
+    async (_, id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }): Promise<AgentWorkspace> => {
       return updateAgentWorkspace(id, updates)
     }
   )
@@ -2922,6 +2929,64 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.REORDER_WORKSPACES,
     async (_, orderedIds: string[]): Promise<AgentWorkspace[]> => {
       return reorderAgentWorkspaces(orderedIds)
+    }
+  )
+
+  // 重新关联工作区本地项目根目录（从本地文件夹创建/重新绑定项目）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RELINK_WORKSPACE_PROJECT_ROOT,
+    async (_event, id: string, projectRootPath: string): Promise<AgentWorkspace> => {
+      return relinkAgentWorkspaceProjectRoot(id, projectRootPath)
+    }
+  )
+
+  // 在缺失的原路径恢复空项目根目录
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RESTORE_WORKSPACE_PROJECT_ROOT,
+    async (_event, id: string): Promise<AgentWorkspace> => {
+      return restoreAgentWorkspaceProjectRoot(id)
+    }
+  )
+
+  // 查询项目→工作区迁移状态（阶段二，手动触发入口状态）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_PROJECT_WORKSPACE_MIGRATION_STATUS,
+    async (_event, workspaceId: string): Promise<{ done: boolean; pendingCount: number }> => {
+      return getProjectToWorkspaceMigrationStatus(workspaceId)
+    }
+  )
+
+  // 执行项目→工作区迁移（手动触发，含备份；幂等）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION,
+    async (_event, workspaceId: string): Promise<ProjectToWorkspaceMigrationResult> => {
+      return runProjectToWorkspaceMigration(workspaceId)
+    }
+  )
+
+  // ===== 工作区资产（项目=工作区模型下的资产库，对齐 craft） =====
+
+  // 列出工作区资产
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.LIST_WORKSPACE_ASSETS,
+    async (_event, workspaceSlug: string): Promise<WorkspaceAssetInfo[]> => {
+      return listWorkspaceAssets(workspaceSlug)
+    }
+  )
+
+  // 上传工作区资产（base64）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPLOAD_WORKSPACE_ASSET,
+    async (_event, workspaceSlug: string, filename: string, base64: string): Promise<WorkspaceAssetInfo> => {
+      return uploadWorkspaceAsset(workspaceSlug, filename, base64)
+    }
+  )
+
+  // 删除工作区资产
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.DELETE_WORKSPACE_ASSET,
+    async (_event, workspaceSlug: string, filename: string): Promise<void> => {
+      deleteWorkspaceAsset(workspaceSlug, filename)
     }
   )
 
@@ -4161,6 +4226,8 @@ export function registerIpcHandlers(): void {
         const workspace = meta?.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
         if (workspace) {
           forbiddenRoots.push(getAgentSessionWorkspacePath(workspace.slug, options.sessionId))
+          // 工程目录本身不可作为删除目标（列表/打开已授权，删除受保护）
+          if (workspace.projectRootPath) forbiddenRoots.push(workspace.projectRootPath)
         }
       }
       if (!isSafeDeleteTarget(

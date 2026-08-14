@@ -71,7 +71,7 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   {
     id: 'new-todo',
     name: '新建 Todo/日程/定时任务',
-    description: 'Task 日历内按当前子页签新建 Todo、日程或定时任务',
+    description: '计划内按当前子页签新建 Todo、日程或定时任务',
     defaultMac: 'Cmd+T',
     defaultWin: 'Ctrl+T',
     category: 'app',
@@ -118,8 +118,8 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   },
   {
     id: 'global-search',
-    name: '全局搜索',
-    description: '搜索对话和会话',
+    name: '搜索',
+    description: '打开搜索视图（标题/内容搜索 + 最近会话按时间分组）',
     defaultMac: 'Cmd+Shift+F',
     defaultWin: 'Ctrl+Shift+F',
     category: 'navigation',

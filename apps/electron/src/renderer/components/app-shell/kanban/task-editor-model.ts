@@ -3,7 +3,10 @@ import type { TaskSpec } from '@myyoda/shared/tasks/schema'
 import { buildSpec, specToSubtasks, type SpecForm } from './task-spec-form'
 import type { KanbanItem, TaskEditorTarget } from './types'
 
-export interface TaskEditorDraft extends SpecForm {}
+export interface TaskEditorDraft extends SpecForm {
+  /** 任务归属工作区（新模型：项目=工作区）；空串 = 当前工作区 */
+  targetWorkspaceId: string
+}
 
 export interface TaskEditorCreateRequest {
   yaml: string
@@ -49,6 +52,7 @@ export function createTaskEditorDraft(
     title: target.mode === 'create' ? target.initialTitle ?? '' : promoting ? target.initialTitle ?? '' : '',
     goal: target.mode === 'create' ? target.initialGoal ?? '' : '',
     projectId: target.mode === 'create' ? target.initialProjectId ?? '' : '',
+    targetWorkspaceId: '',
     orchModel: (promoting && target.initialModel) ? target.initialModel : defaultModel,
     permissionMode: 'allow-all',
     ...(initialExpertId ? { expertId: initialExpertId } : {}),
@@ -68,6 +72,7 @@ export function taskSpecToEditorDraft(
     acceptanceCriteria: spec.acceptance_criteria,
     maxRepairs: spec.max_iterations,
     projectId: spec.project ?? (target.mode === 'create' ? target.initialProjectId ?? '' : ''),
+    targetWorkspaceId: '',
     boundProjectId: spec.project,
     orchModel: spec.defaults?.model ?? defaultModel,
     orchConnection: spec.defaults?.llmConnection,

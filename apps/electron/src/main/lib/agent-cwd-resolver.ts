@@ -3,9 +3,10 @@
  *
  * 优先级（从高到低）：
  * 1. Git Worktree 绑定路径（会话级隔离，创建后不随 Project 变化）
- * 2. 新会话（agentCwdMode === 'project'）绑定的 Project 工作目录（动态解析，
- *    Project 重新关联目录后自动生效）
- * 3. 会话隔离沙箱目录（历史会话兼容 / 未绑定 Project 时的托管目录）
+ * 2. 工作区绑定的本地项目根目录（workspace.projectRootPath，对齐 Proma：工作区=项目）
+ * 3. 新会话（agentCwdMode === 'project'）绑定的 Project 工作目录（动态解析，
+ *    Project 重新关联目录后自动生效；存量 KanbanProject 兼容）
+ * 4. 会话隔离沙箱目录（历史会话兼容 / 未绑定目录时的托管兜底）
  *
  * 纯函数，不直接依赖 projectRepository / 文件系统，便于单测覆盖决策分支。
  */
@@ -15,6 +16,8 @@ import type { EffectiveCwdResult } from './project-path-service'
 export interface ResolveSessionCwdInput {
   /** 会话绑定的 Git Worktree 路径；存在时优先级最高 */
   gitWorktreePath?: string
+  /** 工作区绑定的本地项目根目录（workspace.projectRootPath）；存在时优先于 Project 工作目录 */
+  workspaceProjectRootPath?: string
   /** 会话的 cwd 语义标记；历史会话缺失时应传 undefined（按 'session' 解释） */
   agentCwdMode?: 'session' | 'project'
   /** 会话关联的 Project ID */
@@ -25,7 +28,7 @@ export interface ResolveSessionCwdInput {
   sandboxCwd: string
 }
 
-export type SessionCwdSource = 'worktree' | 'project' | 'sandbox'
+export type SessionCwdSource = 'worktree' | 'workspace-root' | 'project' | 'sandbox'
 
 export interface ResolveSessionCwdResult {
   cwd: string
@@ -43,6 +46,10 @@ export function resolveSessionCwd(
 ): ResolveSessionCwdResult | ResolveSessionCwdUnavailable {
   if (input.gitWorktreePath) {
     return { cwd: input.gitWorktreePath, source: 'worktree' }
+  }
+
+  if (input.workspaceProjectRootPath) {
+    return { cwd: input.workspaceProjectRootPath, source: 'workspace-root' }
   }
 
   if (input.agentCwdMode === 'project' && input.projectId) {

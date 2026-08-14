@@ -21,6 +21,12 @@ interface UseWorkspaceActionsResult {
   selectWorkspace: (workspaceId: string, opts?: { resetView?: boolean }) => void
   /** 创建并切到新工作区；成功返回新工作区，失败已 toast 并返回 null */
   createWorkspace: (name: string) => Promise<AgentWorkspace | null>
+  /** 从本地文件夹创建项目（工作区）；成功返回新工作区，失败已 toast 并返回 null */
+  createWorkspaceFromFolder: (projectRootPath: string) => Promise<AgentWorkspace | null>
+  /** 重新关联工作区本地项目根目录 */
+  relinkWorkspaceProjectRoot: (id: string, projectRootPath: string) => Promise<AgentWorkspace | null>
+  /** 在缺失的原路径恢复空项目根目录 */
+  restoreWorkspaceProjectRoot: (id: string) => Promise<AgentWorkspace | null>
 }
 
 export function useWorkspaceActions(): UseWorkspaceActionsResult {
@@ -64,5 +70,72 @@ export function useWorkspaceActions(): UseWorkspaceActionsResult {
     [setWorkspaces, setCurrentWorkspaceId, setActiveView],
   )
 
-  return { workspaces, currentWorkspaceId, selectWorkspace, createWorkspace }
+  /** 从本地文件夹创建项目（工作区）：名称取文件夹名，projectRootPath 绑定该目录 */
+  const createWorkspaceFromFolder = React.useCallback(
+    async (projectRootPath: string): Promise<AgentWorkspace | null> => {
+      const trimmed = projectRootPath.trim()
+      if (!trimmed) return null
+      if (createInFlightRef.current) return null
+      createInFlightRef.current = true
+
+      try {
+        const name = trimmed.split(/[\\/]/).filter(Boolean).pop() ?? trimmed
+        const workspace = await window.electronAPI.createAgentWorkspace({ name, projectRootPath: trimmed })
+        setWorkspaces((prev) => [workspace, ...prev])
+        setCurrentWorkspaceId(workspace.id)
+        setActiveView('conversations')
+        window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
+        return workspace
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : '创建失败'
+        toast.error(msg)
+        return null
+      } finally {
+        createInFlightRef.current = false
+      }
+    },
+    [setWorkspaces, setCurrentWorkspaceId, setActiveView],
+  )
+
+  /** 重新关联工作区本地项目根目录；成功后更新列表 */
+  const relinkWorkspaceProjectRoot = React.useCallback(
+    async (id: string, projectRootPath: string): Promise<AgentWorkspace | null> => {
+      try {
+        const updated = await window.electronAPI.relinkAgentWorkspaceProjectRoot(id, projectRootPath)
+        setWorkspaces((prev) => prev.map((w) => (w.id === id ? updated : w)))
+        return updated
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : '重新关联失败'
+        toast.error(msg)
+        return null
+      }
+    },
+    [setWorkspaces],
+  )
+
+  /** 在缺失的原路径恢复空项目根目录；成功后更新列表 */
+  const restoreWorkspaceProjectRoot = React.useCallback(
+    async (id: string): Promise<AgentWorkspace | null> => {
+      try {
+        const updated = await window.electronAPI.restoreAgentWorkspaceProjectRoot(id)
+        setWorkspaces((prev) => prev.map((w) => (w.id === id ? updated : w)))
+        return updated
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : '恢复失败'
+        toast.error(msg)
+        return null
+      }
+    },
+    [setWorkspaces],
+  )
+
+  return {
+    workspaces,
+    currentWorkspaceId,
+    selectWorkspace,
+    createWorkspace,
+    createWorkspaceFromFolder,
+    relinkWorkspaceProjectRoot,
+    restoreWorkspaceProjectRoot,
+  }
 }

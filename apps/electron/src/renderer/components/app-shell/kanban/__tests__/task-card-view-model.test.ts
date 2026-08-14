@@ -55,6 +55,15 @@ describe('buildTaskCardViewModel', () => {
       project: null,
       task: { ...item().task!, scope: { kind: 'workspace' } },
     }))
-    expect(vm.projectName).toBe('Workspace')
+    expect(vm.projectName).toBe('工作区')
+  })
+
+  test('跨工作区视图（scope=all）携带 workspaceName 时优先显示工作区名', () => {
+    const vm = buildTaskCardViewModel(item({
+      workspaceName: 'LuxAgents',
+      project: null,
+      task: { ...item().task!, scope: { kind: 'workspace' } },
+    }))
+    expect(vm.projectName).toBe('LuxAgents')
   })
 })

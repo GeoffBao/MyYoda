@@ -1,12 +1,11 @@
 import * as React from 'react'
-import { Upload, Trash2, FileText } from 'lucide-react'
+import { FileText, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import type { KanbanProject } from '@/components/app-shell/kanban/types'
 
 interface ProjectAssetsTabProps {
   workspaceRoot: string
-  project: KanbanProject
+  workspaceSlug: string
   onError: (message: string | null) => void
 }
 
@@ -21,20 +20,18 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function ProjectAssetsTab({ workspaceRoot, project, onError }: ProjectAssetsTabProps): React.ReactElement {
-  const slug = project.slug
+/** 工作区资产（项目=工作区：资产库位于 workspace-files/assets/，对齐 craft） */
+export function ProjectAssetsTab({ workspaceRoot: _workspaceRoot, workspaceSlug, onError }: ProjectAssetsTabProps): React.ReactElement {
   const [assets, setAssets] = React.useState<AssetInfo[]>([])
   const [busy, setBusy] = React.useState(false)
 
   React.useEffect(() => {
-    if (!slug) return
-    window.electronAPI.projects.listAssets(workspaceRoot, slug)
+    window.electronAPI.listWorkspaceAssets(workspaceSlug)
       .then((list) => setAssets(list.map((a) => ({ filename: a.filename, size: a.sizeBytes }))))
       .catch(() => setAssets([]))
-  }, [workspaceRoot, slug])
+  }, [workspaceSlug])
 
   const handleUpload = async (): Promise<void> => {
-    if (!slug) return
     const file = await new Promise<File | null>((resolve) => {
       const input = document.createElement('input')
       input.type = 'file'
@@ -50,10 +47,7 @@ export function ProjectAssetsTab({ workspaceRoot, project, onError }: ProjectAss
         reader.onerror = () => reject(new Error('读取文件失败'))
         reader.readAsDataURL(file)
       })
-      const result = await window.electronAPI.projects.uploadAsset(workspaceRoot, slug, {
-        filename: file.name,
-        base64,
-      })
+      const result = await window.electronAPI.uploadWorkspaceAsset(workspaceSlug, file.name, base64)
       setAssets((prev) => [...prev, { filename: result.filename, size: file.size }])
       onError(null)
     } catch (cause) {
@@ -66,10 +60,9 @@ export function ProjectAssetsTab({ workspaceRoot, project, onError }: ProjectAss
   }
 
   const handleDelete = async (filename: string): Promise<void> => {
-    if (!slug) return
     setBusy(true)
     try {
-      await window.electronAPI.projects.deleteAsset(workspaceRoot, slug, filename)
+      await window.electronAPI.deleteWorkspaceAsset(workspaceSlug, filename)
       setAssets((prev) => prev.filter((a) => a.filename !== filename))
       onError(null)
     } catch (cause) {
@@ -86,8 +79,8 @@ export function ProjectAssetsTab({ workspaceRoot, project, onError }: ProjectAss
       <div className="rounded-xl border border-border/40 bg-muted/20 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold">Project Assets</h2>
-            <p className="text-xs text-muted-foreground">项目文档、图片、设计稿等附件。</p>
+            <h2 className="text-sm font-semibold">工作区资料</h2>
+            <p className="text-xs text-muted-foreground">项目文档、图片、设计稿等附件（workspace-files/assets/）。</p>
           </div>
           <Button size="sm" disabled={busy} onClick={() => void handleUpload()}>
             <Upload className="mr-1 h-3.5 w-3.5" />

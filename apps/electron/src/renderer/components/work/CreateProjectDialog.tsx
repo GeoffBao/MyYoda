@@ -89,13 +89,13 @@ export function CreateProjectDialog({
               />
             </label>
             <div className="space-y-1.5 text-xs font-medium">
-              <span>项目工作目录（可选）</span>
+              <span>工程目录（可选）</span>
               <WorkingDirectoryField
                 value={draft.workingDirectory}
                 onChange={handleWorkingDirectoryChange}
               />
               <p className="text-[11px] font-normal text-muted-foreground">
-                选择本地文件夹会绑定为项目工作目录，名称自动取文件夹名；也可以留空仅创建项目分组
+                选择本地文件夹会绑定为项目工程目录（会话 cwd 与记忆落在此目录），名称自动取文件夹名；留空则创建空白项目（托管目录）
               </p>
             </div>
           </div>
