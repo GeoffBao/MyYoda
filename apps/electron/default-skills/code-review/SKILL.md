@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: 对代码改动做结构化审查（质量、规范、健壮性、影响面）。当需要审查提交、PR 或一次改动的代码时使用；输出分级问题清单（阻断/建议/风格）并附文件行号与修复建议。
-version: "1.0.0"
+version: "1.1.0"
 ---
 
 # Code Review
