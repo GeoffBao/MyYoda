@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, type PlanningWorkspaceScope, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -5052,6 +5052,62 @@ export function registerIpcHandlers(): void {
     RELEASE_NOTES_IPC_CHANNELS.COMBINED,
     async (): Promise<string> => {
       return getCombinedReleaseNotes()
+    }
+  )
+
+  // ===== 用户反馈（→ Notion）=====
+
+  // 提交反馈到 Notion 数据库（含截图上传，失败自动落本地草稿）
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.SUBMIT,
+    async (_event, input: FeedbackSubmitInput, appVersion?: string, platform?: string) => {
+      const { submitFeedback } = await import('./lib/feedback-service')
+      return submitFeedback(input, appVersion ?? '', platform ?? '')
+    }
+  )
+
+  // 测试 Notion 连接（token + databaseId）
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.TEST_CONNECTION,
+    async (_event, config: FeedbackNotionConfig) => {
+      const { testFeedbackConnection } = await import('./lib/feedback-service')
+      return testFeedbackConnection(config)
+    }
+  )
+
+  // 读取反馈渠道配置（不返回 token 明文）
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.GET_CONFIG,
+    async () => {
+      const { getFeedbackConfigPublic } = await import('./lib/feedback-service')
+      return getFeedbackConfigPublic()
+    }
+  )
+
+  // 保存反馈渠道配置
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.SAVE_CONFIG,
+    async (_event, config: FeedbackNotionConfig) => {
+      const { saveFeedbackConfig } = await import('./lib/feedback-service')
+      saveFeedbackConfig(config)
+    }
+  )
+
+  // 截取当前应用窗口（renderer 会在调用前短暂隐藏反馈弹窗自身）
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.CAPTURE_WINDOW,
+    async (event) => {
+      const { captureFeedbackWindow } = await import('./lib/feedback-service')
+      return captureFeedbackWindow(event.sender)
+    }
+  )
+
+  // 选择本地图片（压缩后返回预览 dataUrl + 提交用 filePath）
+  ipcMain.handle(
+    FEEDBACK_IPC_CHANNELS.PICK_IMAGES,
+    async (event) => {
+      const { pickFeedbackImages } = await import('./lib/feedback-service')
+      return pickFeedbackImages(event.sender)
     }
   )
 

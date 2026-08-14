@@ -7,7 +7,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, TEAMBITION_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
 import type { TaskAggregateSummary, TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks'
 import type { StartTodoAgentInput, StartTodoAgentResult, TodoAgentSessionActivation, PlanningWorkspaceScope } from '@myyoda/shared'
 import { LABEL_IPC_CHANNELS } from '@myyoda/shared/channels'
@@ -1329,6 +1329,14 @@ export interface ElectronAPI {
   listReleaseNotes: () => Promise<ReleaseNote[]>
   getLatestReleaseVersion: () => Promise<string | undefined>
   getCombinedReleaseNotes: () => Promise<string>
+
+  // ===== 用户反馈（→ Notion）=====
+  feedbackSubmit: (input: import('@myyoda/shared').FeedbackSubmitInput, appVersion?: string, platform?: string) => Promise<import('@myyoda/shared').FeedbackSubmitResult>
+  feedbackTestConnection: (config: import('@myyoda/shared').FeedbackNotionConfig) => Promise<import('@myyoda/shared').FeedbackTestConnectionResult>
+  feedbackGetConfig: () => Promise<{ configured: boolean; databaseId: string }>
+  feedbackSaveConfig: (config: import('@myyoda/shared').FeedbackNotionConfig) => Promise<void>
+  feedbackCaptureWindow: () => Promise<{ filePath: string; dataUrl: string } | null>
+  feedbackPickImages: () => Promise<Array<{ filePath: string; dataUrl: string }>>
 
   // 工作区文件变化通知
   onCapabilitiesChanged: (callback: () => void) => () => void
@@ -3090,6 +3098,31 @@ const electronAPI: ElectronAPI = {
 
   getCombinedReleaseNotes: () => {
     return ipcRenderer.invoke(RELEASE_NOTES_IPC_CHANNELS.COMBINED)
+  },
+
+  // ===== 用户反馈（→ Notion）=====
+  feedbackSubmit: (input, appVersion, platform) => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.SUBMIT, input, appVersion, platform)
+  },
+
+  feedbackTestConnection: (config) => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.TEST_CONNECTION, config)
+  },
+
+  feedbackGetConfig: () => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.GET_CONFIG)
+  },
+
+  feedbackSaveConfig: (config) => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.SAVE_CONFIG, config)
+  },
+
+  feedbackCaptureWindow: () => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.CAPTURE_WINDOW)
+  },
+
+  feedbackPickImages: () => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.PICK_IMAGES)
   },
 
   // ===== 飞书集成 =====

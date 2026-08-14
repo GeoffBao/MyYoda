@@ -11,7 +11,7 @@
 
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
-import { HelpCircle, Keyboard, ChevronRight, CircleHelp, BookOpen, Sparkles } from 'lucide-react'
+import { HelpCircle, Keyboard, ChevronRight, CircleHelp, BookOpen, Sparkles, MessageSquareHeart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { extractReleaseHeadline, type ReleaseNote } from '@myyoda/shared'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -19,6 +19,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { shortcutGuideOpenAtom } from '@/atoms/shortcut-guide'
 import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
+import { feedbackDialogOpenAtom } from '@/atoms/feedback-dialog'
 
 export interface ReleaseNotesPopoverProps {
   version: string
@@ -49,6 +50,7 @@ export function ReleaseNotesPopover({
   const [dialogInitialVersion, setDialogInitialVersion] = React.useState<string | undefined>(undefined)
   const setShortcutGuideOpen = useSetAtom(shortcutGuideOpenAtom)
   const setFaqDialogOpen = useSetAtom(faqDialogOpenAtom)
+  const setFeedbackDialogOpen = useSetAtom(feedbackDialogOpenAtom)
 
   const handleOpenChange = (next: boolean): void => {
     setOpen(next)
@@ -74,6 +76,11 @@ export function ReleaseNotesPopover({
   const handleOpenFaq = (): void => {
     setOpen(false)
     setFaqDialogOpen(true)
+  }
+
+  const handleOpenFeedback = (): void => {
+    setOpen(false)
+    setFeedbackDialogOpen(true)
   }
 
   return (
@@ -136,6 +143,15 @@ export function ReleaseNotesPopover({
             </button>
           </div>
           <div className="border-t border-border/60 bg-muted/15 p-2">
+            <button
+              type="button"
+              onClick={handleOpenFeedback}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus:bg-accent focus:outline-none"
+            >
+              <MessageSquareHeart size={15} className="shrink-0 text-primary" />
+              意见反馈
+              <span className="ml-auto text-[10px] text-muted-foreground">Bug 报告 / 功能建议</span>
+            </button>
             {onOpenGuide && (
               <button
                 type="button"

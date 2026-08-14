@@ -677,6 +677,24 @@ export function getFeishuConfigPath(): string {
 }
 
 /**
+ * 获取反馈配置（Notion）文件路径
+ *
+ * @returns ~/.myyoda/feedback.json
+ */
+export function getFeedbackConfigPath(): string {
+  return join(getConfigDir(), 'feedback.json')
+}
+
+/**
+ * 获取反馈草稿目录路径
+ *
+ * @returns ~/.myyoda/feedback-drafts
+ */
+export function getFeedbackDraftsDir(): string {
+  return join(getConfigDir(), 'feedback-drafts')
+}
+
+/**
  * 获取飞书聊天绑定持久化路径
  *
  * @returns ~/.myyoda/feishu-bindings.json

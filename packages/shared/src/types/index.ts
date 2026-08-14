@@ -40,6 +40,7 @@ export * from './github'
 
 // 本地化版本历史（Release Notes）相关类型
 export * from './release-notes'
+export * from './feedback'
 
 // 系统提示词相关类型
 export * from './system-prompt'

@@ -104,6 +104,7 @@ import { ProjectsInitializer } from './components/ProjectsInitializer'
 import { GlobalShortcuts } from './components/shortcuts/GlobalShortcuts'
 import { ShortcutGuideDialog } from './components/shortcuts/ShortcutGuideDialog'
 import { FaqDialog } from './components/faq/FaqDialog'
+import { FeedbackDialog } from './components/feedback/FeedbackDialog'
 import { VoiceDictationApp } from './components/voice-dictation/VoiceDictationApp'
 import { TabSwitcher } from './components/tabs/TabSwitcher'
 import { htmlToMarkdown, markdownToHtml } from './lib/markdown-rich-text'
@@ -1283,6 +1284,7 @@ if (isQuickTaskWindow) {
       <GlobalShortcuts />
       <ShortcutGuideDialog />
       <FaqDialog />
+      <FeedbackDialog />
       <TabSwitcher />
       <App />
       <Toaster position="bottom-right" />
