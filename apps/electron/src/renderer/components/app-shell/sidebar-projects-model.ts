@@ -160,20 +160,3 @@ export function sortProjectsByTreeActivity(
     return (right.updatedAt ?? 0) - (left.updatedAt ?? 0)
   })
 }
-
-/**
- * 计算点击项目行后的折叠集合（聚焦规则）：
- * - focusWorkspaceId 有值 → 折叠除目标工作区外的所有工作区（目标保持展开）
- * - focusWorkspaceId 为 null → 全部折叠
- * 调用方自行处理「自动任务」合成组等非工作区 key。
- */
-export function resolveProjectFocusCollapsedIds(
-  workspaceIds: readonly string[],
-  focusWorkspaceId: string | null,
-): Set<string> {
-  const next = new Set<string>()
-  for (const id of workspaceIds) {
-    if (focusWorkspaceId === null || id !== focusWorkspaceId) next.add(id)
-  }
-  return next
-}

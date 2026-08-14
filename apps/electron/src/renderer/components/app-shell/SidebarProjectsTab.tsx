@@ -2,9 +2,11 @@
  * SidebarProjectsTab — 会话列表「分组方式：项目」视图（对齐 Proma：项目 = 工作区）
  *
  * 挂载于 LeftSidebar groupBy === 'project' 时：
- * - 每个工作区（项目）一个行：文件夹图标 + 名称 + 本地目录徽标 + 会话树（updatedAt 倒序）
- * - 自动跟随聚焦：右侧当前打开的会话（不论从何处打开）所属项目自动展开，其他全部折叠
- * - 点击行 = 切换到该工作区并展开（浏览语义，不影响会话跟随）；再点当前项目 = 折叠/展开切换；hover 菜单：新会话 / 看板 / 重命名 / 重新关联目录 / 删除
+ * - 每个工作区（项目）一个行：文件夹图标（参考 Heptabase 风格：闭合 Folder = 折叠，张开 FolderOpen = 展开，常驻显示不依赖 hover）+ 名称 + 本地目录徽标 + 会话树（updatedAt 倒序）
+ * - **展开/折叠两种状态独立共存**：
+ *   1. 手动展开（点击项目行 toggle）：显示该项目下全部会话（分页，超过 8 条可「显示全部」），纯手动状态，不受会话切换影响
+ *   2. 默认折叠时：若右侧当前打开的会话属于该项目，则单独露出这一条（peek，纯渲染时根据 activeSessionId 实时推导，无需手动；会话切换到其他项目时旧的 peek 自动收起）；不属于该项目则什么都不显示
+ * - 点击行 = 切换到该工作区（导航）+ toggle 它自己的手动展开状态（不影响其他项目）；hover 菜单：新会话 / 看板 / 重命名 / 重新关联目录 / 删除
  * - 行右侧聚合注意力点：取组内会话最高优先级状态（blocked > running > completed）
  * - 全部工作区均展示（含默认工作区）；KanbanProject 兼容层保留在看板内，不再作为侧栏分组源
  */
@@ -15,6 +17,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Clock,
+  Folder,
   FolderOpen,
   LayoutDashboard,
   MoreHorizontal,
@@ -80,8 +83,6 @@ import {
 } from './sidebar-session-tree'
 import {
   filterGroupableSessions,
-  isHiddenAutomationSession,
-  resolveProjectFocusCollapsedIds,
   resolveProjectTreeAttention,
 } from './sidebar-projects-model'
 
@@ -113,7 +114,7 @@ const ATTENTION_DOT_CLASS: Record<string, string> = {
   completed: 'bg-emerald-500',
 }
 
-/** 项目分组视图每个 workspace 下默认展示的会话数量上限；超出部分折叠在「显示全部」按钮后 */
+/** 项目手动展开后每个 workspace 下默认展示的会话数量上限；超出部分折叠在「显示全部」按钮后 */
 const PROJECT_MODE_PREVIEW_LIMIT = 8
 /** 「自动任务」合成组专用折叠 key（不对应真实工作区） */
 const AUTOMATION_GROUP_KEY = '__automations__'
@@ -143,6 +144,9 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
   const setActiveView = useSetAtom(activeViewAtom)
 
   const [collapsedIds, setCollapsedIds] = React.useState<Set<string>>(new Set())
+  /** 用户手动展开的工作区（项目行）集合：默认都是折叠（空集合），展开后显示全部会话；
+   * 与会话 peek（折叠时露出当前激活会话的那一条）独立不干扰。 */
+  const [manuallyExpandedWorkspaceIds, setManuallyExpandedWorkspaceIds] = React.useState<Set<string>>(new Set())
   /** 已完全展开的工作区（点击「显示全部」后展示全部任务族，不再分批） */
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = React.useState<Set<string>>(new Set())
   const [expandedParentIds, setExpandedParentIds] = React.useState<Set<string>>(new Set())
@@ -213,52 +217,17 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [setActiveView, setCodeMainView])
 
-  /** 当前激活会话对象（如有）；直接从全量会话列表查，draft/置顶/自动任务会话也能命中 */
-  const activeSession = React.useMemo(() => {
-    if (!activeSessionId) return null
-    return agentSessions.find((session) => session.id === activeSessionId) ?? null
-  }, [activeSessionId, agentSessions])
-  /** 激活会话所属工作区 id，历史会话无归属时为 null */
-  const activeSessionWorkspaceId = activeSession?.workspaceId ?? null
-  /** 激活会话是否为自动任务会话（不属于任何工作区列表，展示在自动任务合成组中） */
-  const activeIsAutomationSession = !!activeSession && isHiddenAutomationSession(activeSession)
-
-  /**
-   * 自动跟随聚焦：右侧当前打开的会话所属项目自动展开，其他全部折叠（对齐参考截图效果）。
-   * 不依赖点击项目名——从搜索、会话行、自动任务等任何入口打开会话，只要 activeSessionId 变化就立即重新聚焦。
-   * 手动折叠（点击当前项目 toggle）不会被立即覆盖——只有 activeSessionId 再次变化时才重新锁定。
-   */
-  React.useEffect(() => {
-    if (activeIsAutomationSession) {
-      // 自动任务会话：展开自动任务合成组，其他工作区全部折叠
-      setCollapsedIds(resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), null))
-      return
-    }
-    setCollapsedIds((prev) => {
-      const next = resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), activeSessionWorkspaceId)
-      // 自动任务合成组保持原状，不被工作区聚焦影响
-      if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
-      return next
-    })
-  }, [activeSessionWorkspaceId, activeIsAutomationSession, visibleWorkspaces])
-
-  /** 点击工作区行：切换为当前工作区 + 展开此项目（浏览语义，与上述会话跟随聚焦独立） */
+  /** 点击工作区行：切换到该工作区（导航）+ toggle 它自己的手动展开状态（不影响其他项目）。
+   * 会话 peek（折叠时露出当前激活会话那一条）与手动展开独立，完全由渲染时根据 activeSessionId 实时推导，不受此处影响。 */
   const handleSelectWorkspace = React.useCallback((workspaceId: string) => {
-    if (workspaceId === currentWorkspaceId) {
-      // 点击当前工作区 → 折叠/展开切换
-      toggleCollapsed(workspaceId)
-      return
-    }
-    // 切换到新项目：总是展开点击的项目，折叠其他（不依赖右侧会话归属，
-    // 供用户无需打开会话即可浏览项目；一旦切换会话，上述自动跟随聚焦会重新接管）
     selectWorkspace(workspaceId)
-    setCollapsedIds((prev) => {
-      const next = resolveProjectFocusCollapsedIds(visibleWorkspaces.map((ws) => ws.id), workspaceId)
-      // 自动任务合成组保持原状
-      if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
+    setManuallyExpandedWorkspaceIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(workspaceId)) next.delete(workspaceId)
+      else next.add(workspaceId)
       return next
     })
-  }, [currentWorkspaceId, selectWorkspace, visibleWorkspaces])
+  }, [selectWorkspace])
 
   /** 打开该工作区的任务看板 */
   const openWorkspaceBoard = React.useCallback((workspaceId: string) => {
@@ -430,14 +399,18 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
             {visibleWorkspaces.map((ws) => {
               const wsId = ws.id
               const isCurrent = wsId === currentWorkspaceId
-              const expanded = !collapsedIds.has(wsId)
               const wsTrees = treesByWorkspace.get(wsId) ?? []
+              const isManuallyExpanded = manuallyExpandedWorkspaceIds.has(wsId)
+              // 折叠时：只 peek 当前右侧激活会话所属的那一条（不展示该项目其他会话），随 activeSessionId 变化自动跟随；已手动展开时不需要 peek（已在全部列表里）
+              const peekTree = !isManuallyExpanded && activeSessionId ? wsTrees.find((tree) => treeContainsSessionId(tree, activeSessionId)) : undefined
+              // 图标/aria-expanded 反映「下面是否有内容在显示」（全部列表或 peek 都算），与「是否手动展开」区分开
+              const expanded = isManuallyExpanded || !!peekTree
               const attention = resolveProjectTreeAttention(wsTrees, indicatorMap)
               const showExpandedAll = expandedWorkspaceIds.has(wsId)
 
               return (
                 <div key={wsId} className="rounded-lg">
-                  {/* 工作区行：点击 = 切换到该工作区并展开/折叠会话；右键/双指点击 = 操作菜单 */}
+                  {/* 工作区行：点击 = 切换到该工作区 + toggle 手动展开/折叠（不影响其他项目）；右键/双指点击 = 操作菜单 */}
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
                       <div
@@ -456,16 +429,9 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                           isCurrent ? 'bg-foreground/[0.05]' : 'hover:bg-foreground/[0.04]',
                         )}
                       >
-                        {/* 项目图标：默认文件夹；hover 显示展开/折叠 chevron（对齐 Proma） */}
+                        {/* 项目图标：参考 Heptabase，常驻显示开合状态（不依赖 hover）——闭合 Folder = 折叠（默认），张开 FolderOpen = 正在显示内容（手动展开或 peek 着激活会话） */}
                         <span className="grid size-5 shrink-0 place-items-center rounded-md bg-foreground/[0.045] text-foreground/45">
-                          <FolderOpen size={13} className="group-hover:hidden" />
-                          <ChevronRight
-                            size={13}
-                            className={cn(
-                              'hidden transition-transform duration-fast group-hover:block',
-                              expanded ? 'rotate-90' : '-rotate-90',
-                            )}
-                          />
+                          {expanded ? <FolderOpen size={13} /> : <Folder size={13} />}
                         </span>
                         <span className="flex min-w-0 items-center gap-1.5">
                           <MarqueeText text={ws.name} className="min-w-0 flex-1 text-[13px] font-medium" />
@@ -602,8 +568,8 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                     </ContextMenuContent>
                   </ContextMenu>
 
-                  {/* 工作区下按任务族展示；预览上限按根任务计数 */}
-                  {expanded && wsTrees.length > 0 && (
+                  {/* 手动展开时显示该工作区下全部任务族（分页）；折叠时只 peek 当前右侧激活会话那一条 */}
+                  {isManuallyExpanded && wsTrees.length > 0 && (
                     <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
                       {(showExpandedAll || wsTrees.length <= PROJECT_MODE_PREVIEW_LIMIT
                         ? wsTrees
@@ -627,6 +593,11 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                           收起
                         </button>
                       )}
+                    </div>
+                  )}
+                  {!isManuallyExpanded && peekTree && (
+                    <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
+                      {renderSessionTree(peekTree)}
                     </div>
                   )}
                 </div>
