@@ -209,9 +209,10 @@ export class RepoMapToolsService {
     }
 
     const graphifyInstalled = this.isGraphifyInstalled();
-    // 进行中的构建状态优先（跨调用保持 running）
+    // 进行中的构建状态优先（跨调用保持 running）。仅当确有待决构建任务时才返回缓存，
+    // 否则重算——修复 graphify 未装时 running 永无终态的死锁（PR #56 review，2026-08-14）。
     const active = this.states.get(mainRepo);
-    if (active?.status === "running") return active;
+    if (active?.status === "running" && this.pendingBuilds.has(mainRepo)) return active;
 
     const mapReady =
       repoMapService.getRepoMapForPromptReadOnly(mainRepo) !== undefined;
@@ -233,9 +234,10 @@ export class RepoMapToolsService {
    * 幂等创建（对话栏按钮唯一入口）：
    * - repo map：warmUp（主进程内生成，fire-and-forget，内置零依赖）
    * - Graphify：spawn 子进程 `graphify extract . --code-only`（cwd=主仓库）
-   * - 同主仓库并发去重（进行中复用）；非 git → unavailable；graphify 未装 → map 照建
+   * - forceUpdate：图已就绪时点击按钮 → 差分更新 `graphify update .`（增量，非全量重建）
+   * - 同主仓库并发去重（进行中复用）；非 git → unavailable；graphify 未装 → map 照建 + 终态 failed
    */
-  ensureMapTools(cwd: string): RepoMapToolsState {
+  ensureMapTools(cwd: string, options?: { forceUpdate?: boolean }): RepoMapToolsState {
     const mainRepo = getMainRepoRootSync(cwd);
     if (!mainRepo) {
       const state: RepoMapToolsState = {
@@ -260,6 +262,34 @@ export class RepoMapToolsService {
     const graphReady = fs.existsSync(graphJsonPath(mainRepo));
 
     if (mapReady && graphReady) {
+      // 已就绪：默认幂等返回 done；forceUpdate 时跑差分更新 `graphify update .`（PR #56 review）
+      if (options?.forceUpdate) {
+        if (!graphifyInstalled) {
+          const failed: RepoMapToolsState = {
+            status: "failed",
+            mapReady: true,
+            graphReady: true,
+            graphifyInstalled: false,
+            mainRepo,
+            error: "未安装 graphify，无法更新图谱（设置 → 通用 → Graphify 环境一键安装）",
+          };
+          this.states.set(mainRepo, failed);
+          this.emit(failed);
+          return failed;
+        }
+        const updating: RepoMapToolsState = {
+          status: "running",
+          mapReady: true,
+          graphReady: true,
+          graphifyInstalled,
+          mainRepo,
+          progress: "增量更新图谱…",
+        };
+        this.states.set(mainRepo, updating);
+        this.emit(updating);
+        void this.buildGraphify(mainRepo, updating, "update");
+        return updating;
+      }
       const state: RepoMapToolsState = {
         status: "done",
         mapReady: true,
@@ -291,16 +321,29 @@ export class RepoMapToolsService {
 
     // Graphify 部分（未安装则跳过，map 照建——部分失败语义）
     if (!graphReady && graphifyInstalled) {
-      void this.buildGraphify(mainRepo, running);
+      void this.buildGraphify(mainRepo, running, "extract");
+    } else if (!graphReady) {
+      // graphify 未装且无图：立即置终态 failed，修复 running 死锁（PR #56 review，2026-08-14）
+      const failed: RepoMapToolsState = {
+        ...running,
+        status: "failed",
+        error: "未安装 graphify，请到设置 → 通用 → Graphify 环境一键安装后重试",
+      };
+      this.states.set(mainRepo, failed);
+      this.emit(failed);
     }
 
     return this.states.get(mainRepo) ?? running;
   }
 
-  /** spawn graphify 构建（异步，完成后更新状态并推送） */
+  /**
+   * spawn graphify 构建（异步，完成后更新状态并推送）。
+   * mode: extract=首次建图（全量 AST 提取）；update=增量更新（代码变更后同步）。
+   */
   private async buildGraphify(
     mainRepo: string,
     initial: RepoMapToolsState,
+    mode: "extract" | "update",
   ): Promise<void> {
     const existing = this.pendingBuilds.get(mainRepo);
     if (existing) return existing;
@@ -319,7 +362,9 @@ export class RepoMapToolsService {
       let child;
       try {
         const { command, prefixArgs } = this.resolveGraphifyCommand();
-        child = spawn(command, [...prefixArgs, "extract", ".", "--code-only"], {
+        const buildArgs =
+          mode === "update" ? ["update", "."] : ["extract", ".", "--code-only"];
+        child = spawn(command, [...prefixArgs, ...buildArgs], {
           cwd: mainRepo,
           stdio: ["ignore", "pipe", "pipe"],
           shell: process.platform === "win32" && command !== "python",
@@ -367,6 +412,10 @@ export class RepoMapToolsService {
           repoMapService.getRepoMapForPromptReadOnly(mainRepo) !== undefined;
         const graphReady = fs.existsSync(graphJsonPath(mainRepo));
         if (code === 0 && graphReady) {
+          // 建图成功：确保 graphify-out/ 已加入主仓库 .gitignore（防止污染 git status；PR #56 review）
+          if (mode === "extract") {
+            this.ensureGitignore(mainRepo);
+          }
           finish({
             status: "done",
             mapReady,

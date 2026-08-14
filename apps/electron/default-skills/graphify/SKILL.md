@@ -1,7 +1,7 @@
 ---
 name: graphify
 description: 代码知识图谱查询（依赖关系、影响面、代码结构）。当需要理解代码库结构、查某个符号/文件的调用与依赖关系、评估改动影响面、或找相关代码时使用；用 Bash 执行 graphify query/explain/path 命令，返回带行号与置信标签（EXTRACTED/INFERRED）的图结构。
-version: "1.0.0"
+version: "1.1.0"
 ---
 
 # Graphify 代码知识图谱查询

@@ -1119,7 +1119,7 @@ export interface ElectronAPI {
   /** 查询图谱工具状态（纯读） */
   getRepoMapToolsState: (cwd: string) => Promise<import('@myyoda/shared').RepoMapToolsState>
   /** 幂等创建（对话栏按钮唯一主动入口） */
-  ensureRepoMapTools: (cwd: string) => Promise<import('@myyoda/shared').RepoMapToolsState>
+  ensureRepoMapTools: (cwd: string, forceUpdate?: boolean) => Promise<import('@myyoda/shared').RepoMapToolsState>
   /** 订阅状态变更推送（不轮询） */
   onRepoMapToolsStatus: (callback: (state: import('@myyoda/shared').RepoMapToolsState) => void) => () => void
   /** 一键安装 graphify（进度经 onRepoMapToolsInstallProgress 推送） */
@@ -2810,8 +2810,8 @@ const electronAPI: ElectronAPI = {
   getRepoMapToolsState: (cwd: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_GET_STATE, cwd)
   },
-  ensureRepoMapTools: (cwd: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_ENSURE, cwd)
+  ensureRepoMapTools: (cwd: string, forceUpdate?: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REPO_MAP_TOOLS_ENSURE, cwd, forceUpdate === true)
   },
   onRepoMapToolsStatus: (callback: (state: import('@myyoda/shared').RepoMapToolsState) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: import('@myyoda/shared').RepoMapToolsState): void => callback(state)

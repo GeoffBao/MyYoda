@@ -383,7 +383,7 @@ export class AgentOrchestrator {
 
   /**
    * 注入 Graphify MCP stdio server（P3，2026-08-14）。
-   * 条件：主仓库图存在 + graphifyy[mcp] 已装（isGraphifyMcpAvailable 含 30s 缓存）。
+   * 条件：主仓库图存在 + graphifyy[mcp] 已装（isGraphifyMcpAvailable 含 10 分钟缓存）。
    * 用户自配同名 'graphify' server 时不覆盖。project_path 参数的安全剥离在 pi-mcp-tools 桥接层。
    * 主仓库解析用 resolveMainRepoRootCached（5 分钟缓存，避免每轮 execSync git）。
    */
@@ -1723,6 +1723,17 @@ export class AgentOrchestrator {
       const maxTurns = appSettings.agentMaxTurns && appSettings.agentMaxTurns > 0 ? appSettings.agentMaxTurns : undefined
       const piReasoningCapability = await resolvePiReasoningCapability(channel.provider, selectedModelId)
       const piThinkingLevel = resolvePiThinkingLevel(appSettings, sessionMeta, channel.provider, selectedModelId, piReasoningCapability)
+      // 图谱工具就绪（2026-08-14 B 方案）：repoMapTools 开 + 主仓库图存在 + graphifyy[mcp] 已装
+      // → 编码规范追加「代码理解优先图谱」强约束。条件与 injectGraphifyMcpServer 对齐，
+      // 避免“条款注入但 MCP 工具不存在”的错位（isGraphifyMcpAvailable 10min 缓存，无额外 spawn 开销）。
+      // resolveMainRepoRootCached 有 5min 缓存，与下方 Graphify 引导块共用同一解析，无额外 git 开销。
+      let graphifyToolsReady = false
+      if (projectContext && agentCwd && repoMapToolsEnabled) {
+        const graphifyMainRepo = await resolveMainRepoRootCached(agentCwd)
+        if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && repoMapToolsService.isGraphifyMcpAvailable()) {
+          graphifyToolsReady = true
+        }
+      }
       let systemPromptAppend =
         buildSystemPrompt({
           agentRuntime,
@@ -1733,6 +1744,7 @@ export class AgentOrchestrator {
           collaborationAvailable,
           currentModelId: selectedModelId,
           optimizedCoding: optimizedCodingEnabled,
+          graphifyToolsReady: graphifyToolsReady,
           projectKnowledgeMaintenanceApproved: workspaceSlug ? isWorkspaceProjectKnowledgeMaintenanceApproved(workspaceSlug) : false,
           memoryGuidance: workspaceSlug && !automationContext && !input.triggeredBy ? getWorkspaceMemoryGuidance(workspaceSlug) : undefined,
           memoryRefreshOpportunity: workspaceSlug && !automationContext && !input.triggeredBy ? claimWorkspaceMemoryRefreshOpportunity(workspaceSlug) : undefined
