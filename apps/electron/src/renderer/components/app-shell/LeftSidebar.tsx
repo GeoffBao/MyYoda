@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -120,6 +120,7 @@ import { hasEnvironmentIssuesAtom } from '@/atoms/environment'
 import { promptConfigAtom, selectedPromptIdAtom, conversationPromptIdAtom } from '@/atoms/system-prompt-atoms'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
+import { newTaskProjectFlowOpenAtom } from '@/atoms/project-context-picker'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
@@ -737,6 +738,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   }, [anyFeatureActive])
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
+  const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
   const syncActiveTabSideEffects = useSyncActiveTabSideEffects()
   const store = useStore()
   const sidebarRootRef = React.useRef<HTMLDivElement>(null)
@@ -1516,8 +1518,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleSwitchWorkspace(workspaceId)
   }, [currentWorkspaceId, handleSwitchWorkspace])
 
-  /** 侧栏「新任务」入口已随回归 Proma 移除；new-task 快捷键由 GlobalShortcuts 直接打开 NewTaskProjectFlowDialog，
-   * 后续看板适配时如需恢复侧栏入口，可在此重新接 handleNewTask 语义。 */
+  /** 侧栏「新任务」：先经工作区选择器（NewTaskProjectFlowDialog）再打开任务编辑器 */
+  const handleNewTask = React.useCallback((): void => {
+    setActiveView('conversations')
+    setNewTaskProjectFlowOpen(true)
+  }, [setActiveView, setNewTaskProjectFlowOpen])
 
   /** 合成「自动任务」组头部点击：仅折叠/展开，绝不切换当前工作区（它不是真实工作区） */
   const handleToggleGroupCollapse = React.useCallback((groupId: string): void => {
@@ -2790,6 +2795,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label="新建任务"
+                  onClick={handleNewTask}
+                  className="size-10 flex items-center justify-center rounded-[12px] text-foreground/70 sidebar-control-surface hover:text-foreground transition-[background-color,color] duration-fast titlebar-no-drag"
+                >
+                  <ClipboardList size={16} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                新任务 ({getAcceleratorDisplay(getActiveAccelerator('new-task'))})
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {mode === 'agent' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
                   aria-label={`看板，${activeTaskCount} 个未完成`}
                   onClick={handleOpenTaskBoard}
                   className={cn(
@@ -3198,7 +3221,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       {/* 工作区切换器已按调研建议收起：默认单工作区，多工作区管理降级到设置 > 工作区（高级选项） */}
 
-      {/* 新对话/新会话（回归 Proma：不再并列「新任务」按钮，看板适配另行设计） */}
+      {/* 新对话/新会话 + 新任务（看板工作区化完成后恢复快速入口） */}
       <div className="px-3 pt-2 flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -3214,6 +3237,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             {mode === 'agent' ? '新会话' : '新对话'} ({getAcceleratorDisplay(getActiveAccelerator('new-session'))})
           </TooltipContent>
         </Tooltip>
+        {mode === 'agent' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleNewTask}
+                className="flex-1 flex items-center gap-2 h-9 px-3 rounded-[10px] text-[13px] font-medium text-foreground/70 sidebar-control-surface hover:text-foreground transition-[background-color,color] duration-fast titlebar-no-drag"
+              >
+                <Plus size={14} />
+                <span>新任务</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              新任务 ({getAcceleratorDisplay(getActiveAccelerator('new-task'))})
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* 未发送草稿找回入口：点「新会话」但没发送时，内容还在，不会真的丢，但原来没有回去的路。 */}
