@@ -996,6 +996,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: existing?.contextWindow,
@@ -1168,6 +1169,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
                 contextWindow: state.contextWindow,
                 contextUsageIsEstimated: state.contextUsageIsEstimated,
                 model: state.model,
+                channelId: state.channelId,
                 contextCompaction: state.contextCompaction,
               })
             } else if (state.backgroundWaiting || state.contextCompaction) {
@@ -1287,6 +1289,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           content: '',
           toolActivities: [],
           model: snapshot.modelId,
+          channelId: snapshot.channelId,
           startedAt: streamStartedAt,
           inputTokens: existing?.inputTokens,
           contextWindow: resolveRunContextWindow(snapshot.modelId, agentChannelProvider, existing?.contextWindow),
@@ -2281,6 +2284,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: resolveRunContextWindow(agentModelId || undefined, agentChannelProvider, existing?.contextWindow),
@@ -2390,6 +2394,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
       }
       map.set(sessionId, {
@@ -2485,6 +2490,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: resolveRunContextWindow(agentModelId || undefined, agentChannelProvider, existing?.contextWindow),
@@ -2531,6 +2537,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           content: '',
           toolActivities: [],
           model: agentModelId || undefined,
+          channelId: agentChannelId,
           startedAt: streamStartedAt,
         })
         return map

@@ -735,6 +735,7 @@ export function useGlobalAgentListeners(): void {
           title: event.title,
           workspaceId: event.workspaceId,
           modelId: event.modelId,
+          channelId: event.channelId ?? eventSession?.channelId,
           startedAt: event.startedAt,
           currentStreamState,
         })
@@ -983,6 +984,14 @@ export function useGlobalAgentListeners(): void {
               const sessionModelMap = store.get(agentSessionModelMapAtom)
               const defaultModelId = store.get(agentModelIdAtom)
               msgRecord._channelModelId = sessionModelMap.get(sessionId) ?? defaultModelId ?? undefined
+            }
+            if (msgRecord.type === 'assistant' && !msgRecord._channelId) {
+              const sessionChannelMap = store.get(agentSessionChannelMapAtom)
+              const defaultChannelId = store.get(agentChannelIdAtom)
+              const channelId = sessionChannelMap.get(sessionId) ?? defaultChannelId ?? undefined
+              if (channelId) {
+                msgRecord._channelId = channelId
+              }
             }
             if (msgRecord.type === 'assistant' && !msgRecord._channelProvider) {
               const sessionChannelMap = store.get(agentSessionChannelMapAtom)
