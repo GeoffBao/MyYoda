@@ -768,7 +768,8 @@ export function ContentBlock({ block, allMessages, basePath, basePaths, animate 
   // thinking 块
   if (block.type === 'thinking') {
     const thinkingBlock = block as SDKThinkingBlock
-    if (!thinkingBlock.thinking && !isStreaming) return null
+    // Pi 会先发送空的 thinking block，再逐步追加内容；首个 chunk 前不显示外框。
+    if (!thinkingBlock.thinking) return null
     return <ThinkingBlock block={thinkingBlock} dimmed={dimmed} isStreaming={isStreaming} />
   }
 
