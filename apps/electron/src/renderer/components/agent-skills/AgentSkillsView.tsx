@@ -240,7 +240,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         <div className="titlebar-no-drag mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
           <div className="flex items-center gap-2.5">
             <Blocks className="size-6 text-foreground/70" />
-            <h1 className="text-2xl font-semibold text-foreground">Yoda 插件</h1>
+            <h1 className="text-2xl font-semibold text-foreground">插件</h1>
           </div>
 
           {/* 范围切换：当前工作区默认（跨 Project 共享，今天的行为）+ 该工作区下嵌套的 Project（Skills/MCP 项目级覆盖），

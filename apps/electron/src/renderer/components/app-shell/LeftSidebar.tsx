@@ -724,7 +724,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  // 功能模块区（Task 日历 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开
   const anyFeatureActive =
     activeView === 'planning'
     || activeView === 'agent-skills'
@@ -2879,7 +2879,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={`Task 日历，${automationCount} 个任务已创建`}
+                aria-label={`计划，${automationCount} 个任务已创建`}
                 onClick={handleOpenPlanning}
                 className={cn(
                   'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
@@ -2904,7 +2904,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              Task 日历（{automationCount} 个任务已创建）
+              计划（{automationCount} 个任务已创建）
             </TooltipContent>
           </Tooltip>
 
@@ -3290,7 +3290,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           ariaLabel="功能模块"
         >
           <div className="flex flex-col gap-0.5 pt-1">
-            {/* Task 日历：Todo / 日历 / 定时任务合一 */}
+            {/* 计划：Todo / 日历 / 定时任务合一 */}
             <button
               type="button"
               onClick={handleOpenPlanning}
@@ -3302,7 +3302,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               )}
             >
               <CalendarDays size={13} className="shrink-0 text-foreground/45" />
-              <span className="min-w-0 flex-1 truncate text-left">Task 日历</span>
+              <span className="min-w-0 flex-1 truncate text-left">计划</span>
               {automationCount > 0 && (
                 <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
                   {formatSidebarModuleCount(automationCount)}
@@ -3345,7 +3345,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 )}
               >
                 <PenTool size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">Yoda 画布</span>
+                <span className="min-w-0 flex-1 truncate text-left">画布</span>
                 {excalidrawCount > 0 && (
                   <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
                     {formatSidebarModuleCount(excalidrawCount)}
@@ -3367,7 +3367,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 )}
               >
                 <Blocks size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">Yoda 插件</span>
+                <span className="min-w-0 flex-1 truncate text-left">插件</span>
               </button>
             )}
 
@@ -3384,7 +3384,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 )}
               >
                 <Library size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">Yoda 知识库</span>
+                <span className="min-w-0 flex-1 truncate text-left">知识库</span>
               </button>
             )}
           </div>
