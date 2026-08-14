@@ -447,9 +447,27 @@ class PiMcpClientManager {
 
 const manager = new PiMcpClientManager()
 
+/**
+ * 安全：剥掉 Graphify serve 的 project_path 参数（跨目录选图：<dir>/graphify-out/graph.json），
+ * 与「图谱只建在主仓库」的约定冲突，只允许主仓库默认图（2026-08-14）。
+ */
+export function sanitizeGraphifyToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+  if (typeof args.project_path === 'string') {
+    const { project_path: _dropped, ...rest } = args
+    return rest
+  }
+  return args
+}
+
 function createPiMcpToolDefinition(binding: McpToolBinding): ToolDefinition {
   const toolName = mcpToolName(binding.serverName, binding.originalToolName)
-  const description = binding.tool.description || `Call MCP tool ${binding.originalToolName} from server ${binding.serverName}`
+  const isGraphify = binding.serverName === 'graphify'
+  // Graphify serve 无 explain 工具：只给 2 个核心工具补组合套路（query_graph 找相关代码、
+  // get_neighbors 影响面分析），避免 10 个工具重复追加同一段描述浪费每轮 token（2026-08-14 review）。
+  const graphifyCombo = isGraphify && (binding.originalToolName === 'query_graph' || binding.originalToolName === 'get_neighbors')
+    ? '\n[Graphify 组合套路] 影响面分析：先 get_node 定位目标，再 get_neighbors 查入边/出边调用关系（等同 explain）；依赖路径用 shortest_path；找相关代码用 query_graph。'
+    : ''
+  const description = (binding.tool.description || `Call MCP tool ${binding.originalToolName} from server ${binding.serverName}`) + graphifyCombo
 
   return {
     name: toolName,
@@ -459,7 +477,8 @@ function createPiMcpToolDefinition(binding: McpToolBinding): ToolDefinition {
     parameters: toTypeBoxSchema(binding.tool.inputSchema),
     async execute(_toolCallId, params, signal) {
       const args = isObjectSchema(params) ? params as Record<string, unknown> : {}
-      const result = await binding.manager.callTool(binding.serverName, binding.managerConfig, binding.originalToolName, args, signal)
+      const safeArgs = isGraphify ? sanitizeGraphifyToolArgs(args) : args
+      const result = await binding.manager.callTool(binding.serverName, binding.managerConfig, binding.originalToolName, safeArgs, signal)
       return convertMcpResult(result)
     },
   } as ToolDefinition

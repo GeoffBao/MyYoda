@@ -31,9 +31,10 @@ export class TreeRenderer {
       return this.renderAllFiles(sortedFiles, rootDir);
     }
 
-    // If more files than maxLines, just list filenames
+    // If more files than maxLines, render a directory tree instead of a flat file list
+    // （2026-08-13 修复：大仓库下平铺路径列表导航价值≈零，目录树 + Top 符号承载全景）
     if (totalFiles > maxLines) {
-      return this.renderFileListOnly(sortedFiles, maxLines);
+      return this.renderDirectoryTree(sortedFiles, maxLines, rootDir);
     }
 
     // Calculate lines per file (at least 2 lines per file: 1 for content + 1 for "..." if truncated)
@@ -62,19 +63,59 @@ export class TreeRenderer {
     return output.trim();
   }
 
-  private renderFileListOnly(sortedFiles: [string, RankedDefinition[]][], maxLines: number): string {
-    let output = '';
-    const filesToShow = sortedFiles.slice(0, maxLines - 1); // Reserve 1 line for "..."
+  /**
+   * 大仓库目录树渲染（2026-08-13）：文件数超过行预算时不再退化为平铺路径列表，
+   * 而是输出目录层级树（缩进 + 每目录文件数）+ PageRank Top 文件的符号签名，
+   * 让预算内的地图承载仓库全景与关键符号（平铺列表只能展示前 maxLines 个文件）。
+   */
+  private async renderDirectoryTree(
+    sortedFiles: [string, RankedDefinition[]][],
+    maxLines: number,
+    rootDir?: string,
+  ): Promise<string> {
+    // 预算分配：目录树占约 70%，Top 文件符号占约 30%
+    const treeBudget = Math.max(10, Math.floor(maxLines * 0.7))
+    const topBudget = Math.max(3, maxLines - treeBudget)
 
-    for (const [file] of filesToShow) {
-      output += `${file}\n`;
+    // 1) 目录聚合（含祖先目录计数，单文件也计入）
+    const dirCounts = new Map<string, number>()
+    for (const [file] of sortedFiles) {
+      let dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '.'
+      for (;;) {
+        dirCounts.set(dir, (dirCounts.get(dir) ?? 0) + 1)
+        if (dir === '.') break
+        const idx = dir.lastIndexOf('/')
+        dir = idx > 0 ? dir.slice(0, idx) : '.'
+      }
     }
 
-    if (sortedFiles.length > filesToShow.length) {
-      output += '...\n';
+    // 2) 目录树文本（深度缩进，预算控制）
+    const dirPaths = Array.from(dirCounts.keys()).sort()
+    let output = ''
+    let lines = 0
+    for (const dir of dirPaths) {
+      if (lines >= treeBudget) break
+      const depth = dir === '.' ? 0 : dir.split('/').length
+      const name = dir === '.' ? './' : dir.slice(dir.lastIndexOf('/') + 1) + '/'
+      const count = dirCounts.get(dir) ?? 0
+      output += `${'  '.repeat(depth)}${name} (${count} files)\n`
+      lines += 1
     }
 
-    return output.trim();
+    // 3) Top 文件符号段（PageRank 最高文件的签名，提升大仓库导航价值）
+    const topFiles = sortedFiles.slice(0, Math.min(topBudget, 8))
+    if (topFiles.length > 0) {
+      output += '\n重点文件（PageRank Top）:\n'
+      for (const [file, definitions] of topFiles) {
+        output += `${file}:\n`
+        const topDef = definitions.reduce((a, b) => (a.rank >= b.rank ? a : b))
+        if (topDef?.name) {
+          output += `└── ${topDef.name} (L${topDef.line})\n`
+        }
+      }
+    }
+
+    return output.trim()
   }
 
   private async renderWithLineLimit(sortedFiles: [string, RankedDefinition[]][], linesPerFile: number, rootDir?: string): Promise<string> {

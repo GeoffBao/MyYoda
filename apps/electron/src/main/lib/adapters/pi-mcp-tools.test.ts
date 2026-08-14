@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { sanitizeGraphifyToolArgs } from './pi-mcp-tools'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -279,5 +280,18 @@ describe('Pi MCP Streamable HTTP Session 恢复', () => {
       rejectedSessions: 0,
       toolCalls: 1,
     })
+  })
+})
+
+
+describe('Graphify 工具参数安全（2026-08-14 P3）', () => {
+  test('sanitizeGraphifyToolArgs 剥掉 project_path（跨目录选图防护）', () => {
+    expect(sanitizeGraphifyToolArgs({ project_path: 'C:\evil\dir', question: 'x' })).toEqual({ question: 'x' })
+    expect(sanitizeGraphifyToolArgs({ project_path: '', question: 'x' })).toEqual({ question: 'x' })
+  })
+
+  test('无 project_path 时原样返回且不新增字段', () => {
+    const args = { question: 'x', depth: 2 }
+    expect(sanitizeGraphifyToolArgs(args)).toEqual({ question: 'x', depth: 2 })
   })
 })
