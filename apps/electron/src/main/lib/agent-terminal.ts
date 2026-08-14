@@ -120,12 +120,13 @@ export class AgentTerminalController {
     const terminalId = buildTerminalId(input.sessionId, input.instanceId)
     const existing = this.entries.get(terminalId)
     if (existing) {
-      if (existing.running) {
+      if (existing.running && existing.cwd === input.cwd) {
         // 面板重开/切换 tab 时复用正在运行的 pty（shell 状态不丢失）
         if (!input.warmup) existing.panelOpened = true
         return this.buildState(existing)
       }
-      // 上次 shell 已退出：销毁旧 pty 重新 spawn
+      // shell 已退出，或会话改绑工作区/项目导致 cwd 变化：销毁旧 pty，按新 cwd 重新 spawn。
+      // 若只是复用旧 pty，终端会停留在已失效的旧目录（如改绑前预热在 Movies 的 shell）。
       try { existing.pty.kill() } catch { /* noop */ }
       this.entries.delete(terminalId)
     }
@@ -187,16 +188,19 @@ export class AgentTerminalController {
     if (input.warmup) this.ensureIdleReaper()
 
     pty.onData((data: string) => {
+      // 旧 pty 被 cwd 变化/重开替换后，其迟到的输出/退出事件必须忽略，
+      // 否则会污染同 terminalId 的新实例（buffer 串数据、把新 pty 误标为退出）。
       const current = this.entries.get(terminalId)
-      if (current) {
-        // 滚动缓冲（截断保留最近内容），供面板挂载后回放
-        current.buffer = (current.buffer + data).slice(-MAX_TERMINAL_BUFFER)
-      }
+      if (!current || current.pty !== pty) return
+      // 滚动缓冲（截断保留最近内容），供面板挂载后回放
+      current.buffer = (current.buffer + data).slice(-MAX_TERMINAL_BUFFER)
       this.emit(AGENT_IPC_CHANNELS.TERMINAL_DATA, { terminalId, data } satisfies TerminalDataEventLike)
     })
     pty.onExit(({ exitCode }) => {
+      // kill 旧 pty 后其 onExit 异步触发时，entries 可能已被同 terminalId 的新 pty 替换；
+      // 必须按 pty 实例核对，避免把新终端标记为已退出并连锁误杀。
       const current = this.entries.get(terminalId)
-      if (!current) return
+      if (!current || current.pty !== pty) return
       current.running = false
       current.exitCode = exitCode
       this.emit(AGENT_IPC_CHANNELS.TERMINAL_STATE_CHANGED, { state: this.buildState(current) })

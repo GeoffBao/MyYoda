@@ -20,8 +20,10 @@ import '@xterm/xterm/css/xterm.css'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle } from 'lucide-react'
 import { resolvedThemeAtom } from '@/atoms/theme'
+import { agentSessionsAtom } from '@/atoms/agent-atoms'
 import { terminalStateMapAtom } from '@/atoms/terminal-atoms'
 import { cn } from '@/lib/utils'
+import { buildTerminalContextKey, shouldReopenTerminal } from './terminal-context-tracking'
 
 const RESIZE_DEBOUNCE_MS = 120
 const DEFAULT_COLS = 80
@@ -130,7 +132,22 @@ export function TerminalViewport({ sessionId, terminalId, instanceId, visible, c
   const visibleRef = React.useRef(visible)
   visibleRef.current = visible
 
-  // 创建 xterm + 订阅数据 + open pty（组件生命周期内只执行一次）
+  // 会话改绑工作区/项目会改变 pty cwd；归属变化时触发重开（清理旧 xterm → 重新 open，
+  // 主进程会校验 cwd 并重启 pty）。判定逻辑见 terminal-context-tracking（纯函数 + 单测）。
+  const sessions = useAtomValue(agentSessionsAtom)
+  const sessionContextKey = React.useMemo(
+    () => buildTerminalContextKey(sessions.find((item) => item.id === sessionId)),
+    [sessions, sessionId],
+  )
+  const [contextVersion, setContextVersion] = React.useState(0)
+  const lastContextKeyRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    const decision = shouldReopenTerminal(lastContextKeyRef.current, sessionContextKey)
+    lastContextKeyRef.current = decision.nextLastKey
+    if (decision.reopen) setContextVersion((version) => version + 1)
+  }, [sessionContextKey])
+
+  // 创建 xterm + 订阅数据 + open pty（terminalId 或会话归属变化时重开）
   React.useEffect(() => {
     const mount = containerRef.current
     if (!mount) return
@@ -277,7 +294,7 @@ export function TerminalViewport({ sessionId, terminalId, instanceId, visible, c
       pendingDataRef.current = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terminalId])
+  }, [terminalId, contextVersion])
 
   // 主题跟随：读取 CSS 变量构建 xterm theme。
   // 预设切换（Haze → Night Owl 等 custom pack）通过改写 html 的 class/style 投影 CSS 变量，

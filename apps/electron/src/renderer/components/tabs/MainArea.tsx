@@ -344,6 +344,7 @@ export function MainArea(): React.ReactElement {
                 {showTerminalPanel && terminalSessionId && (
                   <div className="relative shrink-0">
                     <TerminalPanel
+                      key={terminalSessionId}
                       sessionId={terminalSessionId}
                       onClose={() => {
                         setTerminalOpenMap((previous) => { const next = new Map(previous); next.delete(terminalSessionId); return next })
