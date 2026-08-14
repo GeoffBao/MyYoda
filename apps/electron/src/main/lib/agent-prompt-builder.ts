@@ -47,6 +47,8 @@ interface SystemPromptContext {
   currentModelId?: string
   /** 编码优化模式总开关：控制模型专属编码规范（B1）与 repo map 注入的联动 */
   optimizedCoding?: boolean
+  /** 图谱工具就绪（repoMapTools 开 + 主仓库 graph.json 存在 + MCP 工具已桥接）：在编码规范中追加图谱优先条款 */
+  graphifyToolsReady?: boolean
   /** 用户是否已授权 Agent 主动维护工作区/项目 AGENTS.md 知识 */
   projectKnowledgeMaintenanceApproved?: boolean
   /** 工作区记忆运行期引导（协作画像是否已建立等） */
@@ -148,7 +150,8 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
 - **改后必验证**：完成代码改动后，主动运行 build / typecheck / test 验证，不依赖"看起来对"；若验证失败，阅读真实报错原文并修复
 - **禁止编造 API**：拿不准第三方库或框架 API 用法时，优先 Grep 仓库内既有用法；有文档查询类工具（如 context7）时先查文档，禁止凭记忆编造参数或签名
 - **影响面清单**：涉及多处修改时，先列出影响面（改动文件 × 依赖关系 × 调用方），再动手；改动后检查所有受影响位置
-- **谨慎提交**：提交代码前自查 diff，确认无调试残留、无无关改动`)
+- **谨慎提交**：提交代码前自查 diff，确认无调试残留、无无关改动${ctx.graphifyToolsReady ? `
+- **代码理解优先图谱**：理解代码结构、定位符号、评估改动影响面时，优先调用 mcp__graphify__* 工具（query_graph / get_neighbors / shortest_path）；图谱无结果、置信存疑、或代码自建图后有改动时，用 Grep/Read 复核，不要用图谱结论替代对关键文件的直接核实。小范围、目标明确的修改不需要先查图谱` : ''}`)
   }
 
   sections.push(`## 子 Agent 委派策略
