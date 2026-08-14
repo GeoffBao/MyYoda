@@ -194,6 +194,12 @@ interface AgentMessagesProps {
   persistedSDKMessages?: SDKMessage[]
   /** 当前会话 sandbox，用于历史兼容和会话文件解析 */
   sessionPath?: string | null
+  /** 是否还有未加载的更早历史记录。 */
+  hasEarlierMessages?: boolean
+  /** 正在向前读取更早历史记录。 */
+  loadingEarlierMessages?: boolean
+  /** 用户主动请求加载更早历史记录。 */
+  onLoadEarlierMessages?: () => void
   /** 主进程解析的实际执行目录与 Project/Outbox 文件根 */
   fileRoots?: AgentSessionFileRoots | null
   /** 附加目录列表（与 sessionPath 一并用作相对路径解析候选） */
@@ -212,12 +218,12 @@ function EmptyState({ sessionId, workspaceId }: { sessionId: string; workspaceId
   return <WelcomeEmptyState sessionId={sessionId} workspaceId={workspaceId} />
 }
 
-function AssistantLogo({ model }: { model?: string }): React.ReactElement {
+function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   if (model) {
     return (
       <img
-        src={getModelLogo(model, resolveModelProvider(model, channels))}
+        src={getModelLogo(model, resolveModelProvider(model, channels, channelId))}
         alt={model}
         className="size-[30px] rounded-[9px] object-cover"
       />
@@ -498,7 +504,7 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
-export const AgentMessages = React.memo(function AgentMessages({ sessionId, workspaceId, sessionModelId, messagesLoaded, persistedSDKMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+export const AgentMessages = React.memo(function AgentMessages({ sessionId, workspaceId, sessionModelId, messagesLoaded, persistedSDKMessages, hasEarlierMessages, loadingEarlierMessages, onLoadEarlierMessages, sessionPath, fileRoots, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
   // 高频 token/live message 状态在历史区内闭环，避免唤醒 AgentView 输入框和工具栏。
   const streamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
   const liveMessages = useAtomValue(agentLiveMessagesAtomFamily(sessionId))
@@ -548,7 +554,10 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, work
   // 从 streamState 属性中计算派生值
   const streamingContent = streamState?.content ?? ''
   const streamingModelId = streamState?.model || sessionModelId
-  const agentStreamingModel = streamingModelId ? resolveModelDisplayName(streamingModelId, channels) : undefined
+  const streamingChannelId = streamState?.channelId
+  const agentStreamingModel = streamingModelId
+    ? resolveModelDisplayName(streamingModelId, channels, streamingChannelId)
+    : undefined
   const retrying = streamState?.retrying
   const startedAt = streamState?.startedAt
 
@@ -708,6 +717,7 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, work
       preview: getGroupPreview(group),
       avatar: group.type === 'user' ? userProfile.avatar : undefined,
       model: group.type === 'assistant-turn' ? group.model : undefined,
+      channelId: group.type === 'assistant-turn' ? group.channelId : undefined,
     })),
     [visibleGroups, userProfile.avatar]
   )
@@ -770,6 +780,19 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, work
       <Conversation resize={ready && !transitioning ? 'smooth' : 'instant'} className={ready ? (skipFadeIn ? 'opacity-100' : 'opacity-100 transition-opacity duration-base') : 'opacity-0'}>
         <ScrollPositionManager id={sessionId} ready={ready} />
         <ConversationContent>
+          {hasEarlierMessages && (
+            <div className="flex justify-center py-2">
+              <button
+                type="button"
+                onClick={onLoadEarlierMessages}
+                disabled={loadingEarlierMessages || !onLoadEarlierMessages}
+                className="titlebar-no-drag inline-flex items-center gap-1.5 rounded-full border border-foreground/10 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+              >
+                {loadingEarlierMessages && <Spinner size="sm" />}
+                {loadingEarlierMessages ? '正在加载更早消息…' : '加载更早消息'}
+              </button>
+            </div>
+          )}
           {!hasContent && !streaming ? (
             <EmptyState sessionId={sessionId} workspaceId={workspaceId} />
           ) : (
@@ -824,7 +847,7 @@ export const AgentMessages = React.memo(function AgentMessages({ sessionId, work
                   <MessageHeader
                     model={agentStreamingModel}
                     time={formatMessageTime(Date.now())}
-                    logo={<AssistantLogo model={streamingModelId} />}
+                    logo={<AssistantLogo model={streamingModelId} channelId={streamingChannelId} />}
                   />
                   <MessageContent>
                     {retrying && <RetryingNotice retrying={retrying} />}

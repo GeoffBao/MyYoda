@@ -239,14 +239,11 @@ export async function runAgent(
           })
         }
       },
-      onComplete: (messages, opts) => {
+      onComplete: (opts) => {
         publishRunStopped(input.sessionId, opts?.stoppedByUser, opts?.startedAt)
         if (!webContents.isDestroyed()) {
-          webContents.send(AGENT_IPC_CHANNELS.STREAM_COMPLETE, {
-            sessionId: input.sessionId,
-            triggeredBy: input.triggeredBy,
+          sendAgentStreamComplete(webContents, input, {
             ...getCompletionSessionOrigin(input.sessionId),
-            messages,
             stoppedByUser: opts?.stoppedByUser ?? false,
             startedAt: opts?.startedAt,
             resultSubtype: opts?.resultSubtype,
@@ -284,11 +281,8 @@ export async function runAgent(
         sessionId: input.sessionId,
         error: errorMessage,
       })
-      webContents.send(AGENT_IPC_CHANNELS.STREAM_COMPLETE, {
-        sessionId: input.sessionId,
-        triggeredBy: input.triggeredBy,
+      sendAgentStreamComplete(webContents, input, {
         ...getCompletionSessionOrigin(input.sessionId),
-        messages: [],
         stoppedByUser: false,
       })
     }
@@ -351,16 +345,15 @@ export async function runAgentHeadless(
           })
         }
       },
-      onComplete: (messages, opts) => {
-        callbacks.onComplete(messages, opts)
+      onComplete: (opts) => {
+        // 不再经回调传输完整 messages（上游 #1627 性能优化）；
+        // conductor 等调用方通过磁盘读取兜底，options 仍完整传递。
+        callbacks.onComplete(undefined, opts)
         publishRunStopped(runInput.sessionId, opts?.stoppedByUser, opts?.startedAt)
         // 同步到渲染进程
         if (wc && !wc.isDestroyed()) {
-          wc.send(AGENT_IPC_CHANNELS.STREAM_COMPLETE, {
-            sessionId: runInput.sessionId,
-            triggeredBy: runInput.triggeredBy,
+          sendAgentStreamComplete(wc, runInput, {
             ...getCompletionSessionOrigin(runInput.sessionId),
-            messages,
             stoppedByUser: opts?.stoppedByUser ?? false,
             startedAt: opts?.startedAt,
             resultSubtype: opts?.resultSubtype,
@@ -396,6 +389,7 @@ export async function runAgentHeadless(
             title: session?.title,
             workspaceId: runInput.workspaceId ?? session?.workspaceId,
             modelId: runInput.modelId,
+            channelId: runInput.channelId,
             startedAt: persistedStartedAt,
           },
         })
@@ -408,7 +402,11 @@ export async function runAgentHeadless(
     callbacks.onComplete()
     if (wc && !wc.isDestroyed()) {
       wc.send(AGENT_IPC_CHANNELS.STREAM_ERROR, { sessionId: runInput.sessionId, error: errorMessage })
-      wc.send(AGENT_IPC_CHANNELS.STREAM_COMPLETE, { sessionId: runInput.sessionId, triggeredBy: runInput.triggeredBy, ...getCompletionSessionOrigin(runInput.sessionId), messages: [], stoppedByUser: false, startedAt })
+      sendAgentStreamComplete(wc, runInput, {
+        ...getCompletionSessionOrigin(runInput.sessionId),
+        stoppedByUser: false,
+        startedAt,
+      })
     }
   } finally {
     if (!orchestrator.isActive(runInput.sessionId)) {

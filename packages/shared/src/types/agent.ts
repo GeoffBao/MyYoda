@@ -283,6 +283,8 @@ export interface SDKAssistantMessage {
   isReplay?: boolean
   /** 渠道配置的模型 ID，持久化/流式期间注入，用于正确匹配模型显示名 */
   _channelModelId?: string
+  /** 产生此消息的渠道 ID；用于在同名模型跨渠道时恢复精确展示信息。 */
+  _channelId?: string
   /** 渠道 provider，用于按 Agent SDK 实际运行窗口计算压缩阈值 */
   _channelProvider?: ProviderType
 }
@@ -346,6 +348,8 @@ export interface SDKResultMessage {
   skill_activations?: SkillActivation[]
   /** 渠道配置的模型 ID，用于缺失 modelUsage.contextWindow 时按 Agent SDK 运行窗口兜底 */
   _channelModelId?: string
+  /** 产生此消息的渠道 ID；用于在同名模型跨渠道时恢复精确展示信息。 */
+  _channelId?: string
   /** 渠道 provider，用于按 Agent SDK 实际运行窗口计算压缩阈值 */
   _channelProvider?: ProviderType
 }
@@ -683,7 +687,7 @@ export type MyYodaEvent =
   | { type: 'context_window'; contextWindow: number }
   | { type: 'permission_mode_changed'; mode: MyYodaPermissionMode }
   | { type: 'title_updated'; title: string }
-  | { type: 'external_run_started'; source: AgentExternalRunSource; sessionId: string; title?: string; workspaceId?: string; modelId?: string; startedAt: number; session?: AgentSessionMeta }
+  | { type: 'external_run_started'; source: AgentExternalRunSource; sessionId: string; title?: string; workspaceId?: string; modelId?: string; channelId?: string; startedAt: number; session?: AgentSessionMeta }
   /** 普通桌面会话已开始执行；startedAt 用于区分同一会话的连续运行。 */
   | { type: 'run_started'; startedAt: number }
   | { type: 'run_resumed'; sessionId: string }
@@ -1657,8 +1661,8 @@ export interface AgentStreamEvent {
 }
 
 /**
- * Agent 流式完成事件载荷（主进程 → 渲染进程）
- * 包含已持久化的消息列表，避免异步重新加载的竞态窗口。
+ * Agent 流式完成事件载荷（主进程 → 渲染进程）。
+ * 消息已在主进程落盘；renderer 收到完成事件后自行按页刷新，避免传输整段历史。
  */
 export interface AgentStreamCompletePayload {
   sessionId: string
@@ -1668,8 +1672,6 @@ export interface AgentStreamCompletePayload {
   sourceDelegationId?: string
   /** 完成会话所属的 Task DAG 节点 ID；用于避免子任务节点完成通知竞态 */
   taskNodeId?: string
-  /** 已持久化的完整消息列表 */
-  messages?: AgentMessage[]
   /** 是否由用户手动中止 */
   stoppedByUser?: boolean
   /** 本轮流式开始时间戳（用于区分新旧流，防止旧流的 complete 事件重置新流状态） */
@@ -2014,10 +2016,16 @@ export const AGENT_IPC_CHANNELS = {
   // 会话管理
   /** 获取会话列表 */
   LIST_SESSIONS: 'agent:list-sessions',
+  /** 按 ID 获取单条会话元数据（启动恢复归档 Tab 时使用） */
+  GET_SESSION_META: 'agent:get-session-meta',
+  /** 获取活跃/归档会话的数量，不传输完整元数据 */
+  GET_SESSION_COUNTS: 'agent:get-session-counts',
   /** 创建会话 */
   CREATE_SESSION: 'agent:create-session',
   /** 获取会话 SDKMessage（Phase 4 新格式） */
   GET_SDK_MESSAGES: 'agent:get-sdk-messages',
+  /** 分页获取会话尾部 SDKMessage，避免长历史一次性进入 renderer */
+  GET_SDK_MESSAGES_PAGE: 'agent:get-sdk-messages-page',
   /** 更新会话标题 */
   UPDATE_TITLE: 'agent:update-title',
   /** 更新会话模型选择 */

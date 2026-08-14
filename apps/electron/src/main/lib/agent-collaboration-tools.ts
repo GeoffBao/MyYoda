@@ -717,9 +717,10 @@ function startDelegation(
       onError: (error) => {
         markDelegationFinished(record, 'failed', { error })
       },
-      onComplete: (messages) => {
+      onComplete: () => {
+        // upstream #1627 起 complete 不再经回调传输完整消息；summarizeChildResult 内部有磁盘兑底
         if (record.status !== 'running') return
-        const resultSummary = summarizeChildResult(child.id, messages)
+        const resultSummary = summarizeChildResult(child.id)
         markDelegationFinished(record, 'completed', { resultSummary })
       },
       onTitleUpdated: (updatedTitle) => {
@@ -1116,9 +1117,10 @@ export function buildPiCollaborationTools(
             onError: (error) => {
               markDelegationFinished(record, 'failed', { error })
             },
-            onComplete: (messages) => {
+            onComplete: () => {
+              // upstream #1627 起 complete 不再经回调传输完整消息；summarizeChildResult 内部有磁盘兑底
               if (record.status !== 'running') return
-              const resultSummary = summarizeChildResult(record.childSessionId, messages)
+              const resultSummary = summarizeChildResult(record.childSessionId)
               markDelegationFinished(record, 'completed', { resultSummary })
             },
             onTitleUpdated: () => {},

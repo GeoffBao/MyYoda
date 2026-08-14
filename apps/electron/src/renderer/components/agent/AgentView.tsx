@@ -379,6 +379,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [persistedSDKMessages, setPersistedSDKMessages] = React.useState<SDKMessage[]>([])
   const persistedSDKMessagesRef = React.useRef<SDKMessage[]>([])
   persistedSDKMessagesRef.current = persistedSDKMessages
+  // 长会话默认仅加载末页；用户需要时再向前展开，避免把完整 transcript 放进 renderer。
+  const [earlierMessagesCursor, setEarlierMessagesCursor] = React.useState<number | undefined>()
+  const [loadingEarlierMessages, setLoadingEarlierMessages] = React.useState(false)
   const setStreamingStates = useSetAtom(agentStreamingStatesAtom)
   // 只订阅输入区/工具栏需要的低频流状态。逐 token content/toolActivities 由
   // AgentMessages 独立消费，不能让 AgentView 和输入框跟随每个 token 重渲染。
@@ -993,6 +996,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: existing?.contextWindow,
@@ -1120,18 +1124,22 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         setPersistedSDKMessages([])
         setMessagesLoaded(false)
       }
+      setEarlierMessagesCursor(undefined)
     }
     messagesRefreshingRef.current = true
     setMessagesRefreshing(true)
     let cancelled = false
-    window.electronAPI.getAgentSessionSDKMessages(sessionId)
-      .then((sdkMsgs) => {
+    window.electronAPI.getAgentSessionSDKMessagesPage(sessionId)
+      .then((page) => {
         if (cancelled) return
+        const sdkMsgs = page.messages
         // 写入缓存（含 LRU 淘汰，防止会话数增长导致内存无限膨胀）
         setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, sdkMsgs))
         unstable_batchedUpdates(() => {
           persistedSDKMessagesRef.current = sdkMsgs
           setPersistedSDKMessages(sdkMsgs)
+          setEarlierMessagesCursor(page.nextBefore)
+          setLoadingEarlierMessages(false)
           setMessagesLoaded(true)
           messagesRefreshingRef.current = false
           setMessagesRefreshing(false)
@@ -1161,6 +1169,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
                 contextWindow: state.contextWindow,
                 contextUsageIsEstimated: state.contextUsageIsEstimated,
                 model: state.model,
+                channelId: state.channelId,
                 contextCompaction: state.contextCompaction,
               })
             } else if (state.backgroundWaiting || state.contextCompaction) {
@@ -1197,6 +1206,25 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       })
     return () => { cancelled = true }
   }, [sessionId, refreshVersion, setStreamingStates, setLiveMessagesMap, setMessagesCache, store])
+
+  const handleLoadEarlierMessages = React.useCallback(async (): Promise<void> => {
+    const before = earlierMessagesCursor
+    if (before === undefined || loadingEarlierMessages) return
+
+    setLoadingEarlierMessages(true)
+    try {
+      const page = await window.electronAPI.getAgentSessionSDKMessagesPage(sessionId, { before })
+      const next = [...page.messages, ...persistedSDKMessagesRef.current]
+      persistedSDKMessagesRef.current = next
+      setPersistedSDKMessages(next)
+      setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, next))
+      setEarlierMessagesCursor(page.nextBefore)
+    } catch (error) {
+      console.error('[Agent 会话] 加载更早消息失败:', error)
+    } finally {
+      setLoadingEarlierMessages(false)
+    }
+  }, [earlierMessagesCursor, loadingEarlierMessages, sessionId, setMessagesCache])
 
   // 从会话元数据初始化附加目录（仅冷启动水合，后续由 handleAttachContent/handleDetachDirectory 实时写入）
   React.useEffect(() => {
@@ -1261,6 +1289,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           content: '',
           toolActivities: [],
           model: snapshot.modelId,
+          channelId: snapshot.channelId,
           startedAt: streamStartedAt,
           inputTokens: existing?.inputTokens,
           contextWindow: resolveRunContextWindow(snapshot.modelId, agentChannelProvider, existing?.contextWindow),
@@ -2255,6 +2284,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: resolveRunContextWindow(agentModelId || undefined, agentChannelProvider, existing?.contextWindow),
@@ -2364,6 +2394,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
       }
       map.set(sessionId, {
@@ -2459,6 +2490,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         content: '',
         toolActivities: [],
         model: agentModelId || undefined,
+        channelId: agentChannelId,
         startedAt: streamStartedAt,
         inputTokens: existing?.inputTokens,
         contextWindow: resolveRunContextWindow(agentModelId || undefined, agentChannelProvider, existing?.contextWindow),
@@ -2505,6 +2537,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           content: '',
           toolActivities: [],
           model: agentModelId || undefined,
+          channelId: agentChannelId,
           startedAt: streamStartedAt,
         })
         return map
@@ -3022,6 +3055,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           sessionModelId={agentModelId || undefined}
           messagesLoaded={messagesLoaded}
           persistedSDKMessages={persistedSDKMessages}
+          hasEarlierMessages={earlierMessagesCursor !== undefined}
+          loadingEarlierMessages={loadingEarlierMessages}
+          onLoadEarlierMessages={handleLoadEarlierMessages}
           sessionPath={sessionPath}
           fileRoots={sessionFileRoots}
           attachedDirs={allAttachedDirs}
@@ -3054,7 +3090,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               // relative z-20：scenic/haze 主题下本容器带 backdrop-filter（创建 stacking context，z=0），
               // 会把内部上弹面板（项目选择器等 z-50）困在消息区空状态内容（z-10）之下，
               // 导致面板顶部项目点不动。提升容器 stacking context 层级使内部弹层能覆盖消息区。
-              'agent-composer-polished relative z-20 rounded-[20px] border-[0.5px] border-border bg-background/70 transition-[border-color,box-shadow,background-color] duration-base ease-out',
+              // 上游 #1633：实时表面提高不透明度（/95）并去掉 backdrop-blur，减少合成开销；
+              // fork 保留 agent-composer-polished（backdrop-filter:none）与 z-20 层级修复。
+              'agent-composer-polished relative z-20 rounded-[20px] border-[0.5px] border-border bg-background/95 transition-[border-color,box-shadow,background-color] duration-base ease-out',
               (isPlanMode || isPermissionPlanMode) && !isDragOver && 'plan-mode-border',
               isDragOver && 'border-[2px] border-dashed border-[#2ecc71] bg-[#2ecc71]/[0.03]'
             )}

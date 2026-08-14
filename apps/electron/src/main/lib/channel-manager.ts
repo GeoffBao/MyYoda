@@ -90,6 +90,8 @@ const QWEN_TOKEN_PLAN_PRESET_MODELS: ChannelModel[] = [
   { id: 'qwen3.6-flash', name: 'Qwen3.6 Flash', enabled: true },
 ]
 const ARK_CODING_PLAN_MODELS: ChannelModel[] = [
+  { id: 'doubao-seed-2.1-pro', name: 'Doubao Seed 2.1 Pro', enabled: true },
+  { id: 'doubao-seed-2.1-turbo', name: 'Doubao Seed 2.1 Turbo', enabled: true },
   { id: 'doubao-seed-2.0-code', name: 'Doubao Seed 2.0 Code', enabled: true },
   { id: 'doubao-seed-2.0-pro', name: 'Doubao Seed 2.0 Pro', enabled: true },
   { id: 'doubao-seed-2.0-lite', name: 'Doubao Seed 2.0 Lite', enabled: true },

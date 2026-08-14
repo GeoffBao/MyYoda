@@ -26,17 +26,15 @@ function createMeta(overrides: Partial<AgentSessionMeta> = {}): AgentSessionMeta
 function createDependencies(): {
   deps: ConductorSessionHostDependencies
   sentInputs: AgentSendInput[]
+  persistedMessages: AgentMessage[]
   callbacks: {
     onError: (error: string) => void
-    onComplete: (
-      messages?: AgentMessage[],
-      opts?: {
-        stoppedByUser?: boolean
-        resultSubtype?: string
-        resultErrors?: string[]
-        backgroundTasksPending?: boolean
-      },
-    ) => void
+    onComplete: (options?: {
+      stoppedByUser?: boolean
+      resultSubtype?: string
+      resultErrors?: string[]
+      backgroundTasksPending?: boolean
+    }) => void
   }
   updates: Array<Record<string, unknown>>
   stopped: string[]
@@ -51,15 +49,12 @@ function createDependencies(): {
   const persistedMessages: AgentMessage[] = []
   let callbacks: {
     onError: (error: string) => void
-    onComplete: (
-      messages?: AgentMessage[],
-      opts?: {
-        stoppedByUser?: boolean
-        resultSubtype?: string
-        resultErrors?: string[]
-        backgroundTasksPending?: boolean
-      },
-    ) => void
+    onComplete: (options?: {
+      stoppedByUser?: boolean
+      resultSubtype?: string
+      resultErrors?: string[]
+      backgroundTasksPending?: boolean
+    }) => void
     onTitleUpdated: (title: string) => void
   } | undefined
   const workspace: AgentWorkspace = {
@@ -105,6 +100,7 @@ function createDependencies(): {
   return {
     deps,
     sentInputs,
+    persistedMessages,
     get callbacks() {
       if (!callbacks) throw new Error('测试回调尚未注册')
       return callbacks
@@ -233,12 +229,9 @@ describe('MyYodaConductorSessionHost', () => {
     })])
 
     testDeps.callbacks.onError('执行失败')
-    testDeps.callbacks.onComplete([
-      { id: 'assistant-1', role: 'assistant', content: '最终结果', createdAt: 2 },
-    ])
-    testDeps.callbacks.onComplete([
-      { id: 'assistant-2', role: 'assistant', content: '重复结果', createdAt: 3 },
-    ])
+    testDeps.persistedMessages.push({ id: 'assistant-1', role: 'assistant', content: '最终结果', createdAt: 2 })
+    testDeps.callbacks.onComplete()
+    testDeps.callbacks.onComplete()
 
     expect(events).toEqual([{ reason: 'error', finalText: '最终结果' }])
   })
@@ -266,9 +259,9 @@ describe('MyYodaConductorSessionHost', () => {
       runAgent: async (input, callbacks) => {
         runAgentInputs.push(input)
         runAgentSource = callbacks.source
-        callbacks.onComplete([
-          { id: 'assistant-1', role: 'assistant', content: '子任务完成', createdAt: 2 },
-        ])
+        // upstream #1627 起 onComplete 不再携带 messages，终态文本从磁盘回读
+        testDeps.persistedMessages.push({ id: 'assistant-1', role: 'assistant', content: '子任务完成', createdAt: 2 })
+        callbacks.onComplete()
       },
     }
     const host = new MyYodaConductorSessionHost(deps)
@@ -304,10 +297,11 @@ describe('MyYodaConductorSessionHost', () => {
       usage: { input_tokens: 12, output_tokens: 7 },
     } as unknown as AgentMessage
 
-    testDeps.callbacks.onComplete([sdkResult], { backgroundTasksPending: true })
+    testDeps.callbacks.onComplete({ backgroundTasksPending: true })
     expect(events).toEqual([])
 
-    testDeps.callbacks.onComplete([sdkResult])
+    testDeps.persistedMessages.push(sdkResult)
+    testDeps.callbacks.onComplete()
     expect(events).toEqual([{
       sessionId: 'session-1',
       workspaceId: 'workspace-1',
@@ -363,7 +357,7 @@ describe('MyYodaConductorSessionHost', () => {
     const persisted = testDeps.deps.getAgentSessionMessages('session-1')
     persisted.push({ id: 'assistant-1', role: 'assistant', content: '持久化结果', createdAt: 2 })
     await host.sendMessage('session-1', '执行节点')
-    testDeps.callbacks.onComplete([])
+    testDeps.callbacks.onComplete()
 
     expect(events).toHaveLength(1)
     expect(events[0]?.finalText).toBe('持久化结果')
