@@ -168,20 +168,20 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   // 文件面板授权由主进程根据会话与 Workspace 注册信息解析。
   const fileAccess = React.useMemo(() => ({ sessionId }), [sessionId])
 
-  // 项目目录不可用时跳转到该 Project 的设置页，那里已有可编辑的工作目录字段。
+  // 工程目录不可用时跳到工作区详情页的设置 tab（那里可重新关联目录）
   const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)
   const setProjectPageTab = useSetAtom(projectPageTabAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const openProjectSettings = React.useCallback(() => {
-    const boundProjectId = sessionFileRoots?.projectId
-    if (!boundProjectId) return
-    const navigation = buildProjectPageNavigation(boundProjectId, 'settings')
+    const boundWorkspaceId = currentSession?.workspaceId
+    if (!boundWorkspaceId) return
+    const navigation = buildProjectPageNavigation(boundWorkspaceId, 'settings')
     setActiveProjectPageId(navigation.activeProjectPageId)
     setProjectPageTab(navigation.projectPageTab)
     setCodeMainView(navigation.codeMainView)
     setActiveView(navigation.activeView)
-  }, [sessionFileRoots?.projectId, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
+  }, [currentSession?.workspaceId, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
 
   // 附加目录列表（会话级）
   const attachedDirsMap = useAtomValue(agentAttachedDirectoriesMapAtom)

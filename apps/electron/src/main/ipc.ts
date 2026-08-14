@@ -333,6 +333,7 @@ import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
 import { getProjectToWorkspaceMigrationStatus, runProjectToWorkspaceMigration, type ProjectToWorkspaceMigrationResult } from './lib/project-to-workspace-migration'
+import { listWorkspaceAssets, uploadWorkspaceAsset, deleteWorkspaceAsset, type WorkspaceAssetInfo } from './lib/workspace-assets'
 import {
   listAgentWorkspaces,
   createAgentWorkspace,
@@ -2956,6 +2957,32 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION,
     async (_event, workspaceId: string): Promise<ProjectToWorkspaceMigrationResult> => {
       return runProjectToWorkspaceMigration(workspaceId)
+    }
+  )
+
+  // ===== 工作区资产（项目=工作区模型下的资产库，对齐 craft） =====
+
+  // 列出工作区资产
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.LIST_WORKSPACE_ASSETS,
+    async (_event, workspaceSlug: string): Promise<WorkspaceAssetInfo[]> => {
+      return listWorkspaceAssets(workspaceSlug)
+    }
+  )
+
+  // 上传工作区资产（base64）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPLOAD_WORKSPACE_ASSET,
+    async (_event, workspaceSlug: string, filename: string, base64: string): Promise<WorkspaceAssetInfo> => {
+      return uploadWorkspaceAsset(workspaceSlug, filename, base64)
+    }
+  )
+
+  // 删除工作区资产
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.DELETE_WORKSPACE_ASSET,
+    async (_event, workspaceSlug: string, filename: string): Promise<void> => {
+      deleteWorkspaceAsset(workspaceSlug, filename)
     }
   )
 

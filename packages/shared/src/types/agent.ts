@@ -2060,6 +2060,12 @@ export const AGENT_IPC_CHANNELS = {
   RESTORE_WORKSPACE_PROJECT_ROOT: 'agent:restore-workspace-project-root',
   /** 查询项目→工作区迁移状态 */
   GET_PROJECT_WORKSPACE_MIGRATION_STATUS: 'agent:get-project-workspace-migration-status',
+  /** 列出工作区资产 */
+  LIST_WORKSPACE_ASSETS: 'agent:list-workspace-assets',
+  /** 上传工作区资产（base64） */
+  UPLOAD_WORKSPACE_ASSET: 'agent:upload-workspace-asset',
+  /** 删除工作区资产 */
+  DELETE_WORKSPACE_ASSET: 'agent:delete-workspace-asset',
   /** 执行项目→工作区迁移（手动触发） */
   RUN_PROJECT_WORKSPACE_MIGRATION: 'agent:run-project-workspace-migration',
 

@@ -1,11 +1,9 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
+import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import {
   activeProjectPageIdAtom,
   codeMainViewAtom,
-  selectedProjectIdAtom,
-  serverKanbanProjectsAtom,
 } from '@/atoms/project-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { serverTaskSummariesAtom } from '@/atoms/kanban-atoms'
@@ -13,13 +11,10 @@ import { Button } from '@/components/ui/button'
 import { buildTaskBoardNavigation } from '@/components/app-shell/code-main-view-model'
 import { ProjectPage } from './ProjectPage'
 
+/** 工作区详情页路由（项目=工作区）：按 activeProjectPageId（workspaceId）解析当前工作区 */
 export function ProjectPageRoute(): React.ReactElement {
   const workspaces = useAtomValue(agentWorkspacesAtom)
-  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
-  const projects = useAtomValue(serverKanbanProjectsAtom)
-  const setProjects = useSetAtom(serverKanbanProjectsAtom)
-  const projectId = useAtomValue(activeProjectPageIdAtom)
-  const setSelectedProjectId = useSetAtom(selectedProjectIdAtom)
+  const pageWorkspaceId = useAtomValue(activeProjectPageIdAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setTaskSummaries = useSetAtom(serverTaskSummariesAtom)
@@ -27,15 +22,16 @@ export function ProjectPageRoute(): React.ReactElement {
   const [taskSummariesLoaded, setTaskSummariesLoaded] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  const workspace = workspaces.find((candidate) => candidate.id === currentWorkspaceId) ?? workspaces[0] ?? null
-  const project = projects.find((candidate) => candidate.id === projectId) ?? null
+  // 页面目标工作区：优先 activeProjectPageId（workspaceId），回退当前工作区
+  const workspace = workspaces.find((candidate) => candidate.id === pageWorkspaceId)
+    ?? workspaces[0]
+    ?? null
 
-  const openTaskBoard = React.useCallback((facetProjectId: string | null): void => {
-    const navigation = buildTaskBoardNavigation(facetProjectId)
-    setSelectedProjectId(navigation.selectedProjectId)
+  const openTaskBoard = React.useCallback((): void => {
+    const navigation = buildTaskBoardNavigation(null)
     setCodeMainView(navigation.codeMainView)
     setActiveView(navigation.activeView)
-  }, [setActiveView, setCodeMainView, setSelectedProjectId])
+  }, [setActiveView, setCodeMainView])
 
   React.useEffect(() => {
     let cancelled = false
@@ -61,12 +57,12 @@ export function ProjectPageRoute(): React.ReactElement {
     return () => { cancelled = true }
   }, [setTaskSummaries, workspace])
 
-  if (!workspace || !project) {
+  if (!workspace) {
     return (
       <div className="grid h-full place-items-center bg-background p-6">
         <div className="text-center">
-          <p className="text-sm text-muted-foreground">无法找到该 Project。</p>
-          <Button className="mt-3" size="sm" onClick={() => openTaskBoard(null)}>返回 Project 看板</Button>
+          <p className="text-sm text-muted-foreground">暂无工作区。</p>
+          <Button className="mt-3" size="sm" onClick={openTaskBoard}>返回看板</Button>
         </div>
       </div>
     )
@@ -75,7 +71,7 @@ export function ProjectPageRoute(): React.ReactElement {
   if (!workspaceRoot || !taskSummariesLoaded) {
     return (
       <div className="grid h-full place-items-center bg-background p-6 text-sm text-muted-foreground">
-        {error ? `加载 Project 失败：${error}` : '正在加载 Project…'}
+        {error ? `加载工作区失败：${error}` : '正在加载工作区…'}
       </div>
     )
   }
@@ -83,10 +79,8 @@ export function ProjectPageRoute(): React.ReactElement {
   return (
     <ProjectPage
       workspaceRoot={workspaceRoot}
-      project={project}
-      onProjectChanged={(updated) => {
-        setProjects((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate))
-      }}
+      workspace={workspace}
+      onWorkspaceChanged={() => { /* workspace atom 由上层刷新，无需本地投影 */ }}
     />
   )
 }

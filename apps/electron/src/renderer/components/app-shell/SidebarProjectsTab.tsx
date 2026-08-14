@@ -33,7 +33,9 @@ import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { getActiveAccelerator, getAcceleratorDisplay } from '@/lib/shortcut-registry'
 import {
+  activeProjectPageIdAtom,
   codeMainViewAtom,
+  projectPageTabAtom,
 } from '@/atoms/project-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -133,6 +135,8 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   const draftSessionIds = useAtomValue(draftSessionIdsAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
+  const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)
+  const setProjectPageTab = useSetAtom(projectPageTabAtom)
   const setActiveView = useSetAtom(activeViewAtom)
 
   const [collapsedIds, setCollapsedIds] = React.useState<Set<string>>(new Set())
@@ -210,6 +214,15 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
     if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
     enterWork()
   }, [currentWorkspaceId, enterWork, selectWorkspace])
+
+  /** 打开该工作区的详情页（项目资料，参考 craft ProjectInfoPage） */
+  const openWorkspacePage = React.useCallback((workspaceId: string) => {
+    if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
+    setActiveProjectPageId(workspaceId)
+    setProjectPageTab('overview')
+    setCodeMainView('project')
+    setActiveView('conversations')
+  }, [currentWorkspaceId, selectWorkspace, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
 
   /** 行菜单：重新关联本地项目目录 */
   const handleRelinkRoot = React.useCallback(async (workspaceId: string, name: string) => {
@@ -421,6 +434,10 @@ export function SidebarProjectsTab({ workspaceRoot, sessionHandlers, status, sor
                               <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspaceBoard(wsId)}>
                                 <LayoutDashboard size={13} />
                                 查看任务
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspacePage(wsId)}>
+                                <FolderOpen size={13} />
+                                项目资料
                               </DropdownMenuItem>
                               {ws.projectRootPath ? (
                                 ws.projectRootStatus === 'missing' ? (

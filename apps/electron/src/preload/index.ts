@@ -850,6 +850,15 @@ export interface ElectronAPI {
     alreadyDone: boolean
   }>
 
+  /** 列出工作区资产（workspace-files/assets/） */
+  listWorkspaceAssets: (workspaceSlug: string) => Promise<Array<{ filename: string; sizeBytes: number }>>
+
+  /** 上传工作区资产（base64） */
+  uploadWorkspaceAsset: (workspaceSlug: string, filename: string, base64: string) => Promise<{ filename: string; sizeBytes: number }>
+
+  /** 删除工作区资产 */
+  deleteWorkspaceAsset: (workspaceSlug: string, filename: string) => Promise<void>
+
   /** 更新 Agent 工作区 */
   updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => Promise<AgentWorkspace>
 
@@ -2351,6 +2360,18 @@ const electronAPI: ElectronAPI = {
 
   runProjectToWorkspaceMigration: (workspaceId: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RUN_PROJECT_WORKSPACE_MIGRATION, workspaceId)
+  },
+
+  listWorkspaceAssets: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_WORKSPACE_ASSETS, workspaceSlug)
+  },
+
+  uploadWorkspaceAsset: (workspaceSlug: string, filename: string, base64: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPLOAD_WORKSPACE_ASSET, workspaceSlug, filename, base64)
+  },
+
+  deleteWorkspaceAsset: (workspaceSlug: string, filename: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_WORKSPACE_ASSET, workspaceSlug, filename)
   },
 
   updateAgentWorkspace: (id: string, updates: { name?: string; kanbanColumns?: import('@myyoda/shared').KanbanColumnDef[] }) => {
