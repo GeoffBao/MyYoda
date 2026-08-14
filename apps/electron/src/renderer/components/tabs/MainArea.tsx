@@ -30,7 +30,6 @@ import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
-import { YodaSearchView } from '@/components/app-shell/YodaSearchView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
@@ -292,9 +291,6 @@ export function MainArea(): React.ReactElement {
             ) : activeView === 'repo-wiki' ? (
               // Yoda 知识库：Project 模式知识库入口（待开发占位）
               <RepoWikiView />
-            ) : activeView === 'yoda-search' ? (
-              // Yoda 搜索：左侧栏独立模块，搜索 + 最近会话按时间分组，全屏取代 TabBar + TabContent
-              <YodaSearchView />
             ) : activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor' ? (
               <ExcalidrawView />
             ) : (

@@ -1,23 +1,23 @@
 /**
- * YodaSearchView — 「搜索」独立视图（左侧栏独立模块）
+ * YodaSearchView — 「搜索」弹窗（Spotlight / Command Palette 形态）
  *
- * 参考 NewMax：搜索从悬浮 Dialog 升级为左侧独立模块入口，主区切换为全屏搜索视图。
- *
- * 结构：
- * - 标题栏：Yoda 搜索 + 返回会话视图按钮
- * - 顶部搜索框（自动聚焦；Enter 手动触发，避免每次按键全量扫 JSONL 卡主进程）
- * - 默认态（未搜索）：最近会话按时间分组（今天 / 昨天 / 前天 / 更早），
- *   Chat 对话与 Agent 会话混合按 updatedAt 排序，点击直接打开
+ * 参考 NewMax：搜索不再展开到主内容区，而是居中浮层弹出，背景遮罩。
+ * 能力保持与之前一致：
+ * - 顶部搜索框（自动聚焦；Enter 手动触发）
+ * - 默认态：最近会话按时间分组（今天 / 昨天 / 前天 / 更早）
  * - 搜索态：项目 / 标题 / 消息内容 三段结果 + 关键词高亮 + 键盘导航 + Agent 搜索兜底
  *
- * 搜索能力与 SearchDialog 保持一致（复用 IPC / resolveSearchScope / 高亮渲染），
- * 仅形态从浮层改为视图；⌘K 与侧栏搜索按钮均直达本视图。
+ * 触发入口：
+ * - LeftSidebar 搜索按钮
+ * - 全局快捷键（默认 ⌘⇧F / Ctrl+Shift+F）
  */
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { Search, X, MessageSquare, Bot, Archive, Loader2, ArrowLeft } from 'lucide-react'
+import { Search, X, MessageSquare, Bot, Archive, Loader2, FolderOpen, PenLine, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { searchDialogOpenAtom } from '@/atoms/search-dialog'
+import { getActiveAccelerator, getAcceleratorDisplay } from '@/lib/shortcut-registry'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
 import { conversationsAtom, channelsAtom } from '@/atoms/chat-atoms'
 import {
@@ -31,6 +31,11 @@ import { resolveSearchScope } from './search-dialog-model'
 import { appModeAtom } from '@/atoms/app-mode'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useCreateSession } from '@/hooks/useCreateSession'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   SessionMiniMapPopover,
   useSessionMiniMapHover,
@@ -75,6 +80,8 @@ interface RecentSessionItem {
   type: 'chat' | 'agent'
   archived?: boolean
   updatedAt: number
+  /** Agent 会话所属工作区名（展示用） */
+  workspaceName?: string
 }
 
 type DateGroup = '今天' | '昨天' | '前天' | '更早'
@@ -258,7 +265,7 @@ function RecentSessionRow({ item, now, onOpen }: { item: RecentSessionItem; now:
       data-session-id={item.id}
       onClick={() => onOpen(item)}
       className={cn(
-        'w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors hover:bg-foreground/[0.04]',
+        'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors rounded-lg hover:bg-foreground/[0.04]',
         item.archived && 'opacity-60'
       )}
     >
@@ -268,6 +275,12 @@ function RecentSessionRow({ item, now, onOpen }: { item: RecentSessionItem; now:
         <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
       )}
       <span className="flex-1 min-w-0 truncate text-[13px] text-foreground/80">{item.title || '（未命名会话）'}</span>
+      {item.workspaceName && (
+        <span className="flex flex-shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-full bg-foreground/[0.06] text-[10px] leading-4 text-foreground/40 font-medium truncate max-w-[90px]">
+          <FolderOpen size={10} className="flex-shrink-0" />
+          {item.workspaceName}
+        </span>
+      )}
       <span className="flex-shrink-0 text-[11px] tabular-nums text-foreground/35">
         {formatRelativeTime(item.updatedAt, now)}
       </span>
@@ -276,7 +289,8 @@ function RecentSessionRow({ item, now, onOpen }: { item: RecentSessionItem; now:
   )
 }
 
-export function YodaSearchView(): React.ReactElement {
+export function YodaSearchDialog(): React.ReactElement {
+  const [open, setOpen] = useAtom(searchDialogOpenAtom)
   const conversations = useAtomValue(conversationsAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
@@ -286,7 +300,7 @@ export function YodaSearchView(): React.ReactElement {
   const setAgentPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const openSession = useOpenSession()
-  const { createAgent } = useCreateSession()
+  const { createAgent, createChat } = useCreateSession()
 
   const workspaceNameMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -319,20 +333,40 @@ export function YodaSearchView(): React.ReactElement {
   const recentItems = React.useMemo<RecentSessionItem[]>(() => {
     const items: RecentSessionItem[] = [
       ...conversations.map((c) => ({ id: c.id, title: c.title, type: 'chat' as const, archived: c.archived, updatedAt: c.updatedAt })),
-      ...agentSessions.map((s) => ({ id: s.id, title: s.title, type: 'agent' as const, archived: s.archived, updatedAt: s.updatedAt })),
+      ...agentSessions.map((s) => ({
+        id: s.id,
+        title: s.title,
+        type: 'agent' as const,
+        archived: s.archived,
+        updatedAt: s.updatedAt,
+        workspaceName: s.workspaceId ? workspaceNameMap.get(s.workspaceId) : undefined,
+      })),
     ]
     return items.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50)
-  }, [conversations, agentSessions])
-
+  }, [conversations, agentSessions, workspaceNameMap])
   const recentGroups = React.useMemo(() => groupRecentByDate(recentItems), [recentItems])
   // 默认态当前时间基准（挂载时取一次即可，避免每行重复计算）
   const [relativeNow] = React.useState(() => Date.now())
 
-  // 挂载时聚焦搜索框
+  // 弹窗打开时聚焦搜索框
   React.useEffect(() => {
+    if (!open) return
     const timer = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [open])
+
+  // 关闭弹窗后清空状态，避免下次打开时仍显示旧结果
+  React.useEffect(() => {
+    if (open) return
+    setQuery('')
+    setCommittedQuery('')
+    setTitleResults([])
+    setContentResults([])
+    setHasSearched(false)
+    setSelectedIndex(0)
+    setLoading(false)
+    searchTokenRef.current += 1
+  }, [open])
 
   const handleInputChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
@@ -450,25 +484,15 @@ export function YodaSearchView(): React.ReactElement {
     const channelId = deepseekChannel?.id ?? currentAgentChannelId ?? undefined
 
     const configDir = import.meta.env.DEV ? '.myyoda-dev' : '.myyoda'
-    const prompt = `请帮我在 MyYoda 的全部会话历史中搜索与以下描述相关的内容：
+    const prompt = `请帮我在 MyYoda 的全部会话历史中搜索与以下描述相关的内容：\n\n"${q}"\n\n搜索范围：\n- Chat 会话消息文件：~/${configDir}/conversations/ 目录下所有 .jsonl 文件\n- Agent 会话消息文件：~/${configDir}/agent-sessions/ 目录下所有 .jsonl 文件\n\n要求：\n1. 理解用户描述的语义，不要求关键词完全匹配，根据内容相关性判断\n2. 找到相关会话后，给出会话标题、相关内容摘要，以及文件路径\n3. 按相关性排序，最相关的结果排在最前面`
 
-"${q}"
-
-搜索范围：
-- Chat 会话消息文件：~/${configDir}/conversations/ 目录下所有 .jsonl 文件
-- Agent 会话消息文件：~/${configDir}/agent-sessions/ 目录下所有 .jsonl 文件
-
-要求：
-1. 理解用户描述的语义，不要求关键词完全匹配，根据内容相关性判断
-2. 找到相关会话后，给出会话标题、相关内容摘要，以及文件路径
-3. 按相关性排序，最相关的结果排在最前面`
-
+    setOpen(false)
     const sessionId = await createAgent({ channelId })
     if (!sessionId) return
 
     setAgentPendingPrompt({ sessionId, message: prompt })
     setActiveView('conversations')
-  }, [query, channels, currentAgentChannelId, createAgent, setAgentPendingPrompt, setActiveView])
+  }, [query, channels, currentAgentChannelId, createAgent, setAgentPendingPrompt, setActiveView, setOpen])
 
   // 全部结果列表（标题在前、内容在后）
   const allResults = React.useMemo<SearchResult[]>(
@@ -478,7 +502,7 @@ export function YodaSearchView(): React.ReactElement {
 
   // 导航到对话/会话
   const navigateToResult = React.useCallback((result: SearchResult) => {
-    setActiveView('conversations')
+    setOpen(false)
 
     if (result.type === 'chat') {
       const conv = conversations.find((c) => c.id === result.id)
@@ -489,11 +513,11 @@ export function YodaSearchView(): React.ReactElement {
       const title = session?.title ?? result.title
       openSession('agent', result.id, title)
     }
-  }, [setActiveView, openSession, conversations, agentSessions])
+  }, [setOpen, openSession, conversations, agentSessions])
 
   /** 打开默认态最近会话 */
   const openRecentSession = React.useCallback((item: RecentSessionItem) => {
-    setActiveView('conversations')
+    setOpen(false)
     if (item.type === 'chat') {
       const conv = conversations.find((c) => c.id === item.id)
       openSession('chat', item.id, conv?.title ?? item.title)
@@ -501,7 +525,19 @@ export function YodaSearchView(): React.ReactElement {
       const session = agentSessions.find((s) => s.id === item.id)
       openSession('agent', item.id, session?.title ?? item.title)
     }
-  }, [setActiveView, openSession, conversations, agentSessions])
+  }, [setOpen, openSession, conversations, agentSessions])
+
+  /** 新建 Chat 对话（快捷操作） */
+  const handleNewChat = React.useCallback(() => {
+    setOpen(false)
+    void createChat()
+  }, [setOpen, createChat])
+
+  /** 新建 Agent 会话（快捷操作） */
+  const handleNewAgent = React.useCallback(() => {
+    setOpen(false)
+    void createAgent()
+  }, [setOpen, createAgent])
 
   /**
    * Enter 键语义：
@@ -531,10 +567,10 @@ export function YodaSearchView(): React.ReactElement {
       if (query.trim().length > 0) {
         handleClearQuery()
       } else {
-        setActiveView('conversations')
+        setOpen(false)
       }
     }
-  }, [query, committedQuery, hasSearched, allResults, selectedIndex, runSearch, navigateToResult, handleClearQuery, setActiveView])
+  }, [query, committedQuery, hasSearched, allResults, selectedIndex, runSearch, navigateToResult, handleClearQuery, setOpen])
 
   // 自动滚动选中项到可视区域
   React.useEffect(() => {
@@ -550,27 +586,20 @@ export function YodaSearchView(): React.ReactElement {
   const canSearch = trimmedQuery.length >= 2 && !loading
   const isQueryDirty = trimmedQuery !== committedQuery
 
-  return (
-    <div className="flex h-full flex-col bg-content-area refined-content">
-      {/* 标题栏 */}
-      <div className="titlebar-no-drag mx-auto flex w-full max-w-4xl shrink-0 items-center justify-between px-8 pt-8 pb-3">
-        <div className="flex items-center gap-2.5">
-          <Search className="size-6 text-foreground/70" />
-          <h1 className="text-2xl font-semibold text-foreground">搜索</h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => setActiveView('conversations')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] text-foreground/60 hover:bg-foreground/[0.05] hover:text-foreground transition-colors"
-        >
-          <ArrowLeft size={14} />
-          返回会话
-        </button>
-      </div>
+  const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+  }, [setOpen])
 
-      {/* 搜索框 */}
-      <div className="mx-auto w-full max-w-4xl px-8 pb-4">
-        <div className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background/80 px-4 py-3 shadow-sm focus-within:border-primary/50">
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        hideClose
+        className="gap-0 overflow-hidden p-0 border border-border/60 bg-background/95 backdrop-blur-sm rounded-2xl shadow-2xl max-w-2xl w-[90vw] top-[18%] translate-y-0"
+        aria-describedby={undefined}
+      >
+        <DialogTitle className="sr-only">搜索</DialogTitle>
+        {/* 搜索框 */}
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40">
           <Search size={18} className="text-foreground/40 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -591,6 +620,9 @@ export function YodaSearchView(): React.ReactElement {
               <X size={14} />
             </button>
           )}
+          <kbd className="flex-shrink-0 hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md bg-foreground/[0.06] font-mono text-[10px] leading-4 text-foreground/35 select-none">
+            {getAcceleratorDisplay(getActiveAccelerator('global-search'))}
+          </kbd>
           <button
             onClick={() => void runSearch()}
             disabled={!canSearch}
@@ -619,135 +651,169 @@ export function YodaSearchView(): React.ReactElement {
             <span>Agent 搜索</span>
           </button>
         </div>
-      </div>
 
-      {/* 内容区 */}
-      <div ref={listRef} className="mx-auto w-full max-w-4xl min-h-0 flex-1 overflow-y-auto scrollbar-thin px-8 pb-8">
-        {!hasSearched && (
-          <>
-            {trimmedQuery.length === 0 ? (
-              /* 默认态：最近会话按时间分组（今天 / 昨天 / 前天 / 更早） */
-              recentGroups.length > 0 ? (
+        {/* 内容区 */}
+        <div ref={listRef} className="max-h-[60vh] overflow-y-auto scrollbar-thin px-2 py-2">
+          {!hasSearched && (
+            <>
+              {trimmedQuery.length === 0 ? (
+                /* 默认态：快捷操作 + 最近会话按时间分组（今天 / 昨天 / 前天 / 更早） */
                 <div className="animate-in fade-in duration-fast">
-                  <div className="px-1 pt-1 pb-2 text-[13px] font-medium text-foreground/40 select-none">
-                    最近会话
-                  </div>
-                  {recentGroups.map((group) => (
-                    <div key={group.label} className="mb-2">
-                      <div className="px-2 py-1.5 text-[12px] font-medium text-foreground/45 select-none">
-                        {group.label}
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        {group.items.map((item) => (
-                          <div key={`recent-${item.type}-${item.id}`}>
-                            <RecentSessionRow item={item} now={relativeNow} onOpen={openRecentSession} />
-                          </div>
-                        ))}
-                      </div>
+                  {/* 快捷操作 */}
+                  <div className="px-1 pt-1 pb-1">
+                    <div className="px-2 py-1.5 text-[11px] font-medium text-foreground/40 select-none">
+                      快捷操作
                     </div>
-                  ))}
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={handleNewChat}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-lg transition-colors hover:bg-foreground/[0.04]"
+                      >
+                        <MessageSquare size={14} className="flex-shrink-0 text-foreground/40" />
+                        <span className="flex-1 min-w-0 truncate text-[13px] text-foreground/80">新建对话</span>
+                        <PenLine size={12} className="flex-shrink-0 text-foreground/30" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNewAgent}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-lg transition-colors hover:bg-foreground/[0.04]"
+                      >
+                        <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
+                        <span className="flex-1 min-w-0 truncate text-[13px] text-foreground/80">新建 Agent 会话</span>
+                        <Sparkles size={12} className="flex-shrink-0 text-blue-500/40" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {recentGroups.length > 0 ? (
+                    <>
+                      <div className="mx-2 my-1 border-t border-border/30" />
+                      <div className="px-2 pt-1 pb-2 text-[13px] font-medium text-foreground/40 select-none">
+                        最近会话
+                      </div>
+                      {recentGroups.map((group) => (
+                        <div key={group.label} className="mb-2">
+                          <div className="px-2 py-1.5 text-[12px] font-medium text-foreground/45 select-none">
+                            {group.label}
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            {group.items.map((item) => (
+                              <div key={`recent-${item.type}-${item.id}`}>
+                                <RecentSessionRow item={item} now={relativeNow} onOpen={openRecentSession} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="py-8 text-center text-[13px] text-foreground/40">
+                      还没有会话，去新建一个对话吧
+                    </div>
+                  )}
+                </div>
+              ) : trimmedQuery.length < 2 ? (
+                <div className="py-12 text-center text-[13px] text-foreground/40">
+                  关键词至少需要 2 个字符
                 </div>
               ) : (
-                <div className="py-16 text-center text-[13px] text-foreground/40">
-                  还没有会话，去新建一个对话吧
+                <div className="py-12 text-center text-[13px] text-foreground/40">
+                  按 Enter 或点击搜索开始查找
                 </div>
-              )
-            ) : trimmedQuery.length < 2 ? (
-              <div className="py-16 text-center text-[13px] text-foreground/40">
-                关键词至少需要 2 个字符
-              </div>
-            ) : (
-              <div className="py-16 text-center text-[13px] text-foreground/40">
-                按 Enter 或点击搜索开始查找
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {hasSearched && loading && allResults.length === 0 && (
-          <div className="py-16 flex items-center justify-center gap-2 text-[13px] text-foreground/40">
-            <Loader2 size={14} className="animate-spin" />
-            <span>正在搜索...</span>
-          </div>
-        )}
-
-        {hasSearched && !loading && allResults.length === 0 && (
-          <div className="py-12 flex flex-col items-center gap-3 text-[13px] text-foreground/40">
-            <span>未找到匹配结果</span>
-            <button
-              onClick={() => void handleAgentSearch()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
-            >
-              <Bot size={12} />
-              <span>试试 Agent 搜索</span>
-            </button>
-          </div>
-        )}
-
-        {/* 标题匹配区域 */}
-        {titleResults.length > 0 && (
-          <div className="py-1 animate-in fade-in duration-fast">
-            <div className="px-4 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
-              标题匹配
+          {hasSearched && loading && allResults.length === 0 && (
+            <div className="py-12 flex items-center justify-center gap-2 text-[13px] text-foreground/40">
+              <Loader2 size={14} className="animate-spin" />
+              <span>正在搜索...</span>
             </div>
-            {titleResults.map((result, idx) => (
-              <SearchResultRow
-                key={`title-${result.id}`}
-                result={result}
-                index={idx}
-                isSelected={selectedIndex === idx}
-                committedQuery={committedQuery}
-                getAgentWorkspaceName={getAgentWorkspaceName}
-                onSelect={navigateToResult}
-                onHover={setSelectedIndex}
-              />
-            ))}
-          </div>
-        )}
+          )}
 
-        {/* 内容匹配区域 */}
-        {(contentResults.length > 0 || (loading && hasSearched && titleResults.length > 0)) && (
-          <div className="py-1 border-t border-border/30 animate-in fade-in duration-fast">
-            <div className="px-4 pt-2 pb-1 flex items-center gap-2 text-[11px] font-medium text-foreground/40 select-none">
-              <span>消息内容匹配</span>
-              {loading && <Loader2 size={12} className="animate-spin text-foreground/30" />}
+          {hasSearched && !loading && allResults.length === 0 && (
+            <div className="py-10 flex flex-col items-center gap-3 text-[13px] text-foreground/40">
+              <span>未找到匹配结果</span>
+              <button
+                onClick={() => void handleAgentSearch()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
+              >
+                <Bot size={12} />
+                <span>试试 Agent 搜索</span>
+              </button>
             </div>
-            {contentResults.map((result, i) => {
-              const globalIdx = titleResults.length + i
-              return (
+          )}
+
+          {/* 标题匹配区域 */}
+          {titleResults.length > 0 && (
+            <div className="py-1 animate-in fade-in duration-fast">
+              <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
+                标题匹配
+              </div>
+              {titleResults.map((result, idx) => (
                 <SearchResultRow
-                  key={`content-${result.id}-${result.messageId}`}
+                  key={`title-${result.id}`}
                   result={result}
-                  index={globalIdx}
-                  isSelected={selectedIndex === globalIdx}
+                  index={idx}
+                  isSelected={selectedIndex === idx}
                   committedQuery={committedQuery}
                   getAgentWorkspaceName={getAgentWorkspaceName}
                   onSelect={navigateToResult}
                   onHover={setSelectedIndex}
                 />
-              )
-            })}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
 
-      {/* 底部快捷键提示 */}
-      <div className="mx-auto w-full max-w-4xl flex items-center gap-3 px-8 py-2 border-t border-border/30 text-[11px] text-foreground/30">
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">↵</kbd>
-          <span>{isQueryDirty || !hasSearched ? '搜索' : '打开'}</span>
-        </span>
-        {allResults.length > 0 && (
+          {/* 内容匹配区域 */}
+          {(contentResults.length > 0 || (loading && hasSearched && titleResults.length > 0)) && (
+            <div className="py-1 border-t border-border/30 animate-in fade-in duration-fast">
+              <div className="px-3 pt-2 pb-1 flex items-center gap-2 text-[11px] font-medium text-foreground/40 select-none">
+                <span>消息内容匹配</span>
+                {loading && <Loader2 size={12} className="animate-spin text-foreground/30" />}
+              </div>
+              {contentResults.map((result, i) => {
+                const globalIdx = titleResults.length + i
+                return (
+                  <SearchResultRow
+                    key={`content-${result.id}-${result.messageId}`}
+                    result={result}
+                    index={globalIdx}
+                    isSelected={selectedIndex === globalIdx}
+                    committedQuery={committedQuery}
+                    getAgentWorkspaceName={getAgentWorkspaceName}
+                    onSelect={navigateToResult}
+                    onHover={setSelectedIndex}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 底部快捷键提示 */}
+        <div className="flex items-center gap-3 px-4 py-2 border-t border-border/30 text-[11px] text-foreground/30">
           <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">↑↓</kbd>
-            <span>选择</span>
+            <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">↵</kbd>
+            <span>{isQueryDirty || !hasSearched ? '搜索' : '打开'}</span>
           </span>
-        )}
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">Esc</kbd>
-          <span>清空/返回</span>
-        </span>
-      </div>
-    </div>
+          {allResults.length > 0 && (
+            <span className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">↑↓</kbd>
+              <span>选择</span>
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <kbd className="px-1 py-0.5 rounded bg-foreground/[0.06] font-mono">Esc</kbd>
+            <span>清空/关闭</span>
+          </span>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
+
+/** 兼容旧导出名：YodaSearchView 现在即弹窗组件 */
+export const YodaSearchView = YodaSearchDialog
+export default YodaSearchDialog

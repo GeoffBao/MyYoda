@@ -26,6 +26,7 @@ import { isLegacyCoworkMode } from '@/components/app-shell/code-main-view-model'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { WindowControls } from '@/components/WindowControls'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
+import { YodaSearchView } from '@/components/app-shell/YodaSearchView'
 import { WorkspaceMemoryChangeObserver } from '@/components/agent-skills/WorkspaceMemoryChangeObserver'
 import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from '@/lib/platform'
 import { cn } from '@/lib/utils'
@@ -271,8 +272,10 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
       {/* 即使右侧文件面板未打开，也持续观测当前工作区的 memory/ 变化 */}
       {currentWorkspace && <WorkspaceMemoryChangeObserver workspaceSlug={currentWorkspace.slug} />}
 
-      {/* 全局搜索已升级为左侧栏独立模块「Yoda 搜索」（activeView='yoda-search'，⌘K 直达），
-          悬浮 SearchDialog 退役；即使收起侧边栏 ⌘⇧F 仍可唤出搜索视图（GlobalShortcuts 处理） */}
+      {/* 全局搜索弹窗：由 searchDialogOpenAtom 控制，LeftSidebar / GlobalShortcuts 触发。
+          悬浮在所有视图之上，不替换主内容区。 */}
+      <YodaSearchView />
+
       {labelManagerWorkspaceRoot && (
         <WorkspaceLabelManagerDialog
           workspaceRoot={labelManagerWorkspaceRoot}

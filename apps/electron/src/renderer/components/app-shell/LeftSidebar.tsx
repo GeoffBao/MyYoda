@@ -121,6 +121,7 @@ import { promptConfigAtom, selectedPromptIdAtom, conversationPromptIdAtom } from
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
 import { newTaskProjectFlowOpenAtom } from '@/atoms/project-context-picker'
+import { searchDialogOpenAtom } from '@/atoms/search-dialog'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
@@ -740,6 +741,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
   const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
+  const setSearchDialogOpen = useSetAtom(searchDialogOpenAtom)
   const syncActiveTabSideEffects = useSyncActiveTabSideEffects()
   const store = useStore()
   const sidebarRootRef = React.useRef<HTMLDivElement>(null)
@@ -2050,7 +2052,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       if (processedQuickSwitchEventsRef.current.has(event)) return
       processedQuickSwitchEventsRef.current.add(event)
       if (event.isComposing) return
-      if (settingsOpen || activeView === 'yoda-search') return
+      if (settingsOpen) return
 
       if (quickSwitchHintsVisible && !isPrimaryModifierKey(event, isMac) && !modifierActuallyHeld(event)) {
         hideHints()
@@ -2893,7 +2895,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <button
                 type="button"
                 aria-label="搜索"
-                onClick={() => setActiveView('yoda-search')}
+                onClick={() => setSearchDialogOpen(true)}
                 className="size-10 flex items-center justify-center rounded-[12px] text-foreground/45 hover:bg-foreground/[0.08] hover:text-foreground/80 transition-colors duration-fast titlebar-no-drag"
               >
                 <Search size={16} />
@@ -3398,13 +3400,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         />
       )}
 
-      {/* 搜索：左侧栏独立模块（⌘⇧F 直达），主区切换为搜索 + 最近会话按时间分组视图 */}
+      {/* 搜索：左侧栏独立模块（⌘⇧F 直达），点击打开居中搜索弹窗 */}
       <div className="sidebar-module-zone px-3 pt-2 pb-0.5">
         <SidebarModule
           icon={Search}
           title="搜索"
-          active={activeView === 'yoda-search'}
-          onClick={() => setActiveView('yoda-search')}
+          onClick={() => setSearchDialogOpen(true)}
           keycapShortcutId="global-search"
           ariaLabel="搜索"
         />
