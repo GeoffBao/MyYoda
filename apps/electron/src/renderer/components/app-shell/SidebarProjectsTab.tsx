@@ -210,39 +210,35 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [setActiveView, setCodeMainView])
 
-  /** 点击工作区行：切换为当前工作区 + 展开/折叠 */
+  /** 当前激活会话所属工作区 id（历史会话无归属时为 null） */
+  const activeSessionWorkspaceId = React.useMemo(() => {
+    if (!activeSessionId) return null
+    const tree = allSessionTrees.find((item) => treeContainsSessionId(item, activeSessionId))
+    return tree?.session.workspaceId ?? null
+  }, [activeSessionId, allSessionTrees])
+
+  /** 点击工作区行：切换为当前工作区 + 聚焦展开/折叠 */
   const handleSelectWorkspace = React.useCallback((workspaceId: string) => {
     if (workspaceId === currentWorkspaceId) {
       // 点击当前工作区 → 折叠/展开切换
       toggleCollapsed(workspaceId)
       return
     }
-    // 切换到新项目时：展开目标，折叠其他所有工作区
+    // 切换到新项目：当前右侧会话在此项目 → 只展开此项目（单独显示）；
+    // 不在此项目 → 全部折叠，保持列表干净
     selectWorkspace(workspaceId)
     setCollapsedIds((prev) => {
+      const shouldKeepExpanded = activeSessionWorkspaceId === workspaceId
       const next = new Set<string>()
       for (const ws of visibleWorkspaces) {
-        if (ws.id !== workspaceId) next.add(ws.id)
+        if (shouldKeepExpanded && ws.id === workspaceId) continue
+        next.add(ws.id)
       }
       // 自动任务合成组保持原状
       if (prev.has(AUTOMATION_GROUP_KEY)) next.add(AUTOMATION_GROUP_KEY)
       return next
     })
-  }, [currentWorkspaceId, selectWorkspace, visibleWorkspaces])
-
-  /** 当前激活会话所属工作区始终展开，方便定位 */
-  React.useEffect(() => {
-    if (!activeSessionId) return
-    const activeTree = allSessionTrees.find((tree) => treeContainsSessionId(tree, activeSessionId))
-    const wsId = activeTree?.session.workspaceId
-    if (!wsId) return
-    setCollapsedIds((prev) => {
-      if (!prev.has(wsId)) return prev
-      const next = new Set(prev)
-      next.delete(wsId)
-      return next
-    })
-  }, [activeSessionId, allSessionTrees])
+  }, [activeSessionWorkspaceId, currentWorkspaceId, selectWorkspace, visibleWorkspaces])
 
   /** 打开该工作区的任务看板 */
   const openWorkspaceBoard = React.useCallback((workspaceId: string) => {
