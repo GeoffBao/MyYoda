@@ -663,7 +663,7 @@ export function GeneralSettings(): React.ReactElement {
                     : "未安装。一键安装 graphify（Python 生态，PyPI 包名 graphifyy）；也可把「让 AI 帮你装」提示词发给 Agent 会话。"
               }
             >
-              <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-col gap-2 w-full min-w-0">
                 <div className="flex items-center gap-2">
                   {!graphifyInstalled && (
                     <Button
@@ -735,8 +735,9 @@ export function GeneralSettings(): React.ReactElement {
                   )}
                 </div>
                 {graphifyOpLog.length > 0 && (
-                  <pre className="text-xs text-muted-foreground max-h-32 overflow-auto whitespace-pre-wrap rounded border p-2">
-                    {graphifyOpLog.join("")}
+                  <pre className="text-xs text-muted-foreground max-h-32 overflow-auto whitespace-pre-wrap break-all rounded border p-2">
+                    {/* pip 进度条用 \r 回车刷新：转成换行，避免累积成超长单行撑破布局（2026-08-14） */}
+                    {graphifyOpLog.join("").replace(/\r/g, "\n")}
                   </pre>
                 )}
               </div>
