@@ -11,14 +11,15 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import {
+  AlertTriangle,
   ChevronRight,
+  Clock,
   FolderOpen,
   LayoutDashboard,
   MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
-  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { AgentSessionMeta, SessionGroup, LocalProjectRootStatus } from '@myyoda/shared'
@@ -111,6 +112,10 @@ const ATTENTION_DOT_CLASS: Record<string, string> = {
 
 /** 项目分组视图每个 workspace 下默认展示的会话数量上限；超出部分折叠在「显示全部」按钮后 */
 const PROJECT_MODE_PREVIEW_LIMIT = 8
+/** 「自动任务」合成组专用折叠 key（不对应真实工作区） */
+const AUTOMATION_GROUP_KEY = '__automations__'
+/** 自动任务组默认最多展示的会话数，超出折叠为「显示更多」 */
+const AUTOMATION_SESSION_VISIBLE_LIMIT = 4
 
 /** 本地目录状态徽标文案 */
 const PROJECT_ROOT_STATUS_LABEL: Record<LocalProjectRootStatus, string> = {
@@ -177,6 +182,19 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     }
     return byWorkspace
   }, [allSessionTrees])
+
+  /** 自动任务合成组（sourceAutomationId 且未置顶；置顶任务族在置顶区展示，二者互斥） */
+  const automationTrees = React.useMemo(() => {
+    const sessions = agentSessions.filter((session) =>
+      !session.archived
+      && !session.pinned
+      && !draftSessionIds.has(session.id)
+      && !!session.sourceAutomationId,
+    )
+    const trees = buildAgentSessionTrees(sessions)
+    trees.sort((a, b) => getSessionTreeActivityAt(b) - getSessionTreeActivityAt(a))
+    return trees
+  }, [agentSessions, draftSessionIds])
 
   const toggleCollapsed = React.useCallback((id: string) => {
     setCollapsedIds((prev) => {
@@ -317,11 +335,59 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
 
       {/* 工作区（项目）→ 会话分组 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
-        {visibleWorkspaces.length === 0 ? (
-          <div className="px-2 py-8 text-center text-[13px] text-foreground/35">
-            暂无项目
-          </div>
-        ) : (
+        <div className="flex flex-col gap-0.5">
+          {/* 自动任务合成组：聚合自动任务会话，固定排在项目区顶部（方案 A：并入项目区，对齐 Proma） */}
+          {automationTrees.length > 0 && (
+            <div className="rounded-lg">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleCollapsed(AUTOMATION_GROUP_KEY)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    toggleCollapsed(AUTOMATION_GROUP_KEY)
+                  }
+                }}
+                className="group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.04]"
+              >
+                <span className="grid size-5 shrink-0 place-items-center rounded-md bg-foreground/[0.045] text-foreground/45">
+                  <Clock size={13} />
+                </span>
+                <MarqueeText text="自动任务" className="min-w-0 flex-1 text-[13px] font-medium" />
+                <span className="shrink-0 text-[10px] tabular-nums text-foreground/30">
+                  {automationTrees.length}
+                </span>
+                <ChevronRight
+                  size={12}
+                  className={cn('shrink-0 text-foreground/30 transition-transform duration-fast', !collapsedIds.has(AUTOMATION_GROUP_KEY) && 'rotate-90')}
+                />
+              </div>
+              {!collapsedIds.has(AUTOMATION_GROUP_KEY) && automationTrees.length > 0 && (
+                <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
+                  {(expandedWorkspaceIds.has(AUTOMATION_GROUP_KEY) || automationTrees.length <= AUTOMATION_SESSION_VISIBLE_LIMIT
+                    ? automationTrees
+                    : automationTrees.slice(0, AUTOMATION_SESSION_VISIBLE_LIMIT)
+                  ).map(renderSessionTree)}
+                  {automationTrees.length > AUTOMATION_SESSION_VISIBLE_LIMIT && !expandedWorkspaceIds.has(AUTOMATION_GROUP_KEY) && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedWorkspaceIds((prev) => new Set(prev).add(AUTOMATION_GROUP_KEY))}
+                      className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                    >
+                      显示更多 ({automationTrees.length - AUTOMATION_SESSION_VISIBLE_LIMIT})
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {visibleWorkspaces.length === 0 ? (
+            <div className="px-2 py-8 text-center text-[13px] text-foreground/35">
+              暂无项目
+            </div>
+          ) : (
           <div className="flex flex-col gap-0.5">
             {visibleWorkspaces.map((ws) => {
               const wsId = ws.id
@@ -533,7 +599,8 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
               )
             })}
           </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

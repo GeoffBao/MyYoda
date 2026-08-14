@@ -2410,7 +2410,25 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   /** 自动任务组溢出数量（超出默认上限的会话数） */
   const automationOverflow = automationGroup ? Math.max(0, automationGroup.sessions.length - AUTOMATION_SESSION_VISIBLE_LIMIT) : 0
   /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组 */
-  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(new Set())
+  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(() => new Set([PINNED_AGENT_GROUP_KEY]))
+  // 置顶区默认折叠；存在 running/blocked 的置顶任务族时自动展开（对齐「需要处理/进行中」优先可见）
+  React.useEffect(() => {
+    const hasActivePinned = pinnedAgentSessions.some((session) => {
+      const status = getSessionTreeStatus(
+        { session, childSessions: getDirectDelegatedChildren(agentSessions, session.id) },
+        agentIndicatorMap,
+      )
+      return status === 'running' || status === 'blocked'
+    })
+    if (hasActivePinned) {
+      setCollapsedFlatGroupIds((prev) => {
+        if (!prev.has(PINNED_AGENT_GROUP_KEY)) return prev
+        const next = new Set(prev)
+        next.delete(PINNED_AGENT_GROUP_KEY)
+        return next
+      })
+    }
+  }, [agentIndicatorMap, agentSessions, pinnedAgentSessions])
   // 项目模式下「新建项目」弹窗（状态已在顶层声明 creatingProject/setCreatingProject）
   const [createProjectOpen, setCreateProjectOpen] = React.useState(false)
 
@@ -3393,21 +3411,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       {/* 项目中心入口已移除：Project 导航改由下方 Sessions | Projects Tab 承担 */}
 
-      {/* 自动任务组：聚合自动任务会话，常驻在置顶分类上方（跨所有分组模式可见，不进入下方列表区） */}
-      {mode === 'agent' && automationGroup && (
-        <div className="pt-1 pb-0.5 flex-shrink-0 titlebar-no-drag">
-          {renderWorkspaceGroupItem(automationGroup)}
-          {automationOverflow > 0 && (
-            <button
-              type="button"
-              onClick={() => setAutomationOverflowExpanded((prev) => !prev)}
-              className="ml-4 px-1.5 py-1 rounded-md text-left text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-            >
-              {automationOverflowExpanded ? '收起' : `显示更多 (${automationOverflow})`}
-            </button>
-          )}
-        </div>
-      )}
+      {/* 自动任务组已并入项目区（SidebarProjectsTab 顶部合成组，方案 A）；这里不再独立渲染 */}
 
       {/* 置顶区：常驻在会话/项目 Tab 切换器上方，跨 Tab 可见 */}
       {mode === 'chat' && viewMode === 'active' && pinnedConversations.length > 0 && (
