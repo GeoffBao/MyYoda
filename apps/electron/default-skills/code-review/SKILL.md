@@ -18,7 +18,12 @@ version: "1.0.0"
 ### 1. 理解改动
 - 获取 diff（`git diff` / `git show` / PR 变更文件）
 - 明确改动意图：改了什么、为什么改、影响哪些调用方
-- 用 graphify 知识图谱（如已构建）查影响面：`graphify explain <文件> --graph <主仓库>/graphify-out/graph.json`（行号级依赖关系 + 置信标签）
+- **影响面优先图谱（2026-08-14 强化）**：若会话提供 mcp__graphify__* 工具（图谱已建），
+  优先用图谱替代 find/grep 大范围搜索：
+  - 查改动符号的调用方/被调用方：mcp__graphify__get_neighbors + get_node（行号级 + 置信标签）
+  - 查影响链：mcp__graphify__shortest_path；找相关代码：mcp__graphify__query_graph
+  - 图谱无结果、置信存疑或代码建图后有改动时，用 Grep/Read 复核
+  - 图谱未建时退回 CLI：`graphify explain <文件> --graph <主仓库>/graphify-out/graph.json`
 
 ### 2. 分轴审查（对照本仓库规范）
 | 轴 | 检查点 |
