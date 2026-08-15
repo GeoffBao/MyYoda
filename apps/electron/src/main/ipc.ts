@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, DISCOVER_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, type DiscoverContentItem, type DiscussionCategorySlug, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -331,7 +331,7 @@ import { resolveAgentSessionFileRoots } from './lib/agent-file-roots'
 import { listSessionOutputs } from './lib/agent-output-capture'
 import { getAgentWorkspacePath } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
-import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/storage-service'
+import { calculateStorageStats, cleanupStorage, cleanupTempFiles, cleanupDiscoverCache } from './lib/storage-service'
 import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
@@ -5200,6 +5200,100 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
+
+  // 拉取官方精选流（清单 + 更新标记 + 未读红点；force 绕过内存缓存重新拉网络）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_FEED, async (_event, force?: boolean) => {
+    const { fetchDiscoverFeed } = await import('./lib/content-service')
+    return fetchDiscoverFeed(force)
+  })
+
+  // 拉取 article 的 markdown 正文
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_ARTICLE, async (_event, contentUrl: string) => {
+    const { fetchArticleContent } = await import('./lib/content-service')
+    return fetchArticleContent(contentUrl)
+  })
+
+  // 查询视频本地缓存状态
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.GET_VIDEO_STATUS,
+    async (_event, itemId: string, version: string, size?: number) => {
+      const { getVideoStatus } = await import('./lib/content-service')
+      return getVideoStatus(itemId, version, size)
+    }
+  )
+
+  // 下载视频到本地缓存（进度经 VIDEO_DOWNLOAD_PROGRESS 推送）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.DOWNLOAD_VIDEO,
+    async (event, item: DiscoverContentItem) => {
+      const { downloadVideo } = await import('./lib/content-service')
+      const result = await downloadVideo(item, event.sender)
+      return { filePath: result.filePath }
+    }
+  )
+
+  // 记录条目已读版本
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.MARK_SEEN, async (_event, itemId: string, version: string) => {
+    const { markContentSeen } = await import('./lib/content-service')
+    markContentSeen(itemId, version)
+  })
+
+  // 拉取未读汇总（官方未读 + 社区新回复，侧边栏徽标用）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_UNREAD_SUMMARY, async () => {
+    const [{ getFeedUnreadCount }, { getCommunityUnreadCount }] = await Promise.all([
+      import('./lib/content-service'),
+      import('./lib/community-service'),
+    ])
+    return { feedUnread: getFeedUnreadCount(), communityUnread: await getCommunityUnreadCount() }
+  })
+
+  // 记录某讨论已读（打开详情时调用）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.MARK_DISCUSSION_VIEWED,
+    async (_event, number: number, commentCount: number) => {
+      const { markDiscussionViewed } = await import('./lib/community-service')
+      markDiscussionViewed(number, commentCount)
+    }
+  )
+
+  // 拉取讨论列表（按板块）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.LIST_DISCUSSIONS,
+    async (_event, categorySlug: DiscussionCategorySlug, force?: boolean) => {
+      const { listDiscussions } = await import('./lib/community-service')
+      return listDiscussions(categorySlug, force)
+    }
+  )
+
+  // 拉取讨论详情正文与评论（force 绕过缓存重拉）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, async (_event, number: number, force?: boolean) => {
+    const { getDiscussion } = await import('./lib/community-service')
+    return getDiscussion(number, force)
+  })
+
+  // 为已下载视频文件注册 myyoda-file:// 播放 URL（token 门控，支持 Range seek）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_VIDEO_URL, async (_event, filePath: string) => {
+    const { isPathInVideoCacheDir } = await import('./lib/content-service')
+    if (!isPathInVideoCacheDir(filePath)) {
+      throw new Error('非法的视频缓存路径')
+    }
+    const { registerMyYodaFilePath } = await import('./lib/local-file-protocol')
+    return registerMyYodaFilePath(filePath)
+  })
+
+  // 为远程视频注册 discover-video:// 流式播放 URL（白名单校验在主进程）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_VIDEO_STREAM_URL, async (_event, remoteUrl: string) => {
+    const { registerDiscoverVideoStream } = await import('./lib/discover-video-protocol')
+    return registerDiscoverVideoStream(remoteUrl)
+  })
+
+  // 删除某视频的本地缓存（按 itemId+version 构造路径，不接收任意路径）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.DELETE_VIDEO_CACHE, async (_event, itemId: string, version: string) => {
+    const { deleteVideoCache } = await import('./lib/content-service')
+    deleteVideoCache(itemId, version)
+  })
+
   // ===== 飞书集成 =====
 
   // --- 旧 API（向后兼容，操作 bots[0]）---
@@ -5673,6 +5767,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_TEMP, async () => {
     return cleanupTempFiles()
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER, async () => {
+    return cleanupDiscoverCache()
   })
 
   // ===== 用量统计 =====

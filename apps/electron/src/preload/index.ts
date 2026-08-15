@@ -7,7 +7,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, DISCOVER_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
 import type { TaskAggregateSummary, TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks'
 import type { StartTodoAgentInput, StartTodoAgentResult, TodoAgentSessionActivation, PlanningWorkspaceScope } from '@myyoda/shared'
 import { LABEL_IPC_CHANNELS } from '@myyoda/shared/channels'
@@ -1332,6 +1332,22 @@ export interface ElectronAPI {
   feedbackCaptureWindow: () => Promise<{ filePath: string; dataUrl: string } | null>
   feedbackPickImages: () => Promise<Array<{ filePath: string; dataUrl: string }>>
 
+  // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
+  discoverGetFeed: (force?: boolean) => Promise<import('@myyoda/shared').DiscoverFeedResult>
+  discoverGetArticle: (contentUrl: string) => Promise<string>
+  discoverGetVideoStatus: (itemId: string, version: string, size?: number) => Promise<import('@myyoda/shared').VideoDownloadState>
+  discoverDownloadVideo: (item: import('@myyoda/shared').DiscoverContentItem) => Promise<{ filePath: string }>
+  discoverMarkSeen: (itemId: string, version: string) => Promise<void>
+  discoverGetUnreadSummary: () => Promise<import('@myyoda/shared').DiscoverUnreadSummary>
+  discoverMarkDiscussionViewed: (number: number, commentCount: number) => Promise<void>
+  discoverListDiscussions: (categorySlug: import('@myyoda/shared').DiscussionCategorySlug, force?: boolean) => Promise<import('@myyoda/shared').DiscussionListResult>
+  discoverGetDiscussion: (number: number, force?: boolean) => Promise<import('@myyoda/shared').DiscussionDetail>
+  discoverGetVideoUrl: (filePath: string) => Promise<string>
+  discoverGetVideoStreamUrl: (remoteUrl: string) => Promise<string>
+  discoverDeleteVideoCache: (itemId: string, version: string) => Promise<void>
+  onVideoDownloadProgress: (listener: (event: import('@myyoda/shared').VideoDownloadProgressEvent) => void) => () => void
+  onVideoDownloadDone: (listener: (event: import('@myyoda/shared').VideoDownloadDoneEvent) => void) => () => void
+
   // 工作区文件变化通知
   onCapabilitiesChanged: (callback: () => void) => () => void
   onWorkspaceFilesChanged: (callback: () => void) => () => void
@@ -1536,6 +1552,7 @@ export interface ElectronAPI {
   cleanupStorage: (options: unknown) => Promise<unknown>
   /** 清理临时文件（快速） */
   cleanupTempStorage: () => Promise<unknown>
+  cleanupDiscoverStorage: () => Promise<unknown>
 
   // ===== 用量统计 =====
 
@@ -3153,6 +3170,76 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.PICK_IMAGES)
   },
 
+  // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
+
+  discoverGetFeed: (force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_FEED, force)
+  },
+
+  discoverGetArticle: (contentUrl) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_ARTICLE, contentUrl)
+  },
+
+  discoverGetVideoStatus: (itemId, version, size) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_STATUS, itemId, version, size)
+  },
+
+  discoverDownloadVideo: (item) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.DOWNLOAD_VIDEO, item)
+  },
+
+  discoverMarkSeen: (itemId, version) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.MARK_SEEN, itemId, version)
+  },
+
+  discoverGetUnreadSummary: () => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_UNREAD_SUMMARY)
+  },
+
+  discoverMarkDiscussionViewed: (number, commentCount) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.MARK_DISCUSSION_VIEWED, number, commentCount)
+  },
+
+  discoverListDiscussions: (categorySlug, force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.LIST_DISCUSSIONS, categorySlug, force)
+  },
+
+  discoverGetDiscussion: (number, force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, number, force)
+  },
+
+  discoverGetVideoUrl: (filePath) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_URL, filePath)
+  },
+
+  discoverGetVideoStreamUrl: (remoteUrl) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_STREAM_URL, remoteUrl)
+  },
+
+  discoverDeleteVideoCache: (itemId, version) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.DELETE_VIDEO_CACHE, itemId, version)
+  },
+
+  onVideoDownloadProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: import('@myyoda/shared').VideoDownloadProgressEvent): void => {
+      listener(payload)
+    }
+    ipcRenderer.on(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_PROGRESS, handler)
+    return () => {
+      ipcRenderer.removeListener(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_PROGRESS, handler)
+    }
+  },
+
+  onVideoDownloadDone: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: import('@myyoda/shared').VideoDownloadDoneEvent): void => {
+      listener(payload)
+    }
+    ipcRenderer.on(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_DONE, handler)
+    return () => {
+      ipcRenderer.removeListener(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_DONE, handler)
+    }
+  },
+
   // ===== 飞书集成 =====
 
   getFeishuConfig: () => {
@@ -3541,6 +3628,10 @@ const electronAPI: ElectronAPI = {
 
   cleanupTempStorage: () => {
     return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_TEMP)
+  },
+
+  cleanupDiscoverStorage: () => {
+    return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER)
   },
 
   // ===== 用量统计 =====
