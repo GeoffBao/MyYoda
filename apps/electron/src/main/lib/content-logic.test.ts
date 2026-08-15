@@ -43,15 +43,15 @@ describe('computeUpdateFlags', () => {
       { id: 'b', type: 'announcement' as const, title: 'b', version: '1', publishedAt: 'x', body: 'b' },
     ]
     const state = { a: '1', b: '1' }
-    const [a, b] = computeUpdateFlags(items, state)
-    expect(a.hasUpdate).toBe(true)
-    expect(b.hasUpdate).toBe(false)
+    const flags = computeUpdateFlags(items, state)
+    expect(flags[0]?.hasUpdate).toBe(true)
+    expect(flags[1]?.hasUpdate).toBe(false)
   })
 
   test('未记录的条目视为有更新', () => {
     const items = [{ id: 'a', type: 'link' as const, title: 'a', version: '1', publishedAt: 'x', url: 'u' }]
-    const [a] = computeUpdateFlags(items, {})
-    expect(a.hasUpdate).toBe(true)
+    const flags = computeUpdateFlags(items, {})
+    expect(flags[0]?.hasUpdate).toBe(true)
   })
 
   test('空清单返回空数组', () => {
