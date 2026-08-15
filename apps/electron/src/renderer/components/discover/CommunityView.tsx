@@ -150,6 +150,14 @@ export function CommunityView(): React.ReactElement {
         )
         setListResult(result)
         setLoadedCategory(slug)
+      } catch (err) {
+        console.warn('[CommunityView] 讨论列表拉取失败:', err)
+        setListResult({
+          items: [],
+          error: err instanceof Error ? err.message : '社区内容拉取失败',
+          rateLimited: false,
+        })
+        setLoadedCategory(slug)
       } finally {
         setListLoading(false)
       }
@@ -157,11 +165,11 @@ export function CommunityView(): React.ReactElement {
     [setListLoading, setListResult]
   )
 
-  // 切换板块或首次进入时加载（缓存内数据直接复用）
+  // 首次进入或切换板块时加载（缓存内数据由主进程直接复用）
   React.useEffect(() => {
-    if (loadedCategory === category && listResult.items.length > 0) return
+    if (loadedCategory === category) return
     void loadList(category)
-  }, [category, loadedCategory, listResult.items.length, loadList])
+  }, [category, loadedCategory, loadList])
 
   const handleOpenDiscussion = React.useCallback(
     (number: number): void => {

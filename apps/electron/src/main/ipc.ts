@@ -5256,6 +5256,10 @@ export function registerIpcHandlers(): void {
 
   // 为已下载视频文件注册 myyoda-file:// 播放 URL（token 门控，支持 Range seek）
   ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_VIDEO_URL, async (_event, filePath: string) => {
+    const { isPathInVideoCacheDir } = await import('./lib/content-service')
+    if (!isPathInVideoCacheDir(filePath)) {
+      throw new Error('非法的视频缓存路径')
+    }
     const { registerMyYodaFilePath } = await import('./lib/local-file-protocol')
     return registerMyYodaFilePath(filePath)
   })

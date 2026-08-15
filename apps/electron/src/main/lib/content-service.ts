@@ -8,7 +8,7 @@
  * - 全部 HTTP 走代理感知的 getFetchFn（国内网络环境刚需）
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import type { WebContents } from 'electron'
 import {
   DISCOVER_IPC_CHANNELS,
@@ -179,6 +179,12 @@ function sendProgress(webContents: WebContents, itemId: string, progress: number
   })
 }
 
+/** 校验路径位于视频缓存目录内（GET_VIDEO_URL 防任意路径注册） */
+export function isPathInVideoCacheDir(filePath: string): boolean {
+  const dir = getDiscoverVideoCacheDir()
+  return filePath === dir || filePath.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+}
+
 /** 下载单个 URL 到目标路径（返回是否大小校验通过） */
 async function downloadFromUrl(
   url: string,
@@ -188,7 +194,7 @@ async function downloadFromUrl(
   webContents: WebContents,
   lastSentAt: { t: number },
 ): Promise<boolean> {
-  const response = await (await getProxyFetch())(url, { signal: AbortSignal.timeout(60_000) })
+  const response = await (await getProxyFetch())(url, { signal: AbortSignal.timeout(600_000) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   if (!response.body) throw new Error('响应无内容流')
   const reader = response.body.getReader()
