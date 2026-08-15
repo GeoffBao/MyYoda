@@ -1108,6 +1108,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   // 消息是否已完成首次加载（用于 auto-send 等待）
   const [messagesLoaded, setMessagesLoaded] = React.useState(false)
+  const [messagesLoadedSessionId, setMessagesLoadedSessionId] = React.useState<string | null>(null)
+  const messagesLoadedForCurrentSession = messagesLoaded && messagesLoadedSessionId === sessionId
   const [messagesRefreshing, setMessagesRefreshing] = React.useState(false)
   const messagesRefreshingRef = React.useRef(false)
   const loadingSessionIdRef = React.useRef<string | null>(null)
@@ -1126,7 +1128,10 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const cached = store.get(agentSDKMessagesCacheAtom).get(sessionId)
       if (cached) {
         setPersistedSDKMessages(cached)
-        setMessagesLoaded(true)
+        setMessagesLoaded(false)
+        // 缓存只作为最新 IPC 快照到达前的预热数据。若立即揭示，完成中的会话
+        // 可能先显示旧尾部，随后 IPC 返回的新 Agent 消息再单独跳出来。
+        // 保持 messagesLoaded=false 会让 AgentMessages 在同一批更新完成后整体显示。
       } else {
         setPersistedSDKMessages([])
         setMessagesLoaded(false)
@@ -1148,6 +1153,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           setEarlierMessagesCursor(page.nextBefore)
           setLoadingEarlierMessages(false)
           setMessagesLoaded(true)
+          setMessagesLoadedSessionId(sessionId)
           messagesRefreshingRef.current = false
           setMessagesRefreshing(false)
 
@@ -1206,6 +1212,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         if (cancelled) return
         console.error(error)
         setMessagesLoaded(true)
+        setMessagesLoadedSessionId(sessionId)
         messagesRefreshingRef.current = false
         setMessagesRefreshing(false)
       })
@@ -1265,7 +1272,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   // 等待 messagesLoaded 确保消息加载完成后再插入乐观消息，避免被加载结果覆盖。
   // 使用 queueMicrotask 延迟发送：避免 setState → 重渲染 → cleanup 取消 timer 的竞态。
   React.useEffect(() => {
-    if (!messagesLoaded) return
+    if (!messagesLoadedForCurrentSession) return
     if (!pendingPrompt) return
     if (pendingPrompt.sessionId !== sessionId) return
     if (!agentChannelId || streaming) return
@@ -1337,7 +1344,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         })
       })
     })
-  }, [messagesLoaded, pendingPrompt, sessionId, agentChannelId, agentModelId, sessionAgentRuntime, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories])
+  }, [messagesLoadedForCurrentSession, pendingPrompt, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories])
   // ===== 附件处理 =====
 
   /** 为文件生成唯一文件名（避免粘贴多张图片时文件名重复导致覆盖） */
@@ -2120,7 +2127,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // 如果输入为空但有建议，使用建议内容
     const effectiveText = text || suggestion || ''
     const pendingFilesSnapshot = pendingFilesRef.current
-    if (!messagesLoaded || (!effectiveText && pendingFilesSnapshot.length === 0) || !agentChannelId || !hasAvailableModel) return
+    if (!messagesLoadedForCurrentSession || (!effectiveText && pendingFilesSnapshot.length === 0) || !agentChannelId || !hasAvailableModel) return
     if (isStopping) {
       toast.info('正在停止上一轮 Agent', { description: '请等待停止完成后再发送消息。' })
       return
@@ -2340,7 +2347,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         return map
       })
     })
-  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, sessionAgentRuntime, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
+  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoadedForCurrentSession, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
 
   /** 停止生成 */
   const handleStop = React.useCallback((): void => {
@@ -2683,7 +2690,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     (allAskUserRequests.get(sessionId)?.length ?? 0) > 0 ||
     (allExitPlanRequests.get(sessionId)?.length ?? 0) > 0
   const hasBlockingRequests = hasBannerOverlay || (allPermissionRequests.get(sessionId)?.length ?? 0) > 0
-  const canSendQueuedNow = messagesLoaded && (streaming || !messagesRefreshing) && !!agentChannelId && hasAvailableModel && !hasBlockingRequests && !isStopping
+  const canSendQueuedNow = messagesLoadedForCurrentSession && (streaming || !messagesRefreshing) && !!agentChannelId && hasAvailableModel && !hasBlockingRequests && !isStopping
   const queuedSendInFlightRef = React.useRef(false)
   const sendingQueuedMessageIdsRef = React.useRef<Set<string>>(new Set())
 
@@ -2783,7 +2790,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     setInputHasContent(hasContent)
   }, [])
   const hasTextInput = inputHasContent
-  const canSend = !isStopping && messagesLoaded && (streaming || !messagesRefreshing) && (hasTextInput || pendingFiles.length > 0 || !!suggestion) && agentChannelId !== null && hasAvailableModel && (!streaming || hasTextInput)
+  const canSend = !isStopping && messagesLoadedForCurrentSession && (streaming || !messagesRefreshing) && (hasTextInput || pendingFiles.length > 0 || !!suggestion) && agentChannelId !== null && hasAvailableModel && (!streaming || hasTextInput)
 
   const inputToolbarItems = React.useMemo<ToolbarItem[]>(() => [
     {
@@ -3053,7 +3060,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           sessionId={sessionId}
           workspaceId={sessionMeta?.workspaceId}
           sessionModelId={agentModelId || undefined}
-          messagesLoaded={messagesLoaded}
+          messagesLoaded={messagesLoadedForCurrentSession}
           persistedSDKMessages={persistedSDKMessages}
           hasEarlierMessages={earlierMessagesCursor !== undefined}
           loadingEarlierMessages={loadingEarlierMessages}
