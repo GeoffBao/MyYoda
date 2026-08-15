@@ -6,6 +6,7 @@
       "name": "proma",
       "dependencies": {
         "jotai": "^2.17.1",
+        "jotai-family": "^1.1.0",
       },
       "devDependencies": {
         "@rollup/rollup-darwin-x64": "4.56.0",
@@ -1786,6 +1787,8 @@
     "jose": ["jose@6.2.8", "", {}, "sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ=="],
 
     "jotai": ["jotai@2.20.2", "", { "peerDependencies": { "@babel/core": ">=7.0.0", "@babel/template": ">=7.0.0", "@types/react": ">=17.0.0", "react": ">=17.0.0" }, "optionalPeers": ["@babel/core", "@babel/template", "@types/react", "react"] }, "sha512-aHB4CNb9qRcyf0mwSB6EO5bCGAjx8cTwFgOFCE2leOnTzqACbnSWG8XoWB3LxCT1Qoj03I1OWAHszDmN4uHb/w=="],
+
+    "jotai-family": ["jotai-family@1.1.0", "", { "peerDependencies": { "jotai": ">=2.9.0" } }, "sha512-T1ACRsLnN5Mu0B8/DIWUW1hW7x1RmpBprm/+CWmUTf4ZZUmIFEQpBJ9PNQtXPjdUD2uu8RvwBxr7nJPdCw5BXg=="],
 
     "jotai-scope": ["jotai-scope@0.7.2", "", { "peerDependencies": { "jotai": ">=2.9.2", "react": ">=17.0.0" } }, "sha512-Gwed97f3dDObrO43++2lRcgOqw4O2sdr4JCjP/7eHK1oPACDJ7xKHGScpJX9XaflU+KBHXF+VhwECnzcaQiShg=="],
 
