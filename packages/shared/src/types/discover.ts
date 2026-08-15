@@ -47,6 +47,10 @@ export interface DiscoverFeedResult {
   hasUnreadUpdates: boolean
   /** 内容源仓库与分支（错误提示用） */
   source: { owner: string; repo: string; branch: string }
+  /** 本次数据是否来自本地缓存（网络失败降级，渲染层据此显示离线横幅） */
+  fromCache: boolean
+  /** 缓存写入时间（fromCache=true 时有值，Unix 毫秒） */
+  cachedAt?: number
 }
 
 /** 视频本地缓存状态 */
@@ -106,11 +110,12 @@ export interface DiscussionDetail extends DiscussionSummary {
   bodyMarkdown: string
 }
 
-/** 社区列表拉取结果（错误/限流时 error 有值） */
+/** 社区列表拉取结果（错误/限流时 error 有值；fromCache=true 表示展示的是离线缓存） */
 export interface DiscussionListResult {
   items: DiscussionSummary[]
   error?: string
   rateLimited: boolean
+  fromCache: boolean
 }
 
 /** 「发现」IPC 通道常量 */

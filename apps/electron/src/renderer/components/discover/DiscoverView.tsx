@@ -12,10 +12,12 @@ import { useDiscoverFeed } from './use-discover-feed'
 import { FeaturedFeed } from './FeaturedFeed'
 import { CommunityView } from './CommunityView'
 import { FeedbackSection } from './FeedbackSection'
+import { HelpSection } from './HelpSection'
 
-const TABS: Array<{ key: 'featured' | 'community' | 'feedback'; label: string }> = [
+const TABS: Array<{ key: 'featured' | 'community' | 'help' | 'feedback'; label: string }> = [
   { key: 'featured', label: '官方精选' },
   { key: 'community', label: '社区讨论' },
+  { key: 'help', label: '帮助' },
   { key: 'feedback', label: '反馈' },
 ]
 
@@ -90,6 +92,8 @@ export function DiscoverView(): React.ReactElement {
             <FeaturedFeed />
           ) : tab === 'community' ? (
             <CommunityView />
+          ) : tab === 'help' ? (
+            <HelpSection />
           ) : (
             <FeedbackSection />
           )}

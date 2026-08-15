@@ -5,12 +5,18 @@
  */
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
-import { discoverFeedAtom, discoverFeedErrorAtom, discoverHasUnreadAtom } from '@/atoms/discover-atoms'
+import {
+  discoverFeedAtom,
+  discoverFeedErrorAtom,
+  discoverFeedSourceAtom,
+  discoverHasUnreadAtom,
+} from '@/atoms/discover-atoms'
 
 export function DiscoverInitializer(): React.ReactElement | null {
   const setFeed = useSetAtom(discoverFeedAtom)
   const setHasUnread = useSetAtom(discoverHasUnreadAtom)
   const setError = useSetAtom(discoverFeedErrorAtom)
+  const setSource = useSetAtom(discoverFeedSourceAtom)
 
   React.useEffect(() => {
     let cancelled = false
@@ -20,6 +26,7 @@ export function DiscoverInitializer(): React.ReactElement | null {
         if (cancelled) return
         setFeed(result.items)
         setHasUnread(result.hasUnreadUpdates)
+        setSource({ fromCache: result.fromCache, cachedAt: result.cachedAt })
         setError(null)
       })
       .catch((err: unknown) => {
@@ -30,7 +37,7 @@ export function DiscoverInitializer(): React.ReactElement | null {
     return () => {
       cancelled = true
     }
-  }, [setFeed, setHasUnread, setError])
+  }, [setFeed, setHasUnread, setError, setSource])
 
   return null
 }

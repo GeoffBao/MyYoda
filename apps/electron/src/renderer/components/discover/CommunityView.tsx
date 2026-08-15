@@ -7,7 +7,7 @@
  */
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
-import { ArrowLeft, ExternalLink, Loader2, MessageSquare, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { CloudOff, ArrowLeft, ExternalLink, Loader2, MessageSquare, Plus, RefreshCw, Sparkles } from 'lucide-react'
 import { DISCUSSION_CATEGORIES, type DiscussionDetail, type DiscussionSummary } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import {
@@ -156,6 +156,7 @@ export function CommunityView(): React.ReactElement {
           items: [],
           error: err instanceof Error ? err.message : '社区内容拉取失败',
           rateLimited: false,
+          fromCache: false,
         })
         setLoadedCategory(slug)
       } finally {
@@ -237,8 +238,36 @@ export function CommunityView(): React.ReactElement {
         </div>
       </div>
 
-      {/* 提示条（限流/错误） */}
-      {listResult.error && (
+      {/* 提示条：离线缓存（灰）/ 限流（橙）/ 其他错误 */}
+      {listResult.fromCache && !listResult.rateLimited && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-foreground/[0.03] px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-xs text-foreground/55">
+            <CloudOff size={13} className="shrink-0" />
+            离线模式：展示上次缓存的讨论列表
+          </span>
+          <button
+            type="button"
+            onClick={() => void loadList(category, true)}
+            className="shrink-0 flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <RefreshCw size={11} />
+            重新连接
+          </button>
+        </div>
+      )}
+      {listResult.rateLimited && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5">
+          <span className="text-xs text-foreground/60">{listResult.error}</span>
+          <button
+            type="button"
+            onClick={() => void loadList(category, true)}
+            className="shrink-0 rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            重试
+          </button>
+        </div>
+      )}
+      {!listResult.fromCache && !listResult.rateLimited && listResult.error && (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5">
           <span className="text-xs text-foreground/60">{listResult.error}</span>
           <button

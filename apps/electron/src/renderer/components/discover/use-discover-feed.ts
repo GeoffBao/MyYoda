@@ -7,18 +7,22 @@ import {
   discoverFeedAtom,
   discoverFeedErrorAtom,
   discoverFeedLoadingAtom,
+  discoverFeedSourceAtom,
   discoverHasUnreadAtom,
 } from '@/atoms/discover-atoms'
 
 export function useDiscoverFeed(): {
   loading: boolean
   error: string | null
+  fromCache: boolean
+  cachedAt?: number
   refresh: () => Promise<void>
   markSeen: (itemId: string, version: string) => void
 } {
   const [feed, setFeed] = useAtom(discoverFeedAtom)
   const [loading, setLoading] = useAtom(discoverFeedLoadingAtom)
   const [error, setError] = useAtom(discoverFeedErrorAtom)
+  const [source, setSource] = useAtom(discoverFeedSourceAtom)
   const setHasUnread = useSetAtom(discoverHasUnreadAtom)
 
   const refresh = React.useCallback(async (): Promise<void> => {
@@ -28,6 +32,7 @@ export function useDiscoverFeed(): {
       const result = await window.electronAPI.discoverGetFeed(true)
       setFeed(result.items)
       setHasUnread(result.hasUnreadUpdates)
+      setSource({ fromCache: result.fromCache, cachedAt: result.cachedAt })
       setError(null)
     } catch (err) {
       console.warn('[DiscoverFeed] 拉取官方内容流失败:', err)
@@ -35,7 +40,7 @@ export function useDiscoverFeed(): {
     } finally {
       setLoading(false)
     }
-  }, [setFeed, setLoading, setError, setHasUnread])
+  }, [setFeed, setLoading, setError, setSource, setHasUnread])
 
   const markSeen = React.useCallback(
     (itemId: string, version: string): void => {
@@ -51,5 +56,5 @@ export function useDiscoverFeed(): {
     [feed, setFeed, setHasUnread]
   )
 
-  return { loading, error, refresh, markSeen }
+  return { loading, error, fromCache: source.fromCache, cachedAt: source.cachedAt, refresh, markSeen }
 }

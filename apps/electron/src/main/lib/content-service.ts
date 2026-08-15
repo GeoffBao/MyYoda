@@ -41,7 +41,7 @@ const MANIFEST_URLS = [`${RAW_BASE}/${MANIFEST_PATH}`, `${JSDELIVR_BASE}/${MANIF
 const PROGRESS_THROTTLE_MS = 500
 
 /** 清单内存缓存（进程内只拉一次，避免反复请求） */
-let manifestMemoryCache: DiscoverManifest | null = null
+let manifestMemoryCache: ManifestCacheFile | null = null
 
 /** 视频下载进行中的 Promise 去重：itemId -> Promise */
 const inflightDownloads = new Map<string, Promise<{ filePath: string }>>()
@@ -66,19 +66,35 @@ async function fetchWithFallbacks(urls: string[], fetchFn: typeof globalThis.fet
   throw lastError
 }
 
-/** 读取并校验清单缓存文件；无效返回 null */
-function readManifestCacheFile(): DiscoverManifest | null {
+/** 清单磁盘缓存文件结构（wrapper，含写入时间供离线横幅展示） */
+interface ManifestCacheFile {
+  fetchedAt: number
+  manifest: DiscoverManifest
+}
+
+/** 读取清单缓存文件（兼容旧格式=裸 manifest）；无效返回 null */
+function readManifestCacheFile(): ManifestCacheFile | null {
   try {
-    const raw = readFileSync(getDiscoverManifestCachePath(), 'utf-8')
-    const result = validateManifest(JSON.parse(raw))
-    return result.ok ? result.manifest : null
+    const raw = JSON.parse(readFileSync(getDiscoverManifestCachePath(), 'utf-8')) as unknown
+    if (typeof raw !== 'object' || raw === null) return null
+    const candidate = raw as Record<string, unknown>
+    // 新格式：{ fetchedAt, manifest }
+    if (candidate.manifest !== undefined) {
+      const result = validateManifest(candidate.manifest)
+      if (!result.ok) return null
+      return { fetchedAt: typeof candidate.fetchedAt === 'number' ? candidate.fetchedAt : Date.now(), manifest: result.manifest }
+    }
+    // 旧格式：裸 manifest（无 fetchedAt）
+    const result = validateManifest(raw)
+    if (!result.ok) return null
+    return { fetchedAt: Date.now(), manifest: result.manifest }
   } catch {
     return null
   }
 }
 
 /** 拉取清单：内存缓存（非强制）→ 网络双源 → 磁盘缓存兜底；force 时跳过内存缓存 */
-async function fetchManifestWithCache(force = false): Promise<DiscoverManifest> {
+async function fetchManifestWithCache(force = false): Promise<ManifestCacheFile> {
   if (!force && manifestMemoryCache) return manifestMemoryCache
   const diskCache = readManifestCacheFile()
   try {
@@ -86,10 +102,11 @@ async function fetchManifestWithCache(force = false): Promise<DiscoverManifest> 
     const raw: unknown = await response.json()
     const result = validateManifest(raw)
     if (!result.ok) throw new Error(result.error)
-    manifestMemoryCache = result.manifest
+    const cacheEntry: ManifestCacheFile = { fetchedAt: Date.now(), manifest: result.manifest }
+    manifestMemoryCache = cacheEntry
     mkdirSync(join(getDiscoverManifestCachePath(), '..'), { recursive: true })
-    writeFileSync(getDiscoverManifestCachePath(), JSON.stringify(result.manifest, null, 2))
-    return result.manifest
+    writeFileSync(getDiscoverManifestCachePath(), JSON.stringify(cacheEntry, null, 2))
+    return cacheEntry
   } catch (err) {
     if (diskCache) return diskCache
     throw err
@@ -115,10 +132,18 @@ function writeContentState(state: DiscoverContentState): void {
 
 /** 拉取官方精选流（清单 + 更新标记 + 未读红点）；force 时绕过内存缓存重新拉网络 */
 export async function fetchDiscoverFeed(force = false): Promise<DiscoverFeedResult> {
-  const manifest = await fetchManifestWithCache(force)
+  const cacheEntry = await fetchManifestWithCache(force)
+  const fromCache = cacheEntry !== manifestMemoryCache || !manifestMemoryCache
+  const manifest = cacheEntry.manifest
   const state = readContentState()
   const items = computeUpdateFlags(manifest.items, state)
-  return { items, hasUnreadUpdates: items.some((item) => item.hasUpdate), source: CONTENT_SOURCE }
+  return {
+    items,
+    hasUnreadUpdates: items.some((item) => item.hasUpdate),
+    source: CONTENT_SOURCE,
+    fromCache,
+    cachedAt: fromCache ? cacheEntry.fetchedAt : undefined,
+  }
 }
 
 /** 记录条目已读 */

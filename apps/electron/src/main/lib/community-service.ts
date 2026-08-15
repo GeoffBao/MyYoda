@@ -129,12 +129,12 @@ export async function listDiscussions(
   if (!listMemoryCache) listMemoryCache = new Map()
   const memoryEntry = listMemoryCache.get(categorySlug)
   if (!force && memoryEntry && now - memoryEntry.fetchedAt < DISCUSSION_CACHE_TTL_MS) {
-    return { items: memoryEntry.items, rateLimited: false }
+    return { items: memoryEntry.items, rateLimited: false, fromCache: false }
   }
   const diskEntry = readListCache(categorySlug)
   if (!force && diskEntry && now - diskEntry.fetchedAt < DISCUSSION_CACHE_TTL_MS) {
     listMemoryCache.set(categorySlug, diskEntry)
-    return { items: diskEntry.items, rateLimited: false }
+    return { items: diskEntry.items, rateLimited: false, fromCache: false }
   }
 
   const url = `https://api.github.com/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/discussions?per_page=100`
@@ -149,9 +149,19 @@ export async function listDiscussions(
         items: diskEntry?.items ?? [],
         error: 'GitHub API 访问受限（匿名限流或网络受限），请稍后再试',
         rateLimited: true,
+        fromCache: diskEntry !== null,
       }
     }
     if (!response.ok) {
+      // 404：仓库未开启 Discussions
+      if (response.status === 404) {
+        return {
+          items: diskEntry?.items ?? [],
+          error: '社区讨论尚未在仓库开启（GitHub Discussions）',
+          rateLimited: false,
+          fromCache: diskEntry !== null,
+        }
+      }
       throw new Error(`GitHub Discussions API 返回 HTTP ${response.status}`)
     }
     const all: DiscussionSummary[] = parseDiscussionList((await response.json()) as unknown)
@@ -159,16 +169,17 @@ export async function listDiscussions(
     const entry = { fetchedAt: now, items }
     listMemoryCache.set(categorySlug, entry)
     writeListCache(categorySlug, entry)
-    return { items, rateLimited: false }
+    return { items, rateLimited: false, fromCache: false }
   } catch (err) {
     if (diskEntry) {
       listMemoryCache.set(categorySlug, diskEntry)
-      return { items: diskEntry.items, error: '网络不可用，展示本地缓存', rateLimited: false }
+      return { items: diskEntry.items, error: '网络不可用，展示上次缓存', rateLimited: false, fromCache: true }
     }
     return {
       items: [],
       error: err instanceof Error ? err.message : '社区内容拉取失败',
       rateLimited: false,
+      fromCache: false,
     }
   }
 }

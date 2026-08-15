@@ -9,7 +9,7 @@
  */
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
-import { Download, ExternalLink, FileText, Link2, Loader2, Megaphone, Play, RefreshCw, Video } from 'lucide-react'
+import { CloudOff, Download, ExternalLink, FileText, Link2, Loader2, Megaphone, Play, RefreshCw, Video, WifiOff } from 'lucide-react'
 import type { DiscoverContentItem, DiscoverFeedItem, VideoDownloadState } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import { discoverFeedAtom, videoDownloadStatesAtom } from '@/atoms/discover-atoms'
@@ -37,9 +37,10 @@ function formatDate(iso: string): string {
 
 export function FeaturedFeed(): React.ReactElement {
   const feed = useAtomValue(discoverFeedAtom)
-  const { loading, error, refresh, markSeen } = useDiscoverFeed()
+  const { loading, error, fromCache, cachedAt, refresh, markSeen } = useDiscoverFeed()
   const [videoStates, setVideoStates] = useAtom(videoDownloadStatesAtom)
   const [expandedArticles, setExpandedArticles] = React.useState<Map<string, string>>(new Map())
+  const [articleErrors, setArticleErrors] = React.useState<Map<string, string>>(new Map())
   const [playingItem, setPlayingItem] = React.useState<DiscoverFeedItem | null>(null)
 
   // 订阅下载进度推送
@@ -132,6 +133,11 @@ export function FeaturedFeed(): React.ReactElement {
           next.delete(item.id)
           return next
         })
+        setArticleErrors((prev) => {
+          const next = new Map(prev)
+          next.delete(item.id)
+          return next
+        })
         return
       }
       const contentUrl = item.contentUrl
@@ -141,8 +147,13 @@ export function FeaturedFeed(): React.ReactElement {
         const markdown = await window.electronAPI.discoverGetArticle(contentUrl)
         setExpandedArticles((prev) => new Map(prev).set(item.id, markdown))
       } catch (err) {
-        setExpandedArticles((prev) =>
-          new Map(prev).set(item.id, `> 内容加载失败：${err instanceof Error ? err.message : '未知错误'}`)
+        setExpandedArticles((prev) => {
+          const next = new Map(prev)
+          next.delete(item.id)
+          return next
+        })
+        setArticleErrors((prev) =>
+          new Map(prev).set(item.id, err instanceof Error ? err.message : '未知错误')
         )
       }
     },
@@ -158,17 +169,53 @@ export function FeaturedFeed(): React.ReactElement {
     )
   }
 
-  if (error && feed.length === 0) {
+  if (loading && feed.length === 0) {
+    // 首次加载：骨架屏（三张卡片占位）
     return (
-      <div className="flex flex-col items-center gap-3 py-24">
-        <div className="text-sm text-foreground/60">官方内容暂时不可用</div>
-        <div className="max-w-md text-center text-xs text-foreground/40">{error}</div>
+      <div className="flex flex-col gap-3" aria-busy="true">
+        {[0, 1, 2].map((index) => (
+          <div
+            key={index}
+            className="animate-pulse rounded-xl border border-border/40 bg-content-area p-4 shadow-sm"
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5 size-7 shrink-0 rounded-lg bg-foreground/[0.05]" />
+              <div className="flex-1">
+                <div className="h-3.5 w-1/3 rounded bg-foreground/[0.06]" />
+                <div className="mt-2 h-2.5 w-1/2 rounded bg-foreground/[0.04]" />
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <div className="h-7 w-20 rounded-lg bg-foreground/[0.05]" />
+              <div className="h-7 w-20 rounded-lg bg-foreground/[0.04]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (error && feed.length === 0) {
+    // 完全不可用：网络失败且无缓存
+    return (
+      <div className="flex flex-col items-center gap-4 py-24">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-foreground/[0.04]">
+          <WifiOff size={24} className="text-foreground/30" />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-[15px] font-medium text-foreground/85">无法加载官方内容</div>
+          <div className="max-w-md text-center text-xs leading-relaxed text-foreground/45">
+            {error}
+            <br />
+            内容源需要联网访问（GitHub 资源）。请检查网络连接；如已配置代理，可在设置中确认代理是否生效。
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => void refresh()}
-          className="flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs text-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
-          <RefreshCw size={12} />
+          <RefreshCw size={13} />
           重试
         </button>
       </div>
@@ -181,6 +228,24 @@ export function FeaturedFeed(): React.ReactElement {
 
   return (
     <>
+      {/* 离线横幅：展示本地缓存（网络失败降级） */}
+      {fromCache && (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-foreground/[0.03] px-3.5 py-2.5">
+          <span className="flex items-center gap-1.5 text-xs text-foreground/55">
+            <CloudOff size={13} className="shrink-0" />
+            离线模式：显示上次缓存的内容
+            {cachedAt && <span className="text-foreground/35">（{formatDate(new Date(cachedAt).toISOString())}）</span>}
+          </span>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <RefreshCw size={11} />
+            重新连接
+          </button>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         {feed.map((item) => {
           const meta = TYPE_META[item.type]
@@ -287,8 +352,28 @@ export function FeaturedFeed(): React.ReactElement {
                           <Loader2 size={12} className="animate-spin" />
                           加载中...
                         </div>
-                      ) : (
+                      ) : articleMarkdown ? (
                         <ReleaseNoteMarkdown content={articleMarkdown} compact />
+                      ) : null}
+                      {articleErrors.get(item.id) && (
+                        <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-foreground/[0.03] px-3 py-2.5">
+                          <span className="text-xs text-foreground/55">教程加载失败：{articleErrors.get(item.id)}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArticleErrors((prev) => {
+                                const next = new Map(prev)
+                                next.delete(item.id)
+                                return next
+                              })
+                              void handleToggleArticle(item)
+                            }}
+                            className="shrink-0 flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+                          >
+                            <RefreshCw size={11} />
+                            重试
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
