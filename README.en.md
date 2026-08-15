@@ -56,6 +56,14 @@ Subscription login channels are currently intended for Code. Chat availability d
 - **Context**: task plans, temporary notes, and shared workspace material;
 - **Agent Experts**: stable roles, rules, and capability bundles for engineering disciplines.
 
+### Discover and Community
+
+- "Discover" entry in the sidebar (Features group): official feed + community discussions + feedback in one place;
+- Official content (videos / tutorials / announcements / links) is served from a public content repository, with version tags and an "updated" red dot;
+- Videos play in-app after download, with version updates and local caching;
+- Community discussions are read-only in-app (GitHub Discussions); posting and replying open the browser;
+- Feedback reuses the Notion submission channel, consistent with the entry in Settings.
+
 ### Development and Content Workflows
 
 - file tree, diffs, and a multi-tab workspace;
