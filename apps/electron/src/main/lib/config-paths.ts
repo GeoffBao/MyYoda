@@ -695,6 +695,51 @@ export function getFeedbackDraftsDir(): string {
 }
 
 /**
+ * 获取「发现」面板数据目录（清单缓存/已读状态/讨论缓存/视频缓存）
+ *
+ * @returns ~/.myyoda/discover
+ */
+export function getDiscoverDir(): string {
+  return join(getConfigDir(), 'discover')
+}
+
+/**
+ * 获取「发现」已读状态文件路径
+ *
+ * @returns ~/.myyoda/discover/content-state.json
+ */
+export function getDiscoverContentStatePath(): string {
+  return join(getDiscoverDir(), 'content-state.json')
+}
+
+/**
+ * 获取「发现」清单缓存文件路径
+ *
+ * @returns ~/.myyoda/discover/manifest-cache.json
+ */
+export function getDiscoverManifestCachePath(): string {
+  return join(getDiscoverDir(), 'manifest-cache.json')
+}
+
+/**
+ * 获取「发现」视频本地缓存目录
+ *
+ * @returns ~/.myyoda/discover/video-cache
+ */
+export function getDiscoverVideoCacheDir(): string {
+  return join(getDiscoverDir(), 'video-cache')
+}
+
+/**
+ * 获取「发现」讨论列表缓存文件路径
+ *
+ * @returns ~/.myyoda/discover/discussions-cache.json
+ */
+export function getDiscoverDiscussionsCachePath(): string {
+  return join(getDiscoverDir(), 'discussions-cache.json')
+}
+
+/**
  * 获取飞书聊天绑定持久化路径
  *
  * @returns ~/.myyoda/feishu-bindings.json

@@ -43,6 +43,9 @@ export * from './github'
 export * from './release-notes'
 export * from './feedback'
 
+// 「发现」面板（官方内容流 + 社区 Discussions + 反馈入口）
+export * from './discover'
+
 // 系统提示词相关类型
 export * from './system-prompt'
 
