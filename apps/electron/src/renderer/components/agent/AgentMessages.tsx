@@ -36,7 +36,7 @@ import { buildLiveGroupSet } from './live-group-set'
 import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkProvider'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
-import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
+import { applyOptimisticAssistantTurnMetadata, createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
 import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@myyoda/shared'
 import { getSDKCompactStatus } from '@myyoda/shared'
 import { agentLiveMessagesAtomFamily, agentSessionMessagesStreamStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
@@ -578,9 +578,10 @@ const AgentTranscriptTail = React.memo(function AgentTranscriptTail({
   // run 在 user boundary 到达前不得把新回答并入上一轮历史 assistant。
   const shouldMerge = Boolean(finalGroup && previewGroup && finalGroupStreaming)
   const stablePreviousGroup = finalGroup && previewGroup && !shouldMerge ? finalGroup : undefined
-  const group = shouldMerge
+  const rawGroup = shouldMerge
     ? mergeAssistantTurns(finalGroup!, previewGroup!)
     : previewGroup ?? finalGroup
+  const group = applyOptimisticAssistantTurnMetadata(rawGroup, streamingModelId, streamingChannelId)
   const isStreaming = previewGroup !== undefined || (finalGroupStreaming && !stablePreviousGroup)
   const isErrorGroup = group?.assistantMessages.some((message) => !!message.error) ?? false
   const disableActions = isStreaming && !isErrorGroup
