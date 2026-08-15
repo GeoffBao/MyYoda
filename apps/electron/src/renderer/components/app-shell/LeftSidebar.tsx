@@ -63,6 +63,7 @@ import {
   agentSessionPendingFilesAtom,
   agentSessionStreamingStateAtomFamily,
   agentSessionViewStreamStateAtomFamily,
+  agentSessionMessagesStreamStateAtomFamily,
   agentLiveMessagesAtomFamily,
   agentSessionDraftsAtom,
   agentSessionDraftAtomFamily,
@@ -892,6 +893,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     // 删除/归档是会话的终态，连同草稿一起清理，无需像关闭 Tab 那样保留可恢复输入。
     agentSessionStreamingStateAtomFamily.remove(id)
     agentSessionViewStreamStateAtomFamily.remove(id)
+    agentSessionMessagesStreamStateAtomFamily.remove(id)
     agentLiveMessagesAtomFamily.remove(id)
     agentSessionDraftAtomFamily.remove(id)
     agentSessionDraftHtmlAtomFamily.remove(id)

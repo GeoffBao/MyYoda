@@ -21,6 +21,7 @@ import { useAtomValue } from 'jotai'
 import { thinkingExpandedAtom } from '@/atoms/chat-atoms'
 import { cn } from '@/lib/utils'
 import { MessageResponse } from '@/components/ai-elements/message'
+import { useSmoothStream } from '@myyoda/ui'
 import { getToolIcon, extractFilePath } from './tool-utils'
 import { getToolPhrase } from './tool-phrase'
 import { ToolResultRenderer } from './tool-result-renderers'
@@ -211,6 +212,88 @@ export interface ContentBlockProps {
   childBlocks?: SDKContentBlock[]
   /** 是否正在流式输出中（仅流式中的未完成工具调用才显示 spinner） */
   isStreaming?: boolean
+}
+
+interface SmoothMarkdownFrameProps {
+  content: string
+  isStreaming: boolean
+  className?: string
+  basePath?: string
+  basePaths?: string[]
+  onSettled: () => void
+}
+
+/** Chat 同款 grapheme 队列 + rAF 逐字追赶，Markdown 始终随显示文本即时解析。 */
+function SmoothMarkdownFrame({
+  content,
+  isStreaming,
+  className,
+  basePath,
+  basePaths,
+  onSettled,
+}: SmoothMarkdownFrameProps): React.ReactElement | null {
+  const { displayedContent } = useSmoothStream({ content, isStreaming })
+
+  React.useEffect(() => {
+    if (!isStreaming && displayedContent === content) onSettled()
+  }, [content, displayedContent, isStreaming, onSettled])
+
+  if (!displayedContent) return null
+  return (
+    <MessageResponse className={className} basePath={basePath} basePaths={basePaths}>
+      {displayedContent}
+    </MessageResponse>
+  )
+}
+
+interface SmoothMarkdownBodyProps {
+  content: string
+  isStreaming?: boolean
+  className?: string
+  basePath?: string
+  basePaths?: string[]
+}
+
+/**
+ * 历史 block 直接渲染 Markdown；只有真正进入过 streaming 的 block 才启用平滑队列。
+ * stream 结束后先自然排空，再无视觉差地切回普通 MessageResponse。
+ */
+function SmoothMarkdownBody({
+  content,
+  isStreaming = false,
+  className,
+  basePath,
+  basePaths,
+}: SmoothMarkdownBodyProps): React.ReactElement | null {
+  const smoothingRef = React.useRef(isStreaming)
+  const [, finishSettling] = React.useReducer((version: number) => version + 1, 0)
+  if (isStreaming) smoothingRef.current = true
+
+  const handleSettled = React.useCallback(() => {
+    if (isStreaming) return
+    smoothingRef.current = false
+    finishSettling()
+  }, [isStreaming])
+
+  if (!smoothingRef.current) {
+    if (!content) return null
+    return (
+      <MessageResponse className={className} basePath={basePath} basePaths={basePaths}>
+        {content}
+      </MessageResponse>
+    )
+  }
+
+  return (
+    <SmoothMarkdownFrame
+      content={content}
+      isStreaming={isStreaming}
+      className={className}
+      basePath={basePath}
+      basePaths={basePaths}
+      onSettled={handleSettled}
+    />
+  )
 }
 
 // ===== 提示词折叠行 =====
@@ -558,25 +641,39 @@ function ToolUseBlock({ block, allMessages, animate = false, index = 0, dimmed =
 interface ThinkingBlockProps {
   block: SDKThinkingBlock
   dimmed?: boolean
+  isStreaming?: boolean
 }
 
 /** 思考块折叠行数阈值 */
 const THINKING_COLLAPSE_LINE_THRESHOLD = 4
+const THINKING_STREAMING_COLLAPSE_LINE_THRESHOLD = 2
 
-function ThinkingBlock({ block, dimmed = false }: ThinkingBlockProps): React.ReactElement {
+function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingBlockProps): React.ReactElement {
   const thinkingExpanded = useAtomValue(thinkingExpandedAtom)
   const [isExpanded, setIsExpanded] = React.useState(thinkingExpanded)
   const [shouldCollapse, setShouldCollapse] = React.useState(false)
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const wasStreamingRef = React.useRef(isStreaming)
 
-  // 检测内容是否超过阈值行数（useLayoutEffect：在 paint 前同步执行，避免「展开→收起」闪屏）
+  // 流式阶段默认收起，避免 Thinking 持续增长时占满对话区域；完成态保留原有展开阈值。
+  React.useEffect(() => {
+    if (isStreaming && !wasStreamingRef.current) {
+      setIsExpanded(false)
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming])
+
+  // 检测内容是否超过当前状态的行数阈值（useLayoutEffect：在 paint 前同步执行，避免闪屏）
   React.useLayoutEffect(() => {
     if (!contentRef.current) return
     const el = contentRef.current
     const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 22
-    const maxHeight = lineHeight * THINKING_COLLAPSE_LINE_THRESHOLD
+    const threshold = isStreaming
+      ? THINKING_STREAMING_COLLAPSE_LINE_THRESHOLD
+      : THINKING_COLLAPSE_LINE_THRESHOLD
+    const maxHeight = lineHeight * threshold
     setShouldCollapse(el.scrollHeight > maxHeight + 10)
-  }, [block.thinking])
+  }, [block.thinking, isStreaming])
 
   // 当全局偏好变更时同步（仅在"应折叠"时生效）
   React.useEffect(() => {
@@ -611,19 +708,21 @@ function ThinkingBlock({ block, dimmed = false }: ThinkingBlockProps): React.Rea
           className={cn(
             'prose prose-sm dark:prose-invert max-w-none prose-p:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-[14px] leading-relaxed overflow-hidden transition-[max-height] duration-base',
             dimmed ? 'text-muted-foreground' : 'text-foreground/90',
-            shouldCollapse && !isExpanded && 'max-h-[5.6em]',
+            shouldCollapse && !isExpanded && (isStreaming ? 'max-h-[3.25em]' : 'max-h-[5.6em]'),
           )}
         >
-          <MessageResponse className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal">
-            {block.thinking}
-          </MessageResponse>
+          <SmoothMarkdownBody
+            content={block.thinking}
+            isStreaming={isStreaming}
+            className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal"
+          />
         </div>
         {shouldCollapse && (
           <button
             type="button"
             onClick={toggleExpand}
             className={cn(
-              'mt-2 flex items-center gap-1 text-xs text-foreground/35 transition-colors',
+              'mt-1 flex items-center gap-1 text-xs leading-none text-foreground/35 transition-colors',
               'hover:text-foreground/55'
             )}
           >
@@ -651,9 +750,14 @@ export function ContentBlock({ block, allMessages, basePath, basePaths, animate 
   // text 块 — 主要内容，不受 dimmed 影响
   if (block.type === 'text') {
     const textBlock = block as SDKTextBlock
-    if (!textBlock.text) return null
+    if (!textBlock.text && !isStreaming) return null
     return (
-      <MessageResponse basePath={basePath} basePaths={basePaths}>{textBlock.text}</MessageResponse>
+      <SmoothMarkdownBody
+        content={textBlock.text}
+        isStreaming={isStreaming}
+        basePath={basePath}
+        basePaths={basePaths}
+      />
     )
   }
 
@@ -677,8 +781,9 @@ export function ContentBlock({ block, allMessages, basePath, basePaths, animate 
   // thinking 块
   if (block.type === 'thinking') {
     const thinkingBlock = block as SDKThinkingBlock
+    // Pi 会先发送空的 thinking block，再逐步追加内容；首个 chunk 前不显示外框。
     if (!thinkingBlock.thinking) return null
-    return <ThinkingBlock block={thinkingBlock} dimmed={dimmed} />
+    return <ThinkingBlock block={thinkingBlock} dimmed={dimmed} isStreaming={isStreaming} />
   }
 
   return null

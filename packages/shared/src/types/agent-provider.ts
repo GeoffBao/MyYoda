@@ -5,15 +5,22 @@
  * 当前实现：PiAgentAdapter 单 runtime（Claude runtime 已于 2026-08 退役）。
  */
 
-import type { SDKMessage } from './agent'
+import type { AgentAssistantMessageDelta, SDKMessage } from './agent'
 
 /** Agent runtime 实现（仅保留 Pi；Claude runtime 已退役） */
 export type AgentRuntime = 'pi'
 
-/** SDK 用户消息（队列消息注入用，匹配 SDK SDKUserMessage 结构） */
-export interface SDKUserMessageInput {
+/** Pi runtime 的实时增量与稳定 transcript 边界事件。 */
+export type PiRunSourceEvent =
+  | { kind: 'sdk_message'; message: SDKMessage }
+  | AgentAssistantMessageDelta
+
+/** Pi 活跃 session 的队列消息输入。 */
+export interface PiQueuedUserMessageInput {
   type: 'user'
   message: { role: 'user'; content: string }
+  /** 未注入动态上下文/工具提示的用户原文，仅用于 canonical transcript boundary。 */
+  raw_content?: string
   parent_tool_use_id: null
   priority?: 'now' | 'next' | 'later'
   uuid?: string
@@ -30,15 +37,12 @@ export interface SendQueuedMessageOptions {
   onAccepted?: () => void
 }
 
-/**
- * Agent 查询输入（Provider 无关）
- *
- * 包含所有 Provider 都需要的通用字段。
- * SDK 特定配置通过 Adapter 的扩展输入类型传入。
- */
-export interface AgentQueryInput {
+/** Pi run source 的最小查询输入。 */
+export interface PiRunQueryInput {
   /** 会话 ID */
   sessionId: string
+  /** 顶层 run 的唯一身份；retry 与 compaction continuation 期间保持不变。 */
+  runId: string
   /** 用户 prompt（已包含上下文注入） */
   prompt: string
   /** 模型 ID */
@@ -47,30 +51,4 @@ export interface AgentQueryInput {
   cwd?: string
   /** 中止信号 */
   abortSignal?: AbortSignal
-}
-
-/**
- * Agent Provider 适配器接口
- *
- * 职责：接收查询输入，返回 SDKMessage 异步迭代流。
- * SDK 返回完整 JSON 对象（includePartialMessages: false），外部直接透传。
- */
-export interface AgentProviderAdapter {
-  /** 发起查询，返回 SDKMessage 异步迭代流 */
-  query(input: AgentQueryInput): AsyncIterable<SDKMessage>
-  /** 中止指定会话的执行 */
-  abort(sessionId: string): void
-  /**
-   * 软中断当前 turn，但保留活跃 Query/Channel 以便继续注入下一条用户消息。
-   * 与 abort() 的区别：不杀子进程，允许立即续跑新消息。
-   */
-  interruptQuery?(sessionId: string): Promise<void>
-  /** 释放资源 */
-  dispose(): void
-  /** 向活跃查询注入队列消息（可选，仅支持队列的 Provider 实现） */
-  sendQueuedMessage?(sessionId: string, message: SDKUserMessageInput, options?: SendQueuedMessageOptions): Promise<void>
-  /** 取消队列中的待发送消息（可选） */
-  cancelQueuedMessage?(sessionId: string, messageUuid: string): Promise<void>
-  /** 动态切换活跃查询的权限模式（可选，仅支持 SDK 原生 setPermissionMode 的 Provider） */
-  setPermissionMode?(sessionId: string, mode: string): Promise<void>
 }

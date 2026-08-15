@@ -757,8 +757,7 @@ export class BridgeCommandHandler {
     if (payload.kind === 'sdk_message') {
       const msg = payload.message
 
-      // 从 assistant 终态消息中提取文本。Pi 的 _partial 预览帧携带累计全文，
-      // 如果进入 buffer，会在钉钉/微信最终回复里形成多段重复内容。
+      // 通用 Bridge 只缓冲 message_end 的稳定 assistant；实时 delta 不进入最终回复。
       if (msg.type === 'assistant') {
         buffer.text += extractFinalAssistantText(msg)
       }

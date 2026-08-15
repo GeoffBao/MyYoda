@@ -54,31 +54,15 @@ export function buildCompletedToolResultIds(turnMessages: SDKMessage[]): Set<str
   return ids
 }
 
-interface ContentRun {
-  /** true = 连续的 text 块；false = 连续的 tool_use/thinking 等过程块 */
-  isText: boolean
-  start: number
-  end: number
-}
+function getTrailingTextStartIndex(blocks: SDKContentBlock[]): number | null {
+  const lastBlock = blocks[blocks.length - 1]
+  if (lastBlock?.type !== 'text') return null
 
-/**
- * 把内容块按类型切成连续片段：text 片段之间可能夹着 tool_use/thinking 片段。
- * 一轮回答里模型经常「查一段、说一段发现、再查一段、再说一段」，text 并不只出现在结尾——
- * 早期实现只把「结尾连续的 text」当作正文、其余一律折进过程组，导致中间那些已经写完的
- * 发现内容被整段吞掉，用户得展开「执行过程」才能看到。这里改为逐段识别，任何 text 片段
- * 都是正文，只有 tool_use/thinking 片段才折叠。
- */
-function partitionContentRuns(blocks: SDKContentBlock[]): ContentRun[] {
-  const runs: ContentRun[] = []
-  let i = 0
-  while (i < blocks.length) {
-    const isText = blocks[i]?.type === 'text'
-    let j = i + 1
-    while (j < blocks.length && (blocks[j]?.type === 'text') === isText) j += 1
-    runs.push({ isText, start: i, end: j })
-    i = j
+  let finalStartIndex = blocks.length - 1
+  while (finalStartIndex > 0 && blocks[finalStartIndex - 1]?.type === 'text') {
+    finalStartIndex -= 1
   }
-  return runs
+  return finalStartIndex
 }
 
 function areToolsBeforeIndexCompleted(
@@ -108,49 +92,43 @@ export function buildAssistantTurnRenderItems(
 ): AssistantTurnRenderItem[] {
   if (blocks.length === 0) return []
 
-  const runs = partitionContentRuns(blocks)
-  const lastRunIndex = runs.length - 1
-  const lastRun = runs[lastRunIndex]
+  // 流式阶段最后的 text 还不稳定，后续工具调用可能会把它变成中间过程。
+  // 只有当前面所有工具都有结果时，才把尾部 text 视作交付输出提前外置，降低完成瞬间的跳动。
   const hasProcessBlock = blocks.some((block) => block.type === 'tool_use' || block.type === 'thinking')
+  const trailingTextStartIndex = getTrailingTextStartIndex(blocks)
+  const canSplitStreamingFinalOutput = options.isStreaming
+    && hasProcessBlock
+    && trailingTextStartIndex !== null
+    && trailingTextStartIndex > 0
+    && areToolsBeforeIndexCompleted(blocks, trailingTextStartIndex, options.completedToolResultIds)
 
-  // 只有「最后一段」存在流式不稳定的问题（后续还可能追加工具调用，把它变回中间过程）。
-  // 更早的 text 片段后面已经出现过别的内容，说明它已经写完，可以直接展示——
-  // 不需要、也不应该等到整轮结束才放出来。
-  const canExposeTrailingRun = lastRun
-    ? lastRun.isText && (
-      !options.isStreaming
-      || !hasProcessBlock
-      || areToolsBeforeIndexCompleted(blocks, lastRun.start, options.completedToolResultIds)
-    )
-    : false
-
-  const items: AssistantTurnRenderItem[] = []
-  let pendingProcessBlocks: IndexedContentBlock[] = []
-
-  const flushProcessGroup = (): void => {
-    if (pendingProcessBlocks.length === 0) return
-    items.push({ type: 'process-group', items: pendingProcessBlocks })
-    pendingProcessBlocks = []
+  if (options.isStreaming && hasProcessBlock && !canSplitStreamingFinalOutput) {
+    return [{
+      type: 'process-group',
+      items: blocks.map((block, index) => ({ block, index })),
+    }]
   }
 
-  runs.forEach((run, runIndex) => {
-    const isLastRun = runIndex === lastRunIndex
-    const exposeDirectly = run.isText && (!isLastRun || canExposeTrailingRun)
-    const runItems: IndexedContentBlock[] = []
-    for (let index = run.start; index < run.end; index++) {
-      const block = blocks[index]
-      if (block) runItems.push({ block, index })
-    }
+  if (trailingTextStartIndex === null) {
+    return [{
+      type: 'process-group',
+      items: blocks.map((block, index) => ({ block, index })),
+    }]
+  }
 
-    if (exposeDirectly) {
-      flushProcessGroup()
-      for (const item of runItems) items.push({ type: 'block', item })
-    } else {
-      pendingProcessBlocks.push(...runItems)
-    }
-  })
+  const items: AssistantTurnRenderItem[] = []
+  if (trailingTextStartIndex > 0) {
+    items.push({
+      type: 'process-group',
+      items: blocks.slice(0, trailingTextStartIndex).map((block, index) => ({ block, index })),
+    })
+  }
 
-  flushProcessGroup()
+  for (let index = trailingTextStartIndex; index < blocks.length; index++) {
+    const block = blocks[index]
+    if (!block) continue
+    items.push({ type: 'block', item: { block, index } })
+  }
 
   return items
 }
@@ -277,35 +255,27 @@ export function ProcessBlockGroup({ blocks, isStreaming, isMessageTail = false, 
   const visibleToolNames = toolNames.slice(0, MAX_PROCESS_GROUP_ICONS)
   const hiddenToolCount = Math.max(0, toolNames.length - visibleToolNames.length)
 
-  // 内容区子项渲染策略：
-  // - 流式中：每个新块有入场动画，最新一段（消息末尾过程组的最后一个 child）保持正常显示，
-  //   其余步骤轻微弱化以引导视觉重心到最下方。
-  // - 流式结束后用户展开：所有内容以正常颜色显示，无动画。
+  // 过程组会在工具完成时因结果状态更新而重渲染。这里不为已挂载的步骤附加入场动画，
+  // 否则相邻的 thinking 块会随工具状态一起重复淡入，形成闪烁。
   const childArray = React.Children.toArray(children)
   const renderContentChildren = (): React.ReactNode =>
     childArray.map((child, i) => {
       const isLast = i === childArray.length - 1
       const dimmed = isStreaming && !(isMessageTail && isLast)
       return (
-        <div
-          key={i}
-          className={cn(
-            dimmed && 'opacity-80',
-            isStreaming && 'animate-in fade-in slide-in-from-top-1 duration-base',
-          )}
-        >
+        <div key={i} className={cn(dimmed && 'opacity-80')}>
           {child}
         </div>
       )
     })
 
   return (
-    <div className="process-block-group space-y-1.5">
+    <div className="space-y-1.5">
       <button
         type="button"
         className={cn(
-          'group flex w-fit max-w-full items-center gap-2 rounded-full bg-muted/35 px-2.5 py-1 text-left',
-          'text-muted-foreground transition-[background-color,color,opacity] hover:bg-muted/60 hover:text-foreground/75',
+          'flex max-w-full items-center gap-2 py-0.5 text-left transition-opacity group',
+          'hover:opacity-70',
         )}
         onClick={() => {
           userToggledRef.current = true
@@ -316,11 +286,11 @@ export function ProcessBlockGroup({ blocks, isStreaming, isMessageTail = false, 
       >
         <ChevronRight
           className={cn(
-            'size-3 shrink-0 text-muted-foreground/40 transition-transform duration-fast',
+            'size-3 shrink-0 text-muted-foreground/40 transition-transform duration-150',
             expanded && 'rotate-90',
           )}
         />
-        <span className="min-w-0 truncate text-[12px] font-medium">{summary}</span>
+        <span className="min-w-0 truncate text-[14px] text-muted-foreground">{summary}</span>
         {collapseCountdown !== null && (
           <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground/50">
             （{collapseCountdown}）
