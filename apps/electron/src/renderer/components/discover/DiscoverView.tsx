@@ -39,6 +39,11 @@ export function DiscoverView(): React.ReactElement {
     }
   }, [refresh, tab, discussionCategory, setDiscussionResult])
 
+  // 每次打开面板刷新一次（spec §8：启动 + 打开面板 + 手动刷新）
+  React.useEffect(() => {
+    void refresh()
+  }, [refresh])
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* 头部 */}
