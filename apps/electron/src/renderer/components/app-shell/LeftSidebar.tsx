@@ -975,7 +975,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     [conversations, viewMode, draftSessionIds]
   )
 
-  /** 置顶 Agent 会话列表（仅活跃模式显示，仅当前工作区，排除 draft） */
+  /** 置顶 Agent 会话列表（仅活跃模式显示，跨项目/工作区展示，排除 draft）
+   * 对齐 Proma：置顶不按当前工作区过滤，否则切换项目时置顶区会跟着变，用户会误以为
+   * “置顶跟着项目走”。属于其他工作区的置顶会话由 AgentSessionItem 自己的 workspaceName
+   * 兜底显示标签区分归属，点击后再切换工作区。 */
   const pinnedAgentSessions = React.useMemo(
     () => {
       if (viewMode !== 'active') return []
@@ -984,11 +987,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         s.pinned
         && !draftSessionIds.has(s.id)
         && !hasPinnedVisibleParent(s, sessionsById)
-        && (!currentWorkspaceId || !s.workspaceId || s.workspaceId === currentWorkspaceId)
       )
       return sortAgentSessionsByUpdatedAtDesc(filtered)
     },
-    [agentSessions, viewMode, draftSessionIds, currentWorkspaceId]
+    [agentSessions, viewMode, draftSessionIds]
   )
 
   const pinnedAgentSessionTrees = React.useMemo<AgentSessionTreeItem[]>(
@@ -2540,9 +2542,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const [automationOverflowExpanded, setAutomationOverflowExpanded] = React.useState(false)
   /** 自动任务组溢出数量（超出默认上限的会话数） */
   const automationOverflow = automationGroup ? Math.max(0, automationGroup.sessions.length - AUTOMATION_SESSION_VISIBLE_LIMIT) : 0
-  /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组 */
-  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(() => new Set([PINNED_AGENT_GROUP_KEY]))
-  // 置顶区默认折叠；存在 running/blocked 的置顶任务族时自动展开（对齐「需要处理/进行中」优先可见）
+  /** 扁平模式下已折叠的分组（状态/自定义分组）标题；hover 标题行显示折叠按钮，对齐日期分组
+   * 置顶分组默认展开（对齐 Proma：置顶不做默认折叠，避免用户找不到已置顶的会话），
+   * 仅保留用户手动折叠的记忆状态。 */
+  const [collapsedFlatGroupIds, setCollapsedFlatGroupIds] = React.useState<Set<string>>(() => new Set())
+  // 置顶区若被用户手动折叠，存在 running/blocked 的置顶任务族时仍自动展开（对齐「需要处理/进行中」优先可见）
   React.useEffect(() => {
     const hasActivePinned = pinnedAgentSessions.some((session) => {
       const status = getSessionTreeStatus(
@@ -3564,7 +3568,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             className=""
           >
             <div className="px-2">
-              <div className="ml-4 flex flex-col gap-0.5">
+              {/* max-h + overflow-y-auto 作为安全网：置顶区不在主滚动容器内，展开全部置顶后条目过多时仍能自身滚动，
+                  不会把下方会话/项目列表挤出可视区域（参考 Proma 置顶始终可见的思路） */}
+              <div className="ml-4 flex max-h-[320px] flex-col gap-0.5 overflow-y-auto scrollbar-thin">
                 {(pinnedOverflowExpanded ? pinnedConversations : pinnedConversations.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((conv) => (
                   <ConversationItem
                     key={`pinned-${conv.id}`}
@@ -3608,7 +3614,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 else next.add(PINNED_AGENT_GROUP_KEY)
                 return next
               })}
-              className="grid size-5 place-items-center rounded text-foreground/35 opacity-0 transition-opacity titlebar-no-drag hover:bg-foreground/[0.08] hover:text-foreground/70 group-hover/date-header:opacity-100"
+              className="grid size-5 place-items-center rounded text-foreground/45 transition-colors titlebar-no-drag hover:bg-foreground/[0.08] hover:text-foreground/70"
             >
               <ChevronRight
                 size={12}
@@ -3618,7 +3624,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           </div>
           {!isPinnedAgentGroupCollapsed && (
             <div className="px-2">
-              <div className="ml-4 flex flex-col gap-0.5">
+              {/* max-h + overflow-y-auto 作为安全网：置顶区不在主滚动容器内，展开全部置顶后条目过多时仍能自身滚动，
+                  不会把下方项目/会话列表挤出可视区域（参考 Proma 置顶始终可见的思路） */}
+              <div className="ml-4 flex max-h-[320px] flex-col gap-0.5 overflow-y-auto scrollbar-thin">
                 {(pinnedOverflowExpanded ? pinnedAgentSessionTrees : pinnedAgentSessionTrees.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((item) => {
                   const childCount = item.childSessions.length
                   const childProgress = getSessionTreeProgress(item, agentIndicatorMap)

@@ -48,6 +48,9 @@ import { cn } from '@/lib/utils'
 import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 // 终端入口：所有 Agent 会话开放（warmup 预启动 + 多实例）。
 import { terminalPanelOpenMapAtom } from '@/atoms/terminal-atoms'
+// 右侧文件面板打开时 MainArea 会被挤窄，不再到达窗口真实右边缘，Windows WindowControls
+// 避让宽度不能继续相对 TabBar 自身右边缘硬编码，否则浏览器/终端按钮会被错位到面板中间。
+import { rightFilePanelVisibleAtom } from '@/atoms/layout-atoms'
 
 /**
  * macOS 原生全屏检测（非 HTML fullscreen，而是 Electron 原生全屏）。
@@ -280,7 +283,11 @@ function TabBarInner({
   const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
-  const actionLayout = getTabBarActionLayout(isWindows, showOpenPanelButton, showBrowserButton, showTerminalButton)
+  // 右侧文件面板当前是否实际挤窄了 MainArea（面板挂载且展开）。挤窄时 TabBar 自身右边缘
+  // 已不是窗口真实右边缘，真正的 WindowControls 浮在面板上方而不是 TabBar 上方，此时不应再预留 126px。
+  const mainAreaReachesWindowEdge = !useAtomValue(rightFilePanelVisibleAtom)
+  const effectiveIsWindows = isWindows && mainAreaReachesWindowEdge
+  const actionLayout = getTabBarActionLayout(effectiveIsWindows, showOpenPanelButton, showBrowserButton, showTerminalButton)
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
@@ -467,13 +474,14 @@ function TabBarInner({
     )}>
       {/* 顶部 TabBar 的空白区域必须保持可拖拽，尤其是 macOS/Windows 自定义标题栏。
           注意：不要把 titlebar-no-drag 加到下面的整条 flex 容器上，否则标签右侧空白会再次失去拖拽能力。
-          Windows 上背景拖拽层避开右上角 WindowControls 区域（126px），防止 hitmask 重叠。
+          Windows 上背景拖拽层避开右上角 WindowControls 区域（126px），防止 hitmask 重叠；
+          右侧文件面板打开时 TabBar 自身已不到达窗口真实右边缘（effectiveIsWindows 已处理），无需再预留。
           macOS 侧边栏折叠时父容器有 pl-[80px] 避让红绿灯，拖拽层用 -left-[80px] 补回全宽。
           需要交互的单个 Tab 会在 TabBarItem 内部自己声明 titlebar-no-drag。 */}
       <div className={cn(
         "absolute top-0 bottom-0 titlebar-drag-region",
         needsMacTrafficLightGap ? "-left-[80px] right-0" : "inset-0",
-        isWindows && WINDOW_CONTROLS_INSET_RIGHT,
+        effectiveIsWindows && WINDOW_CONTROLS_INSET_RIGHT,
       )} />
 
       {/* Tear-off 提示遮罩：拖出 TabBar 区域时，让 TabBar 下方出现一条高亮分割线 */}

@@ -67,6 +67,9 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
   // 定时任务表单打开时隐藏右侧文件面板，让中间区域扩展到全宽（表单内含自己的右栏配置）；
   // Project 模式切到看板 / 项目详情（codeMainView === 'work'）时同样隐藏，面板属于会话上下文
   const [activeView, setActiveView] = useAtom(activeViewAtom)
+  // 注意：这里只决定是否挂载 RightSidePanel 子树（不含 isPanelOpen），保留面板关闭时
+  // 仍然挂载以保留 CSS 宽度过渡动画；TabBar 内 Windows 按钮避让用的是另一份包含 isPanelOpen 的
+  // [[rightFilePanelVisibleAtom]]（MainArea 是否真实伸展到窗口右边缘）。
   const showRightPanel = appMode === 'agent'
     && codeMainView === 'session'
     && activeView === 'conversations'
