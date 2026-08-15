@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, DISCOVER_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, type DiscoverContentItem, type DiscussionCategorySlug, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -5199,6 +5199,72 @@ export function registerIpcHandlers(): void {
       return pickFeedbackImages(event.sender)
     }
   )
+
+  // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
+
+  // 拉取官方精选流（清单 + 更新标记 + 未读红点）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_FEED, async () => {
+    const { fetchDiscoverFeed } = await import('./lib/content-service')
+    return fetchDiscoverFeed()
+  })
+
+  // 拉取 article 的 markdown 正文
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_ARTICLE, async (_event, contentUrl: string) => {
+    const { fetchArticleContent } = await import('./lib/content-service')
+    return fetchArticleContent(contentUrl)
+  })
+
+  // 查询视频本地缓存状态
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.GET_VIDEO_STATUS,
+    async (_event, itemId: string, version: string, size?: number) => {
+      const { getVideoStatus } = await import('./lib/content-service')
+      return getVideoStatus(itemId, version, size)
+    }
+  )
+
+  // 下载视频到本地缓存（进度经 VIDEO_DOWNLOAD_PROGRESS 推送）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.DOWNLOAD_VIDEO,
+    async (event, item: DiscoverContentItem) => {
+      const { downloadVideo } = await import('./lib/content-service')
+      const result = await downloadVideo(item, event.sender)
+      return { filePath: result.filePath }
+    }
+  )
+
+  // 记录条目已读版本
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.MARK_SEEN, async (_event, itemId: string, version: string) => {
+    const { markContentSeen } = await import('./lib/content-service')
+    markContentSeen(itemId, version)
+  })
+
+  // 拉取讨论列表（按板块）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.LIST_DISCUSSIONS,
+    async (_event, categorySlug: DiscussionCategorySlug, force?: boolean) => {
+      const { listDiscussions } = await import('./lib/community-service')
+      return listDiscussions(categorySlug, force)
+    }
+  )
+
+  // 拉取讨论详情正文
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, async (_event, number: number) => {
+    const { getDiscussion } = await import('./lib/community-service')
+    return getDiscussion(number)
+  })
+
+  // 为已下载视频文件注册 myyoda-file:// 播放 URL（token 门控，支持 Range seek）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_VIDEO_URL, async (_event, filePath: string) => {
+    const { registerMyYodaFilePath } = await import('./lib/local-file-protocol')
+    return registerMyYodaFilePath(filePath)
+  })
+
+  // 用系统浏览器打开外链 / 讨论页
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
+    const { shell } = await import('electron')
+    await shell.openExternal(url)
+  })
 
   // ===== 飞书集成 =====
 
