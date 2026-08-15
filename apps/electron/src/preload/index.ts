@@ -381,6 +381,8 @@ export interface ElectronAPI {
   listGitBranches: (input: ListGitBranchesInput) => Promise<GitBranchInfo[]>
   /** 准备新 Agent 会话 Git 上下文（Local checkout 或 Worktree 创建） */
   prepareSessionGitContext: (input: PrepareSessionGitContextInput) => Promise<PrepareSessionGitContextResult | null>
+  /** 刷新会话头部 Git 分支徽章：检测持久化分支与实际 checkout 是否漂移，漂移则静默回写（仅 Local 模式） */
+  refreshSessionGitBranch: (input: import('@myyoda/shared').RefreshSessionGitBranchInput) => Promise<import('@myyoda/shared').RefreshSessionGitBranchResult | null>
   /** 获取 Worktree 相对于基准分支的全量变更 */
   getWorktreeChanges: (worktreePath: string, baseBranch: string, sessionId: string) => Promise<import('@myyoda/shared').UnstagedChangesResult>
   /** 在独立窗口打开当前文件预览 */
@@ -1817,6 +1819,10 @@ const electronAPI: ElectronAPI = {
 
   prepareSessionGitContext: (input: PrepareSessionGitContextInput) => {
     return ipcRenderer.invoke(IPC_CHANNELS.PREPARE_SESSION_GIT_CONTEXT, input)
+  },
+
+  refreshSessionGitBranch: (input: import('@myyoda/shared').RefreshSessionGitBranchInput) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.REFRESH_SESSION_GIT_BRANCH, input)
   },
 
   getWorktreeChanges: (worktreePath: string, baseBranch: string, sessionId: string) => {

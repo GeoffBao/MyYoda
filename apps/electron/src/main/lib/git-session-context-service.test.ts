@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { normalizePathForCompare } from '@myyoda/shared/utils'
 import type { AgentSessionMeta } from '@myyoda/shared'
-import { assertWorktreeClean, listGitBranchesForSession, prepareSessionGitContext, removeSessionWorktree } from './git-session-context-service'
+import {
+  assertWorktreeClean,
+  listGitBranchesForSession,
+  prepareSessionGitContext,
+  refreshSessionGitBranch,
+  removeSessionWorktree,
+  shouldSyncLocalSessionGitBranch,
+} from './git-session-context-service'
 
 const roots: string[] = []
 
@@ -191,5 +198,127 @@ describe('git-session-context-service', () => {
 
     expect(sh(repo, ['branch', '--show-current'])).toBe('main')
     expect(updates).toHaveLength(0)
+  })
+})
+
+// 会话头部 Git 分支徽章依赖 session.gitBranch 这个持久化字段。Agent 若绕过 UI 直接用
+// Bash 执行 `git checkout`/`git branch -D` 改动仓库分支，这个字段不会自动更新，导致
+// 徽章长期显示已被删除的旧分支（且没有任何交互能刷新它）。这组用例覆盖漂移检测与静默回写。
+describe('shouldSyncLocalSessionGitBranch', () => {
+  test('Given local mode with mismatched bound branch When checking drift Then needs sync', () => {
+    expect(shouldSyncLocalSessionGitBranch({
+      executionMode: 'local',
+      boundBranch: 'fix/session-row-labels-actions-overlap',
+      currentBranch: 'main',
+    })).toBe(true)
+  })
+
+  test('Given local mode with matching bound branch When checking drift Then no sync needed', () => {
+    expect(shouldSyncLocalSessionGitBranch({
+      executionMode: 'local',
+      boundBranch: 'main',
+      currentBranch: 'main',
+    })).toBe(false)
+  })
+
+  test('Given worktree mode with mismatched branch When checking drift Then skips sync (worktree 目录专属于绑定分支，不应被覆盖)', () => {
+    expect(shouldSyncLocalSessionGitBranch({
+      executionMode: 'worktree',
+      boundBranch: 'feature/alpha',
+      currentBranch: 'main',
+    })).toBe(false)
+  })
+
+  test('Given detached HEAD (currentBranch is null) When checking drift Then skips sync', () => {
+    expect(shouldSyncLocalSessionGitBranch({
+      executionMode: 'local',
+      boundBranch: 'main',
+      currentBranch: null,
+    })).toBe(false)
+  })
+
+  test('Given no bound branch yet When checking drift against a real current branch Then needs sync', () => {
+    expect(shouldSyncLocalSessionGitBranch({
+      executionMode: 'local',
+      boundBranch: undefined,
+      currentBranch: 'main',
+    })).toBe(true)
+  })
+})
+
+describe('refreshSessionGitBranch', () => {
+  test('Given Local session bound to a deleted branch When refreshing Then reports current branch and silently persists it', () => {
+    const repo = makeRepo()
+    const updates: Partial<AgentSessionMeta>[] = []
+
+    const result = refreshSessionGitBranch({
+      sessionId: 'session-drift',
+      repoPath: repo,
+      boundBranch: 'feature/alpha',
+      executionMode: 'local',
+    }, {
+      updateSessionMeta: (_sessionId, update) => {
+        updates.push(update)
+        return { id: 'session-drift', title: 'session', createdAt: 1, updatedAt: 2, ...update } as AgentSessionMeta
+      },
+    })
+
+    expect(result).toEqual({ currentBranch: 'main', synced: true })
+    expect(updates).toEqual([{ gitBranch: 'main' }])
+  })
+
+  test('Given Local session already matching current branch When refreshing Then does not touch session meta', () => {
+    const repo = makeRepo()
+    const updates: Partial<AgentSessionMeta>[] = []
+
+    const result = refreshSessionGitBranch({
+      sessionId: 'session-clean',
+      repoPath: repo,
+      boundBranch: 'main',
+      executionMode: 'local',
+    }, {
+      updateSessionMeta: (_sessionId, update) => {
+        updates.push(update)
+        return { id: 'session-clean', title: 'session', createdAt: 1, updatedAt: 2, ...update } as AgentSessionMeta
+      },
+    })
+
+    expect(result).toEqual({ currentBranch: 'main', synced: false })
+    expect(updates).toHaveLength(0)
+  })
+
+  test('Given Worktree session When refreshing Then skips drift correction entirely (worktree checkout is authoritative)', () => {
+    const repo = makeRepo()
+    const worktree = join(repo, '.worktrees', 'alpha')
+    sh(repo, ['worktree', 'add', worktree, 'feature/alpha'])
+    const updates: Partial<AgentSessionMeta>[] = []
+
+    const result = refreshSessionGitBranch({
+      sessionId: 'session-wt',
+      repoPath: worktree,
+      boundBranch: 'feature/alpha',
+      executionMode: 'worktree',
+    }, {
+      updateSessionMeta: (_sessionId, update) => {
+        updates.push(update)
+        return { id: 'session-wt', title: 'session', createdAt: 1, updatedAt: 2, ...update } as AgentSessionMeta
+      },
+    })
+
+    expect(result.synced).toBe(false)
+    expect(updates).toHaveLength(0)
+  })
+
+  test('Given no updateSessionMeta callback provided When drift detected Then still reports synced=true without throwing', () => {
+    const repo = makeRepo()
+
+    const result = refreshSessionGitBranch({
+      sessionId: 'session-no-callback',
+      repoPath: repo,
+      boundBranch: 'feature/alpha',
+      executionMode: 'local',
+    })
+
+    expect(result).toEqual({ currentBranch: 'main', synced: true })
   })
 })

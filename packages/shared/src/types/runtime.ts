@@ -218,6 +218,27 @@ export interface PrepareSessionGitContextResult {
   createdWorktree: boolean
 }
 
+/**
+ * 刷新会话当前 Git 分支的输入。
+ * 用于会话头部徽标随实际 checkout 状态自愈：Agent 若绕过 UI（如直接跑 Bash git checkout/branch -D）
+ * 改变了仓库分支，session.gitBranch 这个持久化字段不会自动更新，需要主动核对并纠正。
+ */
+export interface RefreshSessionGitBranchInput {
+  sessionId: string
+  repoPath: string
+  /** 会话当前绑定/持久化的分支名，可能已经与实际 checkout 脱节 */
+  boundBranch?: string
+  executionMode?: GitExecutionMode
+}
+
+/** 刷新会话当前 Git 分支的结果 */
+export interface RefreshSessionGitBranchResult {
+  /** 仓库当前实际 checkout 的分支名；非 git 仓库或 detached HEAD 时为 null */
+  currentBranch: string | null
+  /** true 表示检测到漂移并已静默回写 session.gitBranch */
+  synced: boolean
+}
+
 /** 获取文件 Diff 的输入 */
 export interface GetFileDiffInput {
   dirPath: string
@@ -437,6 +458,8 @@ export const IPC_CHANNELS = {
   LIST_GIT_BRANCHES: 'git:list-branches',
   /** 准备新 Agent 会话 Git 上下文（Local checkout 或 Worktree 创建） */
   PREPARE_SESSION_GIT_CONTEXT: 'git:prepare-session-context',
+  /** 刷新会话头部 Git 分支徽章：检测持久化分支与实际 checkout 是否漂移，漂移则静默回写 */
+  REFRESH_SESSION_GIT_BRANCH: 'git:refresh-session-branch',
   /** 获取 Worktree 相对于基准分支的全量变更 */
   GET_WORKTREE_CHANGES: 'git:get-worktree-changes',
   /** 在系统默认浏览器中打开外部链接 */

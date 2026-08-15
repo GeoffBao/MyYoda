@@ -7,6 +7,8 @@ import type {
   ListGitBranchesInput,
   PrepareSessionGitContextInput,
   PrepareSessionGitContextResult,
+  RefreshSessionGitBranchInput,
+  RefreshSessionGitBranchResult,
   SessionGitContext,
 } from '@myyoda/shared'
 
@@ -321,6 +323,43 @@ export function prepareSessionGitContext(
     return prepareLocalContext(repoRoot, input, options)
   }
   return prepareWorktreeContext(repoRoot, input, options)
+}
+
+/**
+ * 判断会话持久化的 gitBranch 是否与仓库实际 checkout 的分支发生了漂移。
+ * 只在 Local 模式下处理：Worktree 目录本身就是为某个分支专属创建的，不应因为用户
+ * 在 worktree 里手动切换分支就被静默改写绑定关系。detached HEAD（currentBranch 为
+ * null）也不处理，避免覆盖成一个无意义的空值。
+ */
+export function shouldSyncLocalSessionGitBranch(input: {
+  executionMode?: SessionGitContext['executionMode']
+  boundBranch?: string
+  currentBranch: string | null
+}): boolean {
+  if (input.executionMode === 'worktree') return false
+  if (!input.currentBranch) return false
+  return input.currentBranch !== input.boundBranch
+}
+
+/**
+ * 刷新会话头部 Git 分支徽章的数据源：查询仓库当前实际 checkout 的分支，若与会话
+ * 绑定的 gitBranch 不一致则静默回写，消除持久化状态与真实仓库状态的漂移。
+ * 不抛异常：仓库不存在/非 git 目录等场景下 currentBranch 降级为 null，不影响主流程。
+ */
+export function refreshSessionGitBranch(
+  input: RefreshSessionGitBranchInput,
+  options?: PrepareOptions,
+): RefreshSessionGitBranchResult {
+  const currentBranch = runGitOrNull(input.repoPath, ['branch', '--show-current']) || null
+  const synced = shouldSyncLocalSessionGitBranch({
+    executionMode: input.executionMode,
+    boundBranch: input.boundBranch,
+    currentBranch,
+  })
+  if (synced && currentBranch) {
+    options?.updateSessionMeta?.(input.sessionId, { gitBranch: currentBranch })
+  }
+  return { currentBranch, synced }
 }
 
 export function describeSessionGitContext(context: SessionGitContext): string {

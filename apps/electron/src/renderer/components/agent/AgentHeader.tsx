@@ -17,6 +17,7 @@ import { SessionHeader } from '@/components/tabs/SessionHeader'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatSessionGitBadge } from '@/components/agent/git-context-picker-model'
+import { useSessionGitBranchSync } from '@/hooks/useSessionGitBranchSync'
 
 interface AgentHeaderProps {
   sessionId: string
@@ -31,6 +32,10 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
   const setPendingTaskEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
+
+  // 会话头部徽章只读 session.gitBranch（持久化静态值），若 Agent 绕过 UI 直接用 Bash 改动
+  // 仓库分支会与实际状态漂移且无法自愈；挂载/窗口聚焦时静默核对并回写。
+  useSessionGitBranchSync(session)
 
   if (!session) return null
 
