@@ -80,17 +80,6 @@ export interface KanbanTaskRun {
   nodeStates: Record<string, KanbanNodeState>
 }
 
-/** 可安全展示的 Teambition 绑定字段。 */
-export interface TeambitionBinding {
-  bindingId?: string
-  sessionId: string
-  taskId: string
-  title?: string
-  status?: string
-  syncState?: 'synced' | 'pending' | 'conflict' | 'stale' | 'needs-reauth'
-  error?: string
-}
-
 export type TaskBoardScopeFilter =
   | { kind: 'all' }
   | { kind: 'workspace' }
@@ -112,15 +101,6 @@ export interface KanbanFilter {
 export interface KanbanNodeProgress {
   completedNodes: number
   totalNodes: number
-}
-
-export interface KanbanTeambitionFields {
-  bindingId?: string
-  taskId: string
-  title?: string
-  status?: string
-  syncState?: 'synced' | 'pending' | 'conflict' | 'stale' | 'needs-reauth'
-  error?: string
 }
 
 /** 仅用于渲染的卡片；不会回写到 AgentSessionMeta。 */
@@ -145,7 +125,6 @@ export interface KanbanItem {
   /** 解析后的专家 slug（任务 defaults ∨ 项目默认） */
   expertId?: string
   taskRun?: KanbanNodeProgress
-  teambition?: KanbanTeambitionFields
 }
 
 export interface KanbanViewModel {

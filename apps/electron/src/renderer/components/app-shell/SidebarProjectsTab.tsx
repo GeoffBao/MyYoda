@@ -96,7 +96,7 @@ export interface ProjectSessionHandlers {
   onTogglePin: (id: string, cascade: boolean) => Promise<void>
   onToggleStar: (id: string) => Promise<void>
   onToggleArchive: (id: string) => Promise<void>
-  onMoveToProject: (sessionId: string, projectId?: string) => void | Promise<void>
+  onClearProjectBinding: (sessionId: string) => void | Promise<void>
   /** 在工作区/项目下新建会话（draft；workspace=项目后 projectId 语义收敛为 workspaceId） */
   onNewSessionInProject: (workspaceId: string) => void | Promise<void>
   sessionGroups: SessionGroup[]
@@ -318,8 +318,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
           }
           : undefined}
         delegationChildCount={!nested ? delegatedChildCount : 0}
-        projects={[]}
-        onMoveToProject={nested ? undefined : sessionHandlers.onMoveToProject}
+        onClearProjectBinding={nested ? undefined : sessionHandlers.onClearProjectBinding}
         sessionGroups={nested ? undefined : sessionHandlers.sessionGroups}
         onMoveToGroup={nested ? undefined : sessionHandlers.onMoveToGroup}
         onCreateGroup={nested ? undefined : sessionHandlers.onCreateGroup}

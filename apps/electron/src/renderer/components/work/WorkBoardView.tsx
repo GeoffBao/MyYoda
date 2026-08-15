@@ -15,7 +15,6 @@ import {
   serverKanbanRunsAtom,
   serverKanbanSessionsAtom,
   serverTaskSummariesAtom,
-  serverTeambitionBindingsAtom,
 } from '@/atoms/kanban-atoms'
 import {
   selectedProjectIdAtom,
@@ -53,7 +52,6 @@ export function WorkBoardView(): React.ReactElement {
   const setSessions = useSetAtom(serverKanbanSessionsAtom)
   const [taskSummaries, setTaskSummaries] = useAtom(serverTaskSummariesAtom)
   const setRuns = useSetAtom(serverKanbanRunsAtom)
-  const setBindings = useSetAtom(serverTeambitionBindingsAtom)
   const setSpecNodes = useSetAtom(kanbanSpecNodesAtom)
   const setTaskExpertIds = useSetAtom(kanbanTaskExpertIdsAtom)
   const kanbanItems = useAtomValue(kanbanItemsAtom)
@@ -85,7 +83,6 @@ export function WorkBoardView(): React.ReactElement {
       // selectedProjectId 只表示 Task Board 的 Project facet；Project Page 使用独立页面身份。
       setRuns([])
       setTaskSummaries([])
-      setBindings([])
       setSpecNodes(new Map())
       setTaskExpertIds(new Map())
       setWorkspaceRoot(null)
@@ -109,7 +106,7 @@ export function WorkBoardView(): React.ReactElement {
       })
 
     return () => { cancelled = true }
-  }, [setBindings, setRuns, setSpecNodes, setTaskExpertIds, setTaskSummaries, workspace])
+  }, [setRuns, setSpecNodes, setTaskExpertIds, setTaskSummaries, workspace])
 
   const captureWorkspaceLoad = React.useCallback((): WorkspaceLoadIdentity | null => {
     const active = activeWorkspaceLoadRef.current
@@ -198,27 +195,10 @@ export function WorkBoardView(): React.ReactElement {
     ))
   }, [captureWorkspaceLoad, isCurrentWorkspaceLoad, setSpecNodes, setTaskExpertIds, taskSummaries, workspaceRoot])
 
-  const refreshBindings = React.useCallback(async (): Promise<void> => {
-    if (!workspaceRoot) return
-    const load = captureWorkspaceLoad()
-    if (!load?.root) return
-    const bindings = await window.electronAPI.teambition.listBindings(load.root)
-    if (!isCurrentWorkspaceLoad(load)) return
-    setBindings(bindings.map((binding) => ({
-      bindingId: binding.id,
-      sessionId: binding.sessionId,
-      taskId: binding.remoteTaskId,
-      title: binding.remoteTitle,
-      ...(binding.remoteStatus ? { status: binding.remoteStatus } : {}),
-      syncState: binding.syncState,
-      ...(binding.error ? { error: binding.error } : {}),
-    })))
-  }, [captureWorkspaceLoad, isCurrentWorkspaceLoad, setBindings, workspaceRoot])
-
   const refreshAll = React.useCallback(async (): Promise<void> => {
     await Promise.all([refreshSessions(), refreshTasks()])
-    await Promise.all([refreshProjects(), refreshRuns(), refreshBindings(), refreshSpecNodes()])
-  }, [refreshBindings, refreshProjects, refreshRuns, refreshSessions, refreshSpecNodes, refreshTasks])
+    await Promise.all([refreshProjects(), refreshRuns(), refreshSpecNodes()])
+  }, [refreshProjects, refreshRuns, refreshSessions, refreshSpecNodes, refreshTasks])
 
   // Conductor 派生子会话时主进程不会主动推列表；运行中短轮询保持卡片/进度实时
   const needsLivePoll = kanbanItems.some((item) => item.isProcessing)
@@ -260,13 +240,6 @@ export function WorkBoardView(): React.ReactElement {
       setError(`加载任务定义失败：${errorMessage(cause)}`)
     })
   }, [refreshSpecNodes, workspaceRoot])
-
-  React.useEffect(() => {
-    if (!workspaceRoot) return
-    void refreshBindings().catch((cause: unknown) => {
-      setError(`加载 Teambition 绑定失败：${errorMessage(cause)}`)
-    })
-  }, [refreshBindings, workspaceRoot])
 
   // projects.onChanged 广播由全局 ProjectsInitializer 统一写入项目 atom，这里只处理任务生成事件
   React.useEffect(() => {

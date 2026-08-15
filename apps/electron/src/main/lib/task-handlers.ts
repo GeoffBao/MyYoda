@@ -12,7 +12,6 @@ import {
   SESSION_COMMAND_CHANNEL,
   SESSION_GROUP_IPC_CHANNELS,
   TASK_IPC_CHANNELS,
-  TEAMBITION_IPC_CHANNELS,
 } from '@myyoda/shared/channels'
 import type {
   CreateProjectInput,
@@ -91,7 +90,6 @@ import {
   resolveTaskWorkingDirectory as resolveTaskWorkingDirectoryWithPolicy,
   type TaskWorkingDirectoryResult,
 } from './task-working-directory'
-import { TeambitionService, type ClaimTeambitionTaskInput, type TeambitionRemoteTask } from './teambition-service'
 import { WorkspaceLabelService, assertValidWorkspaceLabelIds } from './workspace-label-service'
 
 const GENERATE_TIMEOUT_MS = 180_000
@@ -681,7 +679,7 @@ async function runTaskOrTeam(
 }
 
 /**
- * 注册所有 Projects、Tasks、Session 与 Teambition IPC handlers。
+ * 注册所有 Projects、Tasks、Session IPC handlers。
  * 重建窗口时只更新推送目标，不重复调用 ipcMain.handle。
  */
 export interface TaskHandlerRegistrationOptions {
@@ -1197,51 +1195,6 @@ export function registerTaskHandlers(window: BrowserWindow, options: TaskHandler
       }
     }
   })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.CAPABILITIES, async (_event, workspaceRoot: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).probeCapabilities()
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.LIST_TASKS, async (_event, workspaceRoot: string, projectId: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).listClaimableTasks(projectId)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.CLAIM_TASK, async (_event, workspaceRoot: string, input: ClaimTeambitionTaskInput) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).claimTask(input)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.BIND_PROJECT, async (_event, workspaceRoot: string, sessionId: string, task: TeambitionRemoteTask) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).bindTask(sessionId, task)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.GET_BINDING, async (_event, workspaceRoot: string, sessionId: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).getBinding(sessionId)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.LIST_BINDINGS, async (_event, workspaceRoot: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).listBindings()
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.UPDATE_STATUS, async (_event, workspaceRoot: string, bindingId: string, status: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).syncStatus(bindingId, status)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.SYNC_PROGRESS, async (_event, workspaceRoot: string, bindingId: string, progress: number) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).syncProgress(bindingId, progress)
-  })
-
-  ipcMain.handle(TEAMBITION_IPC_CHANNELS.RETRY_SYNC, async (_event, workspaceRoot: string, bindingId: string) => {
-    const context = requireProjectWorkspaceRoot(workspaceRoot)
-    return (await getTeambitionService(context.workspaceRoot)).retryPendingSync(bindingId)
-  })
 }
 
 async function generateTaskForSession(
@@ -1302,28 +1255,3 @@ async function generateTaskForSession(
   }
 }
 
-let teambitionAdapter: import('./teambition-adapter').TeambitionAdapter | undefined
-const teambitionServices = new Map<string, TeambitionService>()
-
-async function getTeambitionService(workspaceRoot: string): Promise<TeambitionService> {
-  const existing = teambitionServices.get(workspaceRoot)
-  if (existing) return existing
-  const service = new TeambitionService({
-    storagePath: join(workspaceRoot, 'teambition-bindings.json'),
-    gateway: await getTeambitionAdapter(),
-  })
-  teambitionServices.set(workspaceRoot, service)
-  return service
-}
-
-async function getTeambitionAdapter(): Promise<import('./teambition-adapter').TeambitionAdapter> {
-  if (teambitionAdapter) return teambitionAdapter
-  try {
-    const { MockTeambitionAdapter } = await import('./teambition-adapter')
-    teambitionAdapter = new MockTeambitionAdapter()
-    console.warn('[Teambition] 未配置已验证的 adapter factory，使用本地 Mock 适配器')
-    return teambitionAdapter
-  } catch (error) {
-    throw new Error(`Teambition adapter 不可用: ${errorMessage(error)}`)
-  }
-}

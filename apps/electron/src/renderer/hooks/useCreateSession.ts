@@ -122,12 +122,18 @@ export function useCreateSession(): CreateSessionActions {
 
     // 空白「新会话」入口（recallDraft）且未显式指定项目时，默认绑定同工作区最近工作的项目
     // （参考 Synara）；程序化建会话（如搜索建会话/Skills 分类）保持历史行为不受影响。
-    const defaultProjectId = resolveDefaultProjectId({
-      explicitProjectId: input.projectId,
-      recallDraft: input.recallDraft,
-      sessions: store.get(agentSessionsAtom),
-      workspaceId,
-    })
+    // F3（workspace 化收敛）：工作区已绑定工程目录时不再继承存量 projectId——项目上下文由
+    // F2 合成的 workspace 上下文接管，避免同一工作区下会话间注入行为不一致；未绑目录的
+    // 存量工作区保留旧继承行为，避免新会话从项目目录跌回沙箱。
+    const currentWorkspace = workspaceId ? store.get(agentWorkspacesAtom).find((item) => item.id === workspaceId) : undefined
+    const defaultProjectId = currentWorkspace?.projectRootPath
+      ? undefined
+      : resolveDefaultProjectId({
+          explicitProjectId: input.projectId,
+          recallDraft: input.recallDraft,
+          sessions: store.get(agentSessionsAtom),
+          workspaceId,
+        })
 
     // 整个工作区第一次建 Agent 会话（没有任何项目可默认绑定）时，弹一次「新建项目」引导；
     // 立刻写 localStorage 标记，哪怕用户之后取消对话框也不会再弹第二次。
@@ -135,7 +141,7 @@ export function useCreateSession(): CreateSessionActions {
     if (!defaultProjectId && input.recallDraft && workspaceId) {
       // workspace=项目 模型下「已有项目」= 工作区绑定了工程目录，或该工作区已有会话；
       // 不再看 KanbanProject（UI 已不创建，恒空会误判为「首次」导致每次新会话都弹引导）。
-      const workspace = store.get(agentWorkspacesAtom).find((item) => item.id === workspaceId)
+      const workspace = currentWorkspace
       const hasAnyProjectInWorkspace =
         !!workspace?.projectRootPath
         || store.get(agentSessionsAtom).some((session) => session.workspaceId === workspaceId && !session.archived)

@@ -27,7 +27,6 @@ interface KanbanBoardProps {
   onOpenSubtask?: (sessionId: string) => void
   onOpenTaskFamily?: (item: KanbanItem) => void
   onRunTask?: (item: KanbanItem) => void
-  onRetryTeambition?: (item: KanbanItem) => void
   onSetLabels?: (item: KanbanItem, labelIds: string[]) => void
   onChangeWorkflow?: (item: KanbanItem, workflow: TaskWorkflow) => void
   emptyState?: KanbanBoardEmptyStateView | null
@@ -42,7 +41,7 @@ function dropColumnId(event: DragEndEvent): string | null {
   return typeof value === 'string' ? value : null
 }
 
-export function KanbanBoard({ items, mode, workflowFilter, columns, onMove, onOpenItem, onEditItem, onRenameItem, onArchiveItem, onDeleteItem, onOpenSubtask, onOpenTaskFamily, onRunTask, onRetryTeambition, onSetLabels, onChangeWorkflow, emptyState, onAddColumn, onUpdateColumn, onRemoveColumn }: KanbanBoardProps): React.ReactElement {
+export function KanbanBoard({ items, mode, workflowFilter, columns, onMove, onOpenItem, onEditItem, onRenameItem, onArchiveItem, onDeleteItem, onOpenSubtask, onOpenTaskFamily, onRunTask, onSetLabels, onChangeWorkflow, emptyState, onAddColumn, onUpdateColumn, onRemoveColumn }: KanbanBoardProps): React.ReactElement {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
@@ -116,7 +115,6 @@ export function KanbanBoard({ items, mode, workflowFilter, columns, onMove, onOp
             onOpenSubtask={onOpenSubtask}
             onOpenTaskFamily={onOpenTaskFamily}
             onRunTask={onRunTask}
-            onRetryTeambition={onRetryTeambition}
             onSetLabels={onSetLabels}
             onChangeWorkflow={onChangeWorkflow}
             onUpdateColumn={onUpdateColumn}

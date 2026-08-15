@@ -2,7 +2,7 @@
  * IPC 通道常量 — 按功能分组
  *
  * 参照 OSS: packages/shared/src/protocol/channels.ts
- * 适配: RPC_CHANNELS 对象改为 PROJECTS/TASKS/TEAMBITION/SESSION 四个独立通道组
+ * 适配: RPC_CHANNELS 对象改为 PROJECTS/TASKS/SESSION 三个独立通道组
  */
 
 export const PROJECT_IPC_CHANNELS = {
@@ -63,18 +63,6 @@ export const SESSION_GROUP_IPC_CHANNELS = {
   CREATE: 'session-group:create',
   RENAME: 'session-group:rename',
   DELETE: 'session-group:delete',
-} as const;
-
-export const TEAMBITION_IPC_CHANNELS = {
-  LIST_TASKS:    'teambition:listMyTasks',
-  CLAIM_TASK:    'teambition:claimTask',
-  GET_BINDING:   'teambition:getBinding',
-  CAPABILITIES:  'teambition:capabilities',
-  SYNC_PROGRESS: 'teambition:syncProgress',
-  UPDATE_STATUS: 'teambition:updateStatus',
-  BIND_PROJECT:  'teambition:bindProject',
-  LIST_BINDINGS: 'teambition:listBindings',
-  RETRY_SYNC:    'teambition:retrySync',
 } as const;
 
 export const SESSION_COMMAND_CHANNEL = SESSION_KANBAN_IPC_CHANNELS.COMMAND;

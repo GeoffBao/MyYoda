@@ -290,7 +290,6 @@ const PROJECT_SESSION_RECENT_WINDOW_MS = 7 * 86_400_000
 /** 「显示更多」每次点击额外展开的会话数（增量分页，可多次点击叠加，对齐 Claude 的「Show N more」） */
 const PROJECT_SESSION_EXPAND_STEP = 20
 /** 非当前工作区组的空项目列表；模块级常量保证引用稳定，不破坏 React.memo */
-const EMPTY_PROJECTS: KanbanProject[] = []
 const SESSION_QUICK_SWITCH_HINT_DELAY_MS = 1000
 const SESSION_QUICK_SWITCH_LIMIT = 9
 const SESSION_QUICK_SWITCH_KEYDOWN_EVENT = 'myyoda:session-quick-switch-keydown'
@@ -923,24 +922,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       .catch(() => setExcalidrawCount(0))
   }, [currentWorkspaceSlug, mode])
 
-  /**
-   * 当前工作区的 craft Project 列表。
-   * ProjectsInitializer 按 slug 加载，这里再按 workspaceId 过滤，
-   * 避免工作区切换瞬间 atom 尚未清空时把旧项目渲到新工作区组（闪一帧空子分组）。
-   */
-  const currentWorkspaceProjects = React.useMemo(() => {
-    if (!currentWorkspaceSlug) return EMPTY_PROJECTS
-    return kanbanProjects.filter((project) => {
-      // 隐藏容器 Project（home/ad-hoc）只用于看板卡片归属展示，不出现在侧栏子分组里。
-      if (isHiddenKanbanProjectKind(project.kind)) return false
-      if (project.workspaceId && project.workspaceId !== currentWorkspaceSlug) return false
-      // 归档项目的可见性对齐统一的「状态」筛选（原独立的 showArchivedProjectsAtom 开关已随
-      // SidebarProjectsTab 头部精简一并移除）
-      if (agentStatusFilter === 'active' && project.archivedAt) return false
-      return true
-    })
-  }, [currentWorkspaceSlug, kanbanProjects, agentStatusFilter])
-
   const pendingDeleteWorkspace = React.useMemo(
     () => workspaces.find((workspace) => workspace.id === pendingDeleteWorkspaceId) ?? null,
     [pendingDeleteWorkspaceId, workspaces],
@@ -1447,14 +1428,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     })
   }, [agentChannelId, agentModelId, createAgent, currentWorkspaceId, setActiveView])
 
-  /** 迁移会话进/出项目 */
-  const handleMoveToProject = React.useCallback(async (sessionId: string, projectId?: string): Promise<void> => {
+  /** 清理存量 KanbanProject 绑定（workspace=项目后不再提供「移动到项目」列表入口） */
+  const handleClearProjectBinding = React.useCallback(async (sessionId: string): Promise<void> => {
     try {
-      const updated = await window.electronAPI.sendSessionCommand(sessionId, { kind: 'set_project_id', projectId })
+      const updated = await window.electronAPI.sendSessionCommand(sessionId, { kind: 'set_project_id', projectId: undefined })
       setAgentSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
     } catch (error) {
-      console.error('[侧边栏] 移动到项目失败:', error)
-      toast.error('移动到项目失败')
+      console.error('[侧边栏] 移出项目失败:', error)
+      toast.error('移出项目失败')
     }
   }, [setAgentSessions])
 
@@ -2582,7 +2563,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     onTogglePin: handleTogglePinAgent,
     onToggleStar: handleToggleStarAgent,
     onToggleArchive: handleToggleArchiveAgent,
-    onMoveToProject: handleMoveToProject,
+    onClearProjectBinding: handleClearProjectBinding,
     onNewSessionInProject: createAgentSessionInProject,
     sessionGroups,
     onMoveToGroup: handleMoveToGroup,
@@ -2591,7 +2572,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   }), [
     createAgentSessionInProject,
     handleAgentRename,
-    handleMoveToProject,
+    handleClearProjectBinding,
     handleMoveToGroup,
     handleRequestCreateGroup,
     handleRequestDelete,
@@ -3191,7 +3172,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     const workspaceName = item.session.workspaceId && item.session.workspaceId !== currentWorkspaceId
       ? workspaceNameMap.get(item.session.workspaceId)
       : undefined
-    const projects = item.session.workspaceId === currentWorkspaceId ? currentWorkspaceProjects : EMPTY_PROJECTS
     const taskTree = isTaskTree(item)
 
     const renderChildItem = (childSession: AgentSessionMeta) => (
@@ -3202,8 +3182,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         agentIndicatorMap={agentIndicatorMap}
         relativeTimeNow={relativeTimeNow}
         workspaceName={workspaceName}
-        projects={projects}
-        onMoveToProject={handleMoveToProject}
+        onClearProjectBinding={handleClearProjectBinding}
         sessionGroups={sessionGroups}
         onMoveToGroup={handleMoveToGroup}
         onCreateGroup={handleRequestCreateGroup}
@@ -3238,8 +3217,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             : undefined}
           delegationChildCount={delegatedChildCount}
           workspaceName={workspaceName}
-          projects={projects}
-          onMoveToProject={handleMoveToProject}
+          onClearProjectBinding={handleClearProjectBinding}
           sessionGroups={sessionGroups}
           onMoveToGroup={handleMoveToGroup}
           onCreateGroup={handleRequestCreateGroup}
@@ -3321,9 +3299,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
         onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
         canDeleteWorkspace={isAuto ? false : canDeleteWorkspace(group.workspace)}
-        projects={!isAuto && group.workspace.id === currentWorkspaceId ? currentWorkspaceProjects : EMPTY_PROJECTS}
         hideWorkspaceHeader={!isAuto}
-        onMoveToProject={handleMoveToProject}
+        onClearProjectBinding={handleClearProjectBinding}
         sessionGroups={sessionGroups}
         onMoveToGroup={handleMoveToGroup}
         onCreateGroup={handleRequestCreateGroup}
@@ -3647,8 +3624,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                             ? workspaceNameMap.get(item.session.workspaceId)
                             : undefined
                         }
-                        projects={item.session.workspaceId === currentWorkspaceId ? currentWorkspaceProjects : EMPTY_PROJECTS}
-                        onMoveToProject={handleMoveToProject}
+                        onClearProjectBinding={handleClearProjectBinding}
                         sessionGroups={sessionGroups}
                         onMoveToGroup={handleMoveToGroup}
                         onCreateGroup={handleRequestCreateGroup}
@@ -3678,8 +3654,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                                   ? workspaceNameMap.get(childSession.workspaceId)
                                   : undefined
                               }
-                              projects={childSession.workspaceId === currentWorkspaceId ? currentWorkspaceProjects : EMPTY_PROJECTS}
-                              onMoveToProject={handleMoveToProject}
+                              onClearProjectBinding={handleClearProjectBinding}
                               sessionGroups={sessionGroups}
                               onMoveToGroup={handleMoveToGroup}
                               onCreateGroup={handleRequestCreateGroup}
@@ -3840,8 +3815,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                               : undefined}
                             delegationChildCount={delegatedChildCount}
                             workspaceName={item.session.workspaceId ? workspaceNameMap.get(item.session.workspaceId) : undefined}
-                            projects={EMPTY_PROJECTS}
-                            onMoveToProject={handleMoveToProject}
+                            onClearProjectBinding={handleClearProjectBinding}
                             sessionGroups={sessionGroups}
                             onMoveToGroup={handleMoveToGroup}
                             onCreateGroup={handleRequestCreateGroup}
@@ -3866,8 +3840,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                                   agentIndicatorMap={agentIndicatorMap}
                                   relativeTimeNow={relativeTimeNow}
                                   workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
-                                  projects={EMPTY_PROJECTS}
-                                  onMoveToProject={handleMoveToProject}
+                                  onClearProjectBinding={handleClearProjectBinding}
                                   sessionGroups={sessionGroups}
                                   onMoveToGroup={handleMoveToGroup}
                                   onCreateGroup={handleRequestCreateGroup}
@@ -4351,9 +4324,8 @@ interface ChildSessionItemProps {
   agentIndicatorMap: Map<string, SessionIndicatorStatus>
   relativeTimeNow: number
   workspaceName?: string
-  /** 当前项目列表 + 移动回调；透传给会话行的「移动到项目」子菜单 */
-  projects?: KanbanProject[]
-  onMoveToProject?: (sessionId: string, projectId?: string) => void | Promise<void>
+  /** 存量 KanbanProject 绑定清理出口；透传给会话行「移出项目」菜单项 */
+  onClearProjectBinding?: (sessionId: string) => void | Promise<void>
   /** 当前工作区自定义分组 + 移动/新建回调；透传给会话行的「移动到分组」子菜单 */
   sessionGroups?: SessionGroup[]
   onMoveToGroup?: (sessionId: string, groupId?: string) => void | Promise<void>
@@ -4373,8 +4345,7 @@ const ChildSessionItem = React.memo(function ChildSessionItem({
   agentIndicatorMap,
   relativeTimeNow,
   workspaceName,
-  projects,
-  onMoveToProject,
+  onClearProjectBinding,
   sessionGroups,
   onMoveToGroup,
   onCreateGroup,
@@ -4395,7 +4366,6 @@ const ChildSessionItem = React.memo(function ChildSessionItem({
       indicatorStatus={status}
       relativeTimeNow={relativeTimeNow}
       workspaceName={workspaceName}
-      projects={[]}
       sessionGroups={undefined}
       onSelect={onSelect}
       onRequestDelete={onRequestDelete}
@@ -4495,11 +4465,9 @@ interface AgentProjectGroupItemProps {
   onRenameWorkspace: (workspaceId: string, newName: string) => Promise<void>
   onRequestDeleteWorkspace: (workspaceId: string) => void
   canDeleteWorkspace: boolean
-  /** 当前工作区的 craft Project 列表；非当前工作区组传 [] */
-  projects: KanbanProject[]
   /** 隐藏 Workspace 组头（当前 Workspace 已在设置 > 工作区管理） */
   hideWorkspaceHeader?: boolean
-  onMoveToProject: (sessionId: string, projectId?: string) => void | Promise<void>
+  onClearProjectBinding: (sessionId: string) => void | Promise<void>
   sessionGroups?: SessionGroup[]
   onMoveToGroup?: (sessionId: string, groupId?: string) => void | Promise<void>
   onCreateGroup?: (sessionId: string) => void
@@ -4540,9 +4508,8 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
   onRenameWorkspace,
   onRequestDeleteWorkspace,
   canDeleteWorkspace,
-  projects,
   hideWorkspaceHeader = false,
-  onMoveToProject,
+  onClearProjectBinding,
   sessionGroups,
   onMoveToGroup,
   onCreateGroup,
@@ -4845,8 +4812,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                       agentIndicatorMap={agentIndicatorMap}
                       relativeTimeNow={relativeTimeNow}
                       workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMap?.get(childSession.workspaceId) : undefined}
-                      projects={projects}
-                      onMoveToProject={onMoveToProject}
+                      onClearProjectBinding={onClearProjectBinding}
                       sessionGroups={sessionGroups}
                       onMoveToGroup={onMoveToGroup}
                       onCreateGroup={onCreateGroup}
@@ -4904,8 +4870,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                           delegationChildCount={delegatedChildCount}
                           relativeTimeNow={relativeTimeNow}
                           workspaceName={isAutomationGroup && item.session.workspaceId ? workspaceNameMap?.get(item.session.workspaceId) : undefined}
-                          projects={projects}
-                          onMoveToProject={onMoveToProject}
+                          onClearProjectBinding={onClearProjectBinding}
                           sessionGroups={sessionGroups}
                           onMoveToGroup={onMoveToGroup}
                           onCreateGroup={onCreateGroup}

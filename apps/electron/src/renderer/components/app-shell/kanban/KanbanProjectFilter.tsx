@@ -6,7 +6,6 @@ interface KanbanProjectFilterProps {
   projects: KanbanProject[]
   value: TaskBoardScopeFilter
   onChange: (value: TaskBoardScopeFilter) => void
-  onCreateProject?: () => void
   /** 当前工作区名称（展示在「工作区」选项后；不传则只显示「工作区」） */
   workspaceName?: string
   className?: string
@@ -14,7 +13,6 @@ interface KanbanProjectFilterProps {
 
 const ALL = '__all__'
 const WORKSPACE = '__workspace__'
-const CREATE = '__create__'
 
 function scopeValue(scope: TaskBoardScopeFilter): string {
   if (scope.kind === 'all') return ALL
@@ -22,12 +20,12 @@ function scopeValue(scope: TaskBoardScopeFilter): string {
   return scope.projectId
 }
 
-/** Project 是 Task Board scope facet，而不是看板的强制父级。新模型下默认「当前工作区」；存量 Project 兼容保留。 */
+/** Project 是 Task Board scope facet，而不是看板的强制父级。新模型下默认「当前工作区」；
+ * 存量 KanbanProject 兼容保留为只读筛选维度（新建项目/工作区走侧栏与设置的正规入口）。 */
 export function KanbanProjectFilter({
   projects,
   value,
   onChange,
-  onCreateProject,
   workspaceName,
   className,
 }: KanbanProjectFilterProps): React.ReactElement {
@@ -39,10 +37,6 @@ export function KanbanProjectFilter({
         value={scopeValue(value)}
         onChange={(event) => {
           const next = event.target.value
-          if (next === CREATE) {
-            onCreateProject?.()
-            return
-          }
           if (next === ALL) onChange({ kind: 'all' })
           else if (next === WORKSPACE) onChange({ kind: 'workspace' })
           else onChange({ kind: 'project', projectId: next })
@@ -54,7 +48,6 @@ export function KanbanProjectFilter({
         {projects.filter((project) => !project.archivedAt).map((project) => (
           <option key={project.id} value={project.id}>{project.name}</option>
         ))}
-        {onCreateProject ? <option value={CREATE}>＋ 新建项目…</option> : null}
       </select>
     </label>
   )

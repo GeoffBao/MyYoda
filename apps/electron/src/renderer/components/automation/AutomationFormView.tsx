@@ -339,6 +339,11 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
   const openSession = useOpenSession()
 
   const [form, setForm] = React.useState<AutomationDraft | null>(null)
+  // F5：当前表单选中工作区的完整对象（绑定工程目录判断与展示共用，避免重复 find）
+  const selectedFormWorkspace = React.useMemo(
+    () => (form?.workspaceId ? workspaces.find((ws) => ws.id === form.workspaceId) : undefined),
+    [form?.workspaceId, workspaces],
+  )
   const [weekdayPresetOverride, setWeekdayPresetOverride] = React.useState<'custom' | null>(null)
   const [editingName, setEditingName] = React.useState(false)
   const [runningNow, setRunningNow] = React.useState(false)
@@ -362,7 +367,14 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
   React.useEffect(() => {
     if (formState.open && formState.draft) {
       const draft = formState.draft
-      setForm(draft)
+      // F5 归一化：存量 automation 的 projectId 在其工作区已绑定工程目录时失效（不影响 cwd 且
+      // 会造成 prompt 注入不一致），打开表单即清除，避免用户直接保存时把脏值写回。
+      const boundWorkspace = draft.workspaceId
+        ? workspaces.find((ws) => ws.id === draft.workspaceId)
+        : undefined
+      setForm(boundWorkspace?.projectRootPath && draft.projectId
+        ? { ...draft, projectId: undefined }
+        : draft)
       setWeekdayPresetOverride(null)
       lastSavedSignatureRef.current = draft.id && canPersistDraft(draft)
         ? getDraftSignature(draft)
@@ -370,7 +382,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
       setSaveStatus('idle')
       setLastSavedAt(null)
     }
-  }, [formState.open, formState.draft])
+  }, [formState.open, formState.draft, workspaces])
 
   // 新建模式下若 workspaceId 为空，按优先级填入默认值：
   // 1. 当前 Agent 模式选中的工作区（≈ 当前会话所在工作区）
@@ -1159,15 +1171,19 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
               <Select
                 value={form.workspaceId ?? ''}
                 onValueChange={(v) => {
-                  // 切换工作区时，若当前已选项目不属于新工作区，则解除项目挂载
+                  // 切换工作区时，若当前已选项目不属于新工作区，则解除项目挂载；
+                  // F5：新工作区已绑定工程目录时同样解除（projectId 不影响 cwd 且造成注入不一致）
+                  const nextWorkspace = workspaces.find((ws) => ws.id === v)
                   const currentProject = form.projectId
                     ? pickableProjects.find((p) => p.id === form.projectId)
                     : undefined
                   update({
                     workspaceId: v,
-                    projectId: currentProject && currentProject.workspaceId === workspaceSlugById.get(v)
-                      ? form.projectId
-                      : undefined,
+                    projectId: nextWorkspace?.projectRootPath
+                      ? undefined
+                      : currentProject && currentProject.workspaceId === workspaceSlugById.get(v)
+                        ? form.projectId
+                        : undefined,
                   })
                 }}
               >
@@ -1238,13 +1254,18 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
             </div>
           </div>
 
-          {/* 挂载目标（仅「创建任务」模式）：迁移后项目=工作区，任务会话挂到工作区（cwd 用工程目录）；
-              存量 KanbanProject 存在时仍可选（兼容层） */}
+          {/* 挂载目标（仅「创建任务」模式）：项目=工作区后，任务会话挂到工作区（cwd 用工程目录）。
+              F5 收敛：工作区绑定工程目录时不再展示存量 KanbanProject 选择（projectId 不影响 cwd 且
+              会造成 prompt 注入不一致）；未绑目录的存量工作区保留项目选择作 cwd 兜底。 */}
           {form.executionMode === 'create_task' && (
           <div className="flex flex-col gap-2">
             <Label>执行工作区</Label>
             {!form.workspaceId ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/35">请先选择工作区</div>
+            ) : selectedFormWorkspace?.projectRootPath ? (
+              <div className="px-0.5 text-xs leading-relaxed text-foreground/50">
+                在当前工作区工程目录执行任务（已绑定 {selectedFormWorkspace.projectRootPath}）
+              </div>
             ) : pickableProjects.filter((p) => !p.archivedAt && p.workspaceId === workspaceSlugById.get(form.workspaceId ?? '')).length === 0 ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/50">
                 在当前工作区根目录执行任务（会话 cwd 继承工作区工程目录）
