@@ -48,7 +48,7 @@ type TaskWorkingDirectoryResult = Awaited<ReturnType<typeof window.electronAPI.t
 
 /** 运行目录 blocked 原因 → 用户可读文案（与主进程 describeTaskWorkingDirectoryBlock 同构） */
 const WORKING_DIRECTORY_BLOCKED_LABEL: Record<string, string> = {
-  'missing-cwd': '未解析到运行目录：请绑定项目目录，或在插件 → 工作区设置里配置默认工作目录',
+  'missing-cwd': '未解析到运行目录：请绑定项目目录，或在设置 → 工作区里配置默认工作区目录',
   'invalid-task-cwd': '任务配置的工作目录不可用',
   'missing-project': '任务绑定的项目不存在',
   'invalid-project-cwd': '项目工作目录不可用',

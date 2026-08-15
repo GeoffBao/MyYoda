@@ -1165,10 +1165,10 @@ export interface ElectronAPI {
   /** 从工作区配置移除 worktree 仓库 */
   removeWorktreeRepo: (workspaceSlug: string, repoPath: string) => Promise<import('@myyoda/shared').WorkspaceWorktreeRepo[]>
 
-  /** 获取工作区默认工作目录（未绑定项目的新会话回退使用） */
-  getWorkspaceDefaultWorkingDirectory: (workspaceSlug: string) => Promise<string | undefined>
-  /** 设置/清空工作区默认工作目录 */
-  setWorkspaceDefaultWorkingDirectory: (workspaceSlug: string, path: string | undefined) => Promise<string | undefined>
+  /** 获取默认工作区目录（应用设置；未绑定项目的新会话回退使用） */
+  getAgentDefaultWorkingDirectory: () => Promise<string | undefined>
+  /** 设置/清空默认工作区目录 */
+  setAgentDefaultWorkingDirectory: (path: string | undefined) => Promise<string | undefined>
 
   // ===== Agent 文件系统操作 =====
 
@@ -2941,12 +2941,12 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REMOVE_WORKTREE_REPO, workspaceSlug, repoPath)
   },
 
-  getWorkspaceDefaultWorkingDirectory: (workspaceSlug: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_WORKSPACE_DEFAULT_WORKING_DIRECTORY, workspaceSlug)
+  getAgentDefaultWorkingDirectory: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_AGENT_DEFAULT_WORKING_DIRECTORY)
   },
 
-  setWorkspaceDefaultWorkingDirectory: (workspaceSlug: string, path: string | undefined) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_WORKSPACE_DEFAULT_WORKING_DIRECTORY, workspaceSlug, path)
+  setAgentDefaultWorkingDirectory: (path: string | undefined) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_AGENT_DEFAULT_WORKING_DIRECTORY, path)
   },
 
   // Agent 文件系统操作

@@ -477,7 +477,7 @@ export function buildDynamicContext(ctx: DynamicContext): string {
     // （与 <working_directory> 不同——后者是会话隔离目录，不是用户工程代码所在地）
     sections.push(
       `<workspace_default_working_directory>${ctx.workspaceDefaultWorkingDirectory}</workspace_default_working_directory>\n`
-      + '`<workspace_default_working_directory>` 是当前工作区配置的默认工程代码目录；'
+      + '`<workspace_default_working_directory>` 是应用设置中配置的默认工作区目录（工程代码目录）；'
       + '会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准。',
     )
   }

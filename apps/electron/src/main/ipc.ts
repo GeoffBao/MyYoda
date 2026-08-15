@@ -396,8 +396,8 @@ import {
   addWorktreeRepo,
   removeWorktreeRepo,
   cleanupStaleWorkspaceAttachedPaths,
-  getWorkspaceDefaultWorkingDirectory,
-  setWorkspaceDefaultWorkingDirectory,
+  getAgentDefaultWorkingDirectory,
+  setAgentDefaultWorkingDirectory,
 } from './lib/agent-workspace-manager'
 import { deleteWorkspaceCascade } from './lib/workspace-deletion-service'
 import {
@@ -4157,19 +4157,19 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ===== 工作区默认工作目录 =====
+  // ===== 默认工作区目录（应用设置） =====
 
   ipcMain.handle(
-    AGENT_IPC_CHANNELS.GET_WORKSPACE_DEFAULT_WORKING_DIRECTORY,
-    async (_, workspaceSlug: string): Promise<string | undefined> => {
-      return getWorkspaceDefaultWorkingDirectory(workspaceSlug)
+    AGENT_IPC_CHANNELS.GET_AGENT_DEFAULT_WORKING_DIRECTORY,
+    async (): Promise<string | undefined> => {
+      return getAgentDefaultWorkingDirectory()
     }
   )
 
   ipcMain.handle(
-    AGENT_IPC_CHANNELS.SET_WORKSPACE_DEFAULT_WORKING_DIRECTORY,
-    async (_, workspaceSlug: string, path: string | undefined): Promise<string | undefined> => {
-      return setWorkspaceDefaultWorkingDirectory(workspaceSlug, path)
+    AGENT_IPC_CHANNELS.SET_AGENT_DEFAULT_WORKING_DIRECTORY,
+    async (_, path: string | undefined): Promise<string | undefined> => {
+      return setAgentDefaultWorkingDirectory(path)
     }
   )
 

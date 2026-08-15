@@ -400,6 +400,9 @@ export interface AppSettings {
   agentChannelIds?: string[]
   /** Agent 当前工作区 ID */
   agentWorkspaceId?: string
+  /** 默认工作区目录：未绑定 Project 的会话 / Workspace Task 回退的工程代码目录；未设置时回退到默认工作区。
+   * 2026-08-15 起从工作区 config.json 的 defaultWorkingDirectory 迁移到应用设置，设置优先。 */
+  agentDefaultWorkingDirectory?: string
   /** 新 Agent 会话默认使用的 runtime；历史会话缺省仍按 claude 兼容。 */
   agentRuntime?: AgentRuntime
   /** Windows 上 Agent Bash 工具的运行环境；默认自动选择 Git Bash，WSL 需用户显式启用。 */

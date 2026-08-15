@@ -2288,10 +2288,10 @@ export const AGENT_IPC_CHANNELS = {
   ADD_WORKTREE_REPO: 'agent:add-worktree-repo',
   /** 从工作区配置移除 worktree 仓库 */
   REMOVE_WORKTREE_REPO: 'agent:remove-worktree-repo',
-  /** 获取工作区默认工作目录（未绑定项目的新会话回退使用） */
-  GET_WORKSPACE_DEFAULT_WORKING_DIRECTORY: 'agent:get-workspace-default-working-directory',
-  /** 设置/清空工作区默认工作目录 */
-  SET_WORKSPACE_DEFAULT_WORKING_DIRECTORY: 'agent:set-workspace-default-working-directory',
+  /** 获取默认工作区目录（应用设置；未绑定项目的新会话回退使用） */
+  GET_AGENT_DEFAULT_WORKING_DIRECTORY: 'agent:get-agent-default-working-directory',
+  /** 设置/清空默认工作区目录 */
+  SET_AGENT_DEFAULT_WORKING_DIRECTORY: 'agent:set-agent-default-working-directory',
 
   // 文件系统操作
   /** 获取 session 工作路径 */
