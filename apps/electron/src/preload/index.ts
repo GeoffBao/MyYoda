@@ -389,6 +389,12 @@ export interface ElectronAPI {
   getDetachedPreviewData: (previewId: string) => Promise<DetachedPreviewWindowData | null>
 
   // ===== Pi 受管浏览器（主进程 WebContentsView） =====
+  openAgentBrowser: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  listAgentBrowserTabs: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState>
+  createAgentBrowserTab: (input: import('@myyoda/shared').BrowserCreateTabInput) => Promise<import('@myyoda/shared').BrowserViewState>
+  selectAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => Promise<import('@myyoda/shared').BrowserViewState>
+  closeAgentBrowserTab: (input: import('@myyoda/shared').BrowserTabInput) => Promise<import('@myyoda/shared').BrowserViewState | null>
+  getAgentBrowserState: (sessionId: string) => Promise<import('@myyoda/shared').BrowserViewState | null>
   setAgentBrowserLayout: (layout: import('@myyoda/shared').BrowserViewLayout) => Promise<void>
   hideAgentBrowserPresentation: (revision: number) => Promise<void>
   navigateAgentBrowser: (input: import('@myyoda/shared').BrowserNavigateInput) => Promise<import('@myyoda/shared').BrowserViewState>

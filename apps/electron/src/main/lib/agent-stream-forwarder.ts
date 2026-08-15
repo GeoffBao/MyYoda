@@ -3,7 +3,7 @@ import type {
   AgentAssistantMessageDelta,
   AgentRunEvent,
   AgentStreamPayload,
-} from '@proma/shared'
+} from '@myyoda/shared'
 
 export const FOREGROUND_PARTIAL_INTERVAL_MS = 50
 export const BACKGROUND_PARTIAL_INTERVAL_MS = 250

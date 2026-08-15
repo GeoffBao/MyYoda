@@ -44,6 +44,7 @@ import { getScrollTopAfterPrepend } from '@/lib/agent-scroll-anchor'
 import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@myyoda/shared'
 import { getSDKCompactStatus } from '@myyoda/shared'
 import { agentLiveMessagesAtomFamily, agentSessionMessagesStreamStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
+import type { AgentSessionFileRoots } from '@myyoda/shared'
 
 const EMPTY_SDK_MESSAGES: SDKMessage[] = []
 /**
@@ -610,13 +611,9 @@ const AgentTranscriptTail = React.memo(function AgentTranscriptTail({
           basePath={basePath}
           onFork={onFork}
           onRewind={onRewind}
-          onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
-          onCreateTodo={onCreateTodo}
           onRetry={onRetry}
           onRetryInNewSession={onRetryInNewSession}
           onCompact={onCompact}
-          onRelinkProjectRoot={onRelinkProjectRoot}
-          onRestoreProjectRoot={onRestoreProjectRoot}
           historyTurn={groupHistoryTurns.get(stableGroup)}
           sessionModelId={sessionModelId}
         />
