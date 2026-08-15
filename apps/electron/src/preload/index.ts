@@ -1333,7 +1333,7 @@ export interface ElectronAPI {
   feedbackPickImages: () => Promise<Array<{ filePath: string; dataUrl: string }>>
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
-  discoverGetFeed: () => Promise<import('@myyoda/shared').DiscoverFeedResult>
+  discoverGetFeed: (force?: boolean) => Promise<import('@myyoda/shared').DiscoverFeedResult>
   discoverGetArticle: (contentUrl: string) => Promise<string>
   discoverGetVideoStatus: (itemId: string, version: string, size?: number) => Promise<import('@myyoda/shared').VideoDownloadState>
   discoverDownloadVideo: (item: import('@myyoda/shared').DiscoverContentItem) => Promise<{ filePath: string }>
@@ -3168,8 +3168,8 @@ const electronAPI: ElectronAPI = {
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
 
-  discoverGetFeed: () => {
-    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_FEED)
+  discoverGetFeed: (force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_FEED, force)
   },
 
   discoverGetArticle: (contentUrl) => {

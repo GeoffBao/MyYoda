@@ -5202,10 +5202,10 @@ export function registerIpcHandlers(): void {
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
 
-  // 拉取官方精选流（清单 + 更新标记 + 未读红点）
-  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_FEED, async () => {
+  // 拉取官方精选流（清单 + 更新标记 + 未读红点；force 绕过内存缓存重新拉网络）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_FEED, async (_event, force?: boolean) => {
     const { fetchDiscoverFeed } = await import('./lib/content-service')
-    return fetchDiscoverFeed()
+    return fetchDiscoverFeed(force)
   })
 
   // 拉取 article 的 markdown 正文

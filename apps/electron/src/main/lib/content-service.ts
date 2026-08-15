@@ -77,9 +77,9 @@ function readManifestCacheFile(): DiscoverManifest | null {
   }
 }
 
-/** 拉取清单：内存缓存 → 磁盘缓存 → 双源网络；全部失败时回退磁盘缓存并抛错 */
-async function fetchManifestWithCache(): Promise<DiscoverManifest> {
-  if (manifestMemoryCache) return manifestMemoryCache
+/** 拉取清单：内存缓存（非强制）→ 网络双源 → 磁盘缓存兜底；force 时跳过内存缓存 */
+async function fetchManifestWithCache(force = false): Promise<DiscoverManifest> {
+  if (!force && manifestMemoryCache) return manifestMemoryCache
   const diskCache = readManifestCacheFile()
   try {
     const response = await fetchWithFallbacks(MANIFEST_URLS, await getProxyFetch())
@@ -113,9 +113,9 @@ function writeContentState(state: DiscoverContentState): void {
   writeFileSync(getDiscoverContentStatePath(), JSON.stringify(state, null, 2))
 }
 
-/** 拉取官方精选流（清单 + 更新标记 + 未读红点） */
-export async function fetchDiscoverFeed(): Promise<DiscoverFeedResult> {
-  const manifest = await fetchManifestWithCache()
+/** 拉取官方精选流（清单 + 更新标记 + 未读红点）；force 时绕过内存缓存重新拉网络 */
+export async function fetchDiscoverFeed(force = false): Promise<DiscoverFeedResult> {
+  const manifest = await fetchManifestWithCache(force)
   const state = readContentState()
   const items = computeUpdateFlags(manifest.items, state)
   return { items, hasUnreadUpdates: items.some((item) => item.hasUpdate), source: CONTENT_SOURCE }

@@ -24,7 +24,8 @@ export function useDiscoverFeed(): {
   const refresh = React.useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.discoverGetFeed()
+      // force=true 绕过主进程内存缓存，保证手动刷新能看到内容源的最新变化
+      const result = await window.electronAPI.discoverGetFeed(true)
       setFeed(result.items)
       setHasUnread(result.hasUnreadUpdates)
       setError(null)
