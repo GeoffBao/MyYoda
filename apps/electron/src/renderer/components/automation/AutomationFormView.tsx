@@ -50,7 +50,6 @@ import type {
   CreateAutomationInput,
   FeishuChatBinding,
   UpdateAutomationInput,
-  AgentRuntime,
 } from '@myyoda/shared'
 
 const NO_FEISHU_BINDING = '__none__'

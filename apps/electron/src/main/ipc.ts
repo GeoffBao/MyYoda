@@ -6381,14 +6381,6 @@ export function registerIpcHandlers(): void {
     validateAutomationNotificationTargets(i.notificationTargets)
   }
 
-  // Claude runtime 已退役，所有自动化任务统一 Pi。不再需要 runtime 校验。
-  const validateAutomationRuntimePolicy = (
-    _input: Partial<UpdateAutomationInput>,
-    _existing?: Automation,
-  ): void => {
-    // no-op
-  }
-
   const validateAutomationScheduleComplete = (
     input: Partial<UpdateAutomationInput>,
     existing?: Automation,
@@ -6440,7 +6432,6 @@ export function registerIpcHandlers(): void {
       if (!isNonEmptyString(input.prompt)) throw new Error('prompt 必填')
       // channelId / workspaceId 允许为空（草稿态），但此时任务不能被启用
       validateAutomationFields(input)
-      validateAutomationRuntimePolicy(input)
       validateAutomationScheduleComplete(input)
       const a = createAutomation(input)
       broadcastAutomationsChanged()
@@ -6458,7 +6449,6 @@ export function registerIpcHandlers(): void {
       const existing = getAutomation(input.id)
       if (!existing) return undefined
       validateAutomationFields(input)
-      validateAutomationRuntimePolicy(input, existing)
       validateAutomationScheduleComplete(input, existing)
       const a = updateAutomation(input)
       broadcastAutomationsChanged()

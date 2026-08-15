@@ -1168,7 +1168,7 @@ export function migrateChatToAgentSession(conversationId: string, agentSessionId
  * @returns 新创建的会话元数据
  */
 export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSessionMeta> {
-  const { sessionId, upToMessageUuid } = input
+  const { sessionId } = input
 
   // 1. 获取源会话元数据
   const sourceMeta = getAgentSessionMeta(sessionId)
@@ -1287,78 +1287,6 @@ export async function rewindPiAgentSession(sessionId: string, assistantMessageUu
     piSessionFile: branchFile,
     piEntryBindings: retainedBindings,
   })
-}
-
-interface ForkStoredMessageRef {
-  uuid: string
-  sessionId?: string
-}
-
-interface ForkTargetResolution {
-  effectiveUpToMessageUuid: string
-  effectiveSdkSessionId?: string
-  usedSidechainFallback: boolean
-}
-
-async function resolveForkTargetFromStoredMessages(
-  sessionId: string,
-  upToMessageUuid: string,
-): Promise<ForkTargetResolution> {
-  const filePath = getAgentSessionMessagesPath(sessionId)
-  if (!existsSync(filePath)) {
-    throw new Error('未在会话历史中找到指定的消息，可能消息已被清理或截断')
-  }
-
-  let lastMainlineAssistant: ForkStoredMessageRef | undefined
-  let target: (ForkStoredMessageRef & {
-    isSidechain: boolean
-    fallbackMainline?: ForkStoredMessageRef
-  }) | undefined
-
-  for await (const msg of readStoredSDKMessages(filePath)) {
-    const uuid = getStoredMessageUuid(msg)
-    const isMainlineAssistant = msg.type === 'assistant'
-      && !!uuid
-      && !((msg as { parent_tool_use_id?: string | null }).parent_tool_use_id)
-
-    if (uuid === upToMessageUuid) {
-      target = {
-        uuid,
-        sessionId: (msg as { session_id?: string }).session_id,
-        isSidechain: msg.type === 'assistant'
-          && Boolean((msg as { parent_tool_use_id?: string | null }).parent_tool_use_id),
-        fallbackMainline: lastMainlineAssistant,
-      }
-    }
-
-    if (isMainlineAssistant) {
-      lastMainlineAssistant = {
-        uuid,
-        sessionId: (msg as { session_id?: string }).session_id,
-      }
-    }
-  }
-
-  if (!target) {
-    throw new Error('未在会话历史中找到指定的消息，可能消息已被清理或截断')
-  }
-
-  if (target.isSidechain) {
-    if (!target.fallbackMainline) {
-      throw new Error('选中的是子代理执行过程中的消息，且向前找不到可分叉的主对话消息')
-    }
-    return {
-      effectiveUpToMessageUuid: target.fallbackMainline.uuid,
-      effectiveSdkSessionId: target.fallbackMainline.sessionId,
-      usedSidechainFallback: true,
-    }
-  }
-
-  return {
-    effectiveUpToMessageUuid: target.uuid,
-    effectiveSdkSessionId: target.sessionId,
-    usedSidechainFallback: false,
-  }
 }
 
 interface CopyForkStoredSDKMessagesInput {

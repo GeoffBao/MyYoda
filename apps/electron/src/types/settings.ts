@@ -396,8 +396,6 @@ export interface AppSettings {
   agentModelId?: string
   /** 标题生成供应商；默认跟随当前会话渠道。 */
   titleProvider?: 'session' | ProviderType
-  /** Claude Agent 可用渠道 ID 列表（由渠道启用状态与协议兼容性派生） */
-  agentChannelIds?: string[]
   /** Agent 当前工作区 ID */
   agentWorkspaceId?: string
   /** 默认工作区目录：未绑定 Project 的会话 / Workspace Task 回退的工程代码目录；未设置时回退到默认工作区。
