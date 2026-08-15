@@ -3113,7 +3113,14 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               />
               <DraftGitContextPicker
                 sessionId={sessionId}
+                workspaceId={sessionMeta?.workspaceId}
                 projectId={sessionMeta?.projectId}
+                initialGitContext={{
+                  gitRepoPath: sessionMeta?.gitRepoPath,
+                  gitBranch: sessionMeta?.gitBranch,
+                  gitExecutionMode: sessionMeta?.gitExecutionMode,
+                  gitBaseRef: sessionMeta?.gitBaseRef,
+                }}
                 isDraft={isDraftSession || isEmptySession}
                 onSelectionChange={handleDraftGitContextChange}
               />
