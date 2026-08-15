@@ -44,7 +44,10 @@ function formatBytes(sizeBytes: number): string {
 }
 
 /** 将项目上下文格式化为可注入 system/dynamic prompt 的 XML 块 */
-export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string {
+export function formatProjectContextForPrompt(
+  ctx: ProjectPromptContext,
+  options?: { sessionCwdIsProjectDir?: boolean },
+): string {
   const lines: string[] = [];
   lines.push(`<project_context project="${escapeAttr(ctx.name)}">`);
 
@@ -85,7 +88,9 @@ export function formatProjectContextForPrompt(ctx: ProjectPromptContext): string
     lines.push(
       ctx.isWorktree
         ? '`<project_working_directory>` 当前指向本会话绑定的 Git Worktree 隔离目录（与 `<working_directory>` 一致）；改动只会落在这个独立分支/工作树里，不影响项目主目录或其他会话。需要读代码、改代码、跑命令时，直接以该目录为基准，不要跳转到项目原始目录。'
-        : '`<project_working_directory>` 是用户指定的项目工程代码根目录；会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准，不要猜测或搜索其他路径。',
+        : options?.sessionCwdIsProjectDir
+          ? '`<project_working_directory>` 是当前会话的执行目录（会话 cwd 即项目工程目录）；读代码、改代码、跑命令都以该目录为基准，不要猜测或搜索其他路径。'
+          : '`<project_working_directory>` 是用户指定的项目工程代码根目录；会话 cwd 是会话隔离目录，不要在这里找代码。需要读代码、改代码、跑命令时，直接以该目录为基准，不要猜测或搜索其他路径。',
     );
     lines.push('如果 `<project_working_directory>` 下存在 AGENTS.md（旧版为 CLAUDE.md），那是人写指令（可能同时被其他 CLI 等外部工具读取），只读不要自动创建或修改；这个项目的自动记忆一律通过 `<project_memory_path>` 写入 MEMORY.md，不要写入指令文件。');
   }

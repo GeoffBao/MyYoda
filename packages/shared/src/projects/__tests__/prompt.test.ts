@@ -62,4 +62,14 @@ describe('formatProjectContextForPrompt', () => {
     expect(text).toContain('项目工程代码根目录')
     expect(text).toContain('不要在这里找代码')
   })
+
+  test('会话 cwd 即项目目录时使用一致文案，不出现「会话隔离目录」误导', () => {
+    const text = formatProjectContextForPrompt(baseCtx({
+      workingDirectory: '/Users/dev/my-real-project',
+    }), { sessionCwdIsProjectDir: true })
+
+    expect(text).toContain('会话 cwd 即项目工程目录')
+    expect(text).not.toContain('会话隔离目录')
+    expect(text).not.toContain('不要在这里找代码')
+  })
 })
