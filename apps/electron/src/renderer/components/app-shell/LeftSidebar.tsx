@@ -730,12 +730,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库 / 发现）默认折叠；任一功能视图激活时自动展开
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开。
+  // 注意：「发现」已是与「功能」并列的独立入口行，不应触发功能组展开（否则双击发现会误展开功能组）。
   const anyFeatureActive =
     activeView === 'planning'
     || activeView === 'agent-skills'
     || activeView === 'repo-wiki'
-    || activeView === 'discover'
     || activeView === 'excalidraw-gallery'
     || activeView === 'excalidraw-editor'
     || (mode === 'agent' && codeMainView === 'tasks' && activeView === 'conversations')
