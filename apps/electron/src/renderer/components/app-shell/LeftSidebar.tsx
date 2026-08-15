@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -22,6 +22,7 @@ import { ModeSwitcher } from './ModeSwitcher'
 import { TabNavigationControls } from '@/components/tabs/TabNavigationControls'
 import { UserAvatar } from '@/components/chat/UserAvatar'
 import { activeViewAtom, agentSkillsTabAtom, type AgentSkillsCapabilityTab } from '@/atoms/active-view'
+import { discoverHasUnreadAtom } from '@/atoms/discover-atoms'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { appModeAtom, type AppMode } from '@/atoms/app-mode'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
@@ -620,6 +621,7 @@ function deleteSetEntry<T>(prev: Set<T>, value: T): Set<T> {
 
 export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.ReactElement {
   const [activeView, setActiveView] = useAtom(activeViewAtom)
+  const discoverHasUnread = useAtomValue(discoverHasUnreadAtom)
   const setAgentSkillsTab = useSetAtom(agentSkillsTabAtom)
   const setAutomationForm = useSetAtom(automationFormAtom)
   const automations = useAtomValue(automationsAtom)
@@ -725,11 +727,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库 / 发现）默认折叠；任一功能视图激活时自动展开
   const anyFeatureActive =
     activeView === 'planning'
     || activeView === 'agent-skills'
     || activeView === 'repo-wiki'
+    || activeView === 'discover'
     || activeView === 'excalidraw-gallery'
     || activeView === 'excalidraw-editor'
     || (mode === 'agent' && codeMainView === 'tasks' && activeView === 'conversations')
@@ -1096,6 +1099,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       return
     }
     setActiveView('repo-wiki')
+  }, [activeView, setActiveView])
+
+  /** 打开/关闭「发现」视图（官方内容 + 社区 + 反馈） */
+  const handleOpenDiscover = React.useCallback((): void => {
+    if (activeView === 'discover') {
+      setActiveView('conversations')
+      return
+    }
+    setActiveView('discover')
   }, [activeView, setActiveView])
 
   /** 打开唯一正式任务看板；重复点击保持当前页面，不隐式退回会话。 */
@@ -3513,6 +3525,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               >
                 <Library size={13} className="shrink-0 text-foreground/45" />
                 <span className="min-w-0 flex-1 truncate text-left">知识库</span>
+              </button>
+            )}
+
+            {/* 发现：官方内容流 + 社区讨论 + 反馈 */}
+            {mode === 'agent' && (
+              <button
+                type="button"
+                onClick={handleOpenDiscover}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'discover'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <Compass size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">发现</span>
+                {discoverHasUnread && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
               </button>
             )}
           </div>

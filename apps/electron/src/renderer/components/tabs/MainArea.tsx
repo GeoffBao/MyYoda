@@ -29,6 +29,7 @@ import { AutomationFormView } from '@/components/automation/AutomationFormView'
 import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
+import { DiscoverView } from '@/components/discover/DiscoverView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
@@ -326,6 +327,9 @@ export function MainArea(): React.ReactElement {
             ) : activeView === 'repo-wiki' ? (
               // Yoda 知识库：Project 模式知识库入口（待开发占位）
               <RepoWikiView />
+            ) : activeView === 'discover' ? (
+              // 发现：官方内容流 + 社区讨论 + 反馈
+              <DiscoverView />
             ) : activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor' ? (
               <ExcalidrawView />
             ) : (

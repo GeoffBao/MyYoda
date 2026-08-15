@@ -102,6 +102,7 @@ import { diffCapabilities, UPDATER_LINKS } from '@myyoda/shared'
 import type { GitHubRelease, WorkspaceCapabilities } from '@myyoda/shared'
 import { showCapabilityChangeToasts } from './lib/capabilities-toast'
 import { ProjectsInitializer } from './components/ProjectsInitializer'
+import { DiscoverInitializer } from './components/discover/DiscoverInitializer'
 import { GlobalShortcuts } from './components/shortcuts/GlobalShortcuts'
 import { ShortcutGuideDialog } from './components/shortcuts/ShortcutGuideDialog'
 import { FaqDialog } from './components/faq/FaqDialog'
@@ -1308,6 +1309,7 @@ if (isQuickTaskWindow) {
       <AutomationInitializer />
       <PlanningInitializer />
       <ProjectsInitializer />
+      <DiscoverInitializer />
       <FeishuInitializer />
       <DingTalkInitializer />
       <TabStatePersistenceInitializer />

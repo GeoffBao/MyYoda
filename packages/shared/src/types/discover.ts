@@ -55,6 +55,8 @@ export interface VideoDownloadState {
   status: 'not-downloaded' | 'downloading' | 'done' | 'error'
   /** 0-1，downloading 期间有效 */
   progress: number
+  /** done 时有效：本地缓存文件绝对路径（经 GET_VIDEO_URL 换播放 URL） */
+  filePath?: string
   error?: string
 }
 
@@ -133,6 +135,4 @@ export const DISCOVER_IPC_CHANNELS = {
   GET_DISCUSSION: 'discover:get-discussion',
   /** 为已下载视频文件注册 myyoda-file:// 播放 URL */
   GET_VIDEO_URL: 'discover:get-video-url',
-  /** 用系统浏览器打开外链 / 讨论页 */
-  OPEN_EXTERNAL: 'discover:open-external',
 } as const

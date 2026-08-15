@@ -17,6 +17,7 @@ import { atom } from 'jotai'
 
 export type ActiveView = 'conversations' | 'planning' | 'agent-skills'
   | 'repo-wiki'
+  | 'discover'
   | 'excalidraw-gallery' | 'excalidraw-editor'
 /** Yoda 插件视图的子页：专家/专家团平级置顶，随后是 Skills / MCP / API（增强工具），Memory（工作区记忆）已并入为子模块。 */
 export type AgentSkillsCapabilityTab = 'experts' | 'teams' | 'skills' | 'mcp' | 'api' | 'memory'

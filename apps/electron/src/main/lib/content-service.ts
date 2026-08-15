@@ -159,7 +159,7 @@ export function getVideoStatus(itemId: string, version: string, expectedSize?: n
         return { itemId, status: 'error', progress: 0, error: '缓存文件大小不匹配，请重新下载' }
       }
     }
-    return { itemId, status: 'done', progress: 1 }
+    return { itemId, status: 'done', progress: 1, filePath: targetPath }
   }
   const inflight = inflightDownloads.has(itemId)
   return inflight
