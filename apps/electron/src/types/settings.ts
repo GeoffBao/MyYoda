@@ -689,6 +689,8 @@ export const STORAGE_IPC_CHANNELS = {
   CLEANUP: 'storage:cleanup',
   /** 仅清理临时文件（启动时/快速清理） */
   CLEANUP_TEMP: 'storage:cleanup-temp',
+  /** 仅清理「发现」面板视频缓存 */
+  CLEANUP_DISCOVER: 'storage:cleanup-discover',
 } as const
 
 /** 用量统计 IPC 通道 */

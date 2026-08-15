@@ -291,6 +291,26 @@ export async function downloadVideo(
   return promise
 }
 
+/** 删除某视频的本地缓存（含下载中断残留的 .part），返回释放的字节数 */
+export function deleteVideoCache(itemId: string, version: string): number {
+  const targetPath = videoCachePath(itemId, version)
+  let freed = 0
+  if (existsSync(targetPath)) {
+    freed += statSync(targetPath).size
+    rmSync(targetPath, { force: true })
+  }
+  const partPath = `${targetPath}.part`
+  if (existsSync(partPath)) {
+    try {
+      freed += statSync(partPath).size
+    } catch {
+      // 统计失败不影响删除
+    }
+    rmSync(partPath, { force: true })
+  }
+  return freed
+}
+
 /** 清理某条目的旧版本缓存（保留最新） */
 function pruneOldVersions(itemId: string, keepVersion: string): void {
   const dir = getDiscoverVideoCacheDir()

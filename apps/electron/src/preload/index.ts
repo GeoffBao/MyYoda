@@ -1342,6 +1342,7 @@ export interface ElectronAPI {
   discoverGetDiscussion: (number: number) => Promise<import('@myyoda/shared').DiscussionDetail>
   discoverGetVideoUrl: (filePath: string) => Promise<string>
   discoverGetVideoStreamUrl: (remoteUrl: string) => Promise<string>
+  discoverDeleteVideoCache: (itemId: string, version: string) => Promise<void>
   onVideoDownloadProgress: (listener: (event: import('@myyoda/shared').VideoDownloadProgressEvent) => void) => () => void
   onVideoDownloadDone: (listener: (event: import('@myyoda/shared').VideoDownloadDoneEvent) => void) => () => void
 
@@ -1549,6 +1550,7 @@ export interface ElectronAPI {
   cleanupStorage: (options: unknown) => Promise<unknown>
   /** 清理临时文件（快速） */
   cleanupTempStorage: () => Promise<unknown>
+  cleanupDiscoverStorage: () => Promise<unknown>
 
   // ===== 用量统计 =====
 
@@ -3204,6 +3206,10 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_STREAM_URL, remoteUrl)
   },
 
+  discoverDeleteVideoCache: (itemId, version) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.DELETE_VIDEO_CACHE, itemId, version)
+  },
+
   onVideoDownloadProgress: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: import('@myyoda/shared').VideoDownloadProgressEvent): void => {
       listener(payload)
@@ -3612,6 +3618,10 @@ const electronAPI: ElectronAPI = {
 
   cleanupTempStorage: () => {
     return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_TEMP)
+  },
+
+  cleanupDiscoverStorage: () => {
+    return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER)
   },
 
   // ===== 用量统计 =====

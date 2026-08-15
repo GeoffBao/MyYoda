@@ -21,6 +21,7 @@ import {
   getAgentWorkspacesIndexPath,
   getAttachmentsDir,
   getConversationsDir,
+  getDiscoverVideoCacheDir,
 } from './config-paths'
 import { listAgentSessions } from './agent-session-manager'
 import { listAgentWorkspaces } from './agent-workspace-manager'
@@ -36,6 +37,7 @@ export type StorageCategoryKey =
   | 'conversations'
   | 'attachments'
   | 'temp-files'
+  | 'discover-cache'
 
 export interface StorageCategory {
   label: string
@@ -472,6 +474,20 @@ async function calcTempFilesCategory(): Promise<StorageCategory> {
   }
 }
 
+/** 「发现」面板的视频缓存（仅统计视频文件，可随时清理，重新在线播放不受影响） */
+async function calcDiscoverCacheCategory(): Promise<StorageCategory> {
+  const { bytes, count } = await getDirSize(getDiscoverVideoCacheDir())
+  return {
+    label: '发现内容缓存（视频）',
+    key: 'discover-cache',
+    bytes,
+    count,
+    hasOrphans: false,
+    orphanBytes: 0, orphanCount: 0,
+    orphanItems: [], orphanItemsTruncated: false,
+  }
+}
+
 export async function calculateStorageStats(): Promise<StorageStats> {
   const categories = await Promise.all([
     calcAgentSessionsCategory(),
@@ -480,6 +496,7 @@ export async function calculateStorageStats(): Promise<StorageStats> {
     calcConversationsCategory(),
     calcAttachmentsCategory(),
     calcTempFilesCategory(),
+    calcDiscoverCacheCategory(),
   ])
   return {
     categories,
@@ -493,7 +510,6 @@ export async function calculateStorageStats(): Promise<StorageStats> {
 export async function cleanupTempFiles(): Promise<CleanupResult> {
   let freedBytes = 0, deletedCount = 0
   const errors: string[] = []
-
   const previewDir = join(tmpdir(), 'myyoda-preview')
   if (existsSync(previewDir)) {
     try {
@@ -522,6 +538,31 @@ export async function cleanupTempFiles(): Promise<CleanupResult> {
 
   if (freedBytes > 0) {
     console.log(`[存储清理] 临时文件: 释放 ${(freedBytes / 1024 / 1024).toFixed(1)} MB, 删除 ${deletedCount} 个文件`)
+  }
+  return { freedBytes, deletedCount, errors }
+}
+
+/** 清理「发现」面板的视频缓存（全部视频文件；重新在线播放不受影响，可重新下载） */
+export async function cleanupDiscoverCache(): Promise<CleanupResult> {
+  let freedBytes = 0, deletedCount = 0
+  const errors: string[] = []
+
+  const dir = getDiscoverVideoCacheDir()
+  if (existsSync(dir)) {
+    try {
+      const files = await fsPromises.readdir(dir)
+      for (const file of files) {
+        if (!file.endsWith('.mp4') && !file.endsWith('.mp4.part')) continue
+        const freed = safeUnlink(join(dir, file))
+        if (freed > 0) { freedBytes += freed; deletedCount++ }
+      }
+    } catch (e) {
+      errors.push(`清理发现内容缓存失败: ${e}`)
+    }
+  }
+
+  if (freedBytes > 0) {
+    console.log(`[存储清理] 发现内容缓存: 释放 ${(freedBytes / 1024 / 1024).toFixed(1)} MB, 删除 ${deletedCount} 个文件`)
   }
   return { freedBytes, deletedCount, errors }
 }

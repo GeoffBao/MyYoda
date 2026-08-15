@@ -142,4 +142,6 @@ export const DISCOVER_IPC_CHANNELS = {
   GET_VIDEO_URL: 'discover:get-video-url',
   /** 为远程视频注册 discover-video:// 流式播放 URL（主进程代理感知转发） */
   GET_VIDEO_STREAM_URL: 'discover:get-video-stream-url',
+  /** 删除某视频的本地缓存（按 itemId+version 构造路径，不接收任意路径） */
+  DELETE_VIDEO_CACHE: 'discover:delete-video-cache',
 } as const

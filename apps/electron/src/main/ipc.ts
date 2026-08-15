@@ -331,7 +331,7 @@ import { resolveAgentSessionFileRoots } from './lib/agent-file-roots'
 import { listSessionOutputs } from './lib/agent-output-capture'
 import { getAgentWorkspacePath } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
-import { calculateStorageStats, cleanupStorage, cleanupTempFiles } from './lib/storage-service'
+import { calculateStorageStats, cleanupStorage, cleanupTempFiles, cleanupDiscoverCache } from './lib/storage-service'
 import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
@@ -5270,6 +5270,12 @@ export function registerIpcHandlers(): void {
     return registerDiscoverVideoStream(remoteUrl)
   })
 
+  // 删除某视频的本地缓存（按 itemId+version 构造路径，不接收任意路径）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.DELETE_VIDEO_CACHE, async (_event, itemId: string, version: string) => {
+    const { deleteVideoCache } = await import('./lib/content-service')
+    deleteVideoCache(itemId, version)
+  })
+
   // ===== 飞书集成 =====
 
   // --- 旧 API（向后兼容，操作 bots[0]）---
@@ -5743,6 +5749,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_TEMP, async () => {
     return cleanupTempFiles()
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER, async () => {
+    return cleanupDiscoverCache()
   })
 
   // ===== 用量统计 =====

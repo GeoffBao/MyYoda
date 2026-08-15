@@ -9,7 +9,7 @@
  */
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
-import { CloudOff, Download, ExternalLink, FileText, Link2, Loader2, Megaphone, Play, RefreshCw, Video, WifiOff } from 'lucide-react'
+import { CloudOff, Download, ExternalLink, FileText, Link2, Loader2, Megaphone, Play, RefreshCw, Trash2, Video, WifiOff } from 'lucide-react'
 import type { DiscoverContentItem, DiscoverFeedItem, VideoDownloadState } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import { discoverFeedAtom, videoDownloadStatesAtom } from '@/atoms/discover-atoms'
@@ -329,7 +329,31 @@ export function FeaturedFeed(): React.ReactElement {
                       </span>
                     </div>
                   ) : videoState?.status === 'done' ? (
-                    <span className="text-[11px] text-foreground/40">已缓存到本地</span>
+                    <>
+                      <span className="text-[11px] text-foreground/40">已缓存到本地</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.electronAPI
+                            .discoverDeleteVideoCache(item.id, item.version)
+                            .then(() => {
+                              setVideoStates((prev) => {
+                                const next = new Map(prev)
+                                next.set(item.id, { itemId: item.id, status: 'not-downloaded', progress: 0 })
+                                return next
+                              })
+                            })
+                            .catch((err: unknown) => {
+                              console.warn('[DiscoverFeed] 删除视频缓存失败:', err)
+                            })
+                        }}
+                        title="删除本地缓存（在线播放不受影响）"
+                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] text-foreground/40 transition-colors hover:bg-accent hover:text-foreground/70"
+                      >
+                        <Trash2 size={11} />
+                        删除缓存
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"

@@ -122,6 +122,20 @@ export function StorageSettings(): React.ReactElement {
     }
   }
 
+  const handleCleanDiscover = async (): Promise<void> => {
+    setCleaningKey('discover-cache')
+    setLastResult(null)
+    try {
+      const result = await window.electronAPI.cleanupDiscoverStorage() as CleanupResult
+      setLastResult(result)
+      await loadStats()
+    } catch (e) {
+      console.error('[存储管理] 清理发现内容缓存失败:', e)
+    } finally {
+      setCleaningKey(null)
+    }
+  }
+
   const handleAutoCleanupTempChange = async (enabled: boolean): Promise<void> => {
     setAutoCleanupTemp(enabled)
     try {
@@ -187,6 +201,18 @@ export function StorageSettings(): React.ReactElement {
                   >
                     <Trash2 size={12} />
                     {cleaningKey === 'temp-files' ? '清理中...' : '清理'}
+                  </Button>
+                ) : cat.key === 'discover-cache' ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCleanDiscover}
+                    disabled={cleaningKey !== null || cat.bytes === 0}
+                    className="h-7 gap-1 text-xs"
+                    title="仅删除下载的视频缓存，在线播放不受影响"
+                  >
+                    <Trash2 size={12} />
+                    {cleaningKey === 'discover-cache' ? '清理中...' : '清理'}
                   </Button>
                 ) : null}
               </div>
