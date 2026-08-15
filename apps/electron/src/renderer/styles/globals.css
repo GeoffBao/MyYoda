@@ -1981,8 +1981,8 @@ html.theme-custom body {
   pointer-events: none;
 }
 
-/* 会话行 ⋯ 悬浮按钮：absolute 浮在行右侧，hover 才显示，不占布局宽度。
-   标题 truncate 自带 ellipsis 自然裁断，无需渐变遮罩。 */
+/* 会话行 ⋯ 悬浮按钮：在 flex 行内预留固定宽度，hover 才显示。
+   标题容器 flex-1 会自然绕开该区域，避免 hover 时盖住 3/3、工作区名等标签。 */
 .session-item-actions {
   padding-right: 2px;
 }

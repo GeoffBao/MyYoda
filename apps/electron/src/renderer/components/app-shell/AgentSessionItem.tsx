@@ -75,11 +75,6 @@ export function formatRelativeUpdatedAt(updatedAt: number, now: number): string 
 
 export interface SessionItemActionsProps {
   updatedAt: number
-  /**
-   * 行尾存在额外固定控件（如子会话展开/收起按钮）时，操作按钮需要向左让位，
-   * 避免 absolute right-0 的 hover 菜单覆盖行内按钮。
-   */
-  reserveTrailingControl?: boolean
   /** 当前会话是否已归档（决定归档按钮图标与文案） */
   archived?: boolean
   /** 悬停归档按钮回调；未传则不渲染归档按钮（保留原「仅三点菜单」形态） */
@@ -184,7 +179,6 @@ function SessionQuickSwitchKeycap(): React.ReactElement {
 
 export function SessionItemActions({
   updatedAt,
-  reserveTrailingControl = false,
   archived = false,
   onToggleArchive,
   menuItems,
@@ -247,10 +241,7 @@ export function SessionItemActions({
 
   return (
     <div
-      className={cn(
-        'session-item-actions pointer-events-none absolute top-1/2 z-[7] flex h-[22px] -translate-y-1/2 items-center gap-0.5',
-        reserveTrailingControl ? 'right-6' : 'right-0',
-      )}
+      className="session-item-actions pointer-events-none flex h-[22px] w-11 flex-shrink-0 items-center justify-end gap-0.5"
       onClick={(e) => e.stopPropagation()}
     >
       {/* 置顶/星标等低频操作继续收进「...」菜单；归档作为高频操作回归独立按钮
@@ -603,7 +594,7 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', STATUS_DOT_CLASS[indicatorStatus])}
           />
-          <div className={cn('flex-1 min-w-0', !childSummary?.onToggle && 'mr-12')}>
+          <div className="flex-1 min-w-0">
             {editing ? (
               <input
                 ref={inputRef}
@@ -658,6 +649,13 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
 
           {!editing && (
             <>
+              <SessionItemActions
+                updatedAt={session.updatedAt}
+                archived={!!session.archived}
+                onToggleArchive={() => onToggleArchive(session.id)}
+                onMenuOpenChange={setMenuOpen}
+                menuItems={menuItems}
+              />
               {childSummary?.onToggle && childSummary.expanded !== undefined && (
                 <SafeTooltip content={childSummary.expanded ? '收起子会话' : '展开子会话'} side="top">
                   <button
@@ -689,14 +687,6 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
                   </button>
                 </SafeTooltip>
               )}
-              <SessionItemActions
-                updatedAt={session.updatedAt}
-                reserveTrailingControl={!!childSummary?.onToggle}
-                archived={!!session.archived}
-                onToggleArchive={() => onToggleArchive(session.id)}
-                onMenuOpenChange={setMenuOpen}
-                menuItems={menuItems}
-              />
               <SessionQuickSwitchKeycap />
             </>
           )}

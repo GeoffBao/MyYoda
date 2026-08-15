@@ -4297,7 +4297,7 @@ const ConversationItem = React.memo(function ConversationItem({
               streaming ? 'bg-blue-500 animate-pulse' : 'border border-foreground/25 bg-transparent',
             )}
           />
-          <div className="flex-1 min-w-0 mr-12">
+          <div className="flex-1 min-w-0">
             {editing ? (
               <input
                 ref={inputRef}
