@@ -123,12 +123,7 @@
       "message": "错误 SDK 包名 Codex-agent-sdk，应改为 claude-agent-sdk"
     }
   ],
-  "sdkPlatformPackages": [
-    "@anthropic-ai/claude-agent-sdk-darwin-arm64",
-    "@anthropic-ai/claude-agent-sdk-darwin-x64",
-    "@anthropic-ai/claude-agent-sdk-win32-x64",
-    "@anthropic-ai/claude-agent-sdk-win32-arm64"
-  ],
+  "sdkPlatformPackages": [],
   "luxOnlySkills": [
     "myyoda-coach",
     "guizang-ppt-skill"
