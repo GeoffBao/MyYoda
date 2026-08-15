@@ -2997,6 +2997,12 @@ html.theme-custom body {
   .ProseMirror-gapcursor::after {
     animation-duration: 1.3s !important;
   }
+
+  /* 浏览器面板入场 / 预览滑出（Proma #1663）：reduce 下直接瞬切，不做过渡 */
+  .animate-browser-panel-in,
+  .animate-preview-slide-out {
+    animation-duration: 1ms !important;
+  }
 }
 
 /* ===== 终端运行指示器（synara 风格跳动点） ===== */
