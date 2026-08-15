@@ -360,6 +360,35 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 
 // ===== 动态 Per-Message 上下文 =====
 
+/** 合成 workspace 级项目上下文的输入（IO 由调用方准备好，本函数纯组装） */
+export interface SyntheticWorkspaceProjectContextInput {
+  workspaceName: string
+  /** 工作区绑定的本地工程目录（workspace.projectRootPath） */
+  projectRootPath: string
+  assetsPath: string
+  assets: { filename: string; mimeType: string; sizeBytes: number }[]
+  /** 指向工作区长期记忆 MEMORY.md（项目=工作区：项目记忆即工作区记忆） */
+  memoryPath: string
+}
+
+/**
+ * 合成 workspace 级项目上下文（F2：workspace 化后新会话无 projectId，
+ * 绑定工程目录的工作区用它恢复 <project_working_directory> 等标注）。
+ * 不注入记忆内容——工作区记忆由 buildSystemPrompt 说明路径、Agent 按需读取，
+ * 避免每条消息重复携带大块记忆内容。
+ */
+export function buildSyntheticWorkspaceProjectContext(
+  input: SyntheticWorkspaceProjectContextInput,
+): ProjectPromptContext {
+  return {
+    name: input.workspaceName,
+    workingDirectory: input.projectRootPath,
+    assetsPath: input.assetsPath,
+    assets: input.assets,
+    memoryPath: input.memoryPath,
+  }
+}
+
 /** buildDynamicContext 所需的上下文 */
 interface DynamicContext {
   workspaceName?: string
@@ -435,7 +464,14 @@ export function buildDynamicContext(ctx: DynamicContext): string {
   }
 
   if (ctx.projectContext) {
-    sections.push(formatProjectContextForPrompt(ctx.projectContext))
+    // 会话 cwd 与项目工作目录一致时（workspace=项目模式、project 模式）使用另一套措辞，
+    // 避免「会话 cwd 是会话隔离目录，不要在这里找代码」的误导（两个目录其实是同一个）。
+    const sessionCwdIsProjectDir = Boolean(
+      ctx.projectContext.workingDirectory
+      && ctx.agentCwd
+      && ctx.projectContext.workingDirectory.replace(/[\\/]+$/, '') === ctx.agentCwd.replace(/[\\/]+$/, ''),
+    )
+    sections.push(formatProjectContextForPrompt(ctx.projectContext, { sessionCwdIsProjectDir }))
   } else if (ctx.workspaceDefaultWorkingDirectory) {
     // 未绑定项目时的兜底：工作区配置了默认工作目录，告知 agent 真正的代码位置
     // （与 <working_directory> 不同——后者是会话隔离目录，不是用户工程代码所在地）

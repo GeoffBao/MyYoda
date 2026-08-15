@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildSystemPrompt } from './agent-prompt-builder'
+import { buildDynamicContext, buildSyntheticWorkspaceProjectContext, buildSystemPrompt } from './agent-prompt-builder'
 
 const BASE_CTX = {
   sessionId: 'test-session',
@@ -51,5 +51,65 @@ describe('图谱工具就绪条款（graphifyToolsReady，2026-08-14 B 方案）
   test('非 DeepSeek 模型：不注入（图谱条款是 DeepSeek 规范的一部分）', () => {
     const prompt = build({ currentModelId: 'claude-opus-4-8', optimizedCoding: true, graphifyToolsReady: true })
     expect(prompt).not.toContain('代码理解优先图谱')
+  })
+})
+
+describe('合成 workspace 项目上下文（F2：新会话无 projectId 时的 projectContext）', () => {
+  test('Given 工作区绑定工程目录 When 合成上下文 Then 携带名称/工作目录/资产/记忆路径且不含记忆内容', () => {
+    const ctx = buildSyntheticWorkspaceProjectContext({
+      workspaceName: 'MyRepo',
+      projectRootPath: '/Users/dev/MyRepo',
+      assetsPath: '/data/workspace-files/assets',
+      assets: [{ filename: 'spec.pdf', mimeType: 'application/pdf', sizeBytes: 1024 }],
+      memoryPath: '/data/memory/MEMORY.md',
+    })
+    expect(ctx).toEqual({
+      name: 'MyRepo',
+      workingDirectory: '/Users/dev/MyRepo',
+      assetsPath: '/data/workspace-files/assets',
+      assets: [{ filename: 'spec.pdf', mimeType: 'application/pdf', sizeBytes: 1024 }],
+      memoryPath: '/data/memory/MEMORY.md',
+    })
+  })
+
+  test('Given 合成上下文 When 构建动态上下文 Then 注入 project_context 与 project_working_directory', () => {
+    const ctx = buildSyntheticWorkspaceProjectContext({
+      workspaceName: 'MyRepo',
+      projectRootPath: '/Users/dev/MyRepo',
+      assetsPath: '/data/assets',
+      assets: [],
+      memoryPath: '/data/memory/MEMORY.md',
+    })
+    const dynamic = buildDynamicContext({
+      workspaceName: 'MyRepo',
+      workspaceSlug: 'myrepo',
+      agentCwd: '/Users/dev/MyRepo',
+      projectContext: ctx,
+    })
+    expect(dynamic).toContain('<project_context project="MyRepo">')
+    expect(dynamic).toContain('<project_working_directory>/Users/dev/MyRepo</project_working_directory>')
+    expect(dynamic).toContain('<project_memory_path>/data/memory/MEMORY.md</project_memory_path>')
+    // 合成上下文不注入记忆内容块（说明文字中的 `<project_memory>` 字样除外）
+    expect(dynamic).not.toContain('<project_memory>\n')
+    // cwd 与 workingDirectory 一致（workspace=项目模式）：不使用「会话隔离目录」误导文案
+    expect(dynamic).toContain('会话 cwd 即项目工程目录')
+    expect(dynamic).not.toContain('会话隔离目录')
+  })
+
+  test('Given 合成上下文 When 构建动态上下文 Then 不再注入 workspace_default_working_directory 兜底块', () => {
+    const ctx = buildSyntheticWorkspaceProjectContext({
+      workspaceName: 'MyRepo',
+      projectRootPath: '/Users/dev/MyRepo',
+      assetsPath: '/data/assets',
+      assets: [],
+      memoryPath: '/data/memory/MEMORY.md',
+    })
+    const dynamic = buildDynamicContext({
+      workspaceSlug: 'myrepo',
+      agentCwd: '/sandbox/session',
+      projectContext: ctx,
+      workspaceDefaultWorkingDirectory: '/Users/dev/MyRepo',
+    })
+    expect(dynamic).not.toContain('<workspace_default_working_directory>')
   })
 })

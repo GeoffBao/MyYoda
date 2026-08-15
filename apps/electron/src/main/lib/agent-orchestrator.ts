@@ -25,6 +25,7 @@ import { MYYODA_DEFAULT_PERMISSION_MODE, MYYODA_PERMISSION_MODE_CONFIG, PROVIDER
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getMainRepoRoot } from './git-diff-service'
+import { getWorkspaceAssetsDir, listWorkspaceAssetsForPrompt } from './workspace-assets'
 import { normalizePathForCompare } from '@myyoda/shared'
 import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
@@ -49,7 +50,7 @@ import { appendVisionRelayAllowedRoot } from './vision-relay-roots'
 import { resolveAgentSessionFileRoots } from './agent-file-roots'
 import { captureAgentTurnOutputs, buildOutputCaptureRoots, snapshotOutputFiles } from './agent-output-capture'
 import { getRuntimeStatus } from './runtime-init'
-import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
+import { buildSystemPrompt, buildDynamicContext, buildSyntheticWorkspaceProjectContext } from './agent-prompt-builder'
 import { repoMapService } from './repo-map/repo-map-service'
 import { graphJsonPath, repoMapToolsService } from './repo-map-tools-service'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
@@ -1333,7 +1334,20 @@ export class AgentOrchestrator {
       }
 
       // 11. 构建动态上下文和最终 prompt
+      // 存量 projectId 会话优先走 craft Project 上下文（含项目资产/记忆内容）。
       let projectContext = sessionMeta?.projectId && workspaceSlug ? projectRepository.buildPromptContext(getAgentWorkspacePath(workspaceSlug), sessionMeta.projectId) : null
+      // F2（workspace 化修复）：新会话不再有 projectId，但工作区绑定工程目录时，合成等价项目上下文，
+      // 恢复 <project_working_directory> 标注与资产/记忆路径指引（项目=工作区：记忆指向工作区长期记忆目录，
+      // 与 buildSystemPrompt 的 workspace memory 规则一致；记忆内容不重复注入，由 Agent 按需读取）。
+      if (!projectContext && workspaceSlug && workspace?.projectRootPath) {
+        projectContext = buildSyntheticWorkspaceProjectContext({
+          workspaceName: workspace.name,
+          projectRootPath: workspace.projectRootPath,
+          assetsPath: getWorkspaceAssetsDir(workspaceSlug),
+          assets: listWorkspaceAssetsForPrompt(workspaceSlug),
+          memoryPath: join(getWorkspaceAutoMemoryDir(workspaceSlug), 'MEMORY.md'),
+        })
+      }
       // worktree 绑定会话：project 静态 workingDirectory 与实际 cwd 不一致，覆写为 worktree 路径，
       // 避免 <project_working_directory> 与 <working_directory> 互相矛盾，误导 Agent 去主仓库目录操作
       projectContext = applyWorktreeProjectContextOverride(projectContext, agentCwdSource, agentCwd)
@@ -1355,8 +1369,10 @@ export class AgentOrchestrator {
       // 会话级去重：注入动作按「首次 + map 内容变化」执行（SWR 检查仍由纯读每轮触发）。
       const optimizedCodingEnabled = resolveOptimizedCodingEnabled(appSettings)
       const repoMapToolsEnabled = appSettings.repoMapTools === true
+      // F1（workspace 化修复）：repo_map 注入不再依赖 projectContext（新会话无 projectId，projectContext 会为 null 导致
+      // 图谱永远不注入）。getRepoMapForPromptReadOnly 本身纯读、非 git 目录/无缓存时返回 undefined，直接解耦即可。
       let repoMapBlock: string | undefined
-      if (projectContext && agentCwd && repoMapToolsEnabled) {
+      if (agentCwd && repoMapToolsEnabled) {
         repoMapBlock = repoMapService.getRepoMapForPromptReadOnly(agentCwd)
       }
       // 会话级去重：map 内容与上次注入相同 → 跳过拼接（省 token）
@@ -1728,7 +1744,9 @@ export class AgentOrchestrator {
       // 避免“条款注入但 MCP 工具不存在”的错位（isGraphifyMcpAvailable 10min 缓存，无额外 spawn 开销）。
       // resolveMainRepoRootCached 有 5min 缓存，与下方 Graphify 引导块共用同一解析，无额外 git 开销。
       let graphifyToolsReady = false
-      if (projectContext && agentCwd && repoMapToolsEnabled) {
+      // F1（workspace 化修复）：编码规范图谱强约束条件同样不再依赖 projectContext，
+      // 与 repo_map 注入保持一致（新会话也能享受图谱优先约束）。
+      if (agentCwd && repoMapToolsEnabled) {
         const graphifyMainRepo = await resolveMainRepoRootCached(agentCwd)
         if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && repoMapToolsService.isGraphifyMcpAvailable()) {
           graphifyToolsReady = true
@@ -1764,7 +1782,9 @@ ${workContext}`
       //   删与 DeepSeek 编码规范重复的"改代码前先查影响面"独立条目，合并入首句）
       // - 无图：注入建图轻提示（指引对话栏按钮，不自动建图——"仅主动"原则）；
       //   会话中建图后自动升级为命令模板（prev === 'hint' 时重新注入）
-      if (projectContext && agentCwd && repoMapToolsEnabled) {
+      // F1（workspace 化修复）：不依赖 projectContext（新会话无 projectId），内部按主仓库解析
+      // 与图谱文件存在性自行兜底（非 git 目录/无图时分别注入提示或不注入）。
+      if (agentCwd && repoMapToolsEnabled) {
         const prevGraphify = this.injectedGraphifyBySession.get(sessionId)
         if (!prevGraphify || prevGraphify === 'hint') {
           const mainRepo = await resolveMainRepoRootCached(agentCwd)
