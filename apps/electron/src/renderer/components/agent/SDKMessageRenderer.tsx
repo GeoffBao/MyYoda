@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, FolderInput, FolderPlus, ListTodo } from 'lucide-react'
+import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
@@ -55,17 +55,16 @@ import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/chat-atoms'
-import { agentSessionPendingFilesAtom, agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
+import { agentSessionPendingFilesAtom } from '@/atoms/agent-atoms'
+import { agentSessionsAtom } from '@/atoms/agent-atoms'
 import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { automationsAtom, automationFormAtom, automationToDraft } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
-import { planningTabAtom } from '@/atoms/planning-atoms'
 import { environmentCheckDialogOpenAtom } from '@/atoms/environment'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
 import { useOpenPreview } from '@/components/diff/preview-opener'
 import { getFileParentPath } from '@/lib/file-utils'
-import { parseQuotedSelectionRefs, replaceAgentHistoryQuoteMentionsWithLabels } from '@/lib/quoted-selection'
-import type { QuotedSelection } from '@/atoms/preview-atoms'
+import { parseQuotedSelectionRefs } from '@/lib/quoted-selection'
 import type { ParsedQuotedSelectionRef } from '@/lib/quoted-selection'
 import type {
   SDKMessage,
@@ -82,6 +81,7 @@ import type {
 import type { AgentPendingFile } from '@myyoda/shared'
 import {
   getSDKCompactStatus,
+  inferAgentSdkContextWindow,
   inferContextWindow,
   THINKING_SIGNATURE_ERROR_CODE,
   THINKING_SIGNATURE_ERROR_TITLE,
@@ -133,7 +133,7 @@ function PermissionDeniedNotice({ message }: { message: SDKSystemMessage }): Rea
   const reason = typeof message.decision_reason === 'string' ? message.decision_reason : undefined
 
   return (
-    <div className="my-3 pl-[46px] pr-1">
+    <div className="my-3 pl-[40px] pr-1">
       <div className="flex items-start gap-2.5 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-foreground/80">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
         <div className="min-w-0 space-y-1">
@@ -157,12 +157,26 @@ function PermissionDeniedNotice({ message }: { message: SDKSystemMessage }): Rea
   )
 }
 
-// ===== system 消息：压缩历史状态 =====
+// ===== system 消息：正在压缩指示器（与 CompactBoundaryDivider 同款横线样式，pill 内带 spinner） =====
 
-function CompactStatusNotice({ message }: { message: SDKSystemMessage }): React.ReactElement | null {
+export function CompactingIndicator(): React.ReactElement {
+  return (
+    <div className="flex items-center gap-3 my-4 px-1">
+      <div className="flex-1 h-px bg-border/40" />
+      <span className="shrink-0 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/70 px-2 py-0.5 rounded-full border border-border/30 bg-muted/20">
+        <Loader2 className="size-3 animate-spin" />
+        正在压缩...
+      </span>
+      <div className="flex-1 h-px bg-border/40" />
+    </div>
+  )
+}
+
+function CompactStatusNotice({ message, active = false }: { message: SDKSystemMessage; active?: boolean }): React.ReactElement | null {
   const compactStatus = getSDKCompactStatus(message)
   if (compactStatus === 'success') return <CompactBoundaryDivider />
   if (compactStatus === 'compacting') {
+    if (active) return <CompactingIndicator />
     return (
       <div className="flex items-center gap-3 my-4 px-1">
         <div className="flex-1 h-px bg-border/40" />
@@ -187,7 +201,7 @@ function CompactStatusNotice({ message }: { message: SDKSystemMessage }): React.
   if (compactStatus === 'failed') {
     const error = typeof message.compact_error === 'string' ? message.compact_error : undefined
     return (
-      <div className="my-3 pl-[46px] pr-1">
+      <div className="my-3 pl-[40px] pr-1">
         <div className="flex items-start gap-2.5 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-foreground/80">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
           <div className="min-w-0 space-y-1">
@@ -202,7 +216,6 @@ function CompactStatusNotice({ message }: { message: SDKSystemMessage }): React.
 }
 
 // extractMeta / MessageMeta 已迁移至 @myyoda/session-core
-
 /** 从 turn 消息列表中提取 result 消息的耗时和用量数据 */
 function extractTurnUsage(turnMessages: SDKMessage[]): { durationMs?: number; usage?: AgentEventUsage } {
   for (const msg of turnMessages) {
@@ -217,14 +230,18 @@ function extractTurnUsage(turnMessages: SDKMessage[]): { durationMs?: number; us
     if (resultMsg.modelUsage) {
       for (const [modelId, info] of Object.entries(resultMsg.modelUsage)) {
         const fallbackModelId = resultMsg._channelModelId ?? modelId
-        const fallbackWindow = inferContextWindow(fallbackModelId)
+        const fallbackWindow = resultMsg._channelProvider
+          ? inferAgentSdkContextWindow(fallbackModelId, resultMsg._channelProvider)
+          : inferContextWindow(fallbackModelId)
         const candidate = Math.max(info?.contextWindow ?? 0, fallbackWindow ?? 0) || undefined
         if (candidate && (contextWindow === undefined || candidate > contextWindow)) {
           contextWindow = candidate
         }
       }
     } else {
-      contextWindow = inferContextWindow(resultMsg._channelModelId)
+      contextWindow = resultMsg._channelProvider
+        ? inferAgentSdkContextWindow(resultMsg._channelModelId, resultMsg._channelProvider)
+        : inferContextWindow(resultMsg._channelModelId)
     }
     return {
       durationMs,
@@ -273,13 +290,13 @@ function AssistantLogo({ model, channelId }: { model?: string; channelId?: strin
       <img
         src={getModelLogo(model, resolveModelProvider(model, channels, channelId))}
         alt={model}
-        className="size-[35px] rounded-[25%] object-cover"
+        className="size-[30px] rounded-[9px] object-cover"
       />
     )
   }
   return (
-    <div className="size-[35px] rounded-[25%] bg-primary/10 flex items-center justify-center">
-      <Bot size={18} className="text-primary" />
+    <div className="flex size-[30px] items-center justify-center rounded-[9px] bg-primary/10">
+      <Bot size={16} className="text-primary" />
     </div>
   )
 }
@@ -366,6 +383,8 @@ export function buildTaskProgressDataForTurn(turn: AssistantTurn): { taskActivit
 }
 
 
+// ===== AssistantTurnRenderer — 渲染一个完整的 assistant turn =====
+
 export interface AssistantTurnRendererProps {
   turn: AssistantTurn
   /** 所有消息（全局，供工具结果查找跨 turn 的结果） */
@@ -375,16 +394,12 @@ export interface AssistantTurnRendererProps {
   onFork?: (upToMessageUuid: string) => void
   /** 回退回调（传入 assistant message uuid） */
   onRewind?: (assistantMessageUuid: string) => void
-  /** 将本轮回复标记为 Todo */
-  onCreateTodo?: (text: string) => void
   /** 错误重试回调（传入本轮开始前应删除的错误 UUID） */
   onRetry?: (errorUuid?: string) => void
   /** 在新会话中重试回调（仅当 turn 含错误消息时使用） */
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
   /** 是否正在流式输出中（隐藏操作栏） */
   isStreaming?: boolean
   /** 是否被用户中断 */
@@ -393,7 +408,7 @@ export interface AssistantTurnRendererProps {
   sessionModelId?: string
 }
 
-export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
+export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
   const channels = useAtomValue(channelsAtom)
   // 收集所有 assistant 消息的内容块，保留 parent_tool_use_id 关联
   interface EnrichedBlock {
@@ -459,8 +474,15 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
     }
   }
 
+  // 过滤仅用于进度追踪的工具块（TaskCreate/TaskUpdate），它们不影响内容分组逻辑。
+  // 否则这些块若位于数组末尾（正文之后），会单独形成一个只有它自己的过程组，
+  // 在最终答案下方冒出一条孤零零的「执行过程：1 次工具调用」。
+  const contentBlocks = topLevelBlocks.filter(
+    (b) => !(b.type === 'tool_use' && TASK_TOOL_NAMES.has((b as SDKToolUseBlock).name))
+  )
+
   // 检测是否有主要内容（text 块），用于决定 tool/thinking 是否 dimmed
-  const hasTextContent = topLevelBlocks.some(
+  const hasTextContent = contentBlocks.some(
     (b) => b.type === 'text' && 'text' in b && !!(b as { text: string }).text
   )
 
@@ -468,11 +490,11 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
     return buildCompletedToolResultIds(turn.turnMessages)
   }, [turn.turnMessages])
   const renderItems = React.useMemo(() => {
-    return buildAssistantTurnRenderItems(topLevelBlocks, {
+    return buildAssistantTurnRenderItems(contentBlocks, {
       isStreaming,
       completedToolResultIds,
     })
-  }, [topLevelBlocks, isStreaming, completedToolResultIds])
+  }, [contentBlocks, isStreaming, completedToolResultIds])
 
   // 本轮「文件名 → 绝对路径」映射：与 footer chips 同源，供正文内联文件引用补全裸文件名
   const turnFileMap = React.useMemo(
@@ -497,8 +519,6 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
         onRetry={onRetry}
         onRetryInNewSession={onRetryInNewSession}
         onCompact={onCompact}
-        onRelinkProjectRoot={onRelinkProjectRoot}
-        onRestoreProjectRoot={onRestoreProjectRoot}
       />
     )
   }
@@ -572,8 +592,6 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
             onRetry={onRetry}
             onRetryInNewSession={onRetryInNewSession}
             onCompact={onCompact}
-            onRelinkProjectRoot={onRelinkProjectRoot}
-            onRestoreProjectRoot={onRestoreProjectRoot}
           />
         )}
         </TurnFileMapProvider>
@@ -605,14 +623,9 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
         const hasDuration = durationMs != null
         if (!hasDuration && !hasActions && !showStoppedBadge) return null
         return (
-          <MessageActions className="pl-[46px] mt-0.5 min-h-[28px] justify-start">
+          <MessageActions className="mt-0.5 min-h-[28px] justify-start">
             {hasDuration && <DurationBadge durationMs={durationMs!} usage={usage} />}
             {textContent && <CopyButton content={textContent} />}
-            {textContent && onCreateTodo && (
-              <MessageAction tooltip="标记为 Todo" onClick={() => onCreateTodo(textContent)}>
-                <ListTodo className="size-3.5" />
-              </MessageAction>
-            )}
             {onFork && lastUuid && (
               <MessageAction tooltip="按当前模型从此处分叉" onClick={() => onFork(lastUuid)}>
                 <Split className="size-3.5" />
@@ -756,11 +769,8 @@ export interface AttachedFileRef {
 export type QuotedFileRef = ParsedQuotedSelectionRef
 
 /** 解析消息中的 <attached_files>、<quoted_file> 和 <quoted_context> 块，返回文件列表、引用列表和剩余文本 */
-export function parseAttachedFiles(
-  content: string,
-  options: { inlineAgentHistoryQuotes?: boolean } = {},
-): { files: AttachedFileRef[]; quotes: QuotedFileRef[]; text: string } {
-  const parsedQuotes = parseQuotedSelectionRefs(content, options)
+export function parseAttachedFiles(content: string): { files: AttachedFileRef[]; quotes: QuotedFileRef[]; text: string } {
+  const parsedQuotes = parseQuotedSelectionRefs(content)
   const quotes: QuotedFileRef[] = parsedQuotes.quotes
 
   const regex = /<attached_files>\n?([\s\S]*?)\n?<\/attached_files>\n*/
@@ -880,7 +890,6 @@ function AttachedFileChip({ file }: { file: AttachedFileRef }): React.ReactEleme
   )
 }
 
-
 /** 引用文件 Chip（显示在用户消息中，表示该消息引用了某个文件的选中内容） */
 function QuoteChip({ quote }: { quote: QuotedFileRef }): React.ReactElement {
   const label = quote.label ?? quote.filename
@@ -895,7 +904,7 @@ function QuoteChip({ quote }: { quote: QuotedFileRef }): React.ReactElement {
 // ===== 用户输入消息渲染 =====
 
 
-const SCHEDULED_RUN_MARKER = '<!--PROMA_SCHEDULED_RUN-->'
+const SCHEDULED_RUN_MARKER = '<!--MYYODA_SCHEDULED_RUN-->'
 
 // stripScheduledRunMarker 已迁移至 @myyoda/session-core（本文件从该包 import 使用）
 
@@ -905,7 +914,6 @@ function ScheduledRunBadge(): React.ReactElement {
   const automations = useAtomValue(automationsAtom)
   const setForm = useSetAtom(automationFormAtom)
   const setActiveView = useSetAtom(activeViewAtom)
-  const setPlanningTab = useSetAtom(planningTabAtom)
 
   const session = sessions.find((s) => s.id === activeSessionId)
   const automation = session?.sourceAutomationId && !session.sourceDelegationId
@@ -915,7 +923,6 @@ function ScheduledRunBadge(): React.ReactElement {
   const handleClick = (): void => {
     if (!automation) return
     setActiveView('planning')
-    setPlanningTab('automations')
     setForm({
       open: true,
       draft: automationToDraft(automation),
@@ -927,25 +934,19 @@ function ScheduledRunBadge(): React.ReactElement {
       type="button"
       onClick={handleClick}
       className="inline-flex items-center gap-1 text-[10px] text-primary/70 hover:text-primary transition-colors"
-      title="来自 Proma 定时任务，点击查看设置"
+      title="来自 MyYoda 定时任务，点击查看设置"
     >
       <Clock className="size-3" />
-      <span>来自 Proma 定时任务</span>
+      <span>来自 MyYoda 定时任务</span>
     </button>
   )
 }
 
-function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
-  message: SDKUserMessage
-  onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-}): React.ReactElement {
+function UserInputMessage({ message }: { message: SDKUserMessage }): React.ReactElement {
   const userProfile = useAtomValue(userProfileAtom)
   const rawText = extractUserText(message) ?? ''
   const isScheduledRun = rawText.includes(SCHEDULED_RUN_MARKER)
-  const { files: attachedFiles, quotes, text } = parseAttachedFiles(
-    stripScheduledRunMarker(rawText),
-    { inlineAgentHistoryQuotes: true },
-  )
+  const { files: attachedFiles, quotes, text } = parseAttachedFiles(stripScheduledRunMarker(rawText))
   const imageFiles = attachedFiles.filter((f) => isImageFile(f.filename))
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   const setSessionPendingFiles = useSetAtom(agentSessionPendingFilesAtom)
@@ -1006,10 +1007,10 @@ function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
 
   return (
     <Message from="user">
-      <div className="flex items-start gap-2.5 mb-2.5">
-        <UserAvatar avatar={userProfile.avatar} size={35} />
-        <div className="flex flex-col justify-between h-[35px]">
-          <span className="text-sm font-semibold text-foreground/60 leading-none">{userProfile.userName}</span>
+      <div className="mb-2 flex flex-row-reverse items-start gap-2.5">
+        <UserAvatar avatar={userProfile.avatar} size={30} />
+        <div className="flex h-[30px] flex-col items-end justify-between py-px">
+          <span className="text-[13px] font-medium text-foreground/65 leading-none">{userProfile.userName}</span>
           {(meta.createdAt || isScheduledRun) && (
             <span className="flex items-center gap-2 leading-none">
               {meta.createdAt && (
@@ -1024,13 +1025,11 @@ function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
       </div>
       <MessageContent>
         {/* 引用文件 Chip */}
-        {quotes.filter((quote) => quote.sourceType !== 'agent-history').length > 0 && (
+        {quotes.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {quotes
-              .filter((quote) => quote.sourceType !== 'agent-history')
-              .map((q, i) => (
-                <QuoteChip key={`${q.path}:${i}`} quote={q} />
-              ))}
+            {quotes.map((q, i) => (
+              <QuoteChip key={`${q.path}:${i}`} quote={q} />
+            ))}
           </div>
         )}
         {/* 图片缩略图 */}
@@ -1055,11 +1054,7 @@ function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
             ))}
           </div>
         )}
-        {text && (
-          <UserMessageContent onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}>
-            {text}
-          </UserMessageContent>
-        )}
+        {text && <UserMessageContent>{text}</UserMessageContent>}
       </MessageContent>
       {/* 共享大图预览 — 单图时无翻页，行为同以前 */}
       {imageFiles.length > 0 && (
@@ -1072,8 +1067,8 @@ function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
         />
       )}
       {text && (
-        <MessageActions className="pl-[46px] mt-0.5">
-          <CopyButton content={replaceAgentHistoryQuoteMentionsWithLabels(text)} />
+        <MessageActions className="mt-0.5">
+          <CopyButton content={text} />
         </MessageActions>
       )}
     </Message>
@@ -1081,10 +1076,6 @@ function UserInputMessage({ message, onAgentHistoryQuoteClick }: {
 }
 
 // ===== 错误消息渲染 =====
-
-function shouldOfferProjectRootRestore(projectRootStatus: string | undefined): boolean {
-  return projectRootStatus === 'missing'
-}
 
 interface ErrorMessageProps {
   message: SDKAssistantMessage
@@ -1094,8 +1085,6 @@ interface ErrorMessageProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
 }
 
 interface AssistantErrorTailProps {
@@ -1106,8 +1095,6 @@ interface AssistantErrorTailProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
   /**
    * 以「独立错误消息」形式渲染：正文用红色 MessageResponse 展示（用于 ErrorMessage 主体）。
    *
@@ -1131,8 +1118,6 @@ export function AssistantErrorTail({
   onRetry,
   onRetryInNewSession,
   onCompact,
-  onRelinkProjectRoot,
-  onRestoreProjectRoot,
   standalone = false,
 }: AssistantErrorTailProps): React.ReactElement | null {
   const errorText = message.error?.message ?? '未知错误'
@@ -1147,13 +1132,6 @@ export function AssistantErrorTail({
     ? (msgAny._errorActions as RecoveryAction[])
     : undefined
   const isPromptTooLong = errorCode === 'prompt_too_long'
-  const isLocalProjectRootUnavailable = errorCode === 'local_project_root_unavailable'
-  const activeSessionId = useAtomValue(activeSessionIdAtom)
-  const sessions = useAtomValue(agentSessionsAtom)
-  const workspaces = useAtomValue(agentWorkspacesAtom)
-  const activeWorkspaceId = sessions.find((session) => session.id === activeSessionId)?.workspaceId
-  const projectRootStatus = workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.projectRootStatus
-  const canRestoreProjectRoot = shouldOfferProjectRootRestore(projectRootStatus)
 
   const setEnvDialogOpen = useSetAtom(environmentCheckDialogOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
@@ -1161,8 +1139,8 @@ export function AssistantErrorTail({
   const setModelSelectorOpen = useSetAtom(modelSelectorOpenAtom)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
 
-  // Error presentation always uses error.message. Assistant content is not error detail:
-  // Pi may have generated it before a stream failure.
+  // 错误展示统一只用 error.message：assistant content 不是错误详情，
+  // Pi 可能在流失败前已经生成了这段文本。
   const bodyText = errorText
   const isThinkingSignature = errorCode === THINKING_SIGNATURE_ERROR_CODE ||
     isThinkingSignatureError(bodyText, errorText)
@@ -1233,10 +1211,7 @@ export function AssistantErrorTail({
 
   const hasStructuredActions = displayedErrorActions.length > 0
   const hasLegacyActions = !!(onRetry || onRetryInNewSession || (isPromptTooLong && onCompact))
-  const hasProjectRootActions = isLocalProjectRootUnavailable && !!(
-    onRelinkProjectRoot || (canRestoreProjectRoot && onRestoreProjectRoot)
-  )
-  const hasActions = hasStructuredActions || hasLegacyActions || hasProjectRootActions
+  const hasActions = hasStructuredActions || hasLegacyActions
 
   // tail 模式：给出上边距 + 顶部细边分隔线，让它视觉上是「正文之后的一段警告」而不是「消息本身」
   const rootClass = standalone
@@ -1282,22 +1257,6 @@ export function AssistantErrorTail({
       )}
       {hasActions && (
         <div className="flex items-center flex-wrap gap-2 mt-3">
-          {hasProjectRootActions && (
-            <>
-              {onRelinkProjectRoot && (
-                <Button size="sm" onClick={onRelinkProjectRoot}>
-                  <FolderInput className="size-3.5 mr-1.5" />
-                  重新选择文件夹
-                </Button>
-              )}
-              {canRestoreProjectRoot && onRestoreProjectRoot && (
-                <Button size="sm" variant="outline" onClick={onRestoreProjectRoot}>
-                  <FolderPlus className="size-3.5 mr-1.5" />
-                  在原路径新建空文件夹
-                </Button>
-              )}
-            </>
-          )}
           {hasStructuredActions &&
             displayedErrorActions.map((a, i) => (
               <Button
@@ -1349,11 +1308,12 @@ export function AssistantErrorTail({
   )
 }
 
-function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot }: ErrorMessageProps): React.ReactElement {
+function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact }: ErrorMessageProps): React.ReactElement {
   const meta = extractMeta(message as unknown as SDKMessage)
 
-  // Do not copy assistant content carried by an error record.
-  const copyText = message.error?.message ?? 'Unknown error'
+  // 复用 AssistantErrorTail 的正文/详情/按钮逻辑，只在这里补上「独立错误消息」的 Message 外壳。
+  // 不复制错误记录携带的 assistant content。
+  const copyText = message.error?.message ?? '未知错误'
 
   return (
     <Message from="assistant">
@@ -1361,8 +1321,8 @@ function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact, onReli
         model={undefined}
         time={meta.createdAt ? formatMessageTime(meta.createdAt) : undefined}
         logo={
-          <div className="size-[35px] rounded-[25%] bg-destructive/10 flex items-center justify-center">
-            <AlertTriangle size={18} className="text-destructive" />
+          <div className="flex size-[30px] items-center justify-center rounded-[9px] bg-destructive/10">
+            <AlertTriangle size={16} className="text-destructive" />
           </div>
         }
       />
@@ -1372,12 +1332,10 @@ function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact, onReli
           onRetry={onRetry}
           onRetryInNewSession={onRetryInNewSession}
           onCompact={onCompact}
-          onRelinkProjectRoot={onRelinkProjectRoot}
-          onRestoreProjectRoot={onRestoreProjectRoot}
           standalone
         />
       </MessageContent>
-      <MessageActions className="pl-[46px] mt-0.5">
+      <MessageActions className="mt-0.5">
         <CopyButton content={copyText} />
       </MessageActions>
     </Message>
@@ -1394,18 +1352,12 @@ export interface MessageGroupRendererProps {
   basePath?: string
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
-  /** 已发送的 Agent 历史引用 chip 请求定位时的精确范围。 */
-  onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-  /** 将 assistant 回复标记为 Todo */
-  onCreateTodo?: (text: string) => void
   /** 错误重试回调（传入本轮开始前应删除的错误 UUID） */
   onRetry?: (errorUuid?: string) => void
   /** 在新会话中重试回调（仅当 turn 含错误消息时使用） */
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
   /** 当前历史轮次；直接写入消息 DOM，避免划选时回扫整段历史。 */
   historyTurn?: number
   /** 是否正在流式输出中（隐藏操作栏） */
@@ -1430,7 +1382,7 @@ let fallbackIdCounter = 0
 export function getGroupId(group: MessageGroup): string {
   if (group.type === 'user') {
     if (group.message.uuid) return group.message.uuid
-    const stableKey = (group.message as unknown as Record<string, unknown>)._promaStableKey
+    const stableKey = (group.message as unknown as Record<string, unknown>)._myyodaStableKey
     if (typeof stableKey === 'string') return stableKey
     // 没有 uuid：使用基于 message 对象引用的缓存 ID（message 引用在重渲染间稳定）
     if (!messageIdCache.has(group.message)) {
@@ -1447,7 +1399,7 @@ export function getGroupId(group: MessageGroup): string {
   // assistant-turn：取首条 assistant 消息的 uuid
   const first = group.assistantMessages[0]
   if (first?.uuid) return first.uuid
-  const stableKey = first ? (first as unknown as Record<string, unknown>)._promaStableKey : undefined
+  const stableKey = first ? (first as unknown as Record<string, unknown>)._myyodaStableKey : undefined
   if (typeof stableKey === 'string') return stableKey
   // 没有 uuid：使用基于首条 assistant message 对象引用的缓存 ID
   if (first) {
@@ -1462,13 +1414,13 @@ export function getGroupId(group: MessageGroup): string {
 
 // getGroupPreview 已迁移至 @myyoda/session-core（本文件从该包 import 并 re-export）
 
-export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onAgentHistoryQuoteClick, onCreateTodo, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, historyTurn, isStreaming, stoppedByUser, sessionModelId }: MessageGroupRendererProps): React.ReactElement | null {
+export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, historyTurn, isStreaming, stoppedByUser, sessionModelId }: MessageGroupRendererProps): React.ReactElement | null {
   const groupId = getGroupId(group)
 
   if (group.type === 'user') {
     return (
       <div data-message-id={groupId} data-message-role="user" data-message-turn={historyTurn}>
-        <UserInputMessage message={group.message} onAgentHistoryQuoteClick={onAgentHistoryQuoteClick} />
+        <UserInputMessage message={group.message} />
       </div>
     )
   }
@@ -1481,7 +1433,7 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
       'data-message-role': 'system',
       'data-message-turn': historyTurn,
     }
-    if (getSDKCompactStatus(group.message)) return <div {...historySelectionAttributes}><CompactStatusNotice message={group.message} /></div>
+    if (getSDKCompactStatus(group.message)) return <div {...historySelectionAttributes}><CompactStatusNotice message={group.message} active={isStreaming} /></div>
     if (subtype === 'permission_denied') return <div {...historySelectionAttributes}><PermissionDeniedNotice message={group.message} /></div>
     return null
   }
@@ -1500,12 +1452,9 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
         basePath={basePath}
         onFork={onFork}
         onRewind={onRewind}
-        onCreateTodo={onCreateTodo}
         onRetry={onRetry}
         onRetryInNewSession={onRetryInNewSession}
         onCompact={onCompact}
-        onRelinkProjectRoot={onRelinkProjectRoot}
-        onRestoreProjectRoot={onRestoreProjectRoot}
         isStreaming={isStreaming}
         stoppedByUser={stoppedByUser}
         sessionModelId={sessionModelId}
@@ -1514,16 +1463,13 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
   )
 }, (previous, next) => (
   previous.group === next.group
+  && previous.allMessages === next.allMessages
   && previous.basePath === next.basePath
   && previous.onFork === next.onFork
   && previous.onRewind === next.onRewind
-  && previous.onAgentHistoryQuoteClick === next.onAgentHistoryQuoteClick
-  && previous.onCreateTodo === next.onCreateTodo
   && previous.onRetry === next.onRetry
   && previous.onRetryInNewSession === next.onRetryInNewSession
   && previous.onCompact === next.onCompact
-  && previous.onRelinkProjectRoot === next.onRelinkProjectRoot
-  && previous.onRestoreProjectRoot === next.onRestoreProjectRoot
   && previous.historyTurn === next.historyTurn
   && previous.isStreaming === next.isStreaming
   && previous.stoppedByUser === next.stoppedByUser

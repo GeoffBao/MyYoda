@@ -2914,17 +2914,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       kind: 'status',
       node: (
         <ContextUsageBadge
-<<<<<<< HEAD
-          inputTokens={contextStatus.inputTokens}
-          outputTokens={contextStatus.outputTokens}
-          cacheReadTokens={contextStatus.cacheReadTokens}
-          cacheCreationTokens={contextStatus.cacheCreationTokens}
-          contextWindow={contextStatus.contextWindow}
-          isEstimated={contextStatus.contextUsageIsEstimated === true}
           isPiRuntime={sessionAgentRuntime === 'pi'}
-          isCompacting={contextStatus.isCompacting}
-=======
->>>>>>> fb62fbf1 (perf(agent): isolate usage updates from input rendering (#1660))
           isProcessing={streaming}
           sessionId={sessionId}
           channelId={planQuotaChannelId}
@@ -2947,18 +2937,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     sessionAgentRuntime,
     backgroundWaiting,
     sessionId,
-<<<<<<< HEAD
-    contextStatus.inputTokens,
-    contextStatus.outputTokens,
-    contextStatus.cacheReadTokens,
-    contextStatus.cacheCreationTokens,
-    contextStatus.contextWindow,
-    contextStatus.contextUsageIsEstimated,
-    contextStatus.isCompacting,
-=======
-    agentThinking,
-    setAgentThinking,
->>>>>>> fb62fbf1 (perf(agent): isolate usage updates from input rendering (#1660))
     streaming,
     handleAttachContent,
     handleCompact,

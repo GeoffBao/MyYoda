@@ -1,4 +1,4 @@
-import type { SDKMessage } from '@proma/shared'
+import type { SDKMessage } from '@myyoda/shared'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 import {
   buildAgentHistoryQuoteLabel,
