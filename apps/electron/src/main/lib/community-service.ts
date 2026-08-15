@@ -66,7 +66,13 @@ export function computeHasNewReplies(
 /** 记录某讨论已读（打开详情时调用，传入当前评论总数） */
 export function markDiscussionViewed(number: number, commentCount: number): void {
   const state = readCommunityState()
-  state[number] = { viewedCommentCount: commentCount, viewedAt: Date.now() }
+  const prev = state[number]
+  // 取 max：防止旧缓存详情（评论被 per_page 截断）把已看计数写小，
+  // 导致已经看过的讨论再次出现「新回复」标记
+  state[number] = {
+    viewedCommentCount: Math.max(prev?.viewedCommentCount ?? 0, commentCount),
+    viewedAt: Date.now(),
+  }
   writeCommunityState(state)
 }
 
