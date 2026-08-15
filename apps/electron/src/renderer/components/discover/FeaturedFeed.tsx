@@ -170,15 +170,6 @@ export function FeaturedFeed(): React.ReactElement {
   )
 
   if (loading && feed.length === 0) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-24 text-sm text-foreground/50">
-        <Loader2 size={16} className="animate-spin" />
-        正在加载官方内容...
-      </div>
-    )
-  }
-
-  if (loading && feed.length === 0) {
     // 首次加载：骨架屏（三张卡片占位）
     return (
       <div className="flex flex-col gap-3" aria-busy="true">

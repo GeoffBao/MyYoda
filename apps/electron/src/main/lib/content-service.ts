@@ -45,6 +45,9 @@ const PROGRESS_THROTTLE_MS = 500
 /** 清单内存缓存（进程内只拉一次，避免反复请求） */
 let manifestMemoryCache: ManifestCacheFile | null = null
 
+/** 清单网络拉取单飞：并发调用（如启动 Initializer 与面板打开刷新）共享同一次请求 */
+let manifestNetworkInflight: Promise<ManifestCacheFile> | null = null
+
 /** 视频下载进行中的 Promise 去重：itemId -> Promise */
 const inflightDownloads = new Map<string, Promise<{ filePath: string }>>()
 
@@ -100,19 +103,34 @@ async function fetchManifestWithCache(force = false): Promise<ManifestCacheFile>
   if (!force && manifestMemoryCache) return manifestMemoryCache
   const diskCache = readManifestCacheFile()
   try {
-    const response = await fetchWithFallbacks(MANIFEST_URLS, await getProxyFetch())
-    const raw: unknown = await response.json()
-    const result = validateManifest(raw)
-    if (!result.ok) throw new Error(result.error)
-    const cacheEntry: ManifestCacheFile = { fetchedAt: Date.now(), manifest: result.manifest }
+    const cacheEntry = await fetchManifestNetwork()
     manifestMemoryCache = cacheEntry
-    mkdirSync(join(getDiscoverManifestCachePath(), '..'), { recursive: true })
-    writeFileSync(getDiscoverManifestCachePath(), JSON.stringify(cacheEntry, null, 2))
     return cacheEntry
   } catch (err) {
     if (diskCache) return diskCache
     throw err
   }
+}
+
+/** 网络拉取清单（单飞：并发共享同一次请求）；成功时写磁盘缓存 */
+async function fetchManifestNetwork(): Promise<ManifestCacheFile> {
+  if (!manifestNetworkInflight) {
+    manifestNetworkInflight = (async (): Promise<ManifestCacheFile> => {
+      try {
+        const response = await fetchWithFallbacks(MANIFEST_URLS, await getProxyFetch())
+        const raw: unknown = await response.json()
+        const result = validateManifest(raw)
+        if (!result.ok) throw new Error(result.error)
+        const cacheEntry: ManifestCacheFile = { fetchedAt: Date.now(), manifest: result.manifest }
+        mkdirSync(join(getDiscoverManifestCachePath(), '..'), { recursive: true })
+        writeFileSync(getDiscoverManifestCachePath(), JSON.stringify(cacheEntry, null, 2))
+        return cacheEntry
+      } finally {
+        manifestNetworkInflight = null
+      }
+    })()
+  }
+  return manifestNetworkInflight
 }
 
 /** 读取已读状态文件（不存在返回空对象，损坏返回空对象） */

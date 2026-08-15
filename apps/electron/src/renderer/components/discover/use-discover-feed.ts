@@ -19,7 +19,7 @@ export function useDiscoverFeed(): {
   refresh: () => Promise<void>
   markSeen: (itemId: string, version: string) => void
 } {
-  const [feed, setFeed] = useAtom(discoverFeedAtom)
+  const [, setFeed] = useAtom(discoverFeedAtom)
   const [loading, setLoading] = useAtom(discoverFeedLoadingAtom)
   const [error, setError] = useAtom(discoverFeedErrorAtom)
   const [source, setSource] = useAtom(discoverFeedSourceAtom)
@@ -44,16 +44,19 @@ export function useDiscoverFeed(): {
 
   const markSeen = React.useCallback(
     (itemId: string, version: string): void => {
-      const next = feed.map((item) =>
-        item.id === itemId ? { ...item, hasUpdate: false } : item
-      )
-      setFeed(next)
-      setFeedUnread(next.filter((item) => item.hasUpdate).length)
+      // 函数式更新：避免连续快速点击多个条目时基于旧 feed 覆盖彼此的已读标记
+      setFeed((prev) => {
+        const next = prev.map((item) =>
+          item.id === itemId ? { ...item, hasUpdate: false } : item
+        )
+        setFeedUnread(next.filter((item) => item.hasUpdate).length)
+        return next
+      })
       window.electronAPI.discoverMarkSeen(itemId, version).catch((err: unknown) => {
         console.warn('[DiscoverFeed] 记录已读失败:', err)
       })
     },
-    [feed, setFeed, setFeedUnread]
+    [setFeed, setFeedUnread]
   )
 
   return { loading, error, fromCache: source.fromCache, cachedAt: source.cachedAt, refresh, markSeen }

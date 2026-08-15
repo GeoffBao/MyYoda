@@ -299,7 +299,9 @@ export function CommunityView(): React.ReactElement {
             setCommunityUnread((prev) => Math.max(0, prev - 1))
           }
           window.electronAPI
-            .discoverMarkDiscussionViewed(number, result.comments.length)
+            // 以列表项 commentCount 为已读基准（详情 comments 数组受 per_page=100 截断，
+            // 用列表计数才能保证「新回复」标记可消除；主进程侧会取 max 防止旧值写小）
+            .discoverMarkDiscussionViewed(number, viewedItem?.commentCount ?? result.comments.length)
             .catch((err: unknown) => {
               console.warn('[CommunityView] 记录讨论已读失败:', err)
             })
