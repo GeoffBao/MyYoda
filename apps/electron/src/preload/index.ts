@@ -1649,7 +1649,7 @@ export interface ElectronAPI {
     move: (sessionId: string, columnId: string) => Promise<AgentSessionMeta>
   }
 
-  // ===== Projects / Tasks Conductor =======
+  // ===== Projects / Tasks Conductor =====
   getProjects: (workspaceRoot: string) => Promise<LoadedProject[]>
   getProject: (workspaceRoot: string, idOrSlug: string) => Promise<LoadedProject | undefined>
   createProject: (workspaceRoot: string, input: CreateProjectInput) => Promise<LoadedProject>

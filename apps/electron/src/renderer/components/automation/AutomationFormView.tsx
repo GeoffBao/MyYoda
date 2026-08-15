@@ -339,6 +339,11 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
   const openSession = useOpenSession()
 
   const [form, setForm] = React.useState<AutomationDraft | null>(null)
+  // F5：当前表单选中工作区的完整对象（绑定工程目录判断与展示共用，避免重复 find）
+  const selectedFormWorkspace = React.useMemo(
+    () => (form?.workspaceId ? workspaces.find((ws) => ws.id === form.workspaceId) : undefined),
+    [form?.workspaceId, workspaces],
+  )
   const [weekdayPresetOverride, setWeekdayPresetOverride] = React.useState<'custom' | null>(null)
   const [editingName, setEditingName] = React.useState(false)
   const [runningNow, setRunningNow] = React.useState(false)
@@ -1257,9 +1262,9 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
             <Label>执行工作区</Label>
             {!form.workspaceId ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/35">请先选择工作区</div>
-            ) : workspaces.find((ws) => ws.id === form.workspaceId)?.projectRootPath ? (
+            ) : selectedFormWorkspace?.projectRootPath ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/50">
-                在当前工作区工程目录执行任务（已绑定 {workspaces.find((ws) => ws.id === form.workspaceId)?.projectRootPath}）
+                在当前工作区工程目录执行任务（已绑定 {selectedFormWorkspace.projectRootPath}）
               </div>
             ) : pickableProjects.filter((p) => !p.archivedAt && p.workspaceId === workspaceSlugById.get(form.workspaceId ?? '')).length === 0 ? (
               <div className="px-0.5 text-xs leading-relaxed text-foreground/50">
