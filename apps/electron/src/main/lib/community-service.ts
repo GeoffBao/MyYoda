@@ -29,6 +29,8 @@ export const COMMUNITY_REPO = { owner: 'GeoffBao', repo: 'MyYoda' }
 const KNOWN_CATEGORY_SLUGS = new Set<string>(['q-a', 'show-and-tell', 'announcements'])
 
 interface DiscussionCacheEntry {
+  /** 缓存结构版本：v2 起缓存只存原始 URL，媒体重写发生在每次读取时（token 注册表不跨进程持久化） */
+  version: 2
   fetchedAt: number
   items: DiscussionSummary[]
 }
@@ -72,7 +74,7 @@ export function markDiscussionViewed(number: number, commentCount: number): void
 let listMemoryCache: Map<string, DiscussionCacheEntry> | null = null
 const detailMemoryCache = new Map<number, { fetchedAt: number; detail: DiscussionDetail }>()
 
-/** 读取磁盘缓存 */
+/** 读取磁盘缓存（v1 旧格式含 myyoda-remote token，跨进程重启后失效，视为过期） */
 function readListCache(categorySlug: string): DiscussionCacheEntry | null {
   try {
     const raw = JSON.parse(readFileSync(getDiscoverDiscussionsCachePath(), 'utf-8')) as Record<
@@ -80,14 +82,16 @@ function readListCache(categorySlug: string): DiscussionCacheEntry | null {
       DiscussionCacheEntry
     >
     const entry = raw[categorySlug]
-    if (entry && typeof entry.fetchedAt === 'number' && Array.isArray(entry.items)) return entry
+    if (entry && entry.version === 2 && typeof entry.fetchedAt === 'number' && Array.isArray(entry.items)) {
+      return entry
+    }
     return null
   } catch {
     return null
   }
 }
 
-/** 写磁盘缓存（合并已有内容） */
+/** 写磁盘缓存（合并已有内容；只存原始 URL，媒体重写发生在读取时） */
 function writeListCache(categorySlug: string, entry: DiscussionCacheEntry): void {
   let all: Record<string, DiscussionCacheEntry> = {}
   try {
@@ -101,6 +105,14 @@ function writeListCache(categorySlug: string, entry: DiscussionCacheEntry): void
   all[categorySlug] = entry
   mkdirSync(join(getDiscoverDiscussionsCachePath(), '..'), { recursive: true })
   writeFileSync(getDiscoverDiscussionsCachePath(), JSON.stringify(all, null, 2))
+}
+
+/** 列表条目媒体重写：每次读取时执行（即时注册新 token，缓存中不持久化代理 URL） */
+function rewriteListItemMedia(item: DiscussionSummary): DiscussionSummary {
+  return {
+    ...item,
+    authorAvatarUrl: rewriteRemoteMediaUrl(item.authorAvatarUrl, registerRemoteMediaUrl),
+  }
 }
 
 /** 解析 GitHub 原始条目为摘要（未知字段容错） */
@@ -203,12 +215,12 @@ export async function listDiscussions(
   if (!listMemoryCache) listMemoryCache = new Map()
   const memoryEntry = listMemoryCache.get(categorySlug)
   if (!force && memoryEntry && now - memoryEntry.fetchedAt < DISCUSSION_CACHE_TTL_MS) {
-    return { items: memoryEntry.items, rateLimited: false, fromCache: false }
+    return { items: memoryEntry.items.map(rewriteListItemMedia), rateLimited: false, fromCache: false }
   }
   const diskEntry = readListCache(categorySlug)
   if (!force && diskEntry && now - diskEntry.fetchedAt < DISCUSSION_CACHE_TTL_MS) {
     listMemoryCache.set(categorySlug, diskEntry)
-    return { items: diskEntry.items, rateLimited: false, fromCache: false }
+    return { items: diskEntry.items.map(rewriteListItemMedia), rateLimited: false, fromCache: false }
   }
 
   const url = `https://api.github.com/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/discussions?per_page=100`
@@ -220,7 +232,7 @@ export async function listDiscussions(
     })
     if (response.status === 403 || response.status === 429) {
       return {
-        items: diskEntry?.items ?? [],
+        items: (diskEntry?.items ?? []).map(rewriteListItemMedia),
         error: 'GitHub API 访问受限（匿名限流或网络受限），请稍后再试',
         rateLimited: true,
         fromCache: diskEntry !== null,
@@ -230,7 +242,7 @@ export async function listDiscussions(
       // 404：仓库未开启 Discussions
       if (response.status === 404) {
         return {
-          items: diskEntry?.items ?? [],
+          items: (diskEntry?.items ?? []).map(rewriteListItemMedia),
           error: '社区讨论尚未在仓库开启（GitHub Discussions）',
           rateLimited: false,
           fromCache: diskEntry !== null,
@@ -240,23 +252,27 @@ export async function listDiscussions(
     }
     const all: DiscussionSummary[] = parseDiscussionList((await response.json()) as unknown)
     const viewedState = readCommunityState()
-    const items = all
+    // 缓存只存原始 URL（媒体重写在读取时执行，token 注册表不跨进程持久化）
+    const rawItems = all
       .filter((item) => item.categorySlug === categorySlug)
       .map((item) => ({
         ...item,
         // 新回复标记（只看“看过之后新增的”）
         hasNewReplies: computeHasNewReplies(item.commentCount, viewedState[item.number]),
-        // 头像走代理转发（渲染层直连 GitHub 会绕过主进程代理）
-        authorAvatarUrl: rewriteRemoteMediaUrl(item.authorAvatarUrl, registerRemoteMediaUrl),
       }))
-    const entry = { fetchedAt: now, items }
+    const entry = { version: 2 as const, fetchedAt: now, items: rawItems }
     listMemoryCache.set(categorySlug, entry)
     writeListCache(categorySlug, entry)
-    return { items, rateLimited: false, fromCache: false }
+    return { items: rawItems.map(rewriteListItemMedia), rateLimited: false, fromCache: false }
   } catch (err) {
     if (diskEntry) {
       listMemoryCache.set(categorySlug, diskEntry)
-      return { items: diskEntry.items, error: '网络不可用，展示上次缓存', rateLimited: false, fromCache: true }
+      return {
+        items: diskEntry.items.map(rewriteListItemMedia),
+        error: '网络不可用，展示上次缓存',
+        rateLimited: false,
+        fromCache: true,
+      }
     }
     return {
       items: [],
