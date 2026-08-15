@@ -71,7 +71,7 @@ import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import type { AgentRuntimeEnv } from './agent-runtime-env'
 import { selectWindowsShell } from './windows-shell-selection'
-import { isVisibleRunMessage } from './agent-run-message-visibility'
+import { isMissingFinalTextAnswer, isVisibleRunMessage } from './agent-run-message-visibility'
 import { resolveOptimizedCodingEnabled, resolvePiThinkingLevel } from './agent-thinking-level'
 import { resolvePiReasoningCapability } from './adapters/pi-model-registry'
 import { generateCodexTitle } from './adapters/pi-codex-title-generator'
@@ -799,10 +799,16 @@ export class AgentOrchestrator {
     channelId: string,
     resultSubtype: string | undefined,
     resultErrors: string[] | undefined,
+    hadActivity = false,
   ): string {
     const detail = resultErrors?.find((error) => error.trim().length > 0)?.trim()
     const subtype = resultSubtype ?? 'unknown'
-    const errorContent = detail ? `Agent 本轮结束了，但没有返回任何可展示内容。错误详情：${detail}` : resultSubtype === 'success' ? 'Agent 本轮结束了，但没有返回任何可展示内容。你的消息已保留，可以直接重试或切换模型。' : `Agent 本轮异常结束（${subtype}），但没有返回任何可展示内容。你的消息已保留，可以直接重试或切换模型。`
+    // hadActivity: 本轮实际发生了工具调用等可见活动，只是最终没有文字结论（模型 stop_reason=stop 但
+    // 只剩 thinking）。这种情况下控制台/用户不能接着说"没有返回任何可展示内容"，会与用户实际看到的
+    // 工具调用过程矛盾，需要单独的提示文案。
+    const errorContent = hadActivity
+      ? 'Agent 本轮执行了一些操作，但没有给出最终的文字结论。你的消息已保留，可以直接重试或切换模型。'
+      : detail ? `Agent 本轮结束了，但没有返回任何可展示内容。错误详情：${detail}` : resultSubtype === 'success' ? 'Agent 本轮结束了，但没有返回任何可展示内容。你的消息已保留，可以直接重试或切换模型。' : `Agent 本轮异常结束（${subtype}），但没有返回任何可展示内容。你的消息已保留，可以直接重试或切换模型。`
     const errorSDKMsg: SDKMessage = {
       type: 'assistant',
       message: {
@@ -816,7 +822,7 @@ export class AgentOrchestrator {
       },
       _createdAt: Date.now(),
       _errorCode: 'unknown_error',
-      _errorTitle: '没有收到模型回复',
+      _errorTitle: hadActivity ? '模型没有给出最终结论' : '没有收到模型回复',
       _errorCanRetry: true,
       _errorActions: [
         { key: 'r', label: '重试', action: 'retry' },
@@ -824,7 +830,7 @@ export class AgentOrchestrator {
       ]
     } as unknown as SDKMessage
     appendSDKMessages(sessionId, [withAgentMessageChannelIdentity(errorSDKMsg, channelId)])
-    console.warn(`[Agent 编排] 本轮没有收到可展示内容: sessionId=${sessionId}, resultSubtype=${subtype}`)
+    console.warn(`[Agent 编排] 本轮没有收到可展示内容: sessionId=${sessionId}, resultSubtype=${subtype}, hadActivity=${hadActivity}`)
     return errorContent
   }
 
@@ -2489,8 +2495,15 @@ ${workContext}`
             /* 忽略 */
           }
 
-          if (!wasStoppedByUser && visibleRunMessageCount === 0) {
-            const errorContent = this.persistEmptyResponseError(sessionId, channelId, capturedResultSubtype, capturedResultErrors)
+          const missingFinalAnswer = visibleRunMessageCount > 0 && isMissingFinalTextAnswer(accumulatedMessages)
+          if (!wasStoppedByUser && (visibleRunMessageCount === 0 || missingFinalAnswer)) {
+            const errorContent = this.persistEmptyResponseError(
+              sessionId,
+              channelId,
+              capturedResultSubtype,
+              capturedResultErrors,
+              missingFinalAnswer
+            )
             failRun(errorContent, {
               startedAt: streamStartedAt,
               resultSubtype: EMPTY_RESPONSE_RESULT_SUBTYPE,
