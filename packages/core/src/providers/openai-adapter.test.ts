@@ -19,7 +19,7 @@ describe('OpenAIAdapter 标题生成请求', () => {
     expect(buildTitleBody('opencode-go-openai').max_tokens).toBe(512)
   })
 
-  test('Given 标准 OpenAI 渠道 When 生成标题 Then 保持原有的小输出预算', () => {
-    expect(buildTitleBody('openai').max_tokens).toBe(50)
+  test('Given 标准 OpenAI 渠道 When 生成标题 Then 统一使用 512 输出预算（兼容第三方供应商空标题）', () => {
+    expect(buildTitleBody('openai').max_tokens).toBe(512)
   })
 })
