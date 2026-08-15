@@ -105,9 +105,22 @@ export interface DiscussionSummary {
   isAnswered: boolean
 }
 
-/** 讨论详情（正文 markdown + 列表字段） */
+/** 讨论评论（含回复，扁平原列表 + parentId 关联；被采纳答案带 isAnswer） */
+export interface DiscussionComment {
+  id: number
+  bodyMarkdown: string
+  author: string
+  authorAvatarUrl?: string
+  createdAt: string
+  isAnswer: boolean
+  /** null = 顶层评论；否则为所回复评论的 id */
+  parentId: number | null
+}
+
+/** 讨论详情（正文 markdown + 列表字段 + 评论列表） */
 export interface DiscussionDetail extends DiscussionSummary {
   bodyMarkdown: string
+  comments: DiscussionComment[]
 }
 
 /** 社区列表拉取结果（错误/限流时 error 有值；fromCache=true 表示展示的是离线缓存） */

@@ -1339,7 +1339,7 @@ export interface ElectronAPI {
   discoverDownloadVideo: (item: import('@myyoda/shared').DiscoverContentItem) => Promise<{ filePath: string }>
   discoverMarkSeen: (itemId: string, version: string) => Promise<void>
   discoverListDiscussions: (categorySlug: import('@myyoda/shared').DiscussionCategorySlug, force?: boolean) => Promise<import('@myyoda/shared').DiscussionListResult>
-  discoverGetDiscussion: (number: number) => Promise<import('@myyoda/shared').DiscussionDetail>
+  discoverGetDiscussion: (number: number, force?: boolean) => Promise<import('@myyoda/shared').DiscussionDetail>
   discoverGetVideoUrl: (filePath: string) => Promise<string>
   discoverGetVideoStreamUrl: (remoteUrl: string) => Promise<string>
   discoverDeleteVideoCache: (itemId: string, version: string) => Promise<void>
@@ -3194,8 +3194,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.LIST_DISCUSSIONS, categorySlug, force)
   },
 
-  discoverGetDiscussion: (number) => {
-    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, number)
+  discoverGetDiscussion: (number, force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, number, force)
   },
 
   discoverGetVideoUrl: (filePath) => {

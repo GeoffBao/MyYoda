@@ -5248,10 +5248,10 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 拉取讨论详情正文
-  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, async (_event, number: number) => {
+  // 拉取讨论详情正文与评论（force 绕过缓存重拉）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, async (_event, number: number, force?: boolean) => {
     const { getDiscussion } = await import('./lib/community-service')
-    return getDiscussion(number)
+    return getDiscussion(number, force)
   })
 
   // 为已下载视频文件注册 myyoda-file:// 播放 URL（token 门控，支持 Range seek）

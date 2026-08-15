@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   type DiscussionCategorySlug,
+  type DiscussionComment,
   type DiscussionDetail,
   type DiscussionListResult,
   type DiscussionSummary,
@@ -119,7 +120,42 @@ export function parseDiscussionDetail(raw: unknown): DiscussionDetail {
   if (!summary) {
     throw new Error('讨论详情解析失败：板块不受支持或字段缺失')
   }
-  return { ...summary, bodyMarkdown: typeof record.body === 'string' ? record.body : '' }
+  return { ...summary, bodyMarkdown: typeof record.body === 'string' ? record.body : '', comments: [] }
+}
+
+/** 从 answer_html_url 提取被采纳评论的 id（锚点形如 #discussioncomment-123679） */
+export function extractAnswerCommentId(answerHtmlUrl: string | undefined): number | null {
+  if (!answerHtmlUrl) return null
+  const match = /discussioncomment-(\d+)/.exec(answerHtmlUrl)
+  return match ? Number(match[1]) : null
+}
+
+/** 解析讨论评论原始 JSON（无 IO，可单测；扁平原列表含回复，parentId 关联） */
+export function parseDiscussionComments(raw: unknown, answerCommentId: number | null): DiscussionComment[] {
+  if (!Array.isArray(raw)) return []
+  const comments: DiscussionComment[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const record = entry as Record<string, unknown>
+    if (typeof record.id !== 'number') continue
+    const user = record.user as Record<string, unknown> | null | undefined
+    const parentId = typeof record.parent_id === 'number' ? record.parent_id : null
+    comments.push({
+      id: record.id,
+      bodyMarkdown: typeof record.body === 'string' ? record.body : '',
+      author: typeof user?.login === 'string' ? user.login : 'unknown',
+      authorAvatarUrl: typeof user?.avatar_url === 'string' ? user.avatar_url : undefined,
+      createdAt: typeof record.created_at === 'string' ? record.created_at : '',
+      isAnswer: answerCommentId !== null && record.id === answerCommentId,
+      parentId,
+    })
+  }
+  // 顶层在前、回复紧随其后（渲染层按 parentId 归组）
+  return comments.sort((a, b) => {
+    if (a.parentId === null && b.parentId !== null) return -1
+    if (a.parentId !== null && b.parentId === null) return 1
+    return a.id - b.id
+  })
 }
 
 /** 拉取讨论列表（带缓存与限流识别） */
@@ -192,27 +228,50 @@ export async function listDiscussions(
   }
 }
 
-/** 拉取讨论详情正文（带缓存） */
-export async function getDiscussion(number: number): Promise<DiscussionDetail> {
+/** 拉取讨论详情正文与评论（带缓存；force 时绕过缓存重拉，用于详情页手动刷新） */
+export async function getDiscussion(number: number, force = false): Promise<DiscussionDetail> {
   const now = Date.now()
-  const cached = detailMemoryCache.get(number)
-  if (cached && now - cached.fetchedAt < DISCUSSION_CACHE_TTL_MS) return cached.detail
-
-  const url = `https://api.github.com/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/discussions/${number}`
-  const fetchFn = getFetchFn(await getEffectiveProxyUrl())
-  const response = await fetchFn(url, {
-    signal: AbortSignal.timeout(20_000),
-    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-  })
-  if (!response.ok) {
-    throw new Error(`讨论详情拉取失败（HTTP ${response.status}）`)
+  if (!force) {
+    const cached = detailMemoryCache.get(number)
+    if (cached && now - cached.fetchedAt < DISCUSSION_CACHE_TTL_MS) return cached.detail
   }
-  const parsed = parseDiscussionDetail((await response.json()) as unknown)
+
+  const fetchFn = getFetchFn(await getEffectiveProxyUrl())
+  const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
+  const base = `https://api.github.com/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/discussions/${number}`
+
+  const [detailResponse, commentsResponse] = await Promise.all([
+    fetchFn(base, { signal: AbortSignal.timeout(20_000), headers }),
+    fetchFn(`${base}/comments?per_page=100`, { signal: AbortSignal.timeout(20_000), headers }),
+  ])
+  if (!detailResponse.ok) {
+    throw new Error(`讨论详情拉取失败（HTTP ${detailResponse.status}）`)
+  }
+
+  const detailRaw = (await detailResponse.json()) as Record<string, unknown>
+  const parsed = parseDiscussionDetail(detailRaw)
+  const answerCommentId = extractAnswerCommentId(
+    typeof detailRaw.answer_html_url === 'string' ? detailRaw.answer_html_url : undefined
+  )
+
+  // 评论拉取失败不阻断详情展示（降级为空评论 + 提示文案由渲染层处理）
+  let comments: DiscussionComment[] = []
+  if (commentsResponse.ok) {
+    comments = parseDiscussionComments((await commentsResponse.json()) as unknown, answerCommentId).map(
+      (comment) => ({
+        ...comment,
+        bodyMarkdown: rewriteMarkdownMedia(comment.bodyMarkdown, registerRemoteMediaUrl),
+        authorAvatarUrl: rewriteRemoteMediaUrl(comment.authorAvatarUrl, registerRemoteMediaUrl),
+      })
+    )
+  }
+
   // 正文图片与头像走代理转发；「上传未完成」占位符一并剥离
   const detail: DiscussionDetail = {
     ...parsed,
     bodyMarkdown: rewriteMarkdownMedia(parsed.bodyMarkdown, registerRemoteMediaUrl),
     authorAvatarUrl: rewriteRemoteMediaUrl(parsed.authorAvatarUrl, registerRemoteMediaUrl),
+    comments,
   }
   detailMemoryCache.set(number, { fetchedAt: now, detail })
   return detail

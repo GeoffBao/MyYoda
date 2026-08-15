@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
 import { CloudOff, ArrowLeft, ExternalLink, Loader2, MessageSquare, Plus, RefreshCw, Sparkles } from 'lucide-react'
-import { DISCUSSION_CATEGORIES, type DiscussionDetail, type DiscussionSummary } from '@myyoda/shared'
+import { DISCUSSION_CATEGORIES, type DiscussionComment, type DiscussionDetail, type DiscussionSummary } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import {
   discussionCategoryAtom,
@@ -87,14 +87,72 @@ function DiscussionItem({
   )
 }
 
+/** 评论渲染：顶层评论 + 缩进的回复 */
+function CommentItem({
+  comment,
+  isReply = false,
+}: {
+  comment: DiscussionComment
+  isReply?: boolean
+}): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2.5 rounded-lg p-2.5',
+        comment.isAnswer ? 'bg-emerald-500/[0.06]' : 'bg-foreground/[0.02]',
+        isReply && 'ml-8'
+      )}
+    >
+      {comment.authorAvatarUrl ? (
+        <img
+          src={comment.authorAvatarUrl}
+          alt={comment.author}
+          className="mt-0.5 size-6 shrink-0 rounded-full border border-border/60"
+        />
+      ) : (
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-[9px] font-medium text-foreground/50">
+          {comment.author.slice(0, 1).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-[11px] text-foreground/45">
+          <span className="font-medium text-foreground/70">{comment.author}</span>
+          <span>{formatDate(comment.createdAt)}</span>
+          {comment.isAnswer && (
+            <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              已采纳答案
+            </span>
+          )}
+        </div>
+        <div className="mt-1.5">
+          <ReleaseNoteMarkdown content={comment.bodyMarkdown} compact />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** 讨论详情视图 */
 function DiscussionDetailView({
   detail,
   onBack,
+  onRefresh,
+  refreshing,
 }: {
   detail: DiscussionDetail
   onBack: () => void
+  onRefresh: () => void
+  refreshing: boolean
 }): React.ReactElement {
+  const topLevel = detail.comments.filter((c) => c.parentId === null)
+  const repliesByParent = new Map<number, DiscussionComment[]>()
+  for (const comment of detail.comments) {
+    if (comment.parentId === null) continue
+    const list = repliesByParent.get(comment.parentId) ?? []
+    list.push(comment)
+    repliesByParent.set(comment.parentId, list)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -106,16 +164,29 @@ function DiscussionDetailView({
           <ArrowLeft size={13} />
           返回列表
         </button>
-        <button
-          type="button"
-          onClick={() => void window.electronAPI.openExternal(buildDiscussionUrl(detail.number))}
-          className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ExternalLink size={12} />
-          在 GitHub 查看与回复
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label="刷新评论"
+            title="刷新正文与评论"
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs text-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={cn(refreshing && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            onClick={() => void window.electronAPI.openExternal(buildDiscussionUrl(detail.number))}
+            className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ExternalLink size={12} />
+            在 GitHub 回复
+          </button>
+        </div>
       </div>
 
+      {/* 正文 */}
       <div className="rounded-xl border border-border/60 bg-content-area p-5 shadow-sm">
         <h2 className="text-[16px] font-semibold text-foreground">{detail.title}</h2>
         <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-foreground/45">
@@ -126,6 +197,34 @@ function DiscussionDetailView({
         </div>
         <div className="mt-4 border-t border-border/40 pt-4">
           <ReleaseNoteMarkdown content={detail.bodyMarkdown} />
+        </div>
+      </div>
+
+      {/* 评论区 */}
+      <div className="rounded-xl border border-border/60 bg-content-area p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground/80">
+            <MessageSquare size={13} className="text-foreground/45" />
+            评论与回复
+            <span className="text-[11px] tabular-nums text-foreground/40">{detail.comments.length}</span>
+          </div>
+          <span className="text-[10.5px] text-foreground/35">在应用内查看 · 回复请跳转 GitHub</span>
+        </div>
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-border/40 pt-3">
+          {topLevel.length === 0 ? (
+            <div className="py-8 text-center text-xs text-foreground/40">
+              还没有评论，去 GitHub 发起第一条讨论回复吧
+            </div>
+          ) : (
+            topLevel.map((comment) => (
+              <div key={comment.id} className="flex flex-col gap-1">
+                <CommentItem comment={comment} />
+                {(repliesByParent.get(comment.id) ?? []).map((reply) => (
+                  <CommentItem key={reply.id} comment={reply} isReply />
+                ))}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -173,10 +272,10 @@ export function CommunityView(): React.ReactElement {
   }, [category, loadedCategory, loadList])
 
   const handleOpenDiscussion = React.useCallback(
-    (number: number): void => {
+    (number: number, force = false): void => {
       setDetailLoading(true)
       window.electronAPI
-        .discoverGetDiscussion(number)
+        .discoverGetDiscussion(number, force)
         .then((result) => {
           setDetail(result)
         })
@@ -192,8 +291,19 @@ export function CommunityView(): React.ReactElement {
     [setDetail, setDetailLoading]
   )
 
+  const handleRefreshDetail = React.useCallback((): void => {
+    if (detail) handleOpenDiscussion(detail.number, true)
+  }, [detail, handleOpenDiscussion])
+
   if (detail) {
-    return <DiscussionDetailView detail={detail} onBack={() => setDetail(null)} />
+    return (
+      <DiscussionDetailView
+        detail={detail}
+        onBack={() => setDetail(null)}
+        onRefresh={handleRefreshDetail}
+        refreshing={detailLoading}
+      />
+    )
   }
 
   return (
