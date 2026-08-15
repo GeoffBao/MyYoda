@@ -67,7 +67,7 @@ import { previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelection
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 import {
   agentStreamingStatesAtom,
-  agentSessionViewStreamStateAtomFamily,
+  agentSessionInputStreamStateAtomFamily,
   agentChannelIdAtom,
   agentModelIdAtom,
   agentChannelIdsAtom,
@@ -386,8 +386,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [loadingEarlierMessages, setLoadingEarlierMessages] = React.useState(false)
   const setStreamingStates = useSetAtom(agentStreamingStatesAtom)
   // 只订阅输入区/工具栏需要的低频流状态。逐 token content/toolActivities 由
-  // AgentMessages 独立消费，不能让 AgentView 和输入框跟随每个 token 重渲染。
-  const streamViewState = useAtomValue(agentSessionViewStreamStateAtomFamily(sessionId))
+  // AgentMessages 独立消费，不能让 3000 行 AgentView 和输入框跟随每个 token 重渲染。
+  const streamViewState = useAtomValue(agentSessionInputStreamStateAtomFamily(sessionId))
   const streaming = streamViewState.running
   // 软空闲态：本轮主体已结束、UI 可输入，但 SDK 通道仍开着等后台任务唤醒。
   // 此时服务端 activeSessions 仍保留，新消息须走注入通道而非新建 run。
@@ -548,15 +548,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     }
   }, [sessionId, sessionMetaChannelId, sessionMetaModelId, hasSessionMeta, defaultChannelId, defaultModelId, setSessionChannelMap, setSessionModelMap])
 
-  const contextStatus: AgentContextStatus = {
-    isCompacting: streamViewState.isCompacting ?? false,
-    inputTokens: streamViewState.inputTokens,
-    outputTokens: streamViewState.outputTokens,
-    cacheReadTokens: streamViewState.cacheReadTokens,
-    cacheCreationTokens: streamViewState.cacheCreationTokens,
-    contextWindow: streamViewState.contextWindow,
-    contextUsageIsEstimated: streamViewState.contextUsageIsEstimated,
-  }
   const setAgentStreamErrors = useSetAtom(agentStreamErrorsAtom)
   const streamErrors = useAtomValue(agentStreamErrorsAtom)
   const agentError = streamErrors.get(sessionId) ?? null
@@ -2923,6 +2914,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       kind: 'status',
       node: (
         <ContextUsageBadge
+<<<<<<< HEAD
           inputTokens={contextStatus.inputTokens}
           outputTokens={contextStatus.outputTokens}
           cacheReadTokens={contextStatus.cacheReadTokens}
@@ -2931,6 +2923,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           isEstimated={contextStatus.contextUsageIsEstimated === true}
           isPiRuntime={sessionAgentRuntime === 'pi'}
           isCompacting={contextStatus.isCompacting}
+=======
+>>>>>>> fb62fbf1 (perf(agent): isolate usage updates from input rendering (#1660))
           isProcessing={streaming}
           sessionId={sessionId}
           channelId={planQuotaChannelId}
@@ -2953,6 +2947,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     sessionAgentRuntime,
     backgroundWaiting,
     sessionId,
+<<<<<<< HEAD
     contextStatus.inputTokens,
     contextStatus.outputTokens,
     contextStatus.cacheReadTokens,
@@ -2960,6 +2955,10 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     contextStatus.contextWindow,
     contextStatus.contextUsageIsEstimated,
     contextStatus.isCompacting,
+=======
+    agentThinking,
+    setAgentThinking,
+>>>>>>> fb62fbf1 (perf(agent): isolate usage updates from input rendering (#1660))
     streaming,
     handleAttachContent,
     handleCompact,
