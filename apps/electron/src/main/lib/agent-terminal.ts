@@ -76,6 +76,11 @@ function resolveShellPath(): { shell: string; args: string[] } {
 /**
  * node-pty 的 spawn-helper 在部分安装/打包场景下缺少可执行位，
  * best-effort chmod（与 synara ensureNodePtySpawnHelperExecutable 同理）。
+ *
+ * 打包（electron-builder asar）环境下：node-pty 的 JS 在 asar 归档内，
+ * require.resolve 返回 `app.asar/...` 路径，而真实文件在可写的
+ * `app.asar.unpacked/...`；对 asar 内路径 chmod 必然失败（只读归档）。
+ * 因此候选路径同时尝试原始路径与 `app.asar → app.asar.unpacked` 变体。
  */
 function ensureSpawnHelperExecutable(): void {
   try {
@@ -87,7 +92,14 @@ function ensureSpawnHelperExecutable(): void {
       join(packageDir, 'build', 'Debug', 'spawn-helper'),
       join(packageDir, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
     ]
+    // asar 打包后真实文件位于 app.asar.unpacked；把候选路径映射到 unpacked 变体
+    const realCandidates: string[] = []
     for (const candidate of candidates) {
+      if (!realCandidates.includes(candidate)) realCandidates.push(candidate)
+      const unpacked = candidate.replace('app.asar', 'app.asar.unpacked')
+      if (!realCandidates.includes(unpacked)) realCandidates.push(unpacked)
+    }
+    for (const candidate of realCandidates) {
       try {
         statSync(candidate)
         chmodSync(candidate, 0o755)
