@@ -4297,7 +4297,7 @@ const ConversationItem = React.memo(function ConversationItem({
               streaming ? 'bg-blue-500 animate-pulse' : 'border border-foreground/25 bg-transparent',
             )}
           />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 mr-12">
             {editing ? (
               <input
                 ref={inputRef}
@@ -4311,7 +4311,7 @@ const ConversationItem = React.memo(function ConversationItem({
               />
             ) : (
               <div className={cn(
-                'truncate text-[13px] leading-[18px] flex items-center gap-1.5',
+                'truncate text-[13px] leading-[18px] flex items-center gap-1.5 min-w-0',
                 active ? 'text-foreground' : 'text-foreground/80'
               )}>
                 {/* 置顶标记 */}

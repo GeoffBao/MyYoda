@@ -603,7 +603,7 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', STATUS_DOT_CLASS[indicatorStatus])}
           />
-          <div className="flex-1 min-w-0">
+          <div className={cn('flex-1 min-w-0', !childSummary?.onToggle && 'mr-12')}>
             {editing ? (
               <input
                 ref={inputRef}
@@ -617,7 +617,7 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
               />
             ) : (
               <div className={cn(
-                'truncate text-[13px] leading-[18px] flex items-center gap-1.5',
+                'truncate text-[13px] leading-[18px] flex items-center gap-1.5 min-w-0',
                 active ? 'text-foreground' : 'text-foreground/80'
               )}>
                 {showPinIcon && (
@@ -643,7 +643,7 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
                   <Star size={12} fill="currentColor" className="flex-shrink-0 text-amber-500" aria-hidden="true" />
                 )}
                 {workspaceName && (
-                  <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-primary/10 text-[10px] leading-4 workspace-badge font-medium truncate max-w-[80px]">
+                  <span className="shrink min-w-0 px-1.5 py-0 rounded-full bg-primary/10 text-[10px] leading-4 workspace-badge font-medium truncate max-w-[140px]">
                     {workspaceName}
                   </span>
                 )}
