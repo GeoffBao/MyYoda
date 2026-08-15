@@ -332,6 +332,20 @@ describe('Agent 会话 runtime 元数据', () => {
     expect(manager.getAgentSessionMeta(session.id)).toMatchObject({ labelIds: ['label-a'], archived: true })
   })
 
+  // 会话头部 Git 分支徽章自愈（useSessionGitBranchSync）会在窗口聚焦时静默回写漂移的 gitBranch，
+  // 该回写必须和星标/标签一样不改变新鲜度与归档状态，否则会导致会话因为一次静默的分支纠正
+  // 而被顶到列表最新，或者把已归档会话意外恢复为活跃。
+  test('Given a session When gitBranch is silently synced Then it persists without changing freshness or archive state', () => {
+    const session = manager.createAgentSession('Git 分支自愈会话')
+    const archived = manager.updateAgentSessionMeta(session.id, { archived: true })
+
+    const updated = manager.updateAgentSessionMeta(session.id, { gitBranch: 'main' })
+
+    expect(updated).toMatchObject({ gitBranch: 'main', archived: true })
+    expect(updated.updatedAt).toBe(archived.updatedAt)
+    expect(manager.getAgentSessionMeta(session.id)).toMatchObject({ gitBranch: 'main', archived: true })
+  })
+
   test('Given 新建会话 When 多次 appendSDKMessages Then messageCount 按追加条数累加', () => {
     const session = manager.createAgentSession('消息计数会话')
     expect(manager.getAgentSessionMeta(session.id)?.messageCount).toBeUndefined()

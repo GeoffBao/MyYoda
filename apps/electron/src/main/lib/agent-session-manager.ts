@@ -803,9 +803,12 @@ export function updateAgentSessionMeta(
   // 星标只是侧栏的视觉标记，不应改变会话的新鲜度或归档状态。
   const isStarredOnly = updateKeys.every((key) => key === 'starred')
   const isLabelsOnly = updateKeys.every((key) => key === 'labelIds')
-  // 非手动归档操作时，若会话已归档则自动恢复为活跃（labelIds 和 stoppedByUser 和 starred 不触发解归档）
+  // Git 分支徽章自愈（useSessionGitBranchSync）的静默回写，与星标/标签同理：
+  // 只是纠正展示数据与真实仓库状态的漂移，不应因此把会话顶到列表最新或把归档会话恢复为活跃。
+  const isGitBranchOnly = updateKeys.every((key) => key === 'gitBranch')
+  // 非手动归档操作时，若会话已归档则自动恢复为活跃（labelIds 和 stoppedByUser 和 starred 和 gitBranch 不触发解归档）
   const isStoppedByUserOnly = updateKeys.every((key) => key === 'stoppedByUser')
-  const autoUnarchive = existing.archived && !('archived' in updates) && !isStoppedByUserOnly && !isStarredOnly && !isLabelsOnly
+  const autoUnarchive = existing.archived && !('archived' in updates) && !isStoppedByUserOnly && !isStarredOnly && !isLabelsOnly && !isGitBranchOnly
 
   // 思考等级双写：任一字段更新时同步 thinkingLevel ↔ openAIThinkingLevel
   const thinkingPatch = (() => {
@@ -819,7 +822,7 @@ export function updateAgentSessionMeta(
     ...updates,
     ...thinkingPatch,
     ...(autoUnarchive ? { archived: false } : {}),
-    updatedAt: (isStarredOnly || isLabelsOnly) ? existing.updatedAt : Date.now(),
+    updatedAt: (isStarredOnly || isLabelsOnly || isGitBranchOnly) ? existing.updatedAt : Date.now(),
   }
 
   index.sessions[idx] = updated

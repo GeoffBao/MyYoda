@@ -34,6 +34,8 @@ import type {
   ListGitBranchesInput,
   PrepareSessionGitContextInput,
   PrepareSessionGitContextResult,
+  RefreshSessionGitBranchInput,
+  RefreshSessionGitBranchResult,
   Channel,
   ChannelCreateInput,
   ChannelUpdateInput,
@@ -184,7 +186,7 @@ import {
   getWorktreeChanges,
   getMainRepoRoot,
 } from './lib/git-diff-service'
-import { listGitBranchesForSession, prepareSessionGitContext } from './lib/git-session-context-service'
+import { listGitBranchesForSession, prepareSessionGitContext, refreshSessionGitBranch } from './lib/git-session-context-service'
 import { registerMyYodaDirectoryPath, registerMyYodaFilePath } from './lib/local-file-protocol'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
 import {
@@ -1307,6 +1309,22 @@ export function registerIpcHandlers(): void {
         throw new Error('当前会话无权访问该 Git 仓库')
       }
       return prepareSessionGitContext(input, { updateSessionMeta: updateAgentSessionMeta })
+    }
+  )
+
+  // 刷新会话头部 Git 分支徽章：检测持久化分支与实际 checkout 是否漂移，漂移则静默回写（仅 Local 模式）
+  ipcMain.handle(
+    IPC_CHANNELS.REFRESH_SESSION_GIT_BRANCH,
+    async (_, input: RefreshSessionGitBranchInput): Promise<RefreshSessionGitBranchResult | null> => {
+      if (!input || typeof input.sessionId !== 'string' || typeof input.repoPath !== 'string' || !input.repoPath) return null
+      const access = normalizeFileAccessOptions({ sessionId: input.sessionId })
+      if (!(await ensurePathAllowedWithWorktree(input.repoPath, access))) return null
+      try {
+        return refreshSessionGitBranch(input, { updateSessionMeta: updateAgentSessionMeta })
+      } catch {
+        // 非 git 仓库、路径已被删除等场景静默降级，不影响会话主流程
+        return null
+      }
     }
   )
 
