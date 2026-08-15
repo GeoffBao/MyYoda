@@ -5,8 +5,6 @@
  * - 剥离 GitHub「图片上传未完成」的占位符 ![Uploading xxx…]()
  * - 相对路径图片（/xxx）解析为 https://github.com/xxx
  */
-import type { registerRemoteMediaUrl as RegisterFn } from './discover-remote-media'
-
 export type RemoteMediaRegister = (url: string) => string | null
 
 /** 图片引用正则：![](...)，容忍空格与换行 */
