@@ -265,7 +265,11 @@ export async function downloadVideo(
         const valid = await downloadFromUrl(url, partPath, item.id, video.size, webContents, lastSentAt)
         if (!valid) throw new Error(`下载大小校验失败：期望 ${video.size} 字节`)
         renameSync(partPath, targetPath)
-        pruneOldVersions(item.id, item.version)
+        try {
+          pruneOldVersions(item.id, item.version)
+        } catch {
+          // 清理失败不影响本次下载结果（如 Windows 下旧版本文件仍被播放占用）
+        }
         if (!webContents.isDestroyed()) {
           webContents.send(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_DONE, { itemId: item.id, filePath: targetPath } satisfies {
             itemId: string

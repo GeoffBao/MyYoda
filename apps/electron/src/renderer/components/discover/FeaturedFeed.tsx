@@ -228,8 +228,22 @@ export function FeaturedFeed(): React.ReactElement {
 
   return (
     <>
+      {/* 刷新失败但有已加载内容：顶部细条提示（不清空旧内容） */}
+      {error && (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3.5 py-2.5">
+          <span className="text-xs text-foreground/60">刷新失败：{error}（当前展示已加载的内容）</span>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <RefreshCw size={11} />
+            重试
+          </button>
+        </div>
+      )}
       {/* 离线横幅：展示本地缓存（网络失败降级） */}
-      {fromCache && (
+      {!error && fromCache && (
         <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-foreground/[0.03] px-3.5 py-2.5">
           <span className="flex items-center gap-1.5 text-xs text-foreground/55">
             <CloudOff size={13} className="shrink-0" />
@@ -319,7 +333,11 @@ export function FeaturedFeed(): React.ReactElement {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => void handleDownload(item)}
+                      onClick={() => {
+                        handleDownload(item).catch(() => {
+                          // 错误状态已在 handleDownload 内写入 videoStates，这里静默即可
+                        })
+                      }}
                       title="下载到本地缓存（离线可用）"
                       className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-xs text-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     >
