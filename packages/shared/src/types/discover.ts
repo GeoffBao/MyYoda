@@ -135,4 +135,6 @@ export const DISCOVER_IPC_CHANNELS = {
   GET_DISCUSSION: 'discover:get-discussion',
   /** 为已下载视频文件注册 myyoda-file:// 播放 URL */
   GET_VIDEO_URL: 'discover:get-video-url',
+  /** 为远程视频注册 discover-video:// 流式播放 URL（主进程代理感知转发） */
+  GET_VIDEO_STREAM_URL: 'discover:get-video-stream-url',
 } as const

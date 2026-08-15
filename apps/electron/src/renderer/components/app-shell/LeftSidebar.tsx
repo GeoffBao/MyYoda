@@ -3527,27 +3527,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 <span className="min-w-0 flex-1 truncate text-left">知识库</span>
               </button>
             )}
-
-            {/* 发现：官方内容流 + 社区讨论 + 反馈 */}
-            {mode === 'agent' && (
-              <button
-                type="button"
-                onClick={handleOpenDiscover}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
-                  activeView === 'discover'
-                    ? 'bg-accent-foreground/[0.10] text-foreground'
-                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
-                )}
-              >
-                <Compass size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">发现</span>
-                {discoverHasUnread && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
-              </button>
-            )}
           </div>
         </SidebarModule>
       </div>
+
+      {/* 发现：官方内容流 + 社区讨论 + 反馈（与「功能」并列的独立入口行） */}
+      {mode === 'agent' && (
+        <div className="sidebar-module-zone px-3 pt-0.5 pb-0.5">
+          <SidebarModule
+            icon={Compass}
+            title="发现"
+            active={activeView === 'discover'}
+            count={discoverHasUnread ? 1 : undefined}
+            badgeTone="accent"
+            onClick={handleOpenDiscover}
+            ariaLabel="发现"
+          />
+        </div>
+      )}
 
       {/* 项目中心入口已移除：Project 导航改由下方 Sessions | Projects Tab 承担 */}
 

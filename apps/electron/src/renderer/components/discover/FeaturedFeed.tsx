@@ -10,7 +10,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
 import { Download, ExternalLink, FileText, Link2, Loader2, Megaphone, Play, RefreshCw, Video } from 'lucide-react'
-import type { DiscoverFeedItem, VideoDownloadState } from '@myyoda/shared'
+import type { DiscoverContentItem, DiscoverFeedItem, VideoDownloadState } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import { discoverFeedAtom, videoDownloadStatesAtom } from '@/atoms/discover-atoms'
 import { useDiscoverFeed } from './use-discover-feed'
@@ -40,7 +40,7 @@ export function FeaturedFeed(): React.ReactElement {
   const { loading, error, refresh, markSeen } = useDiscoverFeed()
   const [videoStates, setVideoStates] = useAtom(videoDownloadStatesAtom)
   const [expandedArticles, setExpandedArticles] = React.useState<Map<string, string>>(new Map())
-  const [playingItem, setPlayingItem] = React.useState<{ item: DiscoverFeedItem; filePath: string } | null>(null)
+  const [playingItem, setPlayingItem] = React.useState<DiscoverFeedItem | null>(null)
 
   // 订阅下载进度推送
   React.useEffect(() => {
@@ -93,15 +93,16 @@ export function FeaturedFeed(): React.ReactElement {
     [markSeen]
   )
 
+  /** 下载视频到本地缓存并返回文件路径（不自动播放，供卡片与播放器兜底共用） */
   const handleDownload = React.useCallback(
-    async (item: DiscoverFeedItem): Promise<void> => {
+    async (item: DiscoverFeedItem): Promise<string> => {
       setVideoStates((prev) => new Map(prev).set(item.id, { itemId: item.id, status: 'downloading', progress: 0 }))
       try {
         const { filePath } = await window.electronAPI.discoverDownloadVideo(item)
         setVideoStates((prev) =>
           new Map(prev).set(item.id, { itemId: item.id, status: 'done', progress: 1, filePath })
         )
-        setPlayingItem({ item, filePath })
+        return filePath
       } catch (err) {
         setVideoStates((prev) =>
           new Map(prev).set(item.id, {
@@ -111,9 +112,15 @@ export function FeaturedFeed(): React.ReactElement {
             error: err instanceof Error ? err.message : '下载失败',
           })
         )
+        throw err
       }
     },
     [setVideoStates]
+  )
+
+  const downloadAndGetPath = React.useCallback(
+    async (item: DiscoverContentItem): Promise<string> => handleDownload(item as DiscoverFeedItem),
+    [handleDownload]
   )
 
   const handleToggleArticle = React.useCallback(
@@ -215,9 +222,23 @@ export function FeaturedFeed(): React.ReactElement {
 
               {/* 内容区（按类型） */}
               {item.type === 'video' && item.video && (
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-2">
+                  {/* 播放：直接流式播放（主进程代理转发），无需下载 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleItemClick(item)
+                      setPlayingItem(item)
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    <Play size={12} />
+                    播放
+                  </button>
+
+                  {/* 下载：离线兜底（进度在卡片上显示） */}
                   {videoState?.status === 'downloading' ? (
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex min-w-[120px] flex-1 items-center gap-2">
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/[0.06]">
                         <div
                           className="h-full rounded-full bg-primary transition-[width] duration-300"
@@ -229,39 +250,23 @@ export function FeaturedFeed(): React.ReactElement {
                       </span>
                     </div>
                   ) : videoState?.status === 'done' ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleItemClick(item)
-                          if (videoState.filePath) setPlayingItem({ item, filePath: videoState.filePath })
-                        }}
-                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                      >
-                        <Play size={12} />
-                        播放
-                      </button>
-                      <span className="text-[11px] text-foreground/40">
-                        {item.video.size ? formatBytes(item.video.size) : '已缓存'}
-                      </span>
-                    </div>
+                    <span className="text-[11px] text-foreground/40">已缓存到本地</span>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleDownload(item)}
-                        className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3.5 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-                      >
-                        <Download size={12} />
-                        下载
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(item)}
+                      title="下载到本地缓存（离线可用）"
+                      className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-xs text-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <Download size={12} />
+                      下载
                       {item.video.size && (
-                        <span className="text-[11px] text-foreground/40">{formatBytes(item.video.size)}</span>
+                        <span className="text-[10.5px] text-foreground/35">{formatBytes(item.video.size)}</span>
                       )}
-                      {videoState?.status === 'error' && (
-                        <span className="text-[11px] text-destructive">{videoState.error ?? '下载失败，可重试'}</span>
-                      )}
-                    </div>
+                    </button>
+                  )}
+                  {videoState?.status === 'error' && (
+                    <span className="text-[11px] text-destructive">{videoState.error ?? '下载失败，可重试'}</span>
                   )}
                 </div>
               )}
@@ -318,12 +323,12 @@ export function FeaturedFeed(): React.ReactElement {
 
       {playingItem && (
         <VideoPlayerDialog
-          item={playingItem.item}
-          filePath={playingItem.filePath}
+          item={playingItem}
           open
           onOpenChange={(open) => {
             if (!open) setPlayingItem(null)
           }}
+          downloadAndGetPath={downloadAndGetPath}
         />
       )}
     </>

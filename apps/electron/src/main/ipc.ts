@@ -5264,6 +5264,12 @@ export function registerIpcHandlers(): void {
     return registerMyYodaFilePath(filePath)
   })
 
+  // 为远程视频注册 discover-video:// 流式播放 URL（白名单校验在主进程）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_VIDEO_STREAM_URL, async (_event, remoteUrl: string) => {
+    const { registerDiscoverVideoStream } = await import('./lib/discover-video-protocol')
+    return registerDiscoverVideoStream(remoteUrl)
+  })
+
   // ===== 飞书集成 =====
 
   // --- 旧 API（向后兼容，操作 bots[0]）---

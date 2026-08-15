@@ -1341,6 +1341,7 @@ export interface ElectronAPI {
   discoverListDiscussions: (categorySlug: import('@myyoda/shared').DiscussionCategorySlug, force?: boolean) => Promise<import('@myyoda/shared').DiscussionListResult>
   discoverGetDiscussion: (number: number) => Promise<import('@myyoda/shared').DiscussionDetail>
   discoverGetVideoUrl: (filePath: string) => Promise<string>
+  discoverGetVideoStreamUrl: (remoteUrl: string) => Promise<string>
   onVideoDownloadProgress: (listener: (event: import('@myyoda/shared').VideoDownloadProgressEvent) => void) => () => void
   onVideoDownloadDone: (listener: (event: import('@myyoda/shared').VideoDownloadDoneEvent) => void) => () => void
 
@@ -3197,6 +3198,10 @@ const electronAPI: ElectronAPI = {
 
   discoverGetVideoUrl: (filePath) => {
     return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_URL, filePath)
+  },
+
+  discoverGetVideoStreamUrl: (remoteUrl) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_VIDEO_STREAM_URL, remoteUrl)
   },
 
   onVideoDownloadProgress: (listener) => {
