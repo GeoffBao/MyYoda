@@ -4474,6 +4474,70 @@ const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection(
   )
 })
 
+const PROJECT_HISTORY_ANIMATION_MS = 160
+
+/**
+ * 仅在收起动画结束后卸载会话树：避免常驻隐藏历史占用渲染与监听开销。
+ * 使用 CSS grid 的固定轨道过渡，不读取内容高度，也不在动画帧中执行 JS。
+ */
+function ProjectSessionList({
+  id,
+  collapsed,
+  hideWorkspaceHeader,
+  children,
+}: {
+  id: string
+  collapsed: boolean
+  hideWorkspaceHeader: boolean
+  children: React.ReactNode
+}): React.ReactElement | null {
+  const [shouldRender, setShouldRender] = React.useState(!collapsed)
+  const [isOpen, setIsOpen] = React.useState(!collapsed)
+
+  React.useEffect(() => {
+    let frameId: number | undefined
+    let cleanupTimer: number | undefined
+
+    if (collapsed) {
+      setIsOpen(false)
+      cleanupTimer = window.setTimeout(() => setShouldRender(false), PROJECT_HISTORY_ANIMATION_MS)
+    } else {
+      setShouldRender(true)
+      // 先以 0fr 挂载，再在下一帧展开，确保首次展开能触发 CSS 过渡。
+      frameId = window.requestAnimationFrame(() => setIsOpen(true))
+    }
+
+    return () => {
+      if (frameId !== undefined) window.cancelAnimationFrame(frameId)
+      if (cleanupTimer !== undefined) window.clearTimeout(cleanupTimer)
+    }
+  }, [collapsed])
+
+  return (
+    <div
+      id={id}
+      className={cn(
+        'sidebar-workspace-content mt-px grid transition-[grid-template-rows] duration-[160ms] ease-out motion-reduce:transition-none',
+        !hideWorkspaceHeader && 'ml-4',
+        isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">
+        {shouldRender && (
+          <div
+            className={cn(
+              'transition-[opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none',
+              isOpen ? 'translate-y-0 opacity-100' : '-translate-y-0.5 opacity-0',
+            )}
+          >
+            {children}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 interface AgentProjectGroupItemProps {
   group: AgentProjectGroup
   currentWorkspaceId: string | null
@@ -4815,13 +4879,13 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
       </div>
       )}
 
-      <div
+      <ProjectSessionList
         id={`project-sessions-${group.workspace.id}`}
-        className={cn('sidebar-workspace-content mt-px', !hideWorkspaceHeader && 'ml-4')}
+        collapsed={collapsed}
+        hideWorkspaceHeader={hideWorkspaceHeader}
       >
-        {!collapsed ? (
-          treeItems.length > 0 ? (
-            <div className="flex flex-col gap-0.5">
+        {treeItems.length > 0 ? (
+          <div className="flex flex-col gap-0.5">
               {(() => {
                 // 按日期插入分组标题（今天/昨天/更早），对齐 craft-agents 的会话列表排序展示；
                 // 不改变 sessions 本身的排序逻辑（活跃优先 + 时间窗 + 显示更多），只在标签变化处插入标题。
@@ -4972,13 +5036,12 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                 </div>
               )}
             </div>
-          ) : (
-            <div className="px-1.5 py-0.5 text-[12px] text-foreground/22 select-none">
-              暂无会话
-            </div>
-          )
-        ) : null}
-      </div>
+        ) : (
+          <div className="px-1.5 py-0.5 text-[12px] text-foreground/22 select-none">
+            暂无会话
+          </div>
+        )}
+      </ProjectSessionList>
       {dropPosition === 'after' && (
         <div className="absolute -bottom-0.5 left-3 right-3 h-0.5 rounded-full bg-primary z-10" />
       )}
