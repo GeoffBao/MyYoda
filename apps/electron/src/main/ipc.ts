@@ -5239,6 +5239,24 @@ export function registerIpcHandlers(): void {
     markContentSeen(itemId, version)
   })
 
+  // 拉取未读汇总（官方未读 + 社区新回复，侧边栏徽标用）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_UNREAD_SUMMARY, async () => {
+    const [{ getFeedUnreadCount }, { getCommunityUnreadCount }] = await Promise.all([
+      import('./lib/content-service'),
+      import('./lib/community-service'),
+    ])
+    return { feedUnread: getFeedUnreadCount(), communityUnread: await getCommunityUnreadCount() }
+  })
+
+  // 记录某讨论已读（打开详情时调用）
+  ipcMain.handle(
+    DISCOVER_IPC_CHANNELS.MARK_DISCUSSION_VIEWED,
+    async (_event, number: number, commentCount: number) => {
+      const { markDiscussionViewed } = await import('./lib/community-service')
+      markDiscussionViewed(number, commentCount)
+    }
+  )
+
   // 拉取讨论列表（按板块）
   ipcMain.handle(
     DISCOVER_IPC_CHANNELS.LIST_DISCUSSIONS,

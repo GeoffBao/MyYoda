@@ -1338,6 +1338,8 @@ export interface ElectronAPI {
   discoverGetVideoStatus: (itemId: string, version: string, size?: number) => Promise<import('@myyoda/shared').VideoDownloadState>
   discoverDownloadVideo: (item: import('@myyoda/shared').DiscoverContentItem) => Promise<{ filePath: string }>
   discoverMarkSeen: (itemId: string, version: string) => Promise<void>
+  discoverGetUnreadSummary: () => Promise<import('@myyoda/shared').DiscoverUnreadSummary>
+  discoverMarkDiscussionViewed: (number: number, commentCount: number) => Promise<void>
   discoverListDiscussions: (categorySlug: import('@myyoda/shared').DiscussionCategorySlug, force?: boolean) => Promise<import('@myyoda/shared').DiscussionListResult>
   discoverGetDiscussion: (number: number, force?: boolean) => Promise<import('@myyoda/shared').DiscussionDetail>
   discoverGetVideoUrl: (filePath: string) => Promise<string>
@@ -3188,6 +3190,14 @@ const electronAPI: ElectronAPI = {
 
   discoverMarkSeen: (itemId, version) => {
     return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.MARK_SEEN, itemId, version)
+  },
+
+  discoverGetUnreadSummary: () => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_UNREAD_SUMMARY)
+  },
+
+  discoverMarkDiscussionViewed: (number, commentCount) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.MARK_DISCUSSION_VIEWED, number, commentCount)
   },
 
   discoverListDiscussions: (categorySlug, force) => {

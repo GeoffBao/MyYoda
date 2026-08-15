@@ -45,6 +45,8 @@ export interface DiscoverFeedResult {
   items: DiscoverFeedItem[]
   /** 是否存在未读更新（侧边栏红点用） */
   hasUnreadUpdates: boolean
+  /** 未读更新条目数（侧边栏徽标计数用） */
+  unreadCount: number
   /** 内容源仓库与分支（错误提示用） */
   source: { owner: string; repo: string; branch: string }
   /** 本次数据是否来自本地缓存（网络失败降级，渲染层据此显示离线横幅） */
@@ -103,6 +105,14 @@ export interface DiscussionSummary {
   labels: string[]
   categorySlug: DiscussionCategorySlug
   isAnswered: boolean
+  /** 上次查看后有新增回复（只看“看过之后新增的”，从未打开的不标记） */
+  hasNewReplies: boolean
+}
+
+/** 「发现」未读汇总（侧边栏徽标 = 两者之和） */
+export interface DiscoverUnreadSummary {
+  feedUnread: number
+  communityUnread: number
 }
 
 /** 讨论评论（含回复，扁平原列表 + parentId 关联；被采纳答案带 isAnswer） */
@@ -147,6 +157,10 @@ export const DISCOVER_IPC_CHANNELS = {
   VIDEO_DOWNLOAD_DONE: 'discover:video-download-done',
   /** 记录某条目已读版本 */
   MARK_SEEN: 'discover:mark-seen',
+  /** 拉取未读汇总（官方未读数 + 社区新回复数，侧边栏徽标用） */
+  GET_UNREAD_SUMMARY: 'discover:get-unread-summary',
+  /** 记录某讨论已读（打开详情时调用，传入当前评论总数） */
+  MARK_DISCUSSION_VIEWED: 'discover:mark-discussion-viewed',
   /** 拉取讨论列表（按板块） */
   LIST_DISCUSSIONS: 'discover:list-discussions',
   /** 拉取讨论详情正文 */

@@ -7,7 +7,7 @@ import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { Compass, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { discoverTabAtom, discussionCategoryAtom, discussionListResultAtom } from '@/atoms/discover-atoms'
+import { discoverTabAtom, discoverCommunityUnreadAtom, discussionCategoryAtom, discussionListResultAtom } from '@/atoms/discover-atoms'
 import { useDiscoverFeed } from './use-discover-feed'
 import { FeaturedFeed } from './FeaturedFeed'
 import { CommunityView } from './CommunityView'
@@ -26,6 +26,7 @@ export function DiscoverView(): React.ReactElement {
   const { loading: feedLoadingState, refresh } = useDiscoverFeed()
   const discussionCategory = useAtomValue(discussionCategoryAtom)
   const setDiscussionResult = useSetAtom(discussionListResultAtom)
+  const setCommunityUnread = useSetAtom(discoverCommunityUnreadAtom)
   const [refreshing, setRefreshing] = React.useState(false)
 
   const handleRefresh = React.useCallback(async (): Promise<void> => {
@@ -36,10 +37,13 @@ export function DiscoverView(): React.ReactElement {
         const result = await window.electronAPI.discoverListDiscussions(discussionCategory, true)
         setDiscussionResult(result)
       }
+      // 同步社区未读计数（徽标分量）
+      const summary = await window.electronAPI.discoverGetUnreadSummary()
+      setCommunityUnread(summary.communityUnread)
     } finally {
       setRefreshing(false)
     }
-  }, [refresh, tab, discussionCategory, setDiscussionResult])
+  }, [refresh, tab, discussionCategory, setDiscussionResult, setCommunityUnread])
 
   // 每次打开面板刷新一次（spec §8：启动 + 打开面板 + 手动刷新）
   React.useEffect(() => {

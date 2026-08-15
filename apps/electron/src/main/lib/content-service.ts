@@ -142,10 +142,19 @@ export async function fetchDiscoverFeed(force = false): Promise<DiscoverFeedResu
   return {
     items,
     hasUnreadUpdates: items.some((item) => item.hasUpdate),
+    unreadCount: items.filter((item) => item.hasUpdate).length,
     source: CONTENT_SOURCE,
     fromCache,
     cachedAt: fromCache ? cacheEntry.fetchedAt : undefined,
   }
+}
+
+/** 未读汇总中的官方未读数（仅用本地缓存清单，不触发网络） */
+export function getFeedUnreadCount(): number {
+  const cacheEntry = manifestMemoryCache ?? readManifestCacheFile()
+  if (!cacheEntry) return 0
+  const items = computeUpdateFlags(cacheEntry.manifest.items, readContentState())
+  return items.filter((item) => item.hasUpdate).length
 }
 
 /** 记录条目已读 */

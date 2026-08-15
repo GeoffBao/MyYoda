@@ -18,8 +18,10 @@ export const discoverTabAtom = atom<DiscoverTab>('featured')
 export const discoverFeedAtom = atom<DiscoverFeedItem[]>([])
 export const discoverFeedLoadingAtom = atom(false)
 export const discoverFeedErrorAtom = atom<string | null>(null)
-/** 未读更新（侧边栏红点） */
-export const discoverHasUnreadAtom = atom(false)
+/** 官方未读条目数（侧边栏徽标分量） */
+export const discoverFeedUnreadAtom = atom(0)
+/** 社区有新增回复的讨论数（侧边栏徽标分量） */
+export const discoverCommunityUnreadAtom = atom(0)
 /** 数据源状态（是否离线缓存 + 缓存时间），用于离线横幅 */
 export const discoverFeedSourceAtom = atom<{ fromCache: boolean; cachedAt?: number }>({
   fromCache: false,

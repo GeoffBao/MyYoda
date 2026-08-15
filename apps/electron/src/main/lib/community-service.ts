@@ -15,7 +15,7 @@ import {
   type DiscussionListResult,
   type DiscussionSummary,
 } from '@myyoda/shared'
-import { getDiscoverDiscussionsCachePath } from './config-paths'
+import { getDiscoverCommunityStatePath, getDiscoverDiscussionsCachePath } from './config-paths'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { rewriteMarkdownMedia, rewriteRemoteMediaUrl } from './media-rewrite'
@@ -31,6 +31,41 @@ const KNOWN_CATEGORY_SLUGS = new Set<string>(['q-a', 'show-and-tell', 'announcem
 interface DiscussionCacheEntry {
   fetchedAt: number
   items: DiscussionSummary[]
+}
+
+/** 社区已读状态：讨论 number -> 已看评论数与查看时间 */
+export type CommunityViewedState = Record<number, { viewedCommentCount: number; viewedAt: number }>
+
+/** 读取社区已读状态（不存在或损坏返回空对象） */
+function readCommunityState(): CommunityViewedState {
+  try {
+    const raw = JSON.parse(readFileSync(getDiscoverCommunityStatePath(), 'utf-8')) as unknown
+    if (typeof raw === 'object' && raw !== null) return raw as CommunityViewedState
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+/** 写社区已读状态 */
+function writeCommunityState(state: CommunityViewedState): void {
+  mkdirSync(join(getDiscoverCommunityStatePath(), '..'), { recursive: true })
+  writeFileSync(getDiscoverCommunityStatePath(), JSON.stringify(state, null, 2))
+}
+
+/** 判定某讨论是否有新增回复（纯逻辑：只看“看过之后新增的”） */
+export function computeHasNewReplies(
+  commentCount: number,
+  viewed: { viewedCommentCount: number } | undefined,
+): boolean {
+  return viewed !== undefined && commentCount > viewed.viewedCommentCount
+}
+
+/** 记录某讨论已读（打开详情时调用，传入当前评论总数） */
+export function markDiscussionViewed(number: number, commentCount: number): void {
+  const state = readCommunityState()
+  state[number] = { viewedCommentCount: commentCount, viewedAt: Date.now() }
+  writeCommunityState(state)
 }
 
 /** 内存缓存 */
@@ -95,6 +130,7 @@ function parseSummaryEntry(raw: Record<string, unknown>): DiscussionSummary | nu
     labels,
     categorySlug: categorySlug as DiscussionCategorySlug,
     isAnswered: answers.some((answer) => answer.is_answer === true),
+    hasNewReplies: false,
   }
 }
 
@@ -203,10 +239,13 @@ export async function listDiscussions(
       throw new Error(`GitHub Discussions API 返回 HTTP ${response.status}`)
     }
     const all: DiscussionSummary[] = parseDiscussionList((await response.json()) as unknown)
+    const viewedState = readCommunityState()
     const items = all
       .filter((item) => item.categorySlug === categorySlug)
       .map((item) => ({
         ...item,
+        // 新回复标记（只看“看过之后新增的”）
+        hasNewReplies: computeHasNewReplies(item.commentCount, viewedState[item.number]),
         // 头像走代理转发（渲染层直连 GitHub 会绕过主进程代理）
         authorAvatarUrl: rewriteRemoteMediaUrl(item.authorAvatarUrl, registerRemoteMediaUrl),
       }))
@@ -275,6 +314,33 @@ export async function getDiscussion(number: number, force = false): Promise<Disc
   }
   detailMemoryCache.set(number, { fetchedAt: now, detail })
   return detail
+}
+
+/** 社区未读计数内存缓存（全板块一次拉取） */
+let allUnreadMemoryCache: { fetchedAt: number; count: number } | null = null
+
+/** 拉取社区未读讨论数（有新增回复的讨论个数；失败时返回最近一次结果或 0） */
+export async function getCommunityUnreadCount(): Promise<number> {
+  const now = Date.now()
+  if (allUnreadMemoryCache && now - allUnreadMemoryCache.fetchedAt < DISCUSSION_CACHE_TTL_MS) {
+    return allUnreadMemoryCache.count
+  }
+  try {
+    const fetchFn = getFetchFn(await getEffectiveProxyUrl())
+    const url = `https://api.github.com/repos/${COMMUNITY_REPO.owner}/${COMMUNITY_REPO.repo}/discussions?per_page=100`
+    const response = await fetchFn(url, {
+      signal: AbortSignal.timeout(20_000),
+      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    })
+    if (!response.ok) throw new Error(`GitHub Discussions API 返回 HTTP ${response.status}`)
+    const all = parseDiscussionList((await response.json()) as unknown)
+    const viewedState = readCommunityState()
+    const count = all.filter((item) => computeHasNewReplies(item.commentCount, viewedState[item.number])).length
+    allUnreadMemoryCache = { fetchedAt: now, count }
+    return count
+  } catch {
+    return allUnreadMemoryCache?.count ?? 0
+  }
 }
 
 /** 构造浏览器打开的讨论 URL */

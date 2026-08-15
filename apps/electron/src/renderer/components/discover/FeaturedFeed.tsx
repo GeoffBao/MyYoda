@@ -87,6 +87,15 @@ export function FeaturedFeed(): React.ReactElement {
     }
   }, [feed, setVideoStates])
 
+  // 公告类条目完整展示即视为已读（无需点击交互）；视频/教程/外链保持点击记已读
+  React.useEffect(() => {
+    for (const item of feed) {
+      if (item.type === 'announcement' && item.hasUpdate) {
+        markSeen(item.id, item.version)
+      }
+    }
+  }, [feed, markSeen])
+
   const handleItemClick = React.useCallback(
     (item: DiscoverFeedItem): void => {
       if (item.hasUpdate) markSeen(item.id, item.version)

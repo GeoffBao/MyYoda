@@ -731,6 +731,15 @@ export function getDiscoverVideoCacheDir(): string {
 }
 
 /**
+ * 获取「发现」社区已读状态文件路径
+ *
+ * @returns ~/.myyoda/discover/community-state.json
+ */
+export function getDiscoverCommunityStatePath(): string {
+  return join(getDiscoverDir(), 'community-state.json')
+}
+
+/**
  * 获取「发现」讨论列表缓存文件路径
  *
  * @returns ~/.myyoda/discover/discussions-cache.json

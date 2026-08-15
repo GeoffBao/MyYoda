@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { DISCUSSION_CACHE_TTL_MS, parseDiscussionDetail, parseDiscussionList } from './community-service'
+import { computeHasNewReplies, DISCUSSION_CACHE_TTL_MS, parseDiscussionDetail, parseDiscussionList } from './community-service'
 
 // fixture 取自 GET /repos/{owner}/{repo}/discussions 真实字段（精简）
 const LIST_FIXTURE = [
@@ -47,6 +47,21 @@ describe('parseDiscussionDetail', () => {
     const detail = parseDiscussionDetail({ ...LIST_FIXTURE[0], body: '# 正文' })
     expect(detail.bodyMarkdown).toBe('# 正文')
     expect(detail.title).toBe('如何配置 DeepSeek 渠道？')
+  })
+})
+
+describe('computeHasNewReplies', () => {
+  test('看过之后评论数增加 → 有新增回复', () => {
+    expect(computeHasNewReplies(5, { viewedCommentCount: 3 })).toBe(true)
+  })
+
+  test('评论数未变或减少 → 无新增', () => {
+    expect(computeHasNewReplies(3, { viewedCommentCount: 3 })).toBe(false)
+    expect(computeHasNewReplies(2, { viewedCommentCount: 3 })).toBe(false)
+  })
+
+  test('从未打开过（无已读记录）→ 不标记', () => {
+    expect(computeHasNewReplies(5, undefined)).toBe(false)
   })
 })
 

@@ -6,11 +6,12 @@
  * - 详情：正文 markdown 应用内渲染，「回复」「发起讨论」跳浏览器
  */
 import * as React from 'react'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtom, useSetAtom } from 'jotai'
 import { CloudOff, ArrowLeft, ExternalLink, Loader2, MessageSquare, Plus, RefreshCw, Sparkles } from 'lucide-react'
 import { DISCUSSION_CATEGORIES, type DiscussionComment, type DiscussionDetail, type DiscussionSummary } from '@myyoda/shared'
 import { cn } from '@/lib/utils'
 import {
+  discoverCommunityUnreadAtom,
   discussionCategoryAtom,
   discussionDetailAtom,
   discussionDetailLoadingAtom,
@@ -64,9 +65,16 @@ function DiscussionItem({
             {discussion.isAnswered && <Sparkles size={12} className="mr-1 inline text-emerald-500" />}
             {discussion.title}
           </div>
-          <div className="flex shrink-0 items-center gap-1 text-[11px] text-foreground/40">
-            <MessageSquare size={11} />
-            <span className="tabular-nums">{discussion.commentCount}</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {discussion.hasNewReplies && (
+              <span className="rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                新回复
+              </span>
+            )}
+            <div className="flex items-center gap-1 text-[11px] text-foreground/40">
+              <MessageSquare size={11} />
+              <span className="tabular-nums">{discussion.commentCount}</span>
+            </div>
           </div>
         </div>
         <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground/40">
@@ -237,6 +245,7 @@ export function CommunityView(): React.ReactElement {
   const [listLoading, setListLoading] = useAtom(discussionListLoadingAtom)
   const [detail, setDetail] = useAtom(discussionDetailAtom)
   const [detailLoading, setDetailLoading] = useAtom(discussionDetailLoadingAtom)
+  const setCommunityUnread = useSetAtom(discoverCommunityUnreadAtom)
   const [loadedCategory, setLoadedCategory] = React.useState<string | null>(null)
 
   const loadList = React.useCallback(
@@ -278,6 +287,22 @@ export function CommunityView(): React.ReactElement {
         .discoverGetDiscussion(number, force)
         .then((result) => {
           setDetail(result)
+          // 打开详情即记已读：写主进程状态 + 本地列表「新回复」标记清除 + 未读计数递减
+          const viewedItem = listResult.items.find((item) => item.number === number)
+          if (viewedItem?.hasNewReplies) {
+            setListResult((prev) => ({
+              ...prev,
+              items: prev.items.map((item) =>
+                item.number === number ? { ...item, hasNewReplies: false } : item
+              ),
+            }))
+            setCommunityUnread((prev) => Math.max(0, prev - 1))
+          }
+          window.electronAPI
+            .discoverMarkDiscussionViewed(number, result.comments.length)
+            .catch((err: unknown) => {
+              console.warn('[CommunityView] 记录讨论已读失败:', err)
+            })
         })
         .catch((err: unknown) => {
           console.warn('[CommunityView] 讨论详情拉取失败:', err)
@@ -288,7 +313,7 @@ export function CommunityView(): React.ReactElement {
           setDetailLoading(false)
         })
     },
-    [setDetail, setDetailLoading]
+    [setDetail, setDetailLoading, listResult.items, setListResult, setCommunityUnread]
   )
 
   const handleRefreshDetail = React.useCallback((): void => {
