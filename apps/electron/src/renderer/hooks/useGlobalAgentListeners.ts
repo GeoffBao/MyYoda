@@ -78,7 +78,7 @@ import { buildTodoAgentPrompt } from '@/lib/todo-agent-prompt'
 import { getAgentCompletionMarkers, notifyAgentCompletion } from '@/lib/agent-completion-presence'
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { getSessionFileChangeKind, upsertSessionFileChange } from '@/lib/session-file-changes'
-import { buildQueuedMessageSendPayload, removeQueuedMessage, restoreQueuedMessageToFront, shouldAutoDispatchQueuedMessage } from '@/lib/agent-message-queue'
+import { buildQueuedMessageSendPayload, removeQueuedMessage, restoreQueuedMessageToFront, shouldAutoDispatchQueuedMessage, upsertAgentLiveMessageByUuid } from '@/lib/agent-message-queue'
 import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
 import { agentLiveTranscriptStore } from '@/lib/agent-live-transcript-store'
 import { claimFinalToolSideEffects, isAgentRunSignalForCurrent, isRunScopedRetryUpdate, projectAgentLiveUpdates, shouldAcceptAgentRunStart } from '@/lib/agent-canonical-stream'
@@ -222,7 +222,7 @@ export function useGlobalAgentListeners(): void {
         return
       }
 
-      const optimisticMessageUuid = `queued-${message.id}`
+      const optimisticMessageUuid = message.id
       const optimisticMessage: SDKMessage = {
         type: 'user',
         uuid: optimisticMessageUuid,
@@ -233,7 +233,8 @@ export function useGlobalAgentListeners(): void {
       } as unknown as SDKMessage
       store.set(liveMessagesMapAtom, (prev) => {
         const map = new Map(prev)
-        map.set(sessionId, [...(map.get(sessionId) ?? []), optimisticMessage])
+        const current = map.get(sessionId) ?? []
+        map.set(sessionId, upsertAgentLiveMessageByUuid(current, optimisticMessage))
         return map
       })
       store.set(agentStreamErrorsAtom, (prev) => {
