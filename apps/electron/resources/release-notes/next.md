@@ -10,6 +10,4 @@
 
 ## Bug Fixes（缺陷修复）
 
-- **修复「发现－官方精选」视频播放失败**：视频流式播放/下载此前只走 Node 全局 `fetch`（未在 MyYoda「代理配置」页显式开启代理时不会读取系统 HTTP 代理/VPN），而该设置页明确标注是给 AI API 请求用的，多数用户不会为了看官方视频专门去开；GitHub Release 视频资源又没有 CDN 镜像兜底，导致系统层有代理/VPN 但未在 MyYoda 里配置的用户视频完全无法播放。现在主进程请求失败时自动用 `net.fetch`（Electron/Chromium 网络栈，自动感知系统代理）重试兜底，不依赖用户额外配置
-
 ## Breaking Changes（破坏性变更）
