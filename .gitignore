@@ -72,3 +72,4 @@ pnpm-workspace.yaml
 !apps/electron/default-skills/**/vendor/
 !apps/electron/default-skills/**/vendor/**
 graphify-out/
+.bitfun/

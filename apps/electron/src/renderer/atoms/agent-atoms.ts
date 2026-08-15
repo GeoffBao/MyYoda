@@ -6,7 +6,8 @@
  */
 
 import { atom } from 'jotai'
-import { atomFamily, atomWithStorage, selectAtom } from 'jotai/utils'
+import { atomFamily } from 'jotai-family'
+import { atomWithStorage, selectAtom } from 'jotai/utils'
 import type { AgentSessionMeta, AgentEvent, AgentWorkspace, AgentPendingFile, RetryAttempt, MyYodaPermissionMode, PermissionRequest, AskUserRequest, ExitPlanModeRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE } from '@myyoda/shared'
 import type { AgentLiveUpdate } from '@/lib/agent-canonical-stream'
