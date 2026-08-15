@@ -83,7 +83,7 @@ import { buildSessionMirrorGroupName, normalizeSessionMirrorUserOpenId } from '.
 import { resolveGroupMessageAccess } from './feishu/group-message-policy'
 import { ScopedQueue } from './feishu/scoped-queue'
 import { RunCoordinator } from './feishu/run-coordinator'
-import { extractFinalAssistantText, isPartialSDKMessage } from './bridge-agent-message-utils'
+import { extractFinalAssistantText } from './bridge-agent-message-utils'
 import {
   buildAgentUserMessage,
   fetchQuotedMessage,
@@ -1818,7 +1818,7 @@ class FeishuBridge {
     if (buffer && payload.kind === 'sdk_message') {
       const msg = payload.message
       // 从 assistant 消息中提取文本与工具使用摘要
-      if (msg.type === 'assistant' && !isPartialSDKMessage(msg)) {
+      if (msg.type === 'assistant') {
         const aMsg = msg as SDKAssistantMessage
         buffer.text += extractFinalAssistantText(msg)
         for (const block of aMsg.message?.content ?? []) {

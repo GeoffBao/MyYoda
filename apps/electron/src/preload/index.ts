@@ -60,6 +60,7 @@ import type {
   AgentStreamCompletePayload,
   AgentSessionFileRoots,
   AgentOutputRecord,
+  AgentStreamErrorPayload,
   AgentWorkspace,
   SessionGroup,
   AgentGenerateTitleInput,
@@ -1044,7 +1045,7 @@ export interface ElectronAPI {
   onAgentStreamComplete: (callback: (data: AgentStreamCompletePayload) => void) => () => void
 
   /** 订阅 Agent 流式错误事件 */
-  onAgentStreamError: (callback: (data: { sessionId: string; error: string }) => void) => () => void
+  onAgentStreamError: (callback: (data: AgentStreamErrorPayload) => void) => () => void
 
   /** 订阅 Agent 标题自动更新事件 */
   onAgentTitleUpdated: (callback: (data: { sessionId: string; title: string }) => void) => () => void
@@ -2755,8 +2756,8 @@ const electronAPI: ElectronAPI = {
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.STREAM_COMPLETE, listener) }
   },
 
-  onAgentStreamError: (callback: (data: { sessionId: string; error: string }) => void) => {
-    const listener = (_: unknown, data: { sessionId: string; error: string }): void => callback(data)
+  onAgentStreamError: (callback: (data: AgentStreamErrorPayload) => void) => {
+    const listener = (_: unknown, data: AgentStreamErrorPayload): void => callback(data)
     ipcRenderer.on(AGENT_IPC_CHANNELS.STREAM_ERROR, listener)
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.STREAM_ERROR, listener) }
   },

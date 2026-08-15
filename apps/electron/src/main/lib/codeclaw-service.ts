@@ -365,7 +365,7 @@ function handleSdkMessage(sessionId: string, message: import('@myyoda/shared').S
 
 function handleAgentEvent(sessionId: string, payload: AgentStreamPayload): void {
   if (payload.kind === 'myyoda_event') handleMyYodaEvent(sessionId, payload.event)
-  else handleSdkMessage(sessionId, payload.message)
+  else if (payload.kind === 'sdk_message') handleSdkMessage(sessionId, payload.message)
 }
 
 function phaseScore(phase: CodeClawPhase): number {

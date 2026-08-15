@@ -121,7 +121,8 @@ import type { AgentRuntime, AgentSendInput, AgentPendingFile, AgentThinkingLevel
 import { DEFAULT_AGENT_THINKING_LEVEL, getSessionThinkingLevel, inferAgentSdkContextWindow, inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, isOpenAIReasoningMaxSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@myyoda/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
-import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
+import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
+import { agentLiveTranscriptStore } from '@/lib/agent-live-transcript-store'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
@@ -955,7 +956,13 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // 气泡显示用原文 text（保留 /skill:、#mcp:、&session:、&todo: 和 &calendar_event: 语法），
     // 让 message.tsx 的 remarkMentions 立即渲染出引用芯片；
     // 剥离后的 sdkText 仅用于传给 SDK，不作为展示文本。
-    appendLiveUserMessage(createUserSDKMessage(rawText, message.id, Date.now()))
+    const optimisticMessage = createUserSDKMessage(rawText, message.id, Date.now())
+    // 当前 assistant partial 尚未进入 Jotai transcript 时，用户边界必须暂放在 live tail
+    // 之后；stable final 到达后 listener 会把 assistant 插到它之前并解除该标记。
+    if (interruptCurrentTurn || agentLiveTranscriptStore.getSnapshot(sessionId).length > 0) {
+      ;(optimisticMessage as Record<string, unknown>)._promaPendingAfterLiveAssistant = true
+    }
+    appendLiveUserMessage(optimisticMessage)
 
     try {
       await window.electronAPI.queueAgentMessage({
@@ -993,7 +1000,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        content: '',
         toolActivities: [],
         model: agentModelId || undefined,
         channelId,
@@ -1160,8 +1166,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                content: '',
-                toolActivities: [],
+                      toolActivities: [],
                 inputTokens: state.inputTokens,
                 outputTokens: state.outputTokens,
                 cacheReadTokens: state.cacheReadTokens,
@@ -1177,8 +1182,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                content: '',
-                toolActivities: [],
+                      toolActivities: [],
                 contextCompaction: state.contextCompaction,
               })
             } else {
@@ -1286,7 +1290,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const existing = prev.get(sessionId)
         map.set(sessionId, {
           running: true,
-          content: '',
           toolActivities: [],
           model: snapshot.modelId,
           channelId: snapshot.channelId,
@@ -2281,7 +2284,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        content: '',
         toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
@@ -2391,7 +2393,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const map = new Map(prev)
       const current = prev.get(sessionId) ?? {
         running: true,
-        content: '',
         toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
@@ -2487,7 +2488,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        content: '',
         toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
@@ -2534,7 +2534,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const map = new Map(prev)
         map.set(meta.id, {
           running: true,
-          content: '',
           toolActivities: [],
           model: agentModelId || undefined,
           channelId: agentChannelId,
