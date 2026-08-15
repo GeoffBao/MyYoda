@@ -41,9 +41,17 @@ export function getSettings(): AppSettings {
 
   try {
     const raw = readFileSync(filePath, 'utf-8')
-    const data = JSON.parse(raw) as Partial<AppSettings> & { experimentalAgentRuntimeSwitchEnabled?: boolean }
-    // Pi runtime 已默认可用；读取时清理旧版本遗留的实验开关。
-    const { experimentalAgentRuntimeSwitchEnabled: _legacyRuntimeSwitch, ...settings } = data
+    const data = JSON.parse(raw) as Partial<AppSettings> & {
+      experimentalAgentRuntimeSwitchEnabled?: boolean
+      /** Claude 时代遗留：渠道白名单已随 Pi-only 终态退役 */
+      agentChannelIds?: string[]
+    }
+    // Pi runtime 已默认可用；读取时清理旧版本遗留的实验开关与 Claude 渠道白名单。
+    const {
+      experimentalAgentRuntimeSwitchEnabled: _legacyRuntimeSwitch,
+      agentChannelIds: _legacyAgentChannelIds,
+      ...settings
+    } = data
     return {
       ...settings,
       themeMode: data.themeMode || DEFAULT_THEME_MODE,

@@ -70,7 +70,6 @@ import {
   agentSessionInputStreamStateAtomFamily,
   agentChannelIdAtom,
   agentModelIdAtom,
-  agentChannelIdsAtom,
   agentSessionChannelMapAtom,
   agentSessionModelMapAtom,
   currentAgentWorkspaceIdAtom,
@@ -427,7 +426,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const isLegacyTranscript = sessionMeta?.legacyTranscript?.continuationRequired === true
   const agentChannelId = sessionMetaChannelId ?? sessionChannelMap.get(sessionId) ?? defaultChannelId
   const agentModelId = sessionMetaModelId ?? sessionModelMap.get(sessionId) ?? defaultModelId
-  const agentChannelIds = useAtomValue(agentChannelIdsAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
   const draftSessionIds = useAtomValue(draftSessionIdsAtom)
@@ -735,16 +733,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // MyYoda 官方渠道（商业版）：只要 enabled 且有可用模型，直接视为可用
     const myyodaOfficial = globalChannels.find((c) => c.id === 'myyoda-official')
     if (myyodaOfficial?.enabled && myyodaOfficial.models.some((m) => m.enabled)) return true
-    // Pi runtime 支持所有协议，任何已启用渠道都可用
-    if (sessionAgentRuntime === 'pi') {
-      return globalChannels.some((c) => c.enabled && c.models.some((m) => m.enabled))
-    }
-    // Claude runtime：需在 agentChannelIds 白名单中
-    if (!agentChannelIds || agentChannelIds.length === 0) return false
-    return globalChannels.some(
-      (c) => c.enabled && agentChannelIds.includes(c.id) && c.models.some((m) => m.enabled),
-    )
-  }, [globalChannels, agentChannelIds, sessionAgentRuntime])
+    // Pi 为唯一 runtime，支持所有协议，任何已启用渠道都可用
+    return globalChannels.some((c) => c.enabled && c.models.some((m) => m.enabled))
+  }, [globalChannels])
   React.useEffect(() => {
     if (!agentChannelId || agentModelId) return
 
@@ -2996,7 +2987,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     <>
       <div className="flex min-w-0 items-center gap-1 [&_.model-selector-trigger>span]:max-w-[min(18rem,42vw)]">
         <ModelSelector
-          filterChannelIds={sessionAgentRuntime === 'pi' ? undefined : agentChannelIds}
           externalSelectedModel={externalSelectedModel}
           onModelSelect={handleModelSelect}
           showChannelInTrigger

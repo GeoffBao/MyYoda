@@ -49,7 +49,7 @@ luxcoder/
 - **导出模块**：`./providers`、`./highlight`、`./types`、`./utils`
 - **关键功能**：Provider 适配器注册表、代码高亮（Shiki）
 - **依赖**：`@myyoda/shared`、`shiki`
-- **Peer 依赖**：`@anthropic-ai/claude-agent-sdk`、`@anthropic-ai/sdk`、`@modelcontextprotocol/sdk`
+- **Peer 依赖**：`@modelcontextprotocol/sdk`
 
 #### @myyoda/ui (v0.1.0)
 - **关键组件**：共享 React UI 组件库
@@ -59,7 +59,7 @@ luxcoder/
 #### @myyoda/electron (v0.1.94)
 - **职责**：Electron 桌面应用主体，集成所有包
 - **关键依赖**：
-  - `@anthropic-ai/claude-agent-sdk` - Agent SDK
+  - `@earendil-works/pi-coding-agent` - Pi-native Agent runtime
   - `@larksuiteoapi/node-sdk` - 飞书集成
   - Radix UI、TipTap、Tailwind CSS
   - 文件解析：`pdf-parse`、`officeparser`、`word-extractor`
@@ -135,7 +135,7 @@ bun run generate:icons    # 生成应用图标
 | **构建工具** | Vite | 6.0.3 |
 | **打包工具** | esbuild | 0.24.0+ |
 | **分发工具** | Electron Builder | 25.1.8 |
-| **Agent SDK** | @anthropic-ai/claude-agent-sdk | 0.3.201 |
+| **Agent Runtime** | @earendil-works/pi-coding-agent | 0.84.2 |
 | **飞书 SDK** | @larksuiteoapi/node-sdk | 最新 |
 
 ## 核心架构
@@ -325,52 +325,23 @@ bun run generate:icons    # 生成应用图标
 
 ## 构建工具
 
-- **主进程/Preload**：esbuild (`--bundle --platform=node --format=cjs --external:electron --external:@anthropic-ai/claude-agent-sdk`)
+- **主进程/Preload**：esbuild (`--bundle --platform=node --format=cjs --external:electron --external:@earendil-works/pi-coding-agent --external:@earendil-works/pi-agent-core --external:@earendil-works/pi-ai --external:sharp --external:web-tree-sitter --external:node-pty`)
 - **渲染进程**：Vite + React 插件 + Tailwind CSS + HMR
 - **开发热重载**：渲染进程 Vite HMR 即时生效；主进程/Preload 通过 electronmon 监听 dist 文件变化自动重启
 - **打包分发**：electron-builder（配置见 `electron-builder.yml`）
 
 ### 重要：打包配置注意事项
 
-**Agent SDK 打包要求（必须遵守）：**
-- `@anthropic-ai/claude-agent-sdk` 必须使用 `--external` 参数排除在 esbuild 打包之外
-- **0.2.113+ 架构变化**：SDK 主包已不再携带 JS CLI 入口（`cli.js`）和 `vendor/ripgrep/`，改为按平台分发 native binary（`Codex` / `Codex.exe`，单文件 214-252 MB），通过 `optionalDependencies` 安装到 `@anthropic-ai/claude-agent-sdk-{platform}-{arch}/` 子包
-- `apps/electron/package.json` 必须显式声明当前 CI 矩阵覆盖的平台子包为 `optionalDependencies`（darwin-arm64 / darwin-x64 / win32-x64），否则 bun workspace 不会把它们链接到 `apps/electron/node_modules/`
-- `electron-builder.yml` 的 `files` 配置要同时包含主包和所有平台子包：
-  ```yaml
-  files:
-    - dist/**/*
-    - package.json
-    - node_modules/@anthropic-ai/claude-agent-sdk/**/*
-    - node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/**/*
-    - node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/**/*
-    - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**/*
-    - "!node_modules/@myyoda/**"
-  ```
-- SDK 主包和同级平台子包会被复制到 `app/node_modules/@anthropic-ai/`，Node.js 的模块解析能从 `app/dist/main.cjs` 找到
-- `agent-orchestrator.ts` 中 `resolveSDKCliPath()` 解析到 SDK 主包入口后，沿 `..` 到 `@anthropic-ai/` 同级目录，再拼 `claude-agent-sdk-${platform}-${arch}/{Codex|Codex.exe}` 得到 binary 路径
-
-**跨平台打包限制：**
-- optionalDependencies 的平台子包由包管理器按 `os`/`cpu` 字段筛选：Apple Silicon runner 只会装 darwin-arm64，不会装 darwin-x64（cpu 不匹配）
-- 因此当前 CI（macos-latest + windows-latest）**不支持在单个 macOS runner 上同时打 arm64 + x64 DMG**
-- 若要发布 darwin-x64 版本，需要在 macos-13（x64 runner）单独跑一次构建
-- Windows runner 默认 x64，打 win32-x64 正常
-
-**不使用 extraResources 放 binary 的原因：**
-- `extraResources` 会将文件复制到 `Contents/Resources/` 目录，路径与 node_modules 解析不一致
-- 直接使用 `files` 配置让 Node.js 的模块解析能正确找到 SDK
-
-**修改打包配置时的检查清单：**
-1. ✅ 确认 SDK 在 esbuild 中使用 `--external` 参数
-2. ✅ 确认 SDK 主包 + 所有目标平台子包都在 `files` 配置中
-3. ✅ 确认 `apps/electron/package.json` 的 `optionalDependencies` 列出了所有目标平台子包
-4. ✅ `bun install` 后验证 `apps/electron/node_modules/@anthropic-ai/claude-agent-sdk-{platform}-{arch}/` symlink 存在且 binary 可执行
-5. ✅ 本地测试打包后的应用 Agent 功能（`CSC_IDENTITY_AUTO_DISCOVERY=false bun run dist:fast`）
+**Pi runtime 打包要求（必须遵守）：**
+- `@earendil-works/pi-coding-agent` / `pi-agent-core` / `pi-ai` 必须使用 `--external` 参数排除在 esbuild 打包之外（纯 JS 包，随 node_modules 打包）
+- `@earendil-works/pi-tui` 含 native 模块，**不**走 esbuild external，随 node_modules 打包；`electron-builder.yml` 的 `asarUnpack` 必须包含 `node_modules/@earendil-works/pi-tui/native/**`
+- 版本一致性：`apps/electron/package.json` 的 dependencies 与 root `package.json` 的 overrides 必须同为 `0.84.2`（`scripts/upstream-sync/check.ts` 的 sdk 门禁强制校验）
+- 修改打包配置后运行 `bun run sync:check`，含「已退役的 claude-agent-sdk 残留即 error」检测
 
 **其他依赖的打包策略：**
-- **原则**：只有 `electron` 和 `@anthropic-ai/claude-agent-sdk` 需要标记为 `--external`
+- **原则**：只有 `electron` 和 Pi runtime 包（`@earendil-works/pi-coding-agent` / `pi-agent-core` / `pi-ai`）需要标记为 `--external`
 - `electron`：由 Electron 运行时提供，必须 external
-- `@anthropic-ai/claude-agent-sdk`：有特殊打包要求（含 214 MB native binary），必须 external + 在 files 中包含主包和平台子包
+- Pi runtime 包：纯 JS，external 后随 node_modules 打包；`pi-tui` native 模块需在 `asarUnpack` 中解压
 - **所有其他依赖**（如 `electron-updater`、`undici`、`chokidar` 等）：应该让 esbuild 打包进 `main.cjs`
   - ✅ 优点：避免遗漏子依赖，简化 electron-builder 配置
   - ❌ 如果标记为 external：必须在 `electron-builder.yml` 的 `files` 中手动列出所有子依赖
@@ -411,7 +382,7 @@ bun run generate:icons    # 生成应用图标
 
 ## Agent SDK 集成架构
 
-基于 `@anthropic-ai/claude-agent-sdk@0.3.201` 实现 Agent 模式，与 Chat 模式并行。
+基于 `@earendil-works/pi-coding-agent@0.84.2`（Pi-native runtime）实现 Agent 模式；Claude runtime 已于 2026-08 退役。
 
 ### 核心流程
 
@@ -461,25 +432,11 @@ React UI 更新
 
 ### SDK 版本升级注意事项
 
-**`@anthropic-ai/claude-agent-sdk` 0.2.113+ `options.env` 语义为"替换"**
+**Pi runtime（@earendil-works/pi-* 0.84.2）升级要点**
 
-- SDK 将 `options.env` **替换** 传递给子进程（0.2.111/0.2.112 短暂改为叠加，0.2.113 恢复替换）
-- 如果传 `env` 时只给 `ANTHROPIC_*` 相关变量，子进程会丢失 `PATH` / `HOME` / `SHELL` 等关键变量，导致 SDK 调用 `npx` / `git` 等命令失败
-- **正确做法**：`agent-orchestrator.ts` 的 `buildSdkEnv()` 末尾显式 `{ ...cleanEnv, ...customEnv }` 合并 `process.env`，再剥离不希望泄漏的 `ANTHROPIC_*` 变量
-- **修改 `buildSdkEnv()` 时的检查清单**：
-  1. ✅ 基于 `process.env` 合并，保证 PATH / HOME / SHELL 等继承到子进程
-  2. ✅ 过滤掉不希望泄漏的 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_CUSTOM_HEADERS`、`ANTHROPIC_MODEL` 等
-  3. ✅ 新增的 SDK 识别的环境变量必须显式加入 `sdkEnv`
-- 若未来升级到后续大版本导致语义再次变化，需重新评估本加固逻辑
-
-**关键 Breaking Changes（升级参考）**：
-- `0.2.91`: `sandbox.failIfUnavailable` 默认从 `false` 变为 `true`（目前项目未使用 sandbox 选项）
-- `0.2.111`: `options.env` 从"替换"变为"叠加"
-- `0.2.113`:
-  - `options.env` 回退为"替换"
-  - **SDK 包结构重构**：删除 `cli.js`，改为平台 native binary（通过 `@anthropic-ai/claude-agent-sdk-{platform}-{arch}` optionalDependency 分发），ripgrep 编译进 binary
-  - 详见上方"打包配置注意事项"段落
-- `0.2.120`: `query()` 省略 `settingSources` 时默认加载所有来源（MyYoda 已显式传 `['user', 'project']`，不受影响）
+- 升级时 `apps/electron/package.json` dependencies、root `package.json` overrides、esbuild `--external` 列表必须同步
+- `scripts/upstream-sync/check.ts` 会强制校验钉版一致性（`bun run sync:check`）
+- Claude Agent SDK（@anthropic-ai/claude-agent-sdk）已于 2026-08 退役并全量移除，任何新引用都是错误
 
 ### 共享类型（`@myyoda/shared`）
 
@@ -496,7 +453,7 @@ React UI 更新
 
 - **会话管理**：收件箱/归档工作流
 - **权限模式**：safe / ask / allow-all
-- **Agent SDK**：@anthropic-ai/claude-agent-sdk（[v1 文档](https://platform.Codex.com/docs/en/agent-sdk/typescript)、[v2 文档](https://platform.Codex.com/docs/en/agent-sdk/typescript-v2-preview)）
+- **Agent Runtime**：@earendil-works/pi-coding-agent 0.84.2（Pi-native）
 - **MCP 集成**：Model Context Protocol 用于外部数据源
 - **凭证存储**：AES-256-GCM 加密
 - **配置位置**：`~/.myyoda/`（类似 `~/.craft-agent/`）
@@ -506,7 +463,7 @@ React UI 更新
 ### 已实现功能
 
 - ✅ **多 Provider 支持**：Anthropic、OpenAI、DeepSeek、Kimi、智谱、MiniMax、豆包、通义千问、Google、自定义端点
-- ✅ **Agent SDK 集成**：基于 Claude Agent SDK 的完整 Agent / Code 模式
+- ✅ **Agent Runtime 集成**：基于 Pi-native runtime 的完整 Agent / Code 模式
 - ✅ **Work / Kanban**：craft 风格看板、TaskRunner 编排、Teambition 认领、Code 对话可见执行过程
 - ✅ **craft Project**：工作区内项目分组（workingDirectory / assets / MEMORY.md）；Code 侧边栏子分组新建/迁移会话；项目详情跨模式跳转
 - ✅ **飞书集成**：消息同步、任务通知、OAuth 认证（68KB 核心服务）

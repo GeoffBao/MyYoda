@@ -4,20 +4,18 @@
  *
  * 检查：
  * 1. rename 残留（@proma / ~/.proma / Codex-agent-sdk 等）
- * 2. SDK 版本一致性（deps / optionalDeps / overrides / electron-builder / esbuild external）
- * 3. 当前平台 SDK 子包 symlink 是否存在
- * 4. default-skills version frontmatter；可选对比 upstream
+ * 2. SDK 版本一致性（Pi runtime 包：deps / overrides / electron-builder / esbuild external）
+ * 3. default-skills version frontmatter；可选对比 upstream
  *
  *   bun run sync:check
  *   bun run sync:check -- --skills-upstream
  *   bun run sync:check -- --strict-docs   # 文档类残留也当 error
  */
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { $ } from 'bun'
 import {
   compareSemver,
-  fileExists,
   isAllowlisted,
   isWarnOnly,
   loadRenameMap,
@@ -95,7 +93,23 @@ const rootPkgPath = join(root, 'package.json')
 const electronPkg = readJson(electronPkgPath)
 const rootPkg = readJson(rootPkgPath)
 
-const sdkMain = '@anthropic-ai/claude-agent-sdk'
+// Claude runtime 已于 2026-08 退役，@anthropic-ai/claude-agent-sdk 全量移除；
+// 门禁改为校验 Pi runtime 包（@earendil-works/pi-*）的版本一致性与打包覆盖。
+const PI_SDK_PACKAGES = [
+  '@earendil-works/pi-agent-core',
+  '@earendil-works/pi-ai',
+  '@earendil-works/pi-coding-agent',
+  '@earendil-works/pi-tui',
+]
+// esbuild --external 只覆盖这 3 个包；pi-tui 含 native 模块，不走 esbuild external
+// （随 node_modules 打包），因此显式列出子集而非按位置 slice，避免顺序调整时静默漏检。
+const PI_SDK_ESBUILD_EXTERNAL_PACKAGES = [
+  '@earendil-works/pi-agent-core',
+  '@earendil-works/pi-ai',
+  '@earendil-works/pi-coding-agent',
+]
+
+const sdkMain = '@earendil-works/pi-coding-agent'
 const pinned = electronPkg?.dependencies?.[sdkMain]
 
 if (!pinned) {
@@ -106,36 +120,15 @@ if (!pinned) {
     message: `缺少 dependencies["${sdkMain}"]`,
   })
 } else {
-  const opt = electronPkg?.optionalDependencies ?? {}
-  for (const plat of map.sdkPlatformPackages) {
-    const v = opt[plat]
-    if (!v) {
-      add({
-        severity: 'error',
-        check: 'sdk/optionalDeps',
-        file: 'apps/electron/package.json',
-        message: `optionalDependencies 缺少 ${plat}`,
-      })
-    } else if (v !== pinned) {
-      add({
-        severity: 'error',
-        check: 'sdk/optionalDeps',
-        file: 'apps/electron/package.json',
-        message: `${plat}=${v} 与主包 ${pinned} 不一致`,
-      })
-    }
-  }
-
   const overrides = rootPkg?.overrides ?? {}
-  const overrideKeys = [sdkMain, ...map.sdkPlatformPackages]
-  for (const key of overrideKeys) {
+  for (const key of PI_SDK_PACKAGES) {
     const v = overrides[key]
     if (!v) {
       add({
-        severity: 'warn',
+        severity: 'error',
         check: 'sdk/overrides',
         file: 'package.json',
-        message: `overrides 未钉住 ${key}（建议与 ${pinned} 对齐）`,
+        message: `overrides 未钉住 ${key}`,
       })
     } else if (v !== pinned) {
       add({
@@ -151,21 +144,23 @@ if (!pinned) {
   const scripts = electronPkg?.scripts ?? {}
   for (const [name, cmd] of Object.entries(scripts)) {
     if (!name.startsWith('build:main') && !name.startsWith('watch:main')) continue
-    if (cmd.includes('Codex-agent-sdk')) {
+    if (cmd.includes('Codex-agent-sdk') || cmd.includes('claude-agent-sdk')) {
       add({
         severity: 'error',
         check: 'sdk/esbuild',
         file: 'apps/electron/package.json',
-        message: `${name} 仍 external 了 Codex-agent-sdk`,
+        message: `${name} 仍 external 了已退役的 claude-agent-sdk`,
       })
     }
-    if (!cmd.includes(`--external:${sdkMain}`) && !cmd.includes('--external:@anthropic-ai/claude-agent-sdk')) {
-      add({
-        severity: 'error',
-        check: 'sdk/esbuild',
-        file: 'apps/electron/package.json',
-        message: `${name} 未 --external:@anthropic-ai/claude-agent-sdk`,
-      })
+    for (const pkg of PI_SDK_ESBUILD_EXTERNAL_PACKAGES) {
+      if (!cmd.includes(`--external:${pkg}`)) {
+        add({
+          severity: 'error',
+          check: 'sdk/esbuild',
+          file: 'apps/electron/package.json',
+          message: `${name} 未 --external:${pkg}`,
+        })
+      }
     }
   }
 
@@ -180,26 +175,12 @@ if (!pinned) {
     })
   } else {
     const yml = readFileSync(builderPath, 'utf-8')
-    const requiredGlobs = [
-      'node_modules/@anthropic-ai/claude-agent-sdk/**/*',
-      ...map.sdkPlatformPackages.map((p) => `node_modules/${p}/**/*`),
-    ]
-    for (const g of requiredGlobs) {
-      if (!yml.includes(g)) {
-        add({
-          severity: 'error',
-          check: 'sdk/builder',
-          file: 'apps/electron/electron-builder.yml',
-          message: `files 缺少 ${g}`,
-        })
-      }
-    }
-    if (yml.includes('Codex-agent-sdk')) {
+    if (yml.includes('claude-agent-sdk') || yml.includes('Codex-agent-sdk')) {
       add({
         severity: 'error',
         check: 'sdk/builder',
         file: 'apps/electron/electron-builder.yml',
-        message: '仍引用 Codex-agent-sdk',
+        message: '仍引用已退役的 claude-agent-sdk',
       })
     }
     // 旧 @proma 排除应变为 @myyoda
@@ -213,7 +194,7 @@ if (!pinned) {
     }
   }
 
-  // 文档里的 SDK 版本号（warn）
+  // 文档里的 SDK 版本号：Pi-only 后文档不应再标注 claude-agent-sdk 版本（warn；--strict-docs 升 error）
   for (const doc of ['CLAUDE.md', 'AGENTS.md']) {
     const path = join(root, doc)
     if (!existsSync(path)) continue
@@ -224,14 +205,12 @@ if (!pinned) {
     )
     const versions = [...new Set([...mentions, ...tableMentions])]
     for (const v of versions) {
-      if (v !== pinned) {
-        add({
-          severity: 'warn',
-          check: 'sdk/docs',
-          file: doc,
-          message: `文档写 SDK ${v}，package.json 钉的是 ${pinned}`,
-        })
-      }
+      add({
+        severity: strictDocs ? 'error' : 'warn',
+        check: 'sdk/docs',
+        file: doc,
+        message: `文档仍标注已退役的 claude-agent-sdk ${v}`,
+      })
     }
     if (/Codex-agent-sdk/.test(text)) {
       add({
@@ -240,42 +219,6 @@ if (!pinned) {
         file: doc,
         message: '文档残留 Codex-agent-sdk 错写',
       })
-    }
-  }
-
-  // 当前平台 symlink
-  const plat =
-    process.platform === 'darwin'
-      ? process.arch === 'arm64'
-        ? 'darwin-arm64'
-        : 'darwin-x64'
-      : process.platform === 'win32'
-        ? process.arch === 'arm64'
-          ? 'win32-arm64'
-          : 'win32-x64'
-        : null
-
-  if (plat) {
-    const pkgName = `@anthropic-ai/claude-agent-sdk-${plat}`
-    const linkPath = join(root, 'apps/electron/node_modules/@anthropic-ai', `claude-agent-sdk-${plat}`)
-    if (!fileExists(linkPath)) {
-      add({
-        severity: 'warn',
-        check: 'sdk/symlink',
-        file: `apps/electron/node_modules/@anthropic-ai/claude-agent-sdk-${plat}`,
-        message: `${pkgName} 未安装/未链接，打包后 Agent 可能找不到 binary（先 bun install）`,
-      })
-    } else {
-      try {
-        realpathSync(linkPath)
-      } catch {
-        add({
-          severity: 'error',
-          check: 'sdk/symlink',
-          file: relative(root, linkPath),
-          message: `${pkgName} symlink 损坏`,
-        })
-      }
     }
   }
 }
