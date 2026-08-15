@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
-import { getFetchFn } from './proxy-fetch'
+import { fetchWithSystemFallback } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 
 /** token → 远程流条目（含注册时间，用于 TTL 清理） */
@@ -92,8 +92,7 @@ export async function handleDiscoverVideoRequest(request: Request): Promise<Resp
 
   let upstream: Response
   try {
-    const fetchFn = getFetchFn(await getEffectiveProxyUrl())
-    upstream = await fetchFn(entry.url, { headers: upstreamHeaders, signal: AbortSignal.timeout(600_000) })
+    upstream = await fetchWithSystemFallback(entry.url, { headers: upstreamHeaders }, await getEffectiveProxyUrl())
   } catch {
     return new Response('上游视频源不可达', { status: 502 })
   }
