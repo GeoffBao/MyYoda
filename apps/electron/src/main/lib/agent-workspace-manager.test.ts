@@ -216,6 +216,59 @@ describe('ensureDefaultWorkspace', () => {
   })
 })
 
+describe('默认工作区目录（应用设置）', () => {
+  test('Given 设置未配置 When 读取默认工作区目录 Then 回退读取默认工作区 config.json 旧值', () => {
+    manager.ensureDefaultWorkspace()
+    expect(manager.getAgentDefaultWorkingDirectory()).toBeUndefined()
+
+    const legacyPath = '/tmp/legacy-project'
+    writeFileSync(
+      join(configPaths.getAgentWorkspacePath('default'), 'config.json'),
+      JSON.stringify({ defaultWorkingDirectory: legacyPath }),
+      'utf-8',
+    )
+    expect(manager.getAgentDefaultWorkingDirectory()).toBe(legacyPath)
+    // 兼容旧签名读取（按 slug / 按 workspace root）走同一回退
+    expect(manager.getWorkspaceDefaultWorkingDirectory('default')).toBe(legacyPath)
+    expect(manager.getWorkspaceDefaultWorkingDirectoryAtRoot(configPaths.getAgentWorkspacePath('default'))).toBe(legacyPath)
+  })
+
+  test('Given 应用设置已配置 When 读取默认工作区目录 Then 设置优先于 config.json 旧值，并清理旧字段', () => {
+    manager.ensureDefaultWorkspace()
+    const legacyPath = '/tmp/legacy-project'
+    writeFileSync(
+      join(configPaths.getAgentWorkspacePath('default'), 'config.json'),
+      JSON.stringify({ defaultWorkingDirectory: legacyPath }),
+      'utf-8',
+    )
+
+    manager.setAgentDefaultWorkingDirectory('/tmp/app-level-project')
+    expect(manager.getAgentDefaultWorkingDirectory()).toBe('/tmp/app-level-project')
+    expect(manager.getWorkspaceDefaultWorkingDirectory('default')).toBe('/tmp/app-level-project')
+    expect(manager.getWorkspaceDefaultWorkingDirectoryAtRoot(configPaths.getAgentWorkspacePath('default'))).toBe('/tmp/app-level-project')
+
+    // 设置后清理各工作区 config.json 旧字段，避免双源
+    const config = JSON.parse(readFileSync(join(configPaths.getAgentWorkspacePath('default'), 'config.json'), 'utf-8'))
+    expect(config.defaultWorkingDirectory).toBeUndefined()
+  })
+
+  test('Given 清空应用设置 When 读取默认工作区目录 Then 回到未配置状态且不再回退旧值', () => {
+    manager.ensureDefaultWorkspace()
+    manager.setAgentDefaultWorkingDirectory('/tmp/app-level-project')
+    expect(manager.getAgentDefaultWorkingDirectory()).toBe('/tmp/app-level-project')
+
+    manager.setAgentDefaultWorkingDirectory(undefined)
+    expect(manager.getAgentDefaultWorkingDirectory()).toBeUndefined()
+    expect(manager.getWorkspaceDefaultWorkingDirectory('default')).toBeUndefined()
+  })
+
+  test('兼容旧 set 签名：转发到应用级设置', () => {
+    manager.ensureDefaultWorkspace()
+    manager.setWorkspaceDefaultWorkingDirectory('default', '/tmp/legacy-api-path')
+    expect(manager.getAgentDefaultWorkingDirectory()).toBe('/tmp/legacy-api-path')
+  })
+})
+
 describe('Agent 工作区删除边界', () => {
   test('删除工作区只删除 MyYoda 托管目录，不删除项目绑定的外部工作目录', () => {
     manager.ensureDefaultWorkspace()

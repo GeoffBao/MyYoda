@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
+import { WorkingDirectoryField } from '@/components/app-shell/kanban/WorkingDirectoryField'
 import { WORKSPACE_TERMS } from '@/lib/workspace-project-terminology'
 
 /** 本地项目根状态的中文提示 */
@@ -63,6 +64,31 @@ export function WorkspaceSettings(): React.ReactElement {
   const [renameBusy, setRenameBusy] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<AgentWorkspace | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+
+  // 默认工作区目录（应用设置；未绑定项目的新会话回退使用）
+  const [defaultWorkingDirectory, setDefaultWorkingDirectory] = React.useState('')
+  const [savingDefaultWorkingDirectory, setSavingDefaultWorkingDirectory] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void window.electronAPI.getAgentDefaultWorkingDirectory()
+      .then((path) => { if (!cancelled) setDefaultWorkingDirectory(path ?? '') })
+      .catch(() => { if (!cancelled) setDefaultWorkingDirectory('') })
+    return () => { cancelled = true }
+  }, [])
+
+  const handleDefaultWorkingDirectoryChange = React.useCallback(async (path: string): Promise<void> => {
+    setDefaultWorkingDirectory(path)
+    setSavingDefaultWorkingDirectory(true)
+    try {
+      await window.electronAPI.setAgentDefaultWorkingDirectory(path || undefined)
+    } catch (err) {
+      console.error('[Workspace Settings] 保存默认工作区目录失败:', err)
+      toast.error(err instanceof Error ? err.message : '保存默认工作区目录失败')
+    } finally {
+      setSavingDefaultWorkingDirectory(false)
+    }
+  }, [])
 
   // 项目 → 工作区迁移（阶段二，手动触发）
   const [migrationStatus, setMigrationStatus] = React.useState<{ done: boolean; pendingCount: number } | null>(null)
@@ -390,6 +416,27 @@ export function WorkspaceSettings(): React.ReactElement {
             <span>从本地文件夹创建项目</span>
           </button>
         </div>
+      </SettingsSection>
+
+      {/* 默认工作区目录：应用设置，未绑定项目的会话 / Workspace Task 回退使用 */}
+      <SettingsSection
+        title="默认工作区目录"
+        description="未绑定项目的会话 / Workspace Task 回退使用的工程代码目录；未设置时使用默认工作区。"
+      >
+        <SettingsCard>
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+            <div className="min-w-0 max-w-md flex-1">
+              <WorkingDirectoryField
+                value={defaultWorkingDirectory}
+                onChange={(path) => { void handleDefaultWorkingDirectoryChange(path) }}
+                className={savingDefaultWorkingDirectory ? 'opacity-60' : undefined}
+              />
+            </div>
+          </div>
+          <div className="px-4 pb-3 text-xs text-muted-foreground">
+            设置后，新会话未选择或新建项目时，Agent 会把该目录作为工程代码目录的基准（不改变会话隔离目录本身）；清空后回到默认工作区。
+          </div>
+        </SettingsCard>
       </SettingsSection>
 
       {/* 项目 → 工作区迁移（阶段二：对齐 Proma「工作区=项目」，手动触发） */}
