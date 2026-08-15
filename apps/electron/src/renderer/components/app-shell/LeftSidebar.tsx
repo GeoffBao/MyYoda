@@ -22,7 +22,7 @@ import { ModeSwitcher } from './ModeSwitcher'
 import { TabNavigationControls } from '@/components/tabs/TabNavigationControls'
 import { UserAvatar } from '@/components/chat/UserAvatar'
 import { activeViewAtom, agentSkillsTabAtom, type AgentSkillsCapabilityTab } from '@/atoms/active-view'
-import { discoverHasUnreadAtom } from '@/atoms/discover-atoms'
+import { discoverCommunityUnreadAtom, discoverFeedUnreadAtom } from '@/atoms/discover-atoms'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { appModeAtom, type AppMode } from '@/atoms/app-mode'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
@@ -621,7 +621,9 @@ function deleteSetEntry<T>(prev: Set<T>, value: T): Set<T> {
 
 export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.ReactElement {
   const [activeView, setActiveView] = useAtom(activeViewAtom)
-  const discoverHasUnread = useAtomValue(discoverHasUnreadAtom)
+  const discoverFeedUnread = useAtomValue(discoverFeedUnreadAtom)
+  const discoverCommunityUnread = useAtomValue(discoverCommunityUnreadAtom)
+  const discoverUnreadTotal = discoverFeedUnread + discoverCommunityUnread
   const setAgentSkillsTab = useSetAtom(agentSkillsTabAtom)
   const setAutomationForm = useSetAtom(automationFormAtom)
   const automations = useAtomValue(automationsAtom)
@@ -3538,7 +3540,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             icon={Compass}
             title="发现"
             active={activeView === 'discover'}
-            count={discoverHasUnread ? 1 : undefined}
+            count={discoverUnreadTotal > 0 ? discoverUnreadTotal : undefined}
             badgeTone="accent"
             onClick={handleOpenDiscover}
             ariaLabel="发现"
