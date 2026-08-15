@@ -5,7 +5,6 @@ import {
   deriveSubtaskRunState,
   type KanbanProject,
   type KanbanTaskRun,
-  type TeambitionBinding,
 } from '../kanban-view-model'
 
 function createSession(overrides: Partial<AgentSessionMeta>): AgentSessionMeta {
@@ -57,7 +56,6 @@ describe('buildKanbanViewModel', () => {
         createSession({ id: 'task-session', title: '旧会话标题', taskSlug: 'workspace-release', updatedAt: 40 }),
       ],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
     })
 
@@ -86,7 +84,6 @@ describe('buildKanbanViewModel', () => {
       })],
       sessions: [],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
     })
 
@@ -113,7 +110,6 @@ describe('buildKanbanViewModel', () => {
       })],
       sessions: [],
       runs: [],
-      bindings: [],
       filter: { projectId: 'project-a' },
     })
 
@@ -131,7 +127,7 @@ describe('buildKanbanViewModel', () => {
       createTask({ taskId: 'project-a-task', taskSlug: 'project-a-task', scope: { kind: 'project', projectId: 'project-a' } }),
       createTask({ taskId: 'project-b-task', taskSlug: 'project-b-task', scope: { kind: 'project', projectId: 'project-b' } }),
     ]
-    const base = { projects, tasks, sessions: [], runs: [], bindings: [] }
+    const base = { projects, tasks, sessions: [], runs: [] }
 
     expect(buildKanbanViewModel({ ...base, filter: { scope: { kind: 'all' } } }).listItems.map((item) => item.id)).toHaveLength(3)
     expect(buildKanbanViewModel({ ...base, filter: { scope: { kind: 'workspace' } } }).listItems.map((item) => item.id)).toEqual(['workspace-task'])
@@ -147,7 +143,6 @@ describe('buildKanbanViewModel', () => {
       ],
       sessions: [],
       runs: [],
-      bindings: [],
       filter: { scope: { kind: 'all' }, workflow: 'needs-review', labelIds: [] },
     })
 
@@ -165,7 +160,6 @@ describe('buildKanbanViewModel', () => {
       ],
       sessions: [],
       runs: [],
-      bindings: [],
       filter: {
         scope: { kind: 'workspace' },
         workflow: 'todo',
@@ -182,7 +176,7 @@ describe('buildKanbanViewModel', () => {
       createTask({ taskId: 'labeled', taskSlug: 'labeled', labelIds: ['label-a'] }),
       createTask({ taskId: 'unlabeled', taskSlug: 'unlabeled', labelIds: [] }),
     ]
-    const base = { projects, tasks, sessions: [], runs: [], bindings: [] }
+    const base = { projects, tasks, sessions: [], runs: [] }
 
     expect(buildKanbanViewModel({
       ...base,
@@ -199,7 +193,6 @@ describe('buildKanbanViewModel', () => {
       projects,
       sessions: [createSession({ id: 'fresh-session', title: '整理需求', updatedAt: 30 })],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
     })
 
@@ -227,7 +220,6 @@ describe('buildKanbanViewModel', () => {
         updatedAt: 20,
       })],
       runs,
-      bindings: [],
       filter: { projectId: null },
     })
 
@@ -252,7 +244,6 @@ describe('buildKanbanViewModel', () => {
         }),
       ],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
       specNodesBySlug: new Map([
         ['release', [
@@ -281,7 +272,6 @@ describe('buildKanbanViewModel', () => {
         createSession({ id: 'has-project', title: '已绑定项目的会话', projectId: 'project-a' }),
       ],
       runs: [],
-      bindings: [],
       filter: {},
     })
 
@@ -294,7 +284,6 @@ describe('buildKanbanViewModel', () => {
       projects,
       sessions: [createSession({ id: 'no-project', title: '未绑定项目的会话' })],
       runs: [],
-      bindings: [],
       filter: {},
     })
 
@@ -309,24 +298,13 @@ describe('buildKanbanViewModel', () => {
         createSession({ id: 'project-b-session', projectId: 'project-b', updatedAt: 20 }),
       ],
       runs: [],
-      bindings: [],
       filter: { projectId: 'project-a' },
     })
 
     expect(model.listItems.map((item) => item.id)).toEqual(['project-a-session'])
   })
 
-  test('列表与看板使用相同的卡片顺序和派生的 Teambition 字段', () => {
-    const bindings: TeambitionBinding[] = [
-      {
-        bindingId: 'binding-1',
-        sessionId: 'bound-session',
-        taskId: 'TW-1',
-        title: '同步状态',
-        status: 'coding',
-        syncState: 'pending',
-      },
-    ]
+  test('列表与看板使用相同的卡片顺序', () => {
     const model = buildKanbanViewModel({
       projects,
       sessions: [
@@ -335,18 +313,10 @@ describe('buildKanbanViewModel', () => {
         createSession({ id: 'middle-session', updatedAt: 20 }),
       ],
       runs: [],
-      bindings,
       filter: { projectId: null },
     })
 
     expect(model.boardItems.map((item) => item.id)).toEqual(model.listItems.map((item) => item.id))
-    expect(model.listItems[0]?.teambition).toEqual({
-      bindingId: 'binding-1',
-      taskId: 'TW-1',
-      title: '同步状态',
-      status: 'coding',
-      syncState: 'pending',
-    })
   })
 
   test('顶层看板排除归档、生成草稿和子会话', () => {
@@ -359,7 +329,6 @@ describe('buildKanbanViewModel', () => {
         createSession({ id: 'child-session', parentSessionId: 'visible-session', updatedAt: 20 }),
       ],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
     })
 
@@ -376,7 +345,6 @@ describe('buildKanbanViewModel', () => {
         updatedAt: 20,
       })],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
       expertIdsBySlug: new Map([['release', 'architect']]),
     })
@@ -394,7 +362,6 @@ describe('buildKanbanViewModel', () => {
         updatedAt: 20,
       })],
       runs: [],
-      bindings: [],
       filter: { projectId: null },
     })
 

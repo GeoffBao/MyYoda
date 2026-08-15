@@ -5,7 +5,6 @@ import {
   PROJECT_IPC_CHANNELS,
   SESSION_KANBAN_IPC_CHANNELS,
   TASK_IPC_CHANNELS,
-  TEAMBITION_IPC_CHANNELS,
 } from '../channels.ts';
 import type {
   AgentSessionMeta,
@@ -54,7 +53,6 @@ describe('kanban protocol contracts', () => {
       PROJECT_IPC_CHANNELS,
       TASK_IPC_CHANNELS,
       SESSION_KANBAN_IPC_CHANNELS,
-      TEAMBITION_IPC_CHANNELS,
     });
   });
 
@@ -110,18 +108,6 @@ describe('kanban protocol contracts', () => {
 
     expect(SESSION_KANBAN_IPC_CHANNELS).toEqual({
       COMMAND: 'session:command',
-    });
-
-    expect(TEAMBITION_IPC_CHANNELS).toEqual({
-      LIST_TASKS: 'teambition:listMyTasks',
-      CLAIM_TASK: 'teambition:claimTask',
-      GET_BINDING: 'teambition:getBinding',
-      CAPABILITIES: 'teambition:capabilities',
-      SYNC_PROGRESS: 'teambition:syncProgress',
-      UPDATE_STATUS: 'teambition:updateStatus',
-      BIND_PROJECT: 'teambition:bindProject',
-      LIST_BINDINGS: 'teambition:listBindings',
-      RETRY_SYNC: 'teambition:retrySync',
     });
   });
 

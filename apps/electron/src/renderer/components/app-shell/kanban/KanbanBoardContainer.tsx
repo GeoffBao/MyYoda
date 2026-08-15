@@ -568,17 +568,6 @@ export function KanbanBoardContainer({
               toast.error('更新 Task Labels 失败', { description: cause instanceof Error ? cause.message : String(cause) })
             })
         }}
-        onRetryTeambition={(item) => {
-          const bindingId = item.teambition?.bindingId
-          if (!workspaceRoot || !bindingId) return
-          void window.electronAPI.teambition.retrySync(workspaceRoot, bindingId)
-            .then(() => onTaskCreated?.())
-            .catch((cause: unknown) => {
-              toast.error('重试 Teambition 同步失败', {
-                description: cause instanceof Error ? cause.message : String(cause),
-              })
-            })
-        }}
         onAddColumn={editingProject ? handleAddColumn : undefined}
         onUpdateColumn={editingProject ? handleUpdateColumn : undefined}
         onRemoveColumn={editingProject ? handleRemoveColumn : undefined}

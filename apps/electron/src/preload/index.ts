@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, TEAMBITION_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
+import { PROJECT_IPC_CHANNELS, TASK_IPC_CHANNELS, SESSION_COMMAND_CHANNEL, SESSION_GROUP_IPC_CHANNELS, EXPERT_IPC_CHANNELS } from '@myyoda/shared/channels'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, CODECLAW_IPC_CHANNELS } from '@myyoda/shared'
 import type { TaskAggregateSummary, TaskMetadataPatch, TaskWorkflow } from '@myyoda/shared/tasks'
 import type { StartTodoAgentInput, StartTodoAgentResult, TodoAgentSessionActivation, PlanningWorkspaceScope } from '@myyoda/shared'
@@ -321,44 +321,6 @@ export interface BrowserTaskRunSnapshot {
     sessionId?: string
     attempt: number
   }>
-}
-
-export type BrowserTeambitionSyncState = 'synced' | 'pending' | 'conflict' | 'stale' | 'needs-reauth'
-export interface BrowserTeambitionCapabilities {
-  listTasks: boolean
-  claimTask: boolean
-  updateStatus: boolean
-  syncProgress: boolean
-  needsReauth: boolean
-}
-export interface BrowserTeambitionTask {
-  id: string
-  title: string
-  projectId: string
-  status?: string
-  updatedAt?: number
-  syncState?: 'synced' | 'stale'
-}
-export interface BrowserTeambitionBinding {
-  id: string
-  sessionId: string
-  remoteTaskId: string
-  projectId: string
-  remoteTitle: string
-  remoteStatus?: string
-  syncState: BrowserTeambitionSyncState
-  updatedAt: number
-  error?: string
-}
-export interface BrowserTeambitionTaskList {
-  tasks: BrowserTeambitionTask[]
-  needsReauth: boolean
-}
-export interface BrowserTeambitionClaimInput {
-  projectId: string
-  remoteTaskId: string
-  sessionId: string
-  idempotencyKey: string
 }
 
 function invokeTyped<TResult>(channel: string, ...args: unknown[]): Promise<TResult> {
@@ -1686,19 +1648,8 @@ export interface ElectronAPI {
   sessions: {
     move: (sessionId: string, columnId: string) => Promise<AgentSessionMeta>
   }
-  teambition: {
-    capabilities: (workspaceRoot: string) => Promise<BrowserTeambitionCapabilities>
-    listTasks: (workspaceRoot: string, projectId: string) => Promise<BrowserTeambitionTaskList>
-    claimTask: (workspaceRoot: string, input: BrowserTeambitionClaimInput) => Promise<BrowserTeambitionBinding>
-    bindTask: (workspaceRoot: string, sessionId: string, task: BrowserTeambitionTask) => Promise<BrowserTeambitionBinding>
-    getBinding: (workspaceRoot: string, sessionId: string) => Promise<BrowserTeambitionBinding | null>
-    listBindings: (workspaceRoot: string) => Promise<BrowserTeambitionBinding[]>
-    updateStatus: (workspaceRoot: string, bindingId: string, status: string) => Promise<BrowserTeambitionBinding>
-    syncProgress: (workspaceRoot: string, bindingId: string, progress: number) => Promise<BrowserTeambitionBinding>
-    retrySync: (workspaceRoot: string, bindingId: string) => Promise<BrowserTeambitionBinding>
-  }
 
-  // ===== Projects / Tasks Conductor =====
+  // ===== Projects / Tasks Conductor =======
   getProjects: (workspaceRoot: string) => Promise<LoadedProject[]>
   getProject: (workspaceRoot: string, idOrSlug: string) => Promise<LoadedProject | undefined>
   createProject: (workspaceRoot: string, input: CreateProjectInput) => Promise<LoadedProject>
@@ -3811,26 +3762,6 @@ const electronAPI: ElectronAPI = {
   sessions: {
     move: (sessionId: string, columnId: string): Promise<AgentSessionMeta> =>
       invokeTyped<AgentSessionMeta>(SESSION_COMMAND_CHANNEL, sessionId, { kind: 'set_kanban_column', kanbanColumn: columnId }),
-  },
-  teambition: {
-    capabilities: (workspaceRoot: string): Promise<BrowserTeambitionCapabilities> =>
-      invokeTyped<BrowserTeambitionCapabilities>(TEAMBITION_IPC_CHANNELS.CAPABILITIES, workspaceRoot),
-    listTasks: (workspaceRoot: string, projectId: string): Promise<BrowserTeambitionTaskList> =>
-      invokeTyped<BrowserTeambitionTaskList>(TEAMBITION_IPC_CHANNELS.LIST_TASKS, workspaceRoot, projectId),
-    claimTask: (workspaceRoot: string, input: BrowserTeambitionClaimInput): Promise<BrowserTeambitionBinding> =>
-      invokeTyped<BrowserTeambitionBinding>(TEAMBITION_IPC_CHANNELS.CLAIM_TASK, workspaceRoot, input),
-    bindTask: (workspaceRoot: string, sessionId: string, task: BrowserTeambitionTask): Promise<BrowserTeambitionBinding> =>
-      invokeTyped<BrowserTeambitionBinding>(TEAMBITION_IPC_CHANNELS.BIND_PROJECT, workspaceRoot, sessionId, task),
-    getBinding: (workspaceRoot: string, sessionId: string): Promise<BrowserTeambitionBinding | null> =>
-      invokeTyped<BrowserTeambitionBinding | null>(TEAMBITION_IPC_CHANNELS.GET_BINDING, workspaceRoot, sessionId),
-    listBindings: (workspaceRoot: string): Promise<BrowserTeambitionBinding[]> =>
-      invokeTyped<BrowserTeambitionBinding[]>(TEAMBITION_IPC_CHANNELS.LIST_BINDINGS, workspaceRoot),
-    updateStatus: (workspaceRoot: string, bindingId: string, status: string): Promise<BrowserTeambitionBinding> =>
-      invokeTyped<BrowserTeambitionBinding>(TEAMBITION_IPC_CHANNELS.UPDATE_STATUS, workspaceRoot, bindingId, status),
-    syncProgress: (workspaceRoot: string, bindingId: string, progress: number): Promise<BrowserTeambitionBinding> =>
-      invokeTyped<BrowserTeambitionBinding>(TEAMBITION_IPC_CHANNELS.SYNC_PROGRESS, workspaceRoot, bindingId, progress),
-    retrySync: (workspaceRoot: string, bindingId: string): Promise<BrowserTeambitionBinding> =>
-      invokeTyped<BrowserTeambitionBinding>(TEAMBITION_IPC_CHANNELS.RETRY_SYNC, workspaceRoot, bindingId),
   },
 
   // ===== Projects / Tasks Conductor =====

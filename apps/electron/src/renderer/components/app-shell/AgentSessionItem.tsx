@@ -10,12 +10,12 @@ import {
   PinOff,
   Star,
   Trash2,
+  FolderInput,
   Pencil,
   ArrowRightLeft,
   Archive,
   ArchiveRestore,
   MoreHorizontal,
-  FolderInput,
   Tag,
   Plus,
   Clock,
@@ -53,7 +53,6 @@ import {
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu'
 import type { AgentSessionMeta, SessionGroup } from '@myyoda/shared'
-import type { KanbanProject } from './kanban/types'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
 
 export function formatRelativeUpdatedAt(updatedAt: number, now: number): string {
@@ -353,9 +352,8 @@ export interface AgentSessionItemProps {
   /** 所属项目主题色（已移除：原左缘 2px 色条随竖条一起去掉）
    * @deprecated 不再渲染任何色条 */
   projectColor?: never
-  /** 当前项目列表；空数组时不渲染「移动到项目」入口 */
-  projects?: KanbanProject[]
-  onMoveToProject?: (sessionId: string, projectId?: string) => void | Promise<void>
+  /** 存量 KanbanProject 绑定的清理出口；仅当会话有 projectId 时渲染「移出项目」入口 */
+  onClearProjectBinding?: (sessionId: string) => void | Promise<void>
   /** 当前工作区自定义分组列表；undefined 时不渲染「移动到分组」入口 */
   sessionGroups?: SessionGroup[]
   onMoveToGroup?: (sessionId: string, groupId?: string) => void | Promise<void>
@@ -385,8 +383,7 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
   delegationChildCount = 0,
   disableMiniMap,
   workspaceName,
-  projects,
-  onMoveToProject,
+  onClearProjectBinding,
   sessionGroups,
   onMoveToGroup,
   onCreateGroup,
@@ -487,34 +484,12 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
           迁移到其他工作区
         </MenuItem>
       )}
-      {projects && projects.length > 0 && onMoveToProject && (
-        <MenuSub>
-          <MenuSubTrigger className="text-xs py-1 [&>svg]:size-3.5">
-            <FolderInput size={14} />
-            移动到项目
-          </MenuSubTrigger>
-          <MenuSubContent className="w-44 z-[9999] min-w-0 p-0.5">
-            {projects.map((project) => (
-              <MenuItem
-                key={project.id}
-                disabled={project.id === session.projectId}
-                className="text-xs py-1"
-                onSelect={() => onMoveToProject(session.id, project.id)}
-              >
-                <span className="mr-1.5 size-2 rounded-full" style={{ backgroundColor: project.color ?? 'hsl(var(--muted-foreground))' }} />
-                {project.name}
-              </MenuItem>
-            ))}
-            {session.projectId && (
-              <>
-                <MenuSeparator className="my-0.5" />
-                <MenuItem className="text-xs py-1" onSelect={() => onMoveToProject(session.id, undefined)}>
-                  移出工作区
-                </MenuItem>
-              </>
-            )}
-          </MenuSubContent>
-        </MenuSub>
+      {/* 存量 KanbanProject 绑定清理出口：workspace=项目后不再提供「移动到项目」列表 */}
+      {session.projectId && onClearProjectBinding && (
+        <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onClearProjectBinding(session.id)}>
+          <FolderInput size={14} />
+          移出项目
+        </MenuItem>
       )}
       {labels && labels.length > 0 && onSetLabels && (
         <MenuSub>

@@ -9,7 +9,6 @@ import {
   type KanbanBoardMode,
   type KanbanItem,
   type KanbanTaskRun,
-  type TeambitionBinding,
 } from '@/components/app-shell/kanban/types'
 import { agentModelIdAtom, agentStreamingStatesAtom, agentWorkspacesAtom } from './agent-atoms'
 import { serverKanbanProjectsAtom, taskBoardScopeAtom } from './project-atoms'
@@ -19,7 +18,6 @@ export const serverKanbanSessionsAtom = atom<AgentSessionMeta[]>([])
 /** TaskRepository-first summaries. Empty during load so ordinary chats never flash as Tasks. */
 export const serverTaskSummariesAtom = atom<TaskAggregateSummary[] | undefined>([])
 export const serverKanbanRunsAtom = atom<KanbanTaskRun[]>([])
-export const serverTeambitionBindingsAtom = atom<TeambitionBinding[]>([])
 /** taskSlug → DAG nodes，供卡片合并子任务行 */
 export const kanbanSpecNodesAtom = atom<Map<string, SpecNodeSummary[]>>(new Map())
 /** taskSlug → TaskSpec.defaults.expertId（未设则不入 map；展示时再与项目默认 resolve） */
@@ -56,7 +54,6 @@ export const kanbanItemsAtom = atom<KanbanItem[]>((get) => {
     projects: get(serverKanbanProjectsAtom),
     sessions,
     runs: get(serverKanbanRunsAtom),
-    bindings: get(serverTeambitionBindingsAtom),
     tasks: get(serverTaskSummariesAtom),
     filter: {
       scope: get(taskBoardScopeAtom),

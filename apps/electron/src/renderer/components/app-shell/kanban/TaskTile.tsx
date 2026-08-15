@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import { useAtomValue } from 'jotai'
-import { Archive, ArchiveRestore, ChevronDown, Clock, Link2, MessageSquare, MoreHorizontal, Pencil, Play, Tag, Trash2, Users } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronDown, Clock, MessageSquare, MoreHorizontal, Pencil, Play, Tag, Trash2, Users } from 'lucide-react'
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { StatusBadge } from './StatusBadge'
@@ -9,7 +9,6 @@ import { SubtaskRow } from './SubtaskRow'
 import { resolveDagAttention, shouldShowDoneColumnAttention } from './dag-attention'
 import type { TaskWorkflow } from '@myyoda/shared/tasks'
 import type { KanbanItem } from './types'
-import { resolveTeambitionSyncBadge } from '@/components/work/teambition-view'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { workspaceLabelsAtom } from '@/atoms/workspace-labels-atoms'
@@ -33,7 +32,6 @@ interface TaskTileProps {
   onRequestDelete?: (item: KanbanItem) => void
   onOpenSubtask?: (sessionId: string) => void
   onRunTask?: (item: KanbanItem) => void
-  onRetryTeambition?: (item: KanbanItem) => void
   onSetLabels?: (item: KanbanItem, labelIds: string[]) => void
   onChangeWorkflow?: (item: KanbanItem, workflow: TaskWorkflow) => void
   /** 打开任务家族会话面板（同 taskSlug 的全部关联会话） */
@@ -56,7 +54,6 @@ export function TaskTile({
   onRequestDelete,
   onOpenSubtask,
   onRunTask,
-  onRetryTeambition,
   onSetLabels,
   onChangeWorkflow,
   onOpenTaskFamily,
@@ -72,9 +69,6 @@ export function TaskTile({
   const workspaceLabels = useAtomValue(workspaceLabelsAtom)
   const viewModel = buildTaskCardViewModel(item)
   const drag = useDraggable({ id: item.id, disabled: !draggable, data: { kind: 'kanban-item' } })
-  const teambitionBadge = item.teambition?.syncState
-    ? resolveTeambitionSyncBadge(item.teambition.syncState)
-    : null
   const transform = drag.transform
     ? `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)`
     : undefined
@@ -386,32 +380,6 @@ export function TaskTile({
                 />
               ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {item.teambition && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" title={item.teambition.error}>
-          <Link2 className="h-3 w-3" />
-          <span className="truncate">{item.teambition.title ?? item.teambition.taskId}</span>
-          {item.teambition.status && <span>· {item.teambition.status}</span>}
-          {teambitionBadge && (
-            <span className={`rounded-full px-1.5 py-0.5 ${teambitionBadge.className}`}>
-              {teambitionBadge.label}
-            </span>
-          )}
-          {item.teambition.bindingId && (item.teambition.syncState === 'pending' || item.teambition.syncState === 'conflict') && (
-            <button
-              type="button"
-              className="rounded-full px-1.5 py-0.5 text-primary hover:bg-primary/10"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation()
-                onRetryTeambition?.(item)
-              }}
-            >
-              重试
-            </button>
           )}
         </div>
       )}

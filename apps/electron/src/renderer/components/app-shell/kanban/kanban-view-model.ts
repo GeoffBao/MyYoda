@@ -12,7 +12,6 @@ import {
   type KanbanTaskRun,
   type KanbanViewModel,
   type SubtaskRunState,
-  type TeambitionBinding,
 } from './types'
 
 export type {
@@ -21,14 +20,12 @@ export type {
   KanbanProject,
   KanbanTaskRun,
   KanbanViewModel,
-  TeambitionBinding,
 } from './types'
 
 export interface BuildKanbanViewModelInput {
   projects: KanbanProject[]
   sessions: AgentSessionMeta[]
   runs: KanbanTaskRun[]
-  bindings: TeambitionBinding[]
   /** 有值时启用 TaskRepository-first 投影；空数组也表示不把普通顶层 Session 当成 Task。 */
   tasks?: TaskAggregateSummary[]
   filter: KanbanFilter
@@ -70,7 +67,6 @@ function buildItem(
   session: AgentSessionMeta,
   projectsById: Map<string, KanbanProject>,
   runs: KanbanTaskRun[],
-  bindingsBySessionId: Map<string, TeambitionBinding>,
   children: SubtaskChildRow[],
   specNodes: SpecNodeSummary[] | undefined,
   fallbackModel: string,
@@ -84,7 +80,6 @@ function buildItem(
   const completedNodes = run
     ? Object.values(run.nodeStates).filter((state) => state === 'done').length
     : 0
-  const binding = bindingsBySessionId.get(session.id)
   // 未绑定真实 Project 的会话（含历史存量）保持 project 为空，由 workspace scope
   // （{ kind: 'workspace' } → !session.projectId）承载「未绑定」语义，不再懒归类到隐藏容器。
   const project = session.projectId ? projectsById.get(session.projectId) ?? null : null
@@ -124,18 +119,6 @@ function buildItem(
     ...(expertId ? { expertId } : {}),
     ...(totalNodes > 0 ? { subtaskTotal: totalNodes } : {}),
     ...(run && totalNodes > 0 ? { taskRun: { completedNodes, totalNodes } } : {}),
-    ...(binding
-      ? {
-          teambition: {
-            ...(binding.bindingId ? { bindingId: binding.bindingId } : {}),
-            taskId: binding.taskId,
-            ...(binding.title ? { title: binding.title } : {}),
-            ...(binding.status ? { status: binding.status } : {}),
-            ...(binding.syncState ? { syncState: binding.syncState } : {}),
-            ...(binding.error ? { error: binding.error } : {}),
-          },
-        }
-      : {}),
   }
 }
 
@@ -144,7 +127,6 @@ function buildItem(
  */
 export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanViewModel {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]))
-  const bindingsBySessionId = new Map(input.bindings.map((binding) => [binding.sessionId, binding]))
   const fallbackModel = input.fallbackModel ?? ''
   const childrenByParent = new Map<string, SubtaskChildRow[]>()
   for (const session of input.sessions) {
@@ -201,7 +183,6 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
         session,
         projectsById,
         input.runs,
-        bindingsBySessionId,
         linkedSession ? childrenByParent.get(linkedSession.id) ?? [] : [],
         input.specNodesBySlug?.get(summary.taskSlug),
         fallbackModel,
@@ -234,7 +215,6 @@ export function buildKanbanViewModel(input: BuildKanbanViewModelInput): KanbanVi
       session,
       projectsById,
       input.runs,
-      bindingsBySessionId,
       childrenByParent.get(session.id) ?? [],
       session.taskSlug ? input.specNodesBySlug?.get(session.taskSlug) : undefined,
       fallbackModel,

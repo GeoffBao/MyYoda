@@ -18,7 +18,6 @@ interface KanbanColumnProps {
   onOpenSubtask?: (sessionId: string) => void
   onOpenTaskFamily?: (item: KanbanItem) => void
   onRunTask?: (item: KanbanItem) => void
-  onRetryTeambition?: (item: KanbanItem) => void
   onSetLabels?: (item: KanbanItem, labelIds: string[]) => void
   onChangeWorkflow?: (item: KanbanItem, workflow: TaskWorkflow) => void
   /** 项目自定义列的编辑入口（仅聚焦单个 Project 时由容器传入） */
@@ -26,7 +25,7 @@ interface KanbanColumnProps {
   onRemoveColumn?: (columnId: string) => void
 }
 
-export function KanbanColumn({ column, onOpenItem, onEditItem, onRenameItem, onArchiveItem, onDeleteItem, onOpenSubtask, onOpenTaskFamily, onRunTask, onRetryTeambition, onSetLabels, onChangeWorkflow, onUpdateColumn, onRemoveColumn }: KanbanColumnProps): React.ReactElement {
+export function KanbanColumn({ column, onOpenItem, onEditItem, onRenameItem, onArchiveItem, onDeleteItem, onOpenSubtask, onOpenTaskFamily, onRunTask, onSetLabels, onChangeWorkflow, onUpdateColumn, onRemoveColumn }: KanbanColumnProps): React.ReactElement {
   const drop = useDroppable({ id: `column:${column.id}`, data: { columnId: column.id } })
   const color = resolveKanbanColumnColor(column.id, column.color)
   return (
@@ -63,7 +62,6 @@ export function KanbanColumn({ column, onOpenItem, onEditItem, onRenameItem, onA
             onOpenSubtask={onOpenSubtask}
             onOpenTaskFamily={onOpenTaskFamily}
             onRunTask={onRunTask}
-            onRetryTeambition={onRetryTeambition}
             onSetLabels={onSetLabels}
             onChangeWorkflow={onChangeWorkflow}
           />
