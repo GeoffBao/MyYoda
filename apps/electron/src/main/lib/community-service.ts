@@ -17,6 +17,8 @@ import {
 import { getDiscoverDiscussionsCachePath } from './config-paths'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { rewriteMarkdownMedia, rewriteRemoteMediaUrl } from './media-rewrite'
+import { registerRemoteMediaUrl } from './discover-remote-media'
 
 export const DISCUSSION_CACHE_TTL_MS = 5 * 60 * 1000
 
@@ -165,7 +167,13 @@ export async function listDiscussions(
       throw new Error(`GitHub Discussions API 返回 HTTP ${response.status}`)
     }
     const all: DiscussionSummary[] = parseDiscussionList((await response.json()) as unknown)
-    const items = all.filter((item) => item.categorySlug === categorySlug)
+    const items = all
+      .filter((item) => item.categorySlug === categorySlug)
+      .map((item) => ({
+        ...item,
+        // 头像走代理转发（渲染层直连 GitHub 会绕过主进程代理）
+        authorAvatarUrl: rewriteRemoteMediaUrl(item.authorAvatarUrl, registerRemoteMediaUrl),
+      }))
     const entry = { fetchedAt: now, items }
     listMemoryCache.set(categorySlug, entry)
     writeListCache(categorySlug, entry)
@@ -199,7 +207,13 @@ export async function getDiscussion(number: number): Promise<DiscussionDetail> {
   if (!response.ok) {
     throw new Error(`讨论详情拉取失败（HTTP ${response.status}）`)
   }
-  const detail = parseDiscussionDetail((await response.json()) as unknown)
+  const parsed = parseDiscussionDetail((await response.json()) as unknown)
+  // 正文图片与头像走代理转发；「上传未完成」占位符一并剥离
+  const detail: DiscussionDetail = {
+    ...parsed,
+    bodyMarkdown: rewriteMarkdownMedia(parsed.bodyMarkdown, registerRemoteMediaUrl),
+    authorAvatarUrl: rewriteRemoteMediaUrl(parsed.authorAvatarUrl, registerRemoteMediaUrl),
+  }
   detailMemoryCache.set(number, { fetchedAt: now, detail })
   return detail
 }

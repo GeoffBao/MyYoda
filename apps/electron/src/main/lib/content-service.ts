@@ -24,6 +24,8 @@ import {
   getDiscoverVideoCacheDir,
 } from './config-paths'
 import { computeUpdateFlags, validateManifest } from './content-logic'
+import { rewriteMarkdownMedia } from './media-rewrite'
+import { registerRemoteMediaUrl } from './discover-remote-media'
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 
@@ -160,13 +162,14 @@ function toJsDelivrUrl(url: string): string | null {
   return `${JSDELIVR_BASE}/${url.slice(prefix.length)}`
 }
 
-/** 拉取 article 的 markdown 正文 */
+/** 拉取 article 的 markdown 正文（正文图片重写为代理转发 URL） */
 export async function fetchArticleContent(contentUrl: string): Promise<string> {
   const mirrors = [contentUrl]
   const jsdelivr = toJsDelivrUrl(contentUrl)
   if (jsdelivr) mirrors.push(jsdelivr)
   const response = await fetchWithFallbacks(mirrors, await getProxyFetch())
-  return response.text()
+  const markdown = await response.text()
+  return rewriteMarkdownMedia(markdown, registerRemoteMediaUrl)
 }
 
 /** 视频缓存文件路径 */

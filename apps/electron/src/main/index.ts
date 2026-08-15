@@ -35,6 +35,7 @@ function registerProtocolsAndHandlers(): void {
   protocol.registerSchemesAsPrivileged([
     { scheme: 'myyoda-file', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
     { scheme: 'discover-video', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+    { scheme: 'myyoda-remote', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
   ])
 
   // Windows: 禁用 LCD 次像素抗锯齿（ClearType），改用灰度 AA。
@@ -58,6 +59,7 @@ function registerProtocolsAndHandlers(): void {
 import { getSettings, updateSettings } from './lib/settings-service'
 import { handleMyYodaFileRequest } from './lib/local-file-protocol'
 import { handleDiscoverVideoRequest } from './lib/discover-video-protocol'
+import { handleRemoteMediaRequest } from './lib/discover-remote-media'
 
 // 处理 EPIPE 错误：当 stdout/stderr 管道被关闭时（如 electronmon 重启），忽略写入错误
 // 这在开发环境热重载时经常发生，不影响应用功能
@@ -603,6 +605,9 @@ async function bootstrap(): Promise<void> {
 
   // 注册 discover-video:// 远程视频流式转发（代理感知 + Range 透传）
   protocol.handle('discover-video', handleDiscoverVideoRequest)
+
+  // 注册 myyoda-remote:// 远程媒体转发（GitHub 图片/头像代理感知加载）
+  protocol.handle('myyoda-remote', handleRemoteMediaRequest)
 
   // 初始化运行时环境（Shell 环境 + Bun + Git 检测）
   // 必须在其他初始化之前执行，确保环境变量正确加载
