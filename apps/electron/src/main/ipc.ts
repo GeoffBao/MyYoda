@@ -5260,12 +5260,6 @@ export function registerIpcHandlers(): void {
     return registerMyYodaFilePath(filePath)
   })
 
-  // 用系统浏览器打开外链 / 讨论页
-  ipcMain.handle(DISCOVER_IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
-    const { shell } = await import('electron')
-    await shell.openExternal(url)
-  })
-
   // ===== 飞书集成 =====
 
   // --- 旧 API（向后兼容，操作 bots[0]）---
