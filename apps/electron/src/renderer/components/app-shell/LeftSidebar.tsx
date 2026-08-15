@@ -977,8 +977,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   /** 置顶 Agent 会话列表（仅活跃模式显示，跨项目/工作区展示，排除 draft）
    * 对齐 Proma：置顶不按当前工作区过滤，否则切换项目时置顶区会跟着变，用户会误以为
-   * “置顶跟着项目走”。属于其他工作区的置顶会话由 AgentSessionItem 自己的 workspaceName
-   * 兜底显示标签区分归属，点击后再切换工作区。 */
+   * “置顶跟着项目走”。置顶会话统一由 AgentSessionItem 的 workspaceName 标签标注所属
+   * 工作区（含当前工作区，与普通项目分组列表行为一致），点击后再切换工作区。 */
   const pinnedAgentSessions = React.useMemo(
     () => {
       if (viewMode !== 'active') return []
@@ -3659,7 +3659,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                         delegationChildCount={delegatedChildCount}
                         workspaceName={
                           item.session.workspaceId
-                          && item.session.workspaceId !== currentWorkspaceId
                             ? workspaceNameMap.get(item.session.workspaceId)
                             : undefined
                         }
@@ -3689,7 +3688,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                               relativeTimeNow={relativeTimeNow}
                               workspaceName={
                                 childSession.workspaceId
-                                && childSession.workspaceId !== currentWorkspaceId
                                   ? workspaceNameMap.get(childSession.workspaceId)
                                   : undefined
                               }
