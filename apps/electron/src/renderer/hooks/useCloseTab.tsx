@@ -28,6 +28,7 @@ import {
   unviewedCompletedSessionIdsAtom,
   agentSessionStreamingStateAtomFamily,
   agentSessionViewStreamStateAtomFamily,
+  agentSessionMessagesStreamStateAtomFamily,
   agentLiveMessagesAtomFamily,
   agentSessionDraftAtomFamily,
   agentSessionDraftHtmlAtomFamily,
@@ -127,6 +128,7 @@ export function useCloseTab(): UseCloseTabReturn {
         // 以免后台 Agent 失去状态；但释放派生 atom 实例，避免频繁打开历史会话长期累积。
         agentSessionStreamingStateAtomFamily.remove(closingTab.sessionId)
         agentSessionViewStreamStateAtomFamily.remove(closingTab.sessionId)
+        agentSessionMessagesStreamStateAtomFamily.remove(closingTab.sessionId)
         agentLiveMessagesAtomFamily.remove(closingTab.sessionId)
         agentSessionDraftAtomFamily.remove(closingTab.sessionId)
         agentSessionDraftHtmlAtomFamily.remove(closingTab.sessionId)

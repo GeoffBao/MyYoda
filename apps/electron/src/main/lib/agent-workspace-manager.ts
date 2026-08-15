@@ -34,6 +34,7 @@ import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared
 import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, KanbanColumnDef, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
 import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
+import { getSettings, updateSettings } from './settings-service'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -2204,7 +2205,7 @@ interface WorkspaceConfig {
   attachedDirectories?: string[]
   attachedFiles?: string[]
   worktreeRepos?: import('@myyoda/shared').WorkspaceWorktreeRepo[]
-  /** Workspace Task / 未绑定 Project 会话使用的默认工作目录；运行前仍需统一校验可访问性。 */
+  /** 旧版工作区默认工作目录（2026-08-15 起迁移到应用设置 agentDefaultWorkingDirectory，此处仅作迁移回退）。 */
   defaultWorkingDirectory?: string
   /** 用户授权 Agent 主动维护工作区/项目 AGENTS.md 知识。 */
   projectKnowledgeMaintenanceApproved?: boolean
@@ -2359,24 +2360,51 @@ export function detachWorkspaceFile(workspaceSlug: string, filePath: string): st
   return updated
 }
 
-// ===== 工作区级默认工作目录 =====
+// ===== 默认工作区目录（应用设置） =====
 
-/** Workspace Task / 未绑定 Project 会话的默认工作目录；未配置时返回 undefined。 */
+/**
+ * 应用级默认工作区目录：Workspace Task / 未绑定 Project 会话的工程代码目录；未配置时返回 undefined。
+ *
+ * 2026-08-15 起从工作区 config.json 的 defaultWorkingDirectory 迁移到应用设置（设置 → 工作区），
+ * 入口从插件 memory 深层面板收拢到设置页。未配置时回退读取默认工作区 config.json 的旧值（迁移兼容）。
+ */
+export function getAgentDefaultWorkingDirectory(): string | undefined {
+  const configured = getSettings().agentDefaultWorkingDirectory
+  if (configured) return configured
+  // 迁移回退：设置未配置时，兼容读取默认工作区 config.json 里的旧字段
+  return readWorkspaceConfig('default').defaultWorkingDirectory
+}
+
+/** 设置/清空应用级默认工作区目录；传 undefined 清空。写入设置并清理各工作区 config.json 的旧字段，避免双源。 */
+export function setAgentDefaultWorkingDirectory(path: string | undefined): string | undefined {
+  updateSettings({ agentDefaultWorkingDirectory: path || undefined })
+  for (const ws of listAgentWorkspaces()) {
+    const config = readWorkspaceConfig(ws.slug)
+    if (config.defaultWorkingDirectory !== undefined) {
+      writeWorkspaceConfig(ws.slug, { ...config, defaultWorkingDirectory: undefined })
+    }
+  }
+  console.log(`[Agent 工作区] 默认工作区目录已${path ? `设为 ${path}` : '清空'}（应用设置）`)
+  return path || undefined
+}
+
+/** 兼容旧签名（内部调用/IPC）：应用设置优先，未配置时回退工作区 config.json 旧值。 */
 export function getWorkspaceDefaultWorkingDirectory(workspaceSlug: string): string | undefined {
+  const configured = getSettings().agentDefaultWorkingDirectory
+  if (configured) return configured
   return readWorkspaceConfig(workspaceSlug).defaultWorkingDirectory
 }
 
-/** 已知 Workspace root 时直接读取 config，避免测试/迁移路径被误解释成全局 workspace slug。 */
+/** 已知 Workspace root 时直接读取其 config.json 旧值（应用设置优先），避免测试/迁移路径被误解释成全局 workspace slug。 */
 export function getWorkspaceDefaultWorkingDirectoryAtRoot(workspaceRoot: string): string | undefined {
+  const configured = getSettings().agentDefaultWorkingDirectory
+  if (configured) return configured
   return readWorkspaceConfigAtPath(join(workspaceRoot, 'config.json')).defaultWorkingDirectory
 }
 
-/** 设置/清空工作区默认工作目录；传 undefined 清空 */
-export function setWorkspaceDefaultWorkingDirectory(workspaceSlug: string, path: string | undefined): string | undefined {
-  const config = readWorkspaceConfig(workspaceSlug)
-  writeWorkspaceConfig(workspaceSlug, { ...config, defaultWorkingDirectory: path || undefined })
-  console.log(`[Agent 工作区] 默认工作目录已${path ? `设为 ${path}` : '清空'} (${workspaceSlug})`)
-  return path || undefined
+/** 兼容旧 set 签名：转发到应用级设置。 */
+export function setWorkspaceDefaultWorkingDirectory(_workspaceSlug: string, path: string | undefined): string | undefined {
+  return setAgentDefaultWorkingDirectory(path)
 }
 
 // ===== 工作区级 Worktree 仓库管理 =====

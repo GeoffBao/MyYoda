@@ -105,21 +105,17 @@ export function useSmoothStream({
     prevContentRef.current = newContent
   }, [content])
 
-  // 非流式状态时，确保最终内容一致（安全网，不立即 flush 队列）
+  // 非流式状态的最终一致性安全网。队列非空时绝不同步倾倒：content 与
+  // isStreaming 同帧更新时，后面的启动 effect 会用结束态速度自然排空。
   useEffect(() => {
-    if (!isStreaming) {
-      // 如果 rAF 循环仍在运行，让它自然排空队列
-      if (rafRef.current) return
-
-      // rAF 已停止：同步剩余内容
-      if (chunkQueueRef.current.length > 0) {
-        displayedRef.current += chunkQueueRef.current.join('')
-        chunkQueueRef.current = []
-      }
-      if (displayedRef.current !== content) {
-        displayedRef.current = content
-      }
-      setDisplayedContent(displayedRef.current)
+    if (
+      !isStreaming
+      && !rafRef.current
+      && chunkQueueRef.current.length === 0
+      && displayedRef.current !== content
+    ) {
+      displayedRef.current = content
+      setDisplayedContent(content)
     }
   }, [isStreaming, content])
 
@@ -127,19 +123,15 @@ export function useSmoothStream({
   const renderLoop = useCallback((currentTime: number) => {
     const queue = chunkQueueRef.current
 
-    // 队列为空
+    // 队列为空时暂停，而不是在整个流期间维持空转 rAF。下一段 content
+    // 到达后下面的启动 effect 会重新拉起；这允许 Agent 同一 turn 的多个 block
+    // 各自平滑，而不会为已完成 block 永久占用 animation frame。
     if (queue.length === 0) {
-      if (streamDoneRef.current) {
-        // 流结束 + 队列空 → 同步最终内容并停止
-        if (displayedRef.current !== prevContentRef.current) {
-          displayedRef.current = prevContentRef.current
-          setDisplayedContent(displayedRef.current)
-        }
-        rafRef.current = null
-        return
+      if (streamDoneRef.current && displayedRef.current !== prevContentRef.current) {
+        displayedRef.current = prevContentRef.current
+        setDisplayedContent(displayedRef.current)
       }
-      // 流未结束但队列空 → 等下一帧
-      rafRef.current = requestAnimationFrame(renderLoop)
+      rafRef.current = null
       return
     }
 
@@ -185,7 +177,7 @@ export function useSmoothStream({
         rafRef.current = null
       }
     }
-  }, [isStreaming, renderLoop])
+  }, [content, isStreaming, renderLoop])
 
   return { displayedContent }
 }

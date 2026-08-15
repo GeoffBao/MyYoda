@@ -60,6 +60,7 @@ import type {
   AgentStreamCompletePayload,
   AgentSessionFileRoots,
   AgentOutputRecord,
+  AgentStreamErrorPayload,
   AgentWorkspace,
   SessionGroup,
   AgentGenerateTitleInput,
@@ -1044,7 +1045,7 @@ export interface ElectronAPI {
   onAgentStreamComplete: (callback: (data: AgentStreamCompletePayload) => void) => () => void
 
   /** 订阅 Agent 流式错误事件 */
-  onAgentStreamError: (callback: (data: { sessionId: string; error: string }) => void) => () => void
+  onAgentStreamError: (callback: (data: AgentStreamErrorPayload) => void) => () => void
 
   /** 订阅 Agent 标题自动更新事件 */
   onAgentTitleUpdated: (callback: (data: { sessionId: string; title: string }) => void) => () => void
@@ -1165,10 +1166,10 @@ export interface ElectronAPI {
   /** 从工作区配置移除 worktree 仓库 */
   removeWorktreeRepo: (workspaceSlug: string, repoPath: string) => Promise<import('@myyoda/shared').WorkspaceWorktreeRepo[]>
 
-  /** 获取工作区默认工作目录（未绑定项目的新会话回退使用） */
-  getWorkspaceDefaultWorkingDirectory: (workspaceSlug: string) => Promise<string | undefined>
-  /** 设置/清空工作区默认工作目录 */
-  setWorkspaceDefaultWorkingDirectory: (workspaceSlug: string, path: string | undefined) => Promise<string | undefined>
+  /** 获取默认工作区目录（应用设置；未绑定项目的新会话回退使用） */
+  getAgentDefaultWorkingDirectory: () => Promise<string | undefined>
+  /** 设置/清空默认工作区目录 */
+  setAgentDefaultWorkingDirectory: (path: string | undefined) => Promise<string | undefined>
 
   // ===== Agent 文件系统操作 =====
 
@@ -2755,8 +2756,8 @@ const electronAPI: ElectronAPI = {
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.STREAM_COMPLETE, listener) }
   },
 
-  onAgentStreamError: (callback: (data: { sessionId: string; error: string }) => void) => {
-    const listener = (_: unknown, data: { sessionId: string; error: string }): void => callback(data)
+  onAgentStreamError: (callback: (data: AgentStreamErrorPayload) => void) => {
+    const listener = (_: unknown, data: AgentStreamErrorPayload): void => callback(data)
     ipcRenderer.on(AGENT_IPC_CHANNELS.STREAM_ERROR, listener)
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.STREAM_ERROR, listener) }
   },
@@ -2941,12 +2942,12 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REMOVE_WORKTREE_REPO, workspaceSlug, repoPath)
   },
 
-  getWorkspaceDefaultWorkingDirectory: (workspaceSlug: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_WORKSPACE_DEFAULT_WORKING_DIRECTORY, workspaceSlug)
+  getAgentDefaultWorkingDirectory: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_AGENT_DEFAULT_WORKING_DIRECTORY)
   },
 
-  setWorkspaceDefaultWorkingDirectory: (workspaceSlug: string, path: string | undefined) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_WORKSPACE_DEFAULT_WORKING_DIRECTORY, workspaceSlug, path)
+  setAgentDefaultWorkingDirectory: (path: string | undefined) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_AGENT_DEFAULT_WORKING_DIRECTORY, path)
   },
 
   // Agent 文件系统操作

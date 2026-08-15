@@ -64,11 +64,6 @@ export function MainArea(): React.ReactElement {
   const isClassic = interfaceVariant === 'classic'
   const store = useStore()
 
-  // Tab 内容渲染降级为非紧急：TabBar 立即高亮新 tab，主区域昂贵渲染（含 PreviewPanel 中
-  // DiffTabContent → ProseMirror editor mount + Shiki tokenize）让出主线程，避免点击 tab
-  // 后必须等主区域渲染完才能看到 tab 切换效果
-  const deferredActiveTabId = React.useDeferredValue(activeTabId)
-
   const previewOpenMap = useAtomValue(previewPanelOpenMapAtom)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const [browserStateMap, setBrowserStateMap] = useAtom(browserStateMapAtom)
@@ -340,9 +335,10 @@ export function MainArea(): React.ReactElement {
                   <AutomationFormView />
                 ) : tabs.length === 0 ? (
                   <WelcomeView />
-                ) : deferredActiveTabId ? (
+                ) : activeTabId ? (
                   <div className="flex-1 min-h-0 titlebar-no-drag">
-                    <TabContent tabId={deferredActiveTabId} />
+                    {/* 会话内容必须与侧栏/右侧面板使用同一个活动 Tab，不能延迟到旧会话。 */}
+                    <TabContent tabId={activeTabId} />
                   </div>
                 ) : null}
                 {showTerminalPanel && terminalSessionId && (

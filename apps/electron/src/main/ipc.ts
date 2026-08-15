@@ -321,7 +321,7 @@ import {
   searchAgentSessionMessages,
   searchAgentSessionReferences,
 } from './lib/agent-session-manager'
-import { runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
+import { agentEventBus, runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
 import { spawnExpertCowork } from './lib/agent-cowork'
 import { permissionService } from './lib/agent-permission-service'
 import { askUserService } from './lib/agent-ask-user-service'
@@ -396,8 +396,8 @@ import {
   addWorktreeRepo,
   removeWorktreeRepo,
   cleanupStaleWorkspaceAttachedPaths,
-  getWorkspaceDefaultWorkingDirectory,
-  setWorkspaceDefaultWorkingDirectory,
+  getAgentDefaultWorkingDirectory,
+  setAgentDefaultWorkingDirectory,
 } from './lib/agent-workspace-manager'
 import { deleteWorkspaceCascade } from './lib/workspace-deletion-service'
 import {
@@ -3607,15 +3607,15 @@ export function registerIpcHandlers(): void {
   // 响应权限请求
   ipcMain.handle(
     AGENT_IPC_CHANNELS.PERMISSION_RESPOND,
-    async (event, response: PermissionResponse): Promise<void> => {
+    async (_, response: PermissionResponse): Promise<void> => {
       const { requestId, behavior, alwaysAllow } = response
       const sessionId = permissionService.respondToPermission(requestId, behavior, alwaysAllow)
 
-      // 发送 permission_resolved 事件给渲染进程
+      // 统一经过 canonical EventBus，renderer、协作、Bridge 与 Agent Island 同步收敛。
       if (sessionId) {
-        event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-          sessionId,
-          payload: { kind: 'myyoda_event', event: { type: 'permission_resolved', requestId, behavior } },
+        agentEventBus.emit(sessionId, {
+          kind: 'myyoda_event',
+          event: { type: 'permission_resolved', requestId, behavior },
         })
       }
     }
@@ -3837,14 +3837,14 @@ export function registerIpcHandlers(): void {
   // 响应 AskUser 请求
   ipcMain.handle(
     AGENT_IPC_CHANNELS.ASK_USER_RESPOND,
-    async (event, response: AskUserResponse): Promise<void> => {
+    async (_, response: AskUserResponse): Promise<void> => {
       const { requestId, answers } = response
       const sessionId = askUserService.respondToAskUser(requestId, answers)
 
       if (sessionId) {
-        event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-          sessionId,
-          payload: { kind: 'myyoda_event', event: { type: 'ask_user_resolved', requestId } },
+        agentEventBus.emit(sessionId, {
+          kind: 'myyoda_event',
+          event: { type: 'ask_user_resolved', requestId },
         })
       }
     }
@@ -3855,16 +3855,16 @@ export function registerIpcHandlers(): void {
   // 响应 ExitPlanMode 请求
   ipcMain.handle(
     AGENT_IPC_CHANNELS.EXIT_PLAN_MODE_RESPOND,
-    async (event, response: ExitPlanModeResponse): Promise<void> => {
+    async (_, response: ExitPlanModeResponse): Promise<void> => {
       const result = exitPlanService.respondToExitPlanMode(response)
 
       if (result) {
         const { sessionId, targetMode } = result
 
-        // 通知渲染进程请求已处理
-        event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-          sessionId,
-          payload: { kind: 'myyoda_event', event: { type: 'exit_plan_mode_resolved', requestId: response.requestId } },
+        // 请求处理结果也走 canonical EventBus，避免外围消费者保留陈旧 blocked 状态。
+        agentEventBus.emit(sessionId, {
+          kind: 'myyoda_event',
+          event: { type: 'exit_plan_mode_resolved', requestId: response.requestId },
         })
 
         // 如果用户选择了新的权限模式，通知渲染进程更新 UI
@@ -3878,9 +3878,9 @@ export function registerIpcHandlers(): void {
               console.warn(`[IPC] ExitPlanMode 持久化 session 权限模式失败: sessionId=${sessionId}`, err)
             }
           }
-          event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {
-            sessionId,
-            payload: { kind: 'myyoda_event', event: { type: 'permission_mode_changed', mode: targetMode } },
+          agentEventBus.emit(sessionId, {
+            kind: 'myyoda_event',
+            event: { type: 'permission_mode_changed', mode: targetMode },
           })
           console.log(`[IPC] ExitPlanMode 权限模式切换: ${targetMode}`)
         }
@@ -4157,19 +4157,19 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ===== 工作区默认工作目录 =====
+  // ===== 默认工作区目录（应用设置） =====
 
   ipcMain.handle(
-    AGENT_IPC_CHANNELS.GET_WORKSPACE_DEFAULT_WORKING_DIRECTORY,
-    async (_, workspaceSlug: string): Promise<string | undefined> => {
-      return getWorkspaceDefaultWorkingDirectory(workspaceSlug)
+    AGENT_IPC_CHANNELS.GET_AGENT_DEFAULT_WORKING_DIRECTORY,
+    async (): Promise<string | undefined> => {
+      return getAgentDefaultWorkingDirectory()
     }
   )
 
   ipcMain.handle(
-    AGENT_IPC_CHANNELS.SET_WORKSPACE_DEFAULT_WORKING_DIRECTORY,
-    async (_, workspaceSlug: string, path: string | undefined): Promise<string | undefined> => {
-      return setWorkspaceDefaultWorkingDirectory(workspaceSlug, path)
+    AGENT_IPC_CHANNELS.SET_AGENT_DEFAULT_WORKING_DIRECTORY,
+    async (_, path: string | undefined): Promise<string | undefined> => {
+      return setAgentDefaultWorkingDirectory(path)
     }
   )
 

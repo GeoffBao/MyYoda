@@ -6,7 +6,6 @@ import type { SkillFileNode, WorkspaceMemorySummary } from '@myyoda/shared'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SettingsCard } from '@/components/settings/primitives'
-import { WorkingDirectoryField } from '@/components/app-shell/kanban/WorkingDirectoryField'
 import { DefaultAppOpenButton } from '@/components/diff/DefaultAppOpenButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MessageResponse } from '@/components/ai-elements/message'
@@ -115,8 +114,6 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
   const [scanningHistory, setScanningHistory] = React.useState(false)
   const [showQuickGenerate, setShowQuickGenerate] = React.useState(false)
   const [historyRange, setHistoryRange] = React.useState<MemoryHistoryRange>('1m')
-  const [defaultWorkingDirectory, setDefaultWorkingDirectory] = React.useState('')
-  const [savingDefaultWorkingDirectory, setSavingDefaultWorkingDirectory] = React.useState(false)
 
   // 自动保存：用 ref 持有最新的编辑状态，供防抖定时器与"切换文件前 flush"复用，
   // 避免把 selected/editText 塞进一堆回调的依赖数组里。
@@ -321,28 +318,6 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       }
     })()
     return () => { cancelled = true }
-  }, [workspaceSlug])
-
-  // 加载工作区默认工作目录（未绑定项目的新会话回退使用）
-  React.useEffect(() => {
-    let cancelled = false
-    void window.electronAPI.getWorkspaceDefaultWorkingDirectory(workspaceSlug)
-      .then((path) => { if (!cancelled) setDefaultWorkingDirectory(path ?? '') })
-      .catch(() => { if (!cancelled) setDefaultWorkingDirectory('') })
-    return () => { cancelled = true }
-  }, [workspaceSlug])
-
-  const handleDefaultWorkingDirectoryChange = React.useCallback(async (path: string): Promise<void> => {
-    setDefaultWorkingDirectory(path)
-    setSavingDefaultWorkingDirectory(true)
-    try {
-      await window.electronAPI.setWorkspaceDefaultWorkingDirectory(workspaceSlug, path || undefined)
-    } catch (err) {
-      console.error('[Workspace Context] 保存默认工作目录失败:', err)
-      toast.error(err instanceof Error ? err.message : '保存默认工作目录失败')
-    } finally {
-      setSavingDefaultWorkingDirectory(false)
-    }
   }, [workspaceSlug])
 
   // 防抖自动保存：编辑内容变脏后 800ms 内无新输入则自动保存（按钮显示 loading 动画）
@@ -586,23 +561,6 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
           </div>
         </SettingsCard>
       )}
-
-      {/* 默认工作目录：降权为紧凑单行，不再占用整张卡片的视觉重量 */}
-      <div className="flex flex-wrap items-center gap-2 px-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="shrink-0 text-xs text-muted-foreground">默认工作目录</span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[260px]">新会话未选择或新建项目时，Agent 会把这里作为工程代码目录的回退位置（不改变会话隔离目录本身）。</TooltipContent>
-        </Tooltip>
-        <div className="min-w-0 max-w-md flex-1">
-          <WorkingDirectoryField
-            value={defaultWorkingDirectory}
-            onChange={(path) => { void handleDefaultWorkingDirectoryChange(path) }}
-            className={savingDefaultWorkingDirectory ? 'opacity-60' : undefined}
-          />
-        </div>
-      </div>
 
       <div className="grid min-h-[520px] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <SettingsCard divided={false} className="min-h-0 overflow-hidden">

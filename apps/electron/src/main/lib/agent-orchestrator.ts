@@ -19,15 +19,15 @@ import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
-import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, RewindSessionResult, ProviderType, AgentThinkingLevel, SkillActivation } from '@myyoda/shared'
+import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, PiRunSourceEvent, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, RewindSessionResult, ProviderType, AgentThinkingLevel, SkillActivation } from '@myyoda/shared'
 import { UPDATER_LINKS } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE, MYYODA_PERMISSION_MODE_CONFIG, PROVIDER_DEFAULT_URLS, THINKING_SIGNATURE_ERROR_CODE, THINKING_SIGNATURE_ERROR_MESSAGE, THINKING_SIGNATURE_ERROR_TITLE, isPersistableSDKSystemMessage, normalizeMcpTransportType, inferAgentSdkContextWindow, inferReasoningTransport, resolveReasoningProfile, collectSkillActivations, mergeSkillActivations } from '@myyoda/shared'
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
-import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
+import type { PiAgentAdapter, PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getMainRepoRoot } from './git-diff-service'
 import { getWorkspaceAssetsDir, listWorkspaceAssetsForPrompt } from './workspace-assets'
 import { normalizePathForCompare } from '@myyoda/shared'
-import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
+import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-transcript-projection'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
 import { friendlyErrorMessage, isPromptTooLongError, isThinkingSignatureError, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './agent-error-utils'
 import { getActiveRunRejectionMessage, shouldPersistInitialUserMessage } from './agent-send-message-policy'
@@ -94,7 +94,7 @@ export interface SessionCallbacks {
   /** 发送标题更新 */
   onTitleUpdated: (title: string) => void
   /** 用户消息已持久化，外部入口可据此通知前端切到实时会话 */
-  onRunStarted?: (opts: { startedAt: number }) => void
+  onRunStarted?: (opts: { runId: string; startedAt: number; userMessageUuid?: string }) => void
 }
 
 type RecoverableAgentQueryOptions = {
@@ -152,7 +152,7 @@ function isMissingActiveQueueChannelError(error: unknown): boolean {
   return errorMessageOf(error).includes('无活跃消息通道可注入队列消息')
 }
 
-function isPartialSDKMessage(message: SDKMessage): boolean {
+function isLegacyPartialSnapshot(message: SDKMessage): boolean {
   return (message as Record<string, unknown>)._partial === true
 }
 
@@ -333,7 +333,7 @@ ${directoryLines}
 // ===== AgentOrchestrator =====
 
 export class AgentOrchestrator {
-  private adapter: AgentProviderAdapter
+  private adapter: PiAgentAdapter
   private eventBus: AgentEventBus
   private activeSessions = new Map<string, number>()
   private nextRunGeneration = 0
@@ -407,7 +407,7 @@ export class AgentOrchestrator {
     }
   }
 
-  constructor(adapter: AgentProviderAdapter, eventBus: AgentEventBus) {
+  constructor(adapter: PiAgentAdapter, eventBus: AgentEventBus) {
     this.adapter = adapter
     this.eventBus = eventBus
   }
@@ -703,41 +703,41 @@ export class AgentOrchestrator {
       return m.type === 'system' && (m as SDKSystemMessage).subtype === 'compact_boundary'
     })
 
-    const toPersist = accumulatedMessages
-      .filter((m) => m.type === 'assistant' || m.type === 'user' || m.type === 'result' || (m.type === 'system' && isPersistableSDKSystemMessage(m as SDKSystemMessage)))
-      .filter((m) => {
-        if (isPartialSDKMessage(m)) return false
-        if (m.type === 'system') {
-          const sysMsg = m as SDKSystemMessage
-          if (hasCompactBoundary && sysMsg.subtype === 'status' && sysMsg.compact_result === 'success') {
-            return false
-          }
+    const toPersist = accumulatedMessages.filter(
+      (m) => m.type === 'assistant' || m.type === 'user' || m.type === 'result'
+        || (m.type === 'system' && isPersistableSDKSystemMessage(m as SDKSystemMessage))
+    ).filter((m) => {
+      if (isLegacyPartialSnapshot(m)) return false
+      if (m.type === 'system') {
+        const sysMsg = m as SDKSystemMessage
+        if (hasCompactBoundary && sysMsg.subtype === 'status' && sysMsg.compact_result === 'success') {
+          return false
         }
-        // 过滤 SDK 内部生成的 user 文本消息（如 Skill 展开 prompt），与实时流过滤逻辑一致
-        if (m.type === 'user') {
-          const content = (m as { message?: { content?: Array<{ type: string }> } }).message?.content
-          const hasToolResult = Array.isArray(content) && content.some((b) => b.type === 'tool_result')
-          if (!hasToolResult) return false
-        }
-        return true
-      })
+      }
+      // 过滤 SDK 内部生成的 user 文本消息（如 Skill 展开 prompt），与实时流过滤逻辑一致
+      if (m.type === 'user') {
+        const content = (m as { message?: { content?: Array<{ type: string }> } }).message?.content
+        const hasToolResult = Array.isArray(content) && content.some((b) => b.type === 'tool_result')
+        const isQueuedBoundary = (m as Record<string, unknown>)._promaQueuedBoundary === true
+        if (!hasToolResult && !isQueuedBoundary) return false
+      }
+      return true
+    })
 
     if (toPersist.length === 0) return
 
     // 为没有 _createdAt 的消息补上时间戳（assistant 消息来自 SDK 原始输出，不含时间）
     const now = Date.now()
     const withTimestamps = toPersist.map((m) => {
-      const msg = m as Record<string, unknown>
-      if (typeof msg._createdAt === 'number') return m
+      const source = m as Record<string, unknown>
+      const msg = source._promaQueuedBoundary === true ? { ...source } : source
+      delete msg._promaQueuedBoundary
+      if (typeof msg._createdAt === 'number') return msg as unknown as SDKMessage
       // 为 result 消息附加 _durationMs
       if (m.type === 'result' && durationMs != null) {
-        return {
-          ...m,
-          _createdAt: now,
-          _durationMs: durationMs
-        } as unknown as SDKMessage
+        return { ...msg, _createdAt: now, _durationMs: durationMs } as unknown as SDKMessage
       }
-      return { ...m, _createdAt: now } as unknown as SDKMessage
+      return { ...msg, _createdAt: now } as unknown as SDKMessage
     })
 
     appendSDKMessages(sessionId, withTimestamps)
@@ -847,6 +847,7 @@ export class AgentOrchestrator {
     const toolsDisabled = toolPolicy === 'none'
     const stderrChunks: string[] = []
     const streamStartedAt = input.startedAt ?? Date.now()
+    const runId = input.runId ?? randomUUID()
     let userMessagePersisted = false
     let initialUserMessageUuid: string | undefined
     let sessionMeta = getAgentSessionMeta(sessionId)
@@ -1067,7 +1068,11 @@ export class AgentOrchestrator {
     // finally 块会通过 generation 匹配来安全清理，不影响正常流程
     const runGeneration = ++this.nextRunGeneration
     this.activeSessions.set(sessionId, runGeneration)
-    callbacks.onRunStarted?.({ startedAt: streamStartedAt })
+    callbacks.onRunStarted?.({
+      runId,
+      startedAt: streamStartedAt,
+      ...(initialUserMessageUuid && { userMessageUuid: initialUserMessageUuid }),
+    })
 
     const releaseActiveRun = (): void => {
       // 在发送 STREAM_COMPLETE 前释放 active slot，避免渲染进程已进入空闲态、
@@ -1862,6 +1867,7 @@ ${workContext}`
       const effectiveBaseUrl = channel.baseUrl || (channel.provider === 'anthropic-oauth' ? PROVIDER_DEFAULT_URLS['anthropic-oauth'] : channel.baseUrl)
       const queryOptions: PiAgentQueryOptions = {
         sessionId,
+        runId,
         prompt: finalPrompt,
         model: selectedModelId,
         cwd: agentCwd,
@@ -2036,12 +2042,21 @@ ${workContext}`
         let shouldRetryFromError = false
 
         try {
+          // stop 可能发生在 active slot 建立后、Pi adapter active session 创建前。
+          // query() 前做 generation 精确闸门，避免一次已经返回的 abort 之后仍发起模型/工具执行。
+          if (this.stoppedBySessions.get(sessionId) === runGeneration) {
+            const wasStoppedByUser = this.consumeStoppedByUser(sessionId, runGeneration)
+            try { updateAgentSessionMeta(sessionId, { stoppedByUser: wasStoppedByUser }) } catch { /* 会话可能已删除 */ }
+            completeRun({ stoppedByUser: wasStoppedByUser, startedAt: streamStartedAt })
+            return
+          }
+
           // 获取异步迭代器（手动 .next() 以支持 Promise.race 中断）
           const queryIterable = this.adapter.query(queryOptions)
           const queryIterator = queryIterable[Symbol.asyncIterator]()
 
-          // 手动事件循环：Promise.race（SDKMessage vs result drain timeout）
-          let pendingNext: Promise<IteratorResult<SDKMessage>> | null = null
+          // 手动事件循环：Promise.race（Pi runtime event vs result drain timeout）
+          let pendingNext: Promise<IteratorResult<PiRunSourceEvent>> | null = null
           // 捕获 result.subtype 以传递给前端（用于区分 success/error_max_turns/error_max_budget_usd）
           let capturedResultSubtype: string | undefined
           // 捕获 result.errors[] 错误详情：SDK 在 error_during_execution 等场景下会把真实错误原因
@@ -2064,12 +2079,9 @@ ${workContext}`
               pendingNext = queryIterator.next()
             }
 
-            const racePromises: Array<
-              Promise<{
-                kind: string
-                result: IteratorResult<SDKMessage> | null
-              }>
-            > = [pendingNext.then((r) => ({ kind: 'event' as const, result: r }))]
+            const racePromises: Array<Promise<{ kind: string; result: IteratorResult<PiRunSourceEvent> | null }>> = [
+              pendingNext.then((r) => ({ kind: 'event' as const, result: r })),
+            ]
             if (drainTimeoutPromise) {
               racePromises.push(
                 drainTimeoutPromise.then(() => ({
@@ -2094,8 +2106,12 @@ ${workContext}`
             if (!iterResult || iterResult.done) break
 
             pendingNext = null
-            let msg = iterResult.value
-            const isPartialMessage = isPartialSDKMessage(msg)
+            const providerEvent = iterResult.value
+            if (providerEvent.kind === 'assistant_message_delta') {
+              this.eventBus.emit(sessionId, providerEvent)
+              continue
+            }
+            let msg = providerEvent.message
             if (msg.type === 'result') {
               const skillActivations = mergeSkillActivations(
                 pendingSkillActivations,
@@ -2119,9 +2135,7 @@ ${workContext}`
             }
             // assistant partial 帧也需要渠道身份：它们会立即进入实时 UI，但不会被持久化。
             msg = withAgentMessageChannelIdentity(msg, channelId)
-            // isVisibleRunMessage 已抽到独立模块，不含 partial 判断；
-            // pi runtime 的流式 partial 消息不应计入可见消息数，故在此显式排除。
-            if (!isPartialMessage && isVisibleRunMessage(msg)) {
+            if (isVisibleRunMessage(msg)) {
               visibleRunMessageCount += 1
             }
 
@@ -2153,7 +2167,7 @@ ${workContext}`
             }
 
             // 检测 assistant 消息中的 SDK 错误
-            if (msg.type === 'assistant' && !isPartialMessage) {
+            if (msg.type === 'assistant') {
               const assistantMsg = msg as SDKAssistantMessage
               if (assistantMsg.error) {
                 // Pi 把已生成文本和终态传输错误分开存放，直接取 Pi 专用错误详情。
@@ -2322,12 +2336,16 @@ ${workContext}`
             // - 对 system 消息，仅累积需要长期可见的状态（压缩 / 权限拒绝）
             if (msg.type === 'assistant' || msg.type === 'user' || msg.type === 'result') {
               const msgRecord = msg as Record<string, unknown>
-              if (!msgRecord.isReplay && !isPartialMessage) {
+              if (!msgRecord.isReplay) {
                 if (msg.type === 'user') {
-                  // 仅累积包含 tool_result 的 user 消息（跳过 SDK 重新发出的初始用户消息）
+                  // 普通初始 user 由步骤 5 落盘；tool_result 与 Pi 实际消费的 queued boundary
+                  // 按 providerQueue 顺序进入本轮 buffer。
                   const content = (msg as { message?: { content?: Array<{ type: string }> } }).message?.content
                   const hasToolResult = Array.isArray(content) && content.some((b) => b.type === 'tool_result')
-                  if (hasToolResult) {
+                  const isQueuedBoundary = (msg as Record<string, unknown>)._promaQueuedBoundary === true
+                  if (isQueuedBoundary) {
+                    accumulatedMessages.push(msg)
+                  } else if (hasToolResult) {
                     accumulatedMessages.push(msg)
                   }
                 } else {
@@ -2353,6 +2371,15 @@ ${workContext}`
               if (isPersistableSDKSystemMessage(sysMsg)) {
                 accumulatedMessages.push(msg)
               }
+            }
+
+            // queued user 被 Pi 真正消费时，立即按 providerQueue 顺序提交此前 assistant + user；
+            // 避免 user 先写盘、assistant 到 result 才补写造成历史 U → A 倒序。
+            if (msg.type === 'user' && (msg as Record<string, unknown>)._promaQueuedBoundary === true) {
+              this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
+              accumulatedMessages.length = 0
+              const queuedUuid = (msg as Record<string, unknown>).uuid
+              if (typeof queuedUuid === 'string') this.flushPendingUserSkillActivations(sessionId, queuedUuid)
             }
 
             // Turn 结束时：持久化累积消息
@@ -2420,7 +2447,8 @@ ${workContext}`
             if (msg.type === 'user') {
               const content = (msg as { message?: { content?: Array<{ type: string }> } }).message?.content
               const hasToolResult = Array.isArray(content) && content.some((b) => b.type === 'tool_result')
-              if (!hasToolResult) {
+              const isQueuedBoundary = (msg as Record<string, unknown>)._promaQueuedBoundary === true
+              if (!hasToolResult && !isQueuedBoundary) {
                 shouldEmit = false
               }
             }
@@ -2503,7 +2531,7 @@ ${workContext}`
           }
 
           // 用户主动中止
-          if (!this.activeSessions.has(sessionId)) {
+          if (this.stoppedBySessions.get(sessionId) === runGeneration) {
             const wasStoppedByUser = this.consumeStoppedByUser(sessionId, runGeneration)
             console.log(`[Agent 编排] 会话 ${sessionId} 已被用户中止`)
             this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
@@ -2755,14 +2783,13 @@ ${workContext}`
   }
 
   /**
-   * 中止指定会话的 Agent 执行
+   * 中止指定会话的 Agent 执行。
    *
-   * 先从 activeSessions 移除（供 sendMessage catch 块检测用户中止），
-   * 再调用 adapter.abort() 中止底层 SDK 进程。
+   * active slot 必须保留到旧 query 的精确终态：否则 stop 后立刻启动的新 run 会通过
+   * 并发检查，却被仍绑定旧 run 的 EventBus scope 丢弃。停止状态单独按 generation 标记。
    */
   stop(sessionId: string): void {
     const runGeneration = this.activeSessions.get(sessionId)
-    this.activeSessions.delete(sessionId)
     this.sessionPermissionModes.delete(sessionId)
     browserController.cancelSession(sessionId)
     if (runGeneration != null) this.stoppedBySessions.set(sessionId, runGeneration)
@@ -2918,6 +2945,7 @@ ${workContext}`
     const sdkMessage = {
       type: 'user' as const,
       message: { role: 'user' as const, content: enrichedText },
+      raw_content: rawText ?? text,
       parent_tool_use_id: null,
       priority: 'now' as const,
       uuid,
@@ -2931,18 +2959,8 @@ ${workContext}`
       })
       console.log(`[Agent 编排] 追加消息已注入: sessionId=${sessionId}, uuid=${uuid}, interrupt=${!!opts?.interrupt}`)
 
-      // 立即持久化到 JSONL — 仅存原始文本，不含 prompt 工程块（与 sendMessage 路径一致）
-      const persistMsg: SDKMessage = {
-        type: 'user',
-        uuid,
-        message: {
-          content: [{ type: 'text', text: rawText ?? text }]
-        },
-        parent_tool_use_id: null,
-        _createdAt: Date.now()
-      } as unknown as SDKMessage
-      appendSDKMessages(sessionId, [persistMsg])
-      this.flushPendingUserSkillActivations(sessionId, uuid)
+      // canonical user boundary 会在 Pi 实际消费该 prompt 的 message_start 时进入
+      // providerQueue；由 sendMessage 事件循环按 A → U → B 顺序落盘，不能在这里抢先 append。
     } catch (error) {
       uuids.delete(uuid)
       this.clearPendingUserSkillActivations(sessionId, uuid)

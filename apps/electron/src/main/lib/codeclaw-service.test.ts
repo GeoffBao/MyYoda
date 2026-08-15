@@ -98,19 +98,30 @@ function resultSuccess(sessionId: string) {
   }
 }
 
+let externalRunCounter = 0
 function externalRun(sessionId: string) {
+  externalRunCounter += 1
   return {
     kind: 'myyoda_event' as const,
     event: {
       type: 'external_run_started' as const,
       source: 'feishu' as const,
       sessionId,
+      runId: `run-${sessionId}-${externalRunCounter}`,
       startedAt: fakeNow,
     },
   }
 }
 
+const activeTestRuns = new Map<string, string>()
 function emit(sessionId: string, payload: Parameters<AgentServiceModule['agentEventBus']['emit']>[1]): void {
+  // 真实流程里 run 结束时 agent-service 会通过 endRun 关闭 EventBus run scope；
+  // 测试连续注入同一会话的多次 external_run_started 前，先关闭上一轮 scope。
+  if (payload.kind === 'myyoda_event' && payload.event.type === 'external_run_started') {
+    const previous = activeTestRuns.get(sessionId)
+    if (previous) realEventBus.endRun(sessionId, previous)
+    activeTestRuns.set(sessionId, payload.event.runId)
+  }
   realEventBus.emit(sessionId, payload)
   service.publishCodeClawNow()
 }
