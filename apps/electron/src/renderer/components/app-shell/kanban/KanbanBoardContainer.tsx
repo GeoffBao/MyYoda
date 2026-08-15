@@ -31,7 +31,6 @@ import {
   taskBoardWorkflowFilterAtom,
 } from '@/atoms/task-board-filter-atoms'
 import { Button } from '@/components/ui/button'
-import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
 import { workspaceLabelsAtom } from '@/atoms/workspace-labels-atoms'
 import {
   AlertDialog,
@@ -92,8 +91,6 @@ export function KanbanBoardContainer({
   const setProjects = useSetAtom(serverKanbanProjectsAtom)
   const [scope, setScope] = useAtom(taskBoardScopeAtom)
   const [composerOpen, setComposerOpen] = React.useState(false)
-  const [createProjectOpen, setCreateProjectOpen] = React.useState(false)
-  const [creatingProject, setCreatingProject] = React.useState(false)
   const [mode, setMode] = useAtom(boardModeAtom)
   const [notifications, setNotifications] = useAtom(kanbanNotificationsAtom)
   const moveCard = useSetAtom(moveCardAtom)
@@ -106,8 +103,6 @@ export function KanbanBoardContainer({
   const clearFilters = useSetAtom(clearTaskBoardFiltersAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
-  const setWorkspaces = useSetAtom(agentWorkspacesAtom)
-  const setCurrentWorkspaceId = useSetAtom(currentAgentWorkspaceIdAtom)
   const workspace = workspaces.find((candidate) => candidate.id === currentWorkspaceId) ?? null
   const channels = useAtomValue(channelsAtom)
   const channelsLoaded = useAtomValue(channelsLoadedAtom)
@@ -454,7 +449,6 @@ export function KanbanBoardContainer({
               projects={pickableProjects}
               value={scope}
               onChange={setScope}
-              onCreateProject={() => setCreateProjectOpen(true)}
               workspaceName={workspace?.name}
             />
             <TaskBoardFilters />
@@ -571,27 +565,6 @@ export function KanbanBoardContainer({
         onAddColumn={editingProject ? handleAddColumn : undefined}
         onUpdateColumn={editingProject ? handleUpdateColumn : undefined}
         onRemoveColumn={editingProject ? handleRemoveColumn : undefined}
-      />
-      <CreateProjectDialog
-        open={createProjectOpen}
-        busy={creatingProject}
-        onOpenChange={setCreateProjectOpen}
-        onSubmit={(input) => {
-          if (creatingProject) return
-          setCreatingProject(true)
-          void window.electronAPI.createAgentWorkspace({
-            name: input.name,
-            projectRootPath: input.workingDirectory?.trim() || undefined,
-          }).then((workspace) => {
-            setWorkspaces((current) => [workspace, ...current.filter((candidate) => candidate.id !== workspace.id)])
-            setCurrentWorkspaceId(workspace.id)
-            void window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id })
-            setCreateProjectOpen(false)
-            toast.success(`已创建项目「${workspace.name}」`)
-          }).catch((cause: unknown) => {
-            toast.error('创建项目失败', { description: cause instanceof Error ? cause.message : String(cause) })
-          }).finally(() => setCreatingProject(false))
-        }}
       />
       <AlertDialog
         open={pendingDeleteItem !== null}
