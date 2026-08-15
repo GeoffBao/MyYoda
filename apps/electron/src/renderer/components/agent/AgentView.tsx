@@ -486,6 +486,19 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     return () => { cancelled = true }
   }, [repoMapToolsCwd, sessionId])
 
+  // 窗口重新聚焦时重查状态：主进程重启（dev 模式 electronmon）后推送链断裂，
+  // 旧 running 状态会残留在 renderer（2026-08-15）；聚焦即拉真实状态。
+  React.useEffect(() => {
+    const refresh = () => {
+      if (!repoMapToolsCwd) return
+      window.electronAPI.getRepoMapToolsState(repoMapToolsCwd)
+        .then(setRepoMapToolsState)
+        .catch(() => { /* ignore */ })
+    }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [repoMapToolsCwd, setRepoMapToolsState])
+
   /** 图谱按钮点击：关→开+首建 / done→rebuild / failed→重试 / running→忽略 / unavailable→跳设置 */
   const handleRepoMapToolsClick = React.useCallback(() => {
     const state = repoMapToolsState
