@@ -26,7 +26,7 @@ import {
 import { computeUpdateFlags, validateManifest } from './content-logic'
 import { rewriteMarkdownMedia } from './media-rewrite'
 import { registerRemoteMediaUrl } from './discover-remote-media'
-import { getFetchFn } from './proxy-fetch'
+import { fetchWithSystemFallback, getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 
 /** 内容源配置（维护者公开仓库） */
@@ -249,7 +249,8 @@ async function downloadFromUrl(
   webContents: WebContents,
   lastSentAt: { t: number },
 ): Promise<boolean> {
-  const response = await (await getProxyFetch())(url, { signal: AbortSignal.timeout(600_000) })
+  // 与流式播放同样用系统网络栈兜底（见 fetchWithSystemFallback 注释）：用户未在 MyYoda 里配置代理但系统层有代理/VPN 时，下载也能成功
+  const response = await fetchWithSystemFallback(url, {}, await getEffectiveProxyUrl())
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   if (!response.body) throw new Error('响应无内容流')
   const reader = response.body.getReader()
