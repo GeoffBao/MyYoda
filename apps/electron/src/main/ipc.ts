@@ -321,7 +321,7 @@ import {
   searchAgentSessionMessages,
   searchAgentSessionReferences,
 } from './lib/agent-session-manager'
-import { runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
+import { runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, enqueueAgentQueuedMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, pokeAgentQueuedMessages, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
 import { spawnExpertCowork } from './lib/agent-cowork'
 import { permissionService } from './lib/agent-permission-service'
 import { askUserService } from './lib/agent-ask-user-service'
@@ -1488,7 +1488,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     CHANNEL_IPC_CHANNELS.CREATE,
     async (_, input: ChannelCreateInput): Promise<Channel> => {
-      return createChannel(input)
+      const channel = createChannel(input)
+      pokeAgentQueuedMessages()
+      return channel
     }
   )
 
@@ -1496,7 +1498,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     CHANNEL_IPC_CHANNELS.UPDATE,
     async (_, id: string, input: ChannelUpdateInput): Promise<Channel> => {
-      return updateChannel(id, input)
+      const channel = updateChannel(id, input)
+      pokeAgentQueuedMessages()
+      return channel
     }
   )
 
@@ -1504,7 +1508,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     CHANNEL_IPC_CHANNELS.DELETE,
     async (_, id: string): Promise<void> => {
-      return deleteChannel(id)
+      deleteChannel(id)
+      pokeAgentQueuedMessages()
     }
   )
 
@@ -2761,6 +2766,8 @@ export function registerIpcHandlers(): void {
         askUserService.clearSessionPending(sessionId)
         // 清理 ExitPlanMode 服务中的待处理请求
         exitPlanService.clearSessionPending(sessionId)
+        // 清理主进程 deferred queue
+        clearAgentQueuedMessages(sessionId)
         // 清理受管浏览器会话
         await browserController.close(sessionId)
         deleteAgentSession(sessionId)
@@ -3577,6 +3584,28 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.QUEUE_MESSAGE,
     async (event, input: import('@myyoda/shared').AgentQueueMessageInput): Promise<string> => {
       return queueAgentMessage(input, event.sender)
+    }
+  )
+
+  // 将等待当前 run 结束的消息交给主进程调度器
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.ENQUEUE_QUEUED_MESSAGE,
+    async (event, input: import('@myyoda/shared').AgentDeferredQueueMessageInput): Promise<void> => {
+      enqueueAgentQueuedMessage(input, event.sender)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.CANCEL_QUEUED_MESSAGE,
+    async (_, input: import('@myyoda/shared').AgentQueuedMessageControlInput): Promise<boolean> => {
+      return cancelAgentQueuedMessage(input)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.MOVE_QUEUED_MESSAGE,
+    async (_, input: import('@myyoda/shared').AgentMoveQueuedMessageInput): Promise<boolean> => {
+      return moveAgentQueuedMessage(input)
     }
   )
 
