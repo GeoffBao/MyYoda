@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, Folder, FolderOpen, FolderInput, GripVertical, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, Folder, FolderOpen, FolderInput, GripVertical, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass, MessagesSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -1089,6 +1089,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       return
     }
     setActiveView('repo-wiki')
+  }, [activeView, setActiveView])
+
+  /** 打开/关闭 消息 视图（IM 集成：飞书 / 微信 / 即将上线渠道，仅 Project 模式） */
+  const handleOpenMessaging = React.useCallback((): void => {
+    if (activeView === 'messaging') {
+      setActiveView('conversations')
+      return
+    }
+    setActiveView('messaging')
   }, [activeView, setActiveView])
 
   /** 打开/关闭「发现」视图（官方内容 + 社区 + 反馈） */
@@ -3553,6 +3562,28 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </Tooltip>
           )}
 
+          {/* 消息：IM 集成（飞书 / 微信 / 即将上线渠道），仅 Project 模式 */}
+          {mode === 'agent' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="消息"
+                  onClick={handleOpenMessaging}
+                  className={cn(
+                    'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
+                    activeView === 'messaging'
+                      ? 'border-primary/80 bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border/45 bg-foreground/[0.025] text-foreground/45 hover:border-border/70 hover:bg-foreground/[0.045] hover:text-primary',
+                  )}
+                >
+                  <MessagesSquare size={16} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">消息</TooltipContent>
+            </Tooltip>
+          )}
+
           {/* Yoda 知识库：Project 模式 LLM 知识库入口（待开发） */}
           {mode === 'agent' && (
             <Tooltip>
@@ -4003,6 +4034,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               >
                 <Blocks size={13} className="shrink-0 text-foreground/45" />
                 <span className="min-w-0 flex-1 truncate text-left">插件</span>
+              </button>
+            )}
+
+            {/* 消息：IM 集成（飞书 / 微信 / 即将上线渠道），仅 Project 模式 */}
+            {shouldShowFeatureItem('messaging', featureCtx, featuresShowingAll) && (
+              <button
+                type="button"
+                onClick={() => navigateFromFeatureGroup(handleOpenMessaging)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'messaging'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <MessagesSquare size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">消息</span>
               </button>
             )}
 
