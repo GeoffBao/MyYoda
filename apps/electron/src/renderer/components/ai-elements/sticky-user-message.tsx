@@ -62,8 +62,8 @@ interface UserMessageData {
 
 interface StickyUserMessageProps {
   userMessages: UserMessageData[]
-  getStickyMessageId?: (scrollTop: number) => string | null
-  onScrollToMessage?: (id: string) => void
+  /** 历史结构变化签名，用于 prepend 非用户消息时刷新用户位置缓存。 */
+  layoutSignature?: string
 }
 
 interface UserMessagePosition {
@@ -73,8 +73,7 @@ interface UserMessagePosition {
 
 export function StickyUserMessage({
   userMessages,
-  getStickyMessageId,
-  onScrollToMessage,
+  layoutSignature,
 }: StickyUserMessageProps): React.ReactElement {
   const { scrollRef, stopScroll, state: stickyState } = useStickToBottomContext()
   const userProfile = useAtomValue(userProfileAtom)
@@ -113,13 +112,6 @@ export function StickyUserMessage({
 
     const updateStickyMessage = (): void => {
       const scrollTop = el.scrollTop
-      if (getStickyMessageId) {
-        const id = getStickyMessageId(scrollTop)
-        const found = id ? messageMap.get(id) ?? null : null
-        setStickyMessage((previous) => previous?.id === found?.id ? previous : found)
-        return
-      }
-
       const positions = positionsRef.current
       let low = 0
       let high = positions.length - 1
@@ -148,14 +140,12 @@ export function StickyUserMessage({
         positions.push({ id, bottom: rect.bottom - containerRect.top + el.scrollTop })
       }
       positionsRef.current = positions
-      if (!getStickyMessageId) {
-        const messageElements = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]'))
-        const lastUserMessageIndex = messageElements.findLastIndex(
-          (message) => message.dataset.messageRole === 'user',
-        )
-        for (const message of messageElements.slice(0, lastUserMessageIndex + 1)) {
-          resizeObserver.observe(message)
-        }
+      const messageElements = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]'))
+      const lastUserMessageIndex = messageElements.findLastIndex(
+        (message) => message.dataset.messageRole === 'user',
+      )
+      for (const message of messageElements.slice(0, lastUserMessageIndex + 1)) {
+        resizeObserver.observe(message)
       }
       updateStickyMessage()
     }
@@ -185,34 +175,26 @@ export function StickyUserMessage({
       }
       if (entries.some((entry) => entry.target !== el)) scheduleMeasure()
     })
-    const virtualContent = el.querySelector<HTMLElement>('[data-index]')?.parentElement
-      ?? el.firstElementChild
-    if (virtualContent && virtualContent !== el) resizeObserver.observe(virtualContent)
+    // 只观察滚动容器尺寸和用户消息节点：assistant 流式内容位于最后一个用户消息之后，
+    // 它的高度变化不会改变已记录的用户消息位置。
+    resizeObserver.observe(el)
 
-    const mutationObserver = getStickyMessageId ? null : new MutationObserver(scheduleMeasure)
-    // 只有最后一条用户消息及其之前的内容会改变用户消息的绝对位置。
-    // 当前流式 assistant 位于它之后，不纳入观察，避免每个流式高度更新重测整段历史。
-    if (!getStickyMessageId) {
-      const messageElements = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]'))
-      const lastUserMessageIndex = messageElements.findLastIndex(
-        (message) => message.dataset.messageRole === 'user',
-      )
-      for (const message of messageElements.slice(0, lastUserMessageIndex + 1)) {
-        resizeObserver.observe(message)
-      }
-      mutationObserver?.observe(el, { childList: true, subtree: true })
+    const messageElements = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]'))
+    const lastUserMessageIndex = messageElements.findLastIndex(
+      (message) => message.dataset.messageRole === 'user',
+    )
+    for (const message of messageElements.slice(0, lastUserMessageIndex + 1)) {
+      resizeObserver.observe(message)
     }
-
     scheduleMeasure()
 
     return () => {
       if (scrollFrame !== null) cancelAnimationFrame(scrollFrame)
       if (measureFrame !== null) cancelAnimationFrame(measureFrame)
       el.removeEventListener('scroll', scheduleScrollUpdate)
-      mutationObserver?.disconnect()
       resizeObserver.disconnect()
     }
-  }, [getStickyMessageId, scrollRef, userMessageSignature, messageMap, stickyEnabled])
+  }, [scrollRef, userMessageSignature, messageMap, layoutSignature, stickyEnabled])
 
   // 点击回滚到原始消息
   const scrollToOriginal = React.useCallback(() => {
@@ -222,10 +204,7 @@ export function StickyUserMessage({
     const target = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]')).find(
       (node) => node.getAttribute('data-message-id') === stickyMessage.id
     )
-    if (!target) {
-      onScrollToMessage?.(stickyMessage.id)
-      return
-    }
+    if (!target) return
 
     stopScroll()
     stickyState.animation = undefined
@@ -236,7 +215,7 @@ export function StickyUserMessage({
     const targetRect = target.getBoundingClientRect()
     const targetScrollTop = el.scrollTop + (targetRect.top - containerRect.top)
     el.scrollTo({ top: Math.max(0, targetScrollTop - 24), behavior: 'smooth' })
-  }, [onScrollToMessage, scrollRef, stopScroll, stickyState, stickyMessage])
+  }, [scrollRef, stopScroll, stickyState, stickyMessage])
 
   const isSticky = stickyMessage !== null
   const hasContent = stickyMessage && (stickyMessage.text || stickyMessage.attachments.length > 0)
