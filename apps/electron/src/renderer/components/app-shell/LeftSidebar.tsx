@@ -3898,41 +3898,46 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       </div>
 
       {/* 功能模块区：Task 日历 / 看板 / 画布 / 插件 / 知识库 收敛为可折叠「功能」组（默认折叠，回归 Proma 简洁样式） */}
-      <div className="sidebar-module-zone px-3 pt-1 pb-0.5">
+      <div className="sidebar-module-zone px-3 pt-1 pb-0.5" ref={featuresModuleRef}>
         <SidebarModule
           icon={Layers}
           title="功能"
           collapsible
           collapsed={featuresCollapsed}
-          onCollapsedChange={setFeaturesCollapsed}
+          onCollapsedChange={(next) => {
+            setFeaturesCollapsed(next)
+            if (!next) setFeaturesShowingAll(true)
+          }}
           ariaLabel="功能模块"
         >
           <div className="flex flex-col gap-0.5 pt-1">
             {/* 计划：Todo / 日历 / 定时任务合一 */}
-            <button
-              type="button"
-              onClick={handleOpenPlanning}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
-                activeView === 'planning'
-                  ? 'bg-accent-foreground/[0.10] text-foreground'
-                  : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
-              )}
-            >
-              <CalendarDays size={13} className="shrink-0 text-foreground/45" />
-              <span className="min-w-0 flex-1 truncate text-left">计划</span>
-              {automationCount > 0 && (
-                <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
-                  {formatSidebarModuleCount(automationCount)}
-                </span>
-              )}
-            </button>
-
-            {/* 任务看板：工作区级正式工作项入口（回归 Proma：看板按工作区展示） */}
-            {mode === 'agent' && (
+            {shouldShowFeatureItem('planning', featureCtx, featuresShowingAll) && (
               <button
                 type="button"
-                onClick={handleOpenTaskBoard}
+                onClick={() => navigateFromFeatureGroup(handleOpenPlanning)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                  activeView === 'planning'
+                    ? 'bg-accent-foreground/[0.10] text-foreground'
+                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+                )}
+              >
+                <CalendarDays size={13} className="shrink-0 text-foreground/45" />
+                <span className="min-w-0 flex-1 truncate text-left">计划</span>
+                {automationCount > 0 && (
+                  <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
+                    {formatSidebarModuleCount(automationCount)}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* 任务看板：工作区级正式工作项入口（回归 Proma：看板按工作区展示） */}
+            {shouldShowFeatureItem('board', featureCtx, featuresShowingAll) && (
+              <button
+                type="button"
+                onClick={() => navigateFromFeatureGroup(handleOpenTaskBoard)}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   codeMainView === 'tasks' && activeView === 'conversations'
@@ -3951,10 +3956,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 画布：手绘风格白板 */}
-            {mode === 'agent' && (
+            {shouldShowFeatureItem('canvas', featureCtx, featuresShowingAll) && (
               <button
                 type="button"
-                onClick={handleOpenExcalidraw}
+                onClick={() => navigateFromFeatureGroup(handleOpenExcalidraw)}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
@@ -3973,10 +3978,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置 */}
-            {mode === 'agent' && (
+            {shouldShowFeatureItem('skills', featureCtx, featuresShowingAll) && (
               <button
                 type="button"
-                onClick={() => handleOpenSkills()}
+                onClick={() => navigateFromFeatureGroup(() => handleOpenSkills())}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'agent-skills'
@@ -3990,10 +3995,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 知识库：LLM 知识库入口（待开发） */}
-            {mode === 'agent' && (
+            {shouldShowFeatureItem('wiki', featureCtx, featuresShowingAll) && (
               <button
                 type="button"
-                onClick={handleOpenRepoWiki}
+                onClick={() => navigateFromFeatureGroup(handleOpenRepoWiki)}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'repo-wiki'
