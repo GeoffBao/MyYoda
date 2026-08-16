@@ -71,7 +71,7 @@ export interface AgentRuntimeState {
 }
 
 export interface AgentRuntimePortTransfer {
-  type: 'proma-agent-runtime-port'
+  type: 'myyoda-agent-runtime-port'
   protocolVersion: typeof AGENT_RUNTIME_PROTOCOL_VERSION
 }
 

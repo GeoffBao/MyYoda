@@ -943,7 +943,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // 当前 assistant partial 尚未进入 Jotai transcript 时，用户边界必须暂放在 live tail
     // 之后；stable final 到达后 listener 会把 assistant 插到它之前并解除该标记。
     if (interruptCurrentTurn || agentLiveTranscriptStore.getSnapshot(sessionId).length > 0) {
-      ;(optimisticMessage as Record<string, unknown>)._promaPendingAfterLiveAssistant = true
+      ;(optimisticMessage as Record<string, unknown>)._myyodaPendingAfterLiveAssistant = true
     }
     appendLiveUserMessage(optimisticMessage)
 

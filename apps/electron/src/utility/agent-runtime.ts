@@ -60,7 +60,7 @@ parentPort.on('message', (event) => {
   const transfer = value?.data && typeof value.data === 'object'
     ? value.data as Record<string, unknown>
     : value
-  if (!transfer || transfer.type !== 'proma-agent-runtime-port') return
+  if (!transfer || transfer.type !== 'myyoda-agent-runtime-port') return
 
   const protocolVersion = transfer.protocolVersion
   const port = event.ports?.[0] ?? value?.port as MessagePortLike | undefined

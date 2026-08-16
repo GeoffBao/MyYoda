@@ -970,7 +970,7 @@ export const AgentMessages = React.memo(function AgentMessages({
   // 原位插入 assistant 并解除用户边界标记，下一次分组自然恢复 canonical 顺序。
   const pendingBoundaryGroups = React.useMemo(
     () => visibleGroups.filter((group) => group.type === 'user'
-      && (group.message as unknown as Record<string, unknown>)._promaPendingAfterLiveAssistant === true),
+      && (group.message as unknown as Record<string, unknown>)._myyodaPendingAfterLiveAssistant === true),
     [visibleGroups],
   )
   const orderedVisibleGroups = React.useMemo(

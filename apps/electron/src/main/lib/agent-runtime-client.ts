@@ -210,7 +210,7 @@ export class AgentRuntimeClient {
     port.start()
 
     const transfer: AgentRuntimePortTransfer = {
-      type: 'proma-agent-runtime-port',
+      type: 'myyoda-agent-runtime-port',
       protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
     }
     runtimeProcess.postMessage(transfer, [channel.port1])
