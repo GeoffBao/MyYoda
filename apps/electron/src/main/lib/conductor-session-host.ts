@@ -15,7 +15,7 @@ import type { AgentSessionMetaUpdates } from './agent-session-manager'
 
 export interface ConductorSessionCallbacks {
   onError: (error: string) => void
-  onComplete: (options?: {
+  onComplete: (messages?: AgentMessage[], options?: {
     stoppedByUser?: boolean
     startedAt?: number
     resultSubtype?: string
@@ -157,7 +157,7 @@ export class MyYodaConductorSessionHost implements ConductorSessionHost {
         onError: () => {
           state.sawError = true
         },
-        onComplete: (options) => {
+        onComplete: (_messages, options) => {
           if (options?.backgroundTasksPending) return
           const reason = state.sawError || isErrorCompletion(options)
             ? 'error'
@@ -267,7 +267,7 @@ export async function createMyYodaConductorSessionHost(): Promise<MyYodaConducto
     getOrchestrator: agentService.getOrchestrator,
     runAgent: (input, callbacks) => agentService.runAgentHeadless(input, {
       onError: callbacks.onError,
-      onComplete: (_messages, options) => callbacks.onComplete(options),
+      onComplete: (messages, options) => callbacks.onComplete(messages, options),
       onTitleUpdated: callbacks.onTitleUpdated,
       source: callbacks.source ?? 'work',
     }),

@@ -70,7 +70,7 @@ export interface AssistantTurn {
   inputMessage?: SDKUserMessage
   /** 模型名称（取首条 assistant 消息的 model） */
   model?: string
-  /** 产生此 turn 的渠道 ID；与 model 共同构成历史展示身份。 */
+  /** 渠道 ID（取首条 assistant 消息的 _channelId） */
   channelId?: string
   /** 创建时间（取首条 assistant 消息的时间） */
   createdAt?: number

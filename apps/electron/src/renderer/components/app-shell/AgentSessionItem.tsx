@@ -305,7 +305,7 @@ export function SessionItemActions({
  * idle=空心圆（占位对齐），running=蓝点脉冲，blocked=橙点，completed=绿点。
  * 原 leftAccent 3px 状态竖条 / projectColor 2px 项目色条 / blocked 行底色已下线。
  */
-const STATUS_DOT_CLASS: Record<SessionIndicatorStatus, string> = {
+export const STATUS_DOT_CLASS: Record<SessionIndicatorStatus, string> = {
   idle: 'border border-foreground/25 bg-transparent',
   running: 'bg-blue-500 animate-pulse',
   blocked: 'bg-orange-500',

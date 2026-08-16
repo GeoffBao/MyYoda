@@ -26,11 +26,11 @@ export interface MinimapItem {
   preview: string
   avatar?: string
   model?: string
-  channelId?: string
 }
 
 interface ScrollMinimapProps {
   items: MinimapItem[]
+  onScrollToMessage?: (id: string) => void
 }
 
 /** 最少消息数才显示迷你地图 */
@@ -40,7 +40,7 @@ const MAX_BARS = 20
 /** 迷你地图横杠垂直间距（px） */
 const MINIMAP_BAR_SPACING = 8
 /** 右侧滚动位置条宽度（px） */
-const SCROLL_PROGRESS_WIDTH = 5
+const SCROLL_PROGRESS_WIDTH = 8
 
 // ── Markdown 预览配置（轻量级，禁用重量级渲染） ──
 
@@ -75,7 +75,7 @@ function escapeRegExp(str: string): string {
 
 // ── 主组件 ──
 
-export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement | null {
+export function ScrollMinimap({ items, onScrollToMessage }: ScrollMinimapProps): React.ReactElement | null {
   const { scrollRef, stopScroll, state: stickyState } = useStickToBottomContext()
   const [hovered, setHovered] = React.useState(false)
   const [isLeaving, setIsLeaving] = React.useState(false)
@@ -189,7 +189,37 @@ export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement
     }, { root: el, threshold: 0 })
 
     updateCenterVisibleRef.current = updateCenterVisible
+    const observeMessageNode = (node: Node): void => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+      const element = node as HTMLElement
+      if (element.matches('[data-message-id]')) observer.observe(element)
+      for (const message of element.querySelectorAll<HTMLElement>('[data-message-id]')) {
+        observer.observe(message)
+      }
+    }
     for (const message of el.querySelectorAll<HTMLElement>('[data-message-id]')) observer.observe(message)
+
+    const mutationObserver = new MutationObserver((mutations) => {
+      let changed = false
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) observeMessageNode(node)
+        for (const node of mutation.removedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue
+          const element = node as HTMLElement
+          const removedMessages = element.matches('[data-message-id]')
+            ? [element]
+            : [...element.querySelectorAll<HTMLElement>('[data-message-id]')]
+          for (const message of removedMessages) {
+            observer.unobserve(message)
+            const id = message.getAttribute('data-message-id')
+            if (id) visibleElementsRef.current.delete(id)
+            if (id && visible.delete(id)) changed = true
+          }
+        }
+      }
+      if (changed) updateVisibleIds(new Set(visible))
+    })
+    mutationObserver.observe(el, { childList: true, subtree: true })
     updateThumb()
 
     const onScroll = (): void => {
@@ -205,6 +235,7 @@ export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement
     return () => {
       el.removeEventListener('scroll', onScroll)
       observer.disconnect()
+      mutationObserver.disconnect()
       resizeObserver.disconnect()
       updateCenterVisibleRef.current = null
       visibleIdsRef.current = new Set()
@@ -322,6 +353,12 @@ export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement
   const scrollToMessage = React.useCallback((id: string) => {
     const el = scrollRef.current
     if (!el) return
+    if (onScrollToMessage) {
+      onScrollToMessage(id)
+      setHovered(false)
+      return
+    }
+
     const target = Array.from(el.querySelectorAll<HTMLElement>('[data-message-id]')).find(
       (node) => node.getAttribute('data-message-id') === id
     )
@@ -341,7 +378,7 @@ export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement
     el.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' })
 
     setHovered(false)
-  }, [scrollRef, stopScroll, stickyState])
+  }, [onScrollToMessage, scrollRef, stopScroll, stickyState])
 
   // ── 搜索过滤 ──
 
@@ -575,7 +612,7 @@ function ItemIcon({ item }: { item: MinimapItem }): React.ReactElement {
   if ((item.role === 'assistant') && item.model) {
     return (
       <img
-        src={getModelLogo(item.model, resolveModelProvider(item.model, channels, item.channelId))}
+        src={getModelLogo(item.model, resolveModelProvider(item.model, channels))}
         alt=""
         className="size-4 shrink-0 mt-0.5 rounded-[20%] object-cover"
       />

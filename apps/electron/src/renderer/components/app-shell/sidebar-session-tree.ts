@@ -153,6 +153,19 @@ export function getSessionTreeStatus(
   return best
 }
 
+/** 整个项目分组内所有会话（含委派子会话）中的最高优先级状态；用于项目折叠时在 header 上给出状态提示。 */
+export function getWorkspaceGroupStatus(
+  sessions: readonly AgentSessionMeta[],
+  indicatorMap: Map<string, SessionIndicatorStatus>,
+): SessionIndicatorStatus {
+  let best: SessionIndicatorStatus = 'idle'
+  for (const session of sessions) {
+    const status = getSessionStatus(session, indicatorMap)
+    if (STATUS_PRIORITY[status] > STATUS_PRIORITY[best]) best = status
+  }
+  return best
+}
+
 /** 用任务族最近活动时间排序/分日期，避免运行中的子任务被旧的主任务时间压到后面。 */
 export function getSessionTreeActivityAt(item: AgentSessionTreeItem): number {
   return item.childSessions.reduce(

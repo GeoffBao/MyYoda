@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, protocol, screen, shell } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { existsSync } from 'fs'
 
 // Dev 与正式版使用独立的 userData 目录，避免共享 Chromium SingletonLock 导致 dev 启动被静默退出
@@ -91,7 +92,6 @@ import { initializeReleaseNotes } from './lib/release-notes-service'
 import { seedBuiltinExperts } from './lib/expert-service'
 import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
 import { stopAllAgents, killOrphanedClaudeSubprocesses, isAgentSessionActive, hasActiveAgentSessions } from './lib/agent-service'
-import { agentRuntimeClient } from './lib/agent-runtime-client'
 import { disposePiMcpConnections } from './lib/adapters/pi-mcp-tools'
 import { browserController } from './lib/browser-controller'
 import { agentTerminalController } from './lib/agent-terminal'
@@ -133,6 +133,7 @@ import {
 } from './lib/voice-dictation-window'
 import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/global-shortcut-service'
 import { setAppVersion } from '@myyoda/core'
+import { canRecoverRenderer, RENDERER_RECOVERY_WINDOW_MS } from './lib/renderer-process-recovery'
 import { TRAY_IPC_CHANNELS } from '../types'
 
 function startCodeClawSurface(): void {
@@ -447,15 +448,20 @@ function createWindow(): void {
 
   // Load the renderer
   const isDev = !app.isPackaged
-  if (isDev) {
-    mainWindow.loadURL('http://127.0.0.1:5173')
-    mainWindow.webContents.openDevTools()
-  } else {
-    mainWindow.loadFile(join(__dirname, 'renderer', 'index.html'))
+  const rendererPath = join(__dirname, 'renderer', 'index.html')
+  const rendererEntryUrl = isDev ? 'http://127.0.0.1:5173' : pathToFileURL(rendererPath).toString()
+  const loadMainRenderer = (): Promise<void> => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return Promise.reject(new Error('主窗口已销毁'))
+    }
+    return isDev
+      ? mainWindow.loadURL(rendererEntryUrl)
+      : mainWindow.loadFile(rendererPath)
   }
 
-  // 主 Renderer 无法加载或崩溃时，不能让启动页无限停留；切换为轻量错误页告知用户。
+  // 主 Renderer 无法加载或崩溃时，不能让启动页无限停留；优先有限次数自动恢复。
   let hasShownRendererFailure = false
+  let rendererRecoveryAttempts: number[] = []
   const showRendererFailure = (reason: string): void => {
     if (!mainWindow || mainWindow.isDestroyed()) return
 
@@ -466,8 +472,14 @@ function createWindow(): void {
     }
 
     hasShownRendererFailure = true
-    const message = encodeURIComponent(`MyYoda 无法加载主界面\n\n${reason}\n\n请重试；若问题持续，请检查应用安装文件。`)
-    mainWindow.loadURL(`data:text/plain;charset=utf-8,${message}`).catch((error) => {
+    const escapeHtml = (value: string): string => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+    const page = `<!doctype html><html><head><meta charset="utf-8"><title>MyYoda 无法加载</title><style>body{font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:48px;color:#222;background:#fff}main{max-width:680px;margin:auto}h1{font-size:20px;font-weight:600}pre{white-space:pre-wrap;background:#f3f3f3;padding:16px;border-radius:8px}a{display:inline-block;margin-top:12px;padding:9px 14px;border-radius:6px;background:#222;color:#fff;text-decoration:none}</style></head><body><main><h1>MyYoda 无法加载主界面</h1><pre>${escapeHtml(reason)}</pre><a href="${escapeHtml(rendererEntryUrl)}">重新加载主界面</a></main></body></html>`
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page)}`).catch((error) => {
       console.error('[启动] 降级错误页加载失败:', error)
       mainWindow?.show()
     })
@@ -477,9 +489,51 @@ function createWindow(): void {
     console.error(`[启动] 主 Renderer 加载失败 (${errorCode}): ${errorDescription} (${validatedURL})`)
     showRendererFailure(errorDescription)
   })
+  mainWindow.webContents.on('did-finish-load', () => {
+    // 主 Renderer 成功恢复后重新开始计数；只有连续失败才应进入错误页。
+    if (!hasShownRendererFailure) rendererRecoveryAttempts = []
+  })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    console.error(`[启动] 主 Renderer 进程异常退出: ${details.reason}`)
-    showRendererFailure(`Renderer 进程异常退出：${details.reason}`)
+    // clean-exit 和应用退出不属于 Renderer 故障；避免退出过程中重新加载主窗口。
+    if (getIsQuitting() || details.reason === 'clean-exit') return
+
+    const now = Date.now()
+    rendererRecoveryAttempts = rendererRecoveryAttempts.filter(
+      (attemptAt) => now - attemptAt < RENDERER_RECOVERY_WINDOW_MS,
+    )
+    const processId = (() => {
+      try {
+        return mainWindow?.webContents.getProcessId()
+      } catch {
+        return undefined
+      }
+    })()
+    const rendererUrl = (() => {
+      try {
+        return mainWindow?.webContents.getURL()
+      } catch {
+        return undefined
+      }
+    })()
+    const crashContext = {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      url: rendererUrl,
+      processId,
+    }
+    console.error('[启动] 主 Renderer 进程异常退出:', crashContext)
+
+    if (!hasShownRendererFailure && canRecoverRenderer(rendererRecoveryAttempts, now)) {
+      rendererRecoveryAttempts.push(now)
+      console.warn(`[启动] 尝试恢复主 Renderer（${rendererRecoveryAttempts.length}/2）`)
+      void loadMainRenderer().catch((error) => {
+        console.error('[启动] 主 Renderer 自动恢复失败:', error)
+        showRendererFailure(`Renderer 进程异常退出：${details.reason}`)
+      })
+      return
+    }
+
+    showRendererFailure(`Renderer 进程异常退出：${details.reason}\n退出码：${details.exitCode}`)
   })
 
   // 窗口就绪后，按保存的状态决定是否最大化
@@ -509,6 +563,12 @@ function createWindow(): void {
 
   // 拦截页面内导航，外部链接用系统浏览器打开，防止 Electron 窗口被覆盖
   mainWindow.webContents.on('will-navigate', (event, url) => {
+    // 错误页上的“重新加载主界面”需要放行回到原始入口。
+    if (url === rendererEntryUrl) {
+      hasShownRendererFailure = false
+      rendererRecoveryAttempts = []
+      return
+    }
     // 允许开发模式下的 Vite HMR 热重载
     if (isDev && isDevServerNavigation(url)) return
     event.preventDefault()
@@ -523,6 +583,12 @@ function createWindow(): void {
       shell.openExternal(url)
     }
     return { action: 'deny' }
+  })
+
+  if (isDev) mainWindow.webContents.openDevTools()
+  void loadMainRenderer().catch((error) => {
+    console.error('[启动] 主 Renderer 初始加载失败:', error)
+    showRendererFailure(error instanceof Error ? error.message : String(error))
   })
 
   // macOS: 点击关闭按钮时隐藏窗口+应用，而不是退出
@@ -613,15 +679,6 @@ async function bootstrap(): Promise<void> {
   // 初始化运行时环境（Shell 环境 + Bun + Git 检测）
   // 必须在其他初始化之前执行，确保环境变量正确加载
   await safeAwait('initializeRuntime', () => initializeRuntime())
-
-  // Phase 1: start the isolated Pi runtime host. The main process still owns
-  // orchestration and Electron capabilities during this migration phase.
-  if (process.env.MYYODA_AGENT_RUNTIME !== 'in-process' && process.env.MYYODA_AGENT_RUNTIME !== 'off') {
-    await safeAwait('startAgentRuntime', async () => {
-      const state = await agentRuntimeClient.start()
-      console.info(`[AgentRuntime] utility ready: pid=${state.pid ?? 'unknown'} bootId=${state.bootId}`)
-    })
-  }
 
   // 同步默认 Skills 模板到 ~/.myyoda/default-skills/
   safeRun('seedDefaultSkills', seedDefaultSkills)
@@ -823,7 +880,6 @@ app.on('before-quit', () => {
 
   // 中止所有活跃的 Agent 和 Chat 子进程
   stopAllAgents()
-  void agentRuntimeClient.stop()
   browserController.dispose()
   agentTerminalController.disposeAll()
   stopAllGenerations()

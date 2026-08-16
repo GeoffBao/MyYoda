@@ -15,9 +15,7 @@ export interface ExternalAgentRunActivationInput {
   title?: string
   workspaceId?: string
   modelId?: string
-  /** 实际启动本轮的渠道；可能与 session metadata 不同。 */
   channelId?: string
-  runId?: string
   startedAt: number
   currentStreamState?: AgentStreamState
 }
@@ -29,24 +27,6 @@ export interface ExternalAgentRunActivation {
   workspaceId?: string
   modelId?: string
   streamState: AgentStreamState
-}
-
-export function buildExternalAgentRunUserMessage(input: {
-  sessionId: string
-  runId: string
-  startedAt: number
-  userMessage?: string
-  userMessageUuid?: string
-}): SDKMessage | null {
-  if (!input.userMessage) return null
-  return {
-    type: 'user',
-    message: { content: [{ type: 'text', text: input.userMessage }] },
-    parent_tool_use_id: null,
-    session_id: input.sessionId,
-    uuid: input.userMessageUuid ?? `external-user:${input.runId}`,
-    _createdAt: input.startedAt,
-  } as unknown as SDKMessage
 }
 
 /** 迟到的启动事件不得复活已结束运行，或覆盖同一会话的更新运行。 */
@@ -86,7 +66,6 @@ export function buildExternalAgentRunActivation(
       toolActivities: input.currentStreamState?.toolActivities ?? [],
       model: input.modelId ?? input.currentStreamState?.model,
       channelId: input.channelId ?? input.currentStreamState?.channelId,
-      runId: input.runId ?? String(input.startedAt),
       startedAt: input.startedAt,
     },
   }

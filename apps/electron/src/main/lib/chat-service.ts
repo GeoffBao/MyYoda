@@ -639,8 +639,9 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string |
   try {
     apiKey = await resolveChannelRuntimeApiKey(channel.id)
   } catch {
-    console.warn('[标题生成] 解密 API Key 失败，使用本地兜底')
-    return createFallbackTitle(userMessage)
+    console.warn('[标题生成] 解密 API Key 失败')
+    // OpenCode Go / 自定义渠道无法解密也仍要完成重命名，避免对话长期停在默认标题。
+    return (channel.provider === 'opencode-go-openai' || channel.provider === 'custom') ? createFallbackTitle(userMessage) : null
   }
 
   try {
@@ -658,13 +659,14 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string |
     const result = title ? sanitizeGeneratedTitle(title) : null
     if (!result) {
       console.warn('[标题生成] API 未返回可用标题')
-      // 所有渠道都必须有稳定兜底，避免请求失败后会话长期停在默认标题。
-      return createFallbackTitle(userMessage)
+      // OpenCode Go / 自定义渠道的服务端偶发返回空标题时，仍要完成重命名，避免对话长期停在默认标题。
+      return (channel.provider === 'opencode-go-openai' || channel.provider === 'custom') ? createFallbackTitle(userMessage) : null
     }
     console.log('[标题生成] 成功生成标题:', result)
     return result
   } catch (error) {
-    console.warn('[标题生成] 请求失败，使用本地兜底:', error)
-    return createFallbackTitle(userMessage)
+    console.warn('[标题生成] 请求失败:', error)
+    // OpenCode Go / 自定义渠道的服务端偶发返回空标题/异常响应/超时，异常路径同样要完成重命名。
+    return (channel.provider === 'opencode-go-openai' || channel.provider === 'custom') ? createFallbackTitle(userMessage) : null
   }
 }

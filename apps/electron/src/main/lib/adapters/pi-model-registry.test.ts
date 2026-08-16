@@ -22,7 +22,6 @@ describe('第三方 GPT-5 capability extrapolation', () => {
     const sdk = await import('@earendil-works/pi-coding-agent')
     const result = await buildModel(sdk, {
       sessionId: 'session-custom-gpt-56-terra',
-      runId: 'run-custom-gpt-56-terra',
       prompt: 'hi',
       apiKey: 'test-key',
       provider: 'custom',
@@ -49,7 +48,6 @@ describe('Pi runtime 火山方舟 GLM-5.2 输出限制', () => {
       const sdk = await import('@earendil-works/pi-coding-agent')
       const result = await buildModel(sdk, {
         sessionId: `session-${provider}-glm-52`,
-        runId: `run-${provider}-glm-52`,
         prompt: 'hi',
         apiKey: 'test-key',
         provider,

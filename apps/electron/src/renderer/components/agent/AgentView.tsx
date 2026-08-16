@@ -48,6 +48,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ThinkingLevelSlider, normalizeToUiIndex, uiIndexToLevel, STANDARD_UI_THINKING_LEVELS, UI_THINKING_LEVELS } from '@/components/ui/thinking-level-slider'
 import {
   AlertDialog,
@@ -65,6 +67,8 @@ import { registerShortcut } from '@/lib/shortcut-registry'
 import { supportsChannelPlanQuota, channelPlanQuotaRefreshVersionAtom } from '@/lib/channel-plan-quota'
 import { previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
+import { todoPlanningGroupsAtom } from '@/atoms/planning-atoms'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import {
   agentStreamingStatesAtom,
   agentSessionInputStreamStateAtomFamily,
@@ -106,7 +110,6 @@ import {
   allPendingExitPlanRequestsAtom,
   finalizeStreamingActivities,
 } from '@/atoms/agent-atoms'
-import type { AgentContextStatus } from '@/atoms/agent-atoms'
 import { projectOnboardingSessionIdsAtom } from '@/atoms/project-onboarding-atoms'
 import { repoMapToolsAtom, settingsOpenAtom } from '@/atoms/settings-tab'
 import { longTextPasteAsAttachmentEnabledAtom } from '@/atoms/ui-preferences'
@@ -121,7 +124,6 @@ import { DEFAULT_AGENT_THINKING_LEVEL, getSessionThinkingLevel, inferAgentSdkCon
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
 import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
-import { agentLiveTranscriptStore } from '@/lib/agent-live-transcript-store'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
@@ -132,7 +134,6 @@ import {
   queuedTextToParagraphHtml,
   removeQueuedMessage,
   restoreQueuedMessageToFront,
-  upsertAgentLiveMessageByUuid,
 } from '@/lib/agent-message-queue'
 import type { AgentQueuedAttachment, AgentQueuedMessage, QueueDropPlacement } from '@/lib/agent-message-queue'
 
@@ -247,6 +248,13 @@ interface SDKMessageRecord {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** 消息「标记为 Todo」的默认截止时间：当天 23:59:59.999 */
+function endOfToday(value: number | Date = Date.now()): number {
+  const date = new Date(value)
+  date.setHours(23, 59, 59, 999)
+  return date.getTime()
 }
 
 function getUserTextFromSDKMessage(message: SDKMessage): string | null {
@@ -380,9 +388,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [persistedSDKMessages, setPersistedSDKMessages] = React.useState<SDKMessage[]>([])
   const persistedSDKMessagesRef = React.useRef<SDKMessage[]>([])
   persistedSDKMessagesRef.current = persistedSDKMessages
-  // 长会话默认仅加载末页；用户需要时再向前展开，避免把完整 transcript 放进 renderer。
-  const [earlierMessagesCursor, setEarlierMessagesCursor] = React.useState<number | undefined>()
-  const [loadingEarlierMessages, setLoadingEarlierMessages] = React.useState(false)
   const setStreamingStates = useSetAtom(agentStreamingStatesAtom)
   // 只订阅输入区/工具栏需要的低频流状态。逐 token content/toolActivities 由
   // AgentMessages 独立消费，不能让 3000 行 AgentView 和输入框跟随每个 token 重渲染。
@@ -904,7 +909,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     store.set(liveMessagesMapAtom, (prev) => {
       const map = new Map(prev)
       const current = map.get(sessionId) ?? []
-      map.set(sessionId, upsertAgentLiveMessageByUuid(current, message))
+      map.set(sessionId, [...current, message])
       return map
     })
   }, [sessionId, store])
@@ -939,13 +944,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // 气泡显示用原文 text（保留 /skill:、#mcp:、&session:、&todo: 和 &calendar_event: 语法），
     // 让 message.tsx 的 remarkMentions 立即渲染出引用芯片；
     // 剥离后的 sdkText 仅用于传给 SDK，不作为展示文本。
-    const optimisticMessage = createUserSDKMessage(rawText, message.id, Date.now())
-    // 当前 assistant partial 尚未进入 Jotai transcript 时，用户边界必须暂放在 live tail
-    // 之后；stable final 到达后 listener 会把 assistant 插到它之前并解除该标记。
-    if (interruptCurrentTurn || agentLiveTranscriptStore.getSnapshot(sessionId).length > 0) {
-      ;(optimisticMessage as Record<string, unknown>)._myyodaPendingAfterLiveAssistant = true
-    }
-    appendLiveUserMessage(optimisticMessage)
+    appendLiveUserMessage(createUserSDKMessage(rawText, message.id, Date.now()))
 
     try {
       await window.electronAPI.queueAgentMessage({
@@ -1090,8 +1089,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   // 消息是否已完成首次加载（用于 auto-send 等待）
   const [messagesLoaded, setMessagesLoaded] = React.useState(false)
-  const [messagesLoadedSessionId, setMessagesLoadedSessionId] = React.useState<string | null>(null)
-  const messagesLoadedForCurrentSession = messagesLoaded && messagesLoadedSessionId === sessionId
   const [messagesRefreshing, setMessagesRefreshing] = React.useState(false)
   const messagesRefreshingRef = React.useRef(false)
   const loadingSessionIdRef = React.useRef<string | null>(null)
@@ -1110,32 +1107,24 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const cached = store.get(agentSDKMessagesCacheAtom).get(sessionId)
       if (cached) {
         setPersistedSDKMessages(cached)
-        // 缓存页可直接作为首屏数据，IPC 只负责后台校准；刷新期间仍由 messagesRefreshing
-        // 阻止非流式发送，避免用户操作与旧快照覆盖竞态。
         setMessagesLoaded(true)
-        setMessagesLoadedSessionId(sessionId)
       } else {
         setPersistedSDKMessages([])
         setMessagesLoaded(false)
       }
-      setEarlierMessagesCursor(undefined)
     }
     messagesRefreshingRef.current = true
     setMessagesRefreshing(true)
     let cancelled = false
-    window.electronAPI.getAgentSessionSDKMessagesPage(sessionId)
-      .then((page) => {
+    window.electronAPI.getAgentSessionSDKMessages(sessionId)
+      .then((sdkMsgs) => {
         if (cancelled) return
-        const sdkMsgs = page.messages
         // 写入缓存（含 LRU 淘汰，防止会话数增长导致内存无限膨胀）
         setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, sdkMsgs))
         unstable_batchedUpdates(() => {
           persistedSDKMessagesRef.current = sdkMsgs
           setPersistedSDKMessages(sdkMsgs)
-          setEarlierMessagesCursor(page.nextBefore)
-          setLoadingEarlierMessages(false)
           setMessagesLoaded(true)
-          setMessagesLoadedSessionId(sessionId)
           messagesRefreshingRef.current = false
           setMessagesRefreshing(false)
 
@@ -1148,14 +1137,14 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
             // 仍在运行中：不清除
             if (!state || state.running) return prev
             const map = new Map(prev)
-            // 软空闲态（后台任务等待）：必须保留 backgroundWaiting 标志（否则 handleSend 误走新建 run），
-            // 但展示字段 content/toolActivities 仍要清空——否则上一轮流式文本残留会被兜底气泡渲染成重复消息。
+            // 软空闲态（后台任务等待）：必须保留 backgroundWaiting 标志（否则 handleSend 误走新建 run）。
+            // 实时文本只在 liveMessages 中，完成消息刷新时随其统一清理。
             if (state.inputTokens !== undefined) {
-              // 保留 usage 数据，仅清除流式展示字段
+              // 保留 usage 数据，仅清除本轮工具活动展示状态。
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                      toolActivities: [],
+                toolActivities: [],
                 inputTokens: state.inputTokens,
                 outputTokens: state.outputTokens,
                 cacheReadTokens: state.cacheReadTokens,
@@ -1171,7 +1160,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                      toolActivities: [],
+                toolActivities: [],
                 contextCompaction: state.contextCompaction,
               })
             } else {
@@ -1194,31 +1183,11 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         if (cancelled) return
         console.error(error)
         setMessagesLoaded(true)
-        setMessagesLoadedSessionId(sessionId)
         messagesRefreshingRef.current = false
         setMessagesRefreshing(false)
       })
     return () => { cancelled = true }
   }, [sessionId, refreshVersion, setStreamingStates, setLiveMessagesMap, setMessagesCache, store])
-
-  const handleLoadEarlierMessages = React.useCallback(async (): Promise<void> => {
-    const before = earlierMessagesCursor
-    if (before === undefined || loadingEarlierMessages) return
-
-    setLoadingEarlierMessages(true)
-    try {
-      const page = await window.electronAPI.getAgentSessionSDKMessagesPage(sessionId, { before })
-      const next = [...page.messages, ...persistedSDKMessagesRef.current]
-      persistedSDKMessagesRef.current = next
-      setPersistedSDKMessages(next)
-      setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, next))
-      setEarlierMessagesCursor(page.nextBefore)
-    } catch (error) {
-      console.error('[Agent 会话] 加载更早消息失败:', error)
-    } finally {
-      setLoadingEarlierMessages(false)
-    }
-  }, [earlierMessagesCursor, loadingEarlierMessages, sessionId, setMessagesCache])
 
   // 从会话元数据初始化附加目录（仅冷启动水合，后续由 handleAttachContent/handleDetachDirectory 实时写入）
   React.useEffect(() => {
@@ -1254,7 +1223,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   // 等待 messagesLoaded 确保消息加载完成后再插入乐观消息，避免被加载结果覆盖。
   // 使用 queueMicrotask 延迟发送：避免 setState → 重渲染 → cleanup 取消 timer 的竞态。
   React.useEffect(() => {
-    if (!messagesLoadedForCurrentSession) return
+    if (!messagesLoaded) return
     if (!pendingPrompt) return
     if (pendingPrompt.sessionId !== sessionId) return
     if (!agentChannelId || streaming) return
@@ -1282,7 +1251,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           running: true,
           toolActivities: [],
           model: snapshot.modelId,
-          channelId: snapshot.channelId,
           startedAt: streamStartedAt,
           inputTokens: existing?.inputTokens,
           contextWindow: resolveRunContextWindow(snapshot.modelId, agentChannelProvider, existing?.contextWindow),
@@ -1326,7 +1294,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         })
       })
     })
-  }, [messagesLoadedForCurrentSession, pendingPrompt, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories])
+  }, [messagesLoaded, pendingPrompt, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories])
   // ===== 附件处理 =====
 
   /** 为文件生成唯一文件名（避免粘贴多张图片时文件名重复导致覆盖） */
@@ -2109,7 +2077,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     // 如果输入为空但有建议，使用建议内容
     const effectiveText = text || suggestion || ''
     const pendingFilesSnapshot = pendingFilesRef.current
-    if (!messagesLoadedForCurrentSession || (!effectiveText && pendingFilesSnapshot.length === 0) || !agentChannelId || !hasAvailableModel) return
+    if (!messagesLoaded || (!effectiveText && pendingFilesSnapshot.length === 0) || !agentChannelId || !hasAvailableModel) return
     if (isStopping) {
       toast.info('正在停止上一轮 Agent', { description: '请等待停止完成后再发送消息。' })
       return
@@ -2329,7 +2297,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         return map
       })
     })
-  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoadedForCurrentSession, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
+  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, isLegacyTranscript, isStopping])
 
   /** 停止生成 */
   const handleStop = React.useCallback((): void => {
@@ -2585,6 +2553,94 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     }
   }, [sessionId, agentChannelId, agentModelId, sessionMetaChannelId, openSession, setAgentSessions])
 
+  /** 本地项目根目录不可用时的恢复操作：重新关联新文件夹 / 在原路径新建空文件夹 */
+  const { relinkWorkspaceProjectRoot, restoreWorkspaceProjectRoot } = useWorkspaceActions()
+  const [restoreProjectRootDialogOpen, setRestoreProjectRootDialogOpen] = React.useState(false)
+  const [restoringProjectRoot, setRestoringProjectRoot] = React.useState(false)
+
+  const handleRelinkProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    const folder = await window.electronAPI.openFolderDialog()
+    if (!folder) return
+    const updated = await relinkWorkspaceProjectRoot(currentWorkspaceId, folder.path)
+    if (updated) toast.success('本地项目根已重新关联', { description: folder.path })
+  }, [currentWorkspaceId, relinkWorkspaceProjectRoot])
+
+  const handleOpenRestoreProjectRootDialog = React.useCallback((): void => {
+    setRestoreProjectRootDialogOpen(true)
+  }, [])
+
+  const handleRestoreProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    setRestoringProjectRoot(true)
+    try {
+      const updated = await restoreWorkspaceProjectRoot(currentWorkspaceId)
+      if (updated) {
+        toast.success('已在原路径新建空项目文件夹', { description: updated.projectRootPath })
+        setRestoreProjectRootDialogOpen(false)
+      }
+    } finally {
+      setRestoringProjectRoot(false)
+    }
+  }, [currentWorkspaceId, restoreWorkspaceProjectRoot])
+
+  /** 标记为 Todo：弹出对话框让用户编辑标题、选择分组后再确认创建 */
+  const planningGroups = useAtomValue(todoPlanningGroupsAtom)
+  const [todoDialogOpen, setTodoDialogOpen] = React.useState(false)
+  const [todoDraftTitle, setTodoDraftTitle] = React.useState('')
+  const [todoSourceText, setTodoSourceText] = React.useState('')
+  const [todoGroupId, setTodoGroupId] = React.useState('__none__')
+  const [creatingTodo, setCreatingTodo] = React.useState(false)
+
+  const createTodoForCurrentSession = React.useCallback(async (title: string, groupId: string, sourceText?: string): Promise<boolean> => {
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      toast.error('Todo 标题不能为空')
+      return false
+    }
+    if (normalizedTitle.length > 500) {
+      toast.error('Todo 标题不能超过 500 字')
+      return false
+    }
+
+    try {
+      await window.electronAPI.createTodo({
+        title: normalizedTitle,
+        notes: sourceText?.trim() && sourceText.trim() !== normalizedTitle ? sourceText.trim() : undefined,
+        dueAt: endOfToday(),
+        groupId: groupId === '__none__' ? undefined : groupId,
+        sessionId,
+        workspaceId: currentWorkspaceId ?? undefined,
+      })
+      toast.success('已添加 Todo', { description: '已关联当前 Agent 会话' })
+      return true
+    } catch (error) {
+      console.error('[AgentView] 创建 Todo 失败:', error)
+      toast.error('创建 Todo 失败', { description: String(error) })
+      return false
+    }
+  }, [currentWorkspaceId, sessionId])
+
+  const handleOpenReplyTodoDialog = React.useCallback((text: string): void => {
+    const sourceText = text.trim()
+    const firstLine = sourceText.split('\n').map((line) => line.trim()).find(Boolean) ?? sourceText
+    setTodoSourceText(sourceText)
+    setTodoDraftTitle(firstLine.replace(/^#{1,6}\s+/, '').slice(0, 500))
+    setTodoGroupId('__none__')
+    setTodoDialogOpen(true)
+  }, [])
+
+  const handleCreateReplyTodo = React.useCallback(async (): Promise<void> => {
+    setCreatingTodo(true)
+    try {
+      if (await createTodoForCurrentSession(todoDraftTitle, todoGroupId, todoSourceText)) {
+        setTodoDialogOpen(false)
+      }
+    } finally {
+      setCreatingTodo(false)
+    }
+  }, [createTodoForCurrentSession, todoDraftTitle, todoGroupId, todoSourceText])
+
   /** 快照回退：同一会话内回退到指定消息点，恢复文件 + 截断对话 */
   const [rewindTargetUuid, setRewindTargetUuid] = React.useState<string | null>(null)
 
@@ -2672,7 +2728,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     (allAskUserRequests.get(sessionId)?.length ?? 0) > 0 ||
     (allExitPlanRequests.get(sessionId)?.length ?? 0) > 0
   const hasBlockingRequests = hasBannerOverlay || (allPermissionRequests.get(sessionId)?.length ?? 0) > 0
-  const canSendQueuedNow = messagesLoadedForCurrentSession && (streaming || !messagesRefreshing) && !!agentChannelId && hasAvailableModel && !hasBlockingRequests && !isStopping
+  const canSendQueuedNow = messagesLoaded && (streaming || !messagesRefreshing) && !!agentChannelId && hasAvailableModel && !hasBlockingRequests && !isStopping
   const queuedSendInFlightRef = React.useRef(false)
   const sendingQueuedMessageIdsRef = React.useRef<Set<string>>(new Set())
 
@@ -2772,7 +2828,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     setInputHasContent(hasContent)
   }, [])
   const hasTextInput = inputHasContent
-  const canSend = !isStopping && messagesLoadedForCurrentSession && (streaming || !messagesRefreshing) && (hasTextInput || pendingFiles.length > 0 || !!suggestion) && agentChannelId !== null && hasAvailableModel && (!streaming || hasTextInput)
+  const canSend = !isStopping && messagesLoaded && (streaming || !messagesRefreshing) && (hasTextInput || pendingFiles.length > 0 || !!suggestion) && agentChannelId !== null && hasAvailableModel && (!streaming || hasTextInput)
 
   const inputToolbarItems = React.useMemo<ToolbarItem[]>(() => [
     {
@@ -3027,11 +3083,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           sessionId={sessionId}
           workspaceId={sessionMeta?.workspaceId}
           sessionModelId={agentModelId || undefined}
-          messagesLoaded={messagesLoadedForCurrentSession}
+          messagesLoaded={messagesLoaded}
           persistedSDKMessages={persistedSDKMessages}
-          hasEarlierMessages={earlierMessagesCursor !== undefined}
-          loadingEarlierMessages={loadingEarlierMessages}
-          onLoadEarlierMessages={handleLoadEarlierMessages}
           sessionPath={sessionPath}
           fileRoots={sessionFileRoots}
           attachedDirs={allAttachedDirs}
@@ -3041,6 +3094,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           onFork={isLegacyTranscript ? undefined : handleFork}
           onRewind={isLegacyTranscript ? undefined : handleRewindRequest}
           onCompact={handleCompact}
+          onCreateTodo={handleOpenReplyTodoDialog}
+          onRelinkProjectRoot={handleRelinkProjectRoot}
+          onRestoreProjectRoot={handleOpenRestoreProjectRootDialog}
         />
 
         {/* 权限请求横幅 */}
@@ -3223,6 +3279,38 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         onOpenChange={setCoworkOpen}
       />
     </AgentSessionProvider>
+
+    <Dialog open={todoDialogOpen} onOpenChange={setTodoDialogOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>标记为 Todo</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <label className="grid gap-2 text-sm font-medium">任务标题
+            <textarea value={todoDraftTitle} onChange={(event) => setTodoDraftTitle(event.target.value)} rows={3} className="min-h-20 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30" />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">Todo 分组
+            <Select value={todoGroupId} onValueChange={setTodoGroupId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">不分组</SelectItem>{planningGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}</SelectContent></Select>
+          </label>
+        </div>
+        <DialogFooter><Button type="button" variant="ghost" onClick={() => setTodoDialogOpen(false)}>取消</Button><Button type="button" onClick={() => void handleCreateReplyTodo()} disabled={creatingTodo || !todoDraftTitle.trim()}><ListTodo size={15} />添加 Todo</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={restoreProjectRootDialogOpen} onOpenChange={setRestoreProjectRootDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>在原路径新建空文件夹？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将在该本地项目原路径创建空文件夹。此操作不会恢复被删除的文件。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={restoringProjectRoot}>取消</AlertDialogCancel>
+          <AlertDialogAction disabled={restoringProjectRoot} onClick={() => void handleRestoreProjectRoot()}>
+            {restoringProjectRoot ? '创建中...' : '新建空文件夹'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     {/* 回退确认弹窗 */}
     <AlertDialog
