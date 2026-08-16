@@ -6,6 +6,7 @@
  *
  * 数据口径（与聚合层一致）：
  * - Total tokens / 成本只从 result 消息累加（权威的每次运行用量）
+ * - 总 Token = 输入（缓存命中 + 未命中）+ 输出，对齐 DeepSeek 官方「Token 用量」口径
  * - Messages = user + assistant 消息数
  * - 热力图 / 按天堆叠 / streak / peak hour 均由 _createdAt 推导
  */
@@ -137,6 +138,16 @@ function providerLabel(provider?: ProviderType): string {
   return provider ? PROVIDER_LABELS[provider] : '未知渠道'
 }
 
+/**
+ * DeepSeek 计费口径映射（Anthropic 兼容端点 usage → DeepSeek 原生 usage）：
+ * - 输入（缓存命中）= cache_read_input_tokens（重读缓存，按命中低价计费）
+ * - 输入（缓存未命中）= input_tokens + cache_creation_input_tokens（新输入 + 写入缓存）
+ * 与 DeepSeek 官网定价页「输入（缓存命中）/ 输入（缓存未命中）/ 输出」三分法一致。
+ */
+function cacheMissTokensOf(row: Pick<UsageModelRow, 'inputTokens' | 'cacheCreationTokens'>): number {
+  return row.inputTokens + row.cacheCreationTokens
+}
+
 /** 本地日期 key（YYYY-MM-DD）→ "8月8日" */
 function formatTodayDate(dayKey: string): string {
   const parts = dayKey.split('-').map(Number)
@@ -195,7 +206,7 @@ function OverviewGrid({ overview }: { overview: UsageOverview }): React.ReactEle
   const cells: Array<{ icon: React.ReactNode; label: string; value: string; sub?: string }> = [
     { icon: <Layers size={16} />, label: '会话', value: formatNumber(overview.sessions), sub: 'sessions' },
     { icon: <MessageSquare size={16} />, label: '消息', value: formatNumber(overview.messages), sub: 'messages' },
-    { icon: <Activity size={16} />, label: '总 Token', value: formatTokens(overview.totalTokens), sub: '新消耗' },
+    { icon: <Activity size={16} />, label: '总 Token', value: formatTokens(overview.totalTokens), sub: '含缓存命中' },
     { icon: <Database size={16} />, label: '缓存读取', value: formatTokens(overview.cacheReadTokens), sub: 'cache read' },
     { icon: <CalendarIcon />, label: '活跃天数', value: formatNumber(overview.activeDays), sub: 'days' },
     { icon: <Flame size={16} />, label: '当前连续', value: `${overview.currentStreak}`, sub: 'streak' },
@@ -508,15 +519,31 @@ function StackedBarChart({ days, range }: { days: UsageDayPoint[]; range: UsageR
   )
 }
 
+/** 模型明细表排序键：cacheMissTokens 为 UI 派生的「输入（缓存未命中）」列 */
+type ModelSortKey =
+  | 'modelId'
+  | 'provider'
+  | 'totalTokens'
+  | 'cacheReadTokens'
+  | 'cacheMissTokens'
+  | 'outputTokens'
+  | 'resultCount'
+  | 'costUsd'
+
+function rowValueOf(row: UsageModelRow, key: ModelSortKey): string | number {
+  if (key === 'cacheMissTokens') return cacheMissTokensOf(row)
+  return row[key] ?? 0
+}
+
 /** 按模型明细表 */
 function ModelTable({ rows }: { rows: UsageModelRow[] }): React.ReactElement {
-  const [sortKey, setSortKey] = React.useState<keyof UsageModelRow>('totalTokens')
+  const [sortKey, setSortKey] = React.useState<ModelSortKey>('totalTokens')
   const [asc, setAsc] = React.useState(false)
 
   const sorted = React.useMemo(() => {
     const arr = [...rows].sort((a, b) => {
-      const va = a[sortKey] ?? 0
-      const vb = b[sortKey] ?? 0
+      const va = rowValueOf(a, sortKey)
+      const vb = rowValueOf(b, sortKey)
       return (va < vb ? -1 : va > vb ? 1 : 0) * (asc ? 1 : -1)
     })
     return arr
@@ -526,7 +553,7 @@ function ModelTable({ rows }: { rows: UsageModelRow[] }): React.ReactElement {
     return <div className="px-4 py-8 text-center text-sm text-muted-foreground">当前范围内暂无模型用量数据</div>
   }
 
-  const header = (key: keyof UsageModelRow, label: string, cls = ''): React.ReactElement => (
+  const header = (key: ModelSortKey, label: string, cls = ''): React.ReactElement => (
     <button
       type="button"
       onClick={() => {
@@ -551,9 +578,9 @@ function ModelTable({ rows }: { rows: UsageModelRow[] }): React.ReactElement {
             <th className="py-2 pr-3">{header('modelId', '模型')}</th>
             <th className="py-2 pr-3">{header('provider', '渠道')}</th>
             <th className="py-2 pr-3 text-right">{header('totalTokens', '总 Token')}</th>
-            <th className="py-2 pr-3 text-right">{header('inputTokens', '输入')}</th>
+            <th className="py-2 pr-3 text-right">{header('cacheReadTokens', '输入 · 缓存命中')}</th>
+            <th className="py-2 pr-3 text-right">{header('cacheMissTokens', '输入 · 缓存未命中')}</th>
             <th className="py-2 pr-3 text-right">{header('outputTokens', '输出')}</th>
-            <th className="py-2 pr-3 text-right">{header('cacheReadTokens', '缓存读取')}</th>
             <th className="py-2 pr-3 text-right">{header('resultCount', '调用')}</th>
             <th className="py-2 text-right">{header('costUsd', '费用')}</th>
           </tr>
@@ -570,9 +597,9 @@ function ModelTable({ rows }: { rows: UsageModelRow[] }): React.ReactElement {
               </td>
               <td className="py-2 pr-3 text-muted-foreground">{providerLabel(row.provider)}</td>
               <td className="py-2 pr-3 text-right tabular-nums">{formatTokens(row.totalTokens)}</td>
-              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatTokens(row.inputTokens)}</td>
-              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatTokens(row.outputTokens)}</td>
               <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatTokens(row.cacheReadTokens)}</td>
+              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatTokens(cacheMissTokensOf(row))}</td>
+              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatTokens(row.outputTokens)}</td>
               <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">{formatNumber(row.resultCount)}</td>
               <td className="py-2 text-right tabular-nums">{formatCost(row.costUsd)}</td>
             </tr>
@@ -671,7 +698,7 @@ export function UsageSettings(): React.ReactElement {
                     <h4 className="mb-3 text-sm font-medium">按天 · 按模型堆叠</h4>
                     <StackedBarChart days={stats.days} range={range} />
                   </SettingsCard>
-                  <SettingsSection title="按模型明细" description="各模型输入 / 输出 / 缓存 Token 与费用">
+                  <SettingsSection title="按模型明细" description="输入（缓存命中 / 未命中）/ 输出 Token 与费用，对齐 DeepSeek 官方计费口径">
                     <SettingsCard divided={false} className="overflow-hidden p-0">
                       <ModelTable rows={stats.models} />
                     </SettingsCard>

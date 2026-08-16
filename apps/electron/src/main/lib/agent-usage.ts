@@ -12,10 +12,13 @@
  * - **Token / 成本只从 `result` 消息取**：每条 `result`（subtype=success/error_*）是一次
  *   Agent 运行的权威用量，自带聚合 `usage`（input/output/cache）+ 按模型拆分的 `modelUsage`
  *   + `total_cost_usd`。把它按天累加即得到"被计费的总 token"，不会与逐消息 usage 重复计数。
- * - **「总 Token」口径 = input + output + cache_creation（新消耗），排除 cache_read**：
- *   cache_read 是模型重读历史上下文的廉价 token（通常占大头，但不代表真实新消耗），
- *   用独立的 `cacheReadTokens` 字段累计展示，与 Claude Code `/usage`（input/output/cache
- *   read/cache write 分列）一致。
+ * - **「总 Token」口径 = 输入 + 输出，输入包含缓存命中与未命中（对齐 DeepSeek 官方）**：
+ *   totalTokens = input + cache_read + cache_creation + output。与 DeepSeek 平台
+ *   「Token 用量」的展示一致，方便对账。字段映射（Anthropic 兼容端点 usage → DeepSeek
+ *   原生 usage）：缓存命中 = cache_read_input_tokens（→ prompt_cache_hit_tokens）；
+ *   缓存未命中 = input_tokens + cache_creation_input_tokens（→ prompt_cache_miss_tokens）；
+ *   输出 = output_tokens（→ completion_tokens）。费用始终直接取 result.total_cost_usd，
+ *   不受口径影响。UI 层按此映射把明细表展示为「输入（缓存命中 / 未命中）/ 输出」三列。
  * - **Messages 数 = 真实对话**：user 排除 tool_result（工具结果回传），assistant 只计含
  *   text 的回复（纯 thinking / tool_use 的工具往返不计）。
  * - **按天 / 按小时 / streak / 热力图** 都从 `_createdAt`（毫秒）推导。
@@ -91,7 +94,9 @@ interface UsageCacheFile {
 // v3：总 Token 口径改为新消耗（排除 cache_read），消息数改为真实对话（排除工具往返），
 // 旧缓存的 totalTokens/messages 口径不同，需全量重扫一次。
 // v5：模型聚合新增 resultCount（result 调用次数）字段，旧缓存模型没有该字段，需重扫回填。
-const CACHE_VERSION = 5
+// v6：总 Token 口径改为对齐 DeepSeek 官方（包含 cache_read，输入含缓存命中），
+// 旧缓存的 totalTokens 口径不同，需全量重扫一次。
+const CACHE_VERSION = 6
 
 /** 汇总后的单模型行（供 Models Tab 明细表） */
 export interface UsageModelRow {
@@ -142,7 +147,7 @@ export interface UsageOverview {
   sessions: number
   messages: number
   totalTokens: number
-  /** 缓存读取 token 汇总（重读历史上下文的廉价 token，不计入 totalTokens） */
+  /** 缓存读取（命中）token 汇总，已计入 totalTokens（对齐 DeepSeek 官方输入口径） */
   cacheReadTokens: number
   activeDays: number
   currentStreak: number
@@ -237,9 +242,14 @@ function hasTextBlock(asst: SDKAssistantMessage): boolean {
   return blocks.some((block) => block.type === 'text')
 }
 
-/** 新消耗 token：新输入 + 新写缓存 + 输出，排除缓存读取（重读旧上下文） */
-function sumFreshTokens(agg: { inputTokens: number; outputTokens: number; cacheCreationTokens: number }): number {
-  return agg.inputTokens + agg.outputTokens + agg.cacheCreationTokens
+/** 总 token（对齐 DeepSeek 官方口径）：全部输入（含缓存命中 + 未命中）+ 输出 */
+function sumTotalTokens(agg: {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}): number {
+  return agg.inputTokens + agg.outputTokens + agg.cacheReadTokens + agg.cacheCreationTokens
 }
 
 interface ResultUsage {
@@ -312,8 +322,8 @@ export function scanSessionLines(
       const output = usage.output_tokens ?? 0
       const cacheRead = usage.cache_read_input_tokens ?? 0
       const cacheCreation = usage.cache_creation_input_tokens ?? 0
-      // 新消耗 token：排除缓存读取（重读旧上下文的廉价 token），与 Claude Code /usage 口径一致
-      const total = input + output + cacheCreation
+      // 总 token（对齐 DeepSeek 官方口径）：输入含缓存命中 + 未命中 + 输出
+      const total = input + output + cacheRead + cacheCreation
       const cost = result.total_cost_usd ?? 0
       const provider = result._channelProvider
 
@@ -456,7 +466,7 @@ export function computeTodayBucket(sessions: SessionUsageAgg[], now: number): Us
     .map(([modelId, m]) => ({
       modelId,
       provider: m.provider,
-      totalTokens: sumFreshTokens(m),
+      totalTokens: sumTotalTokens(m),
     }))
     .sort((a, b) => b.totalTokens - a.totalTokens)
 
@@ -533,7 +543,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
         row.cacheReadTokens += m.cacheReadTokens
         row.cacheCreationTokens += m.cacheCreationTokens
         row.resultCount += m.resultCount ?? 0
-        row.totalTokens = sumFreshTokens(row)
+        row.totalTokens = sumTotalTokens(row)
         row.costUsd += m.costUsd
         if (!row.provider && m.provider) row.provider = m.provider
         modelRows.set(modelId, row)
@@ -599,7 +609,7 @@ function aggregate(stats: AgentUsageStats, sessions: SessionUsageAgg[], rangeSta
       models: Object.entries(agg.models)
         .map(([modelId, m]) => ({
           modelId,
-          totalTokens: sumFreshTokens(m),
+          totalTokens: sumTotalTokens(m),
           inputTokens: m.inputTokens,
           outputTokens: m.outputTokens,
         }))
