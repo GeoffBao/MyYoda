@@ -29,6 +29,7 @@ import { AutomationFormView } from '@/components/automation/AutomationFormView'
 import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
 import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
+import { BotHubSettings } from '@/components/settings/BotHubSettings'
 import { DiscoverView } from '@/components/discover/DiscoverView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
@@ -350,6 +351,9 @@ export function MainArea(): React.ReactElement {
             ) : activeView === 'repo-wiki' ? (
               // Yoda 知识库：Project 模式知识库入口（待开发占位）
               <RepoWikiView />
+            ) : activeView === 'messaging' ? (
+              // 消息：IM 集成（飞书 / 微信 / 即将上线渠道占位），全屏取代 TabBar + TabContent
+              <BotHubSettings />
             ) : activeView === 'discover' ? (
               // 发现：官方内容流 + 社区讨论 + 反馈
               <DiscoverView />

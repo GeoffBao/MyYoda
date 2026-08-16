@@ -56,7 +56,7 @@ describe('shouldShowFeatureItem', () => {
   test('Given 菜单模式 + chat 模式 When 过滤 agentOnly 项（board/canvas/skills/wiki）Then 不可见', () => {
     const chatCtx = ctx({ mode: 'chat' })
     expect(shouldShowFeatureItem('planning', chatCtx, true)).toBe(true)
-    for (const kind of ['board', 'canvas', 'skills', 'wiki'] as const) {
+    for (const kind of ['board', 'canvas', 'skills', 'messaging', 'wiki'] as const) {
       expect(shouldShowFeatureItem(kind, chatCtx, true)).toBe(false)
     }
   })
