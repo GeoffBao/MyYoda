@@ -2599,6 +2599,7 @@ ${workContext}`
             capturedSdkSessionId = undefined
             lastRetryableError = this.prepareSessionNotFoundRecovery(sessionId, queryOptions, contextualMessage, agentCwd, workspaceSlug, accumulatedMessages, queryStartedAt)
             stderrChunks.length = 0
+            await closeQueryIterator()
             continue // 进入下一次 retry 循环
           }
 
@@ -2611,6 +2612,7 @@ ${workContext}`
             skipNextRetryDelay = true
             lastRetryableError = this.prepareResumeFallbackRecovery(sessionId, queryOptions, contextualMessage, agentCwd, workspaceSlug, accumulatedMessages, queryStartedAt, '检测到上下文过长，清除 sdkSessionId 并切换到上下文回填模式', '上下文过长，切换到上下文回填模式', true)
             stderrChunks.length = 0
+            await closeQueryIterator()
             continue // 进入下一次 retry 循环
           }
 
@@ -2634,6 +2636,7 @@ ${workContext}`
               true // 跨模型签名不兼容是唯一确定永久无效的场景，清除磁盘 sdkSessionId
             )
             stderrChunks.length = 0
+            await closeQueryIterator()
             continue // 进入下一次 retry 循环
           }
 
@@ -2645,6 +2648,7 @@ ${workContext}`
             this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
             accumulatedMessages.length = 0
             stderrChunks.length = 0
+            await closeQueryIterator()
             continue // 进入下一次 retry 循环
           }
 

@@ -616,7 +616,7 @@ async function bootstrap(): Promise<void> {
 
   // Phase 1: start the isolated Pi runtime host. The main process still owns
   // orchestration and Electron capabilities during this migration phase.
-  if (process.env.PROMA_AGENT_RUNTIME !== 'in-process' && process.env.PROMA_AGENT_RUNTIME !== 'off') {
+  if (process.env.MYYODA_AGENT_RUNTIME !== 'in-process' && process.env.MYYODA_AGENT_RUNTIME !== 'off') {
     await safeAwait('startAgentRuntime', async () => {
       const state = await agentRuntimeClient.start()
       console.info(`[AgentRuntime] utility ready: pid=${state.pid ?? 'unknown'} bootId=${state.bootId}`)
