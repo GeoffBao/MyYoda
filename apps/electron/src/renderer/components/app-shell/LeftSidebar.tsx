@@ -107,6 +107,7 @@ import {
   getSessionTreeCustomGroupId,
   getSessionTreeProgress,
   getSessionTreeStatus,
+  getWorkspaceGroupStatus,
   hasTaskDraftAncestor,
   isDelegatedChildSession,
   isTaskTree,
@@ -175,7 +176,7 @@ import { SidebarProjectsTab, type ProjectSessionHandlers } from './SidebarProjec
 import { formatSidebarModuleCount } from './sidebar-module-model'
 
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
-import { AgentSessionItem, SessionItemActions } from './AgentSessionItem'
+import { AgentSessionItem, SessionItemActions, STATUS_DOT_CLASS } from './AgentSessionItem'
 import { deleteAgentSessionChildren, shouldDeleteAgentParent } from './agent-deletion-model'
 
 function getSidebarUpdateLabel(status: string, version?: string): string {
@@ -2747,6 +2748,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   // Chat 历史展平为固定行：日期标题、置顶标题和每个会话各占一行，供虚拟列表
   // 按需挂载。不要把整个日期组作为一行，否则大量会话仍会同时留在 DOM。
   const newChatShortcutLabel = getAcceleratorDisplay(getActiveAccelerator('new-session'))
+  const isPinnedAgentGroupCollapsed = collapsedFlatGroupIds.has(PINNED_AGENT_GROUP_KEY)
 
   const chatActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
     const rows: VirtualSidebarRow[] = []
@@ -3043,10 +3045,32 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       rows.push({
         id: 'agent-pinned-heading',
         estimateSize: 30,
-        content: <div className="pl-[18px] pr-3.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">置顶</div>,
+        content: (
+          <div className="group/date-header flex items-center justify-between pl-[18px] pr-3.5 pt-2 pb-1">
+            <span className="text-[13px] font-medium leading-[18px] text-foreground/40 select-none">置顶</span>
+            <button
+              type="button"
+              aria-label={isPinnedAgentGroupCollapsed ? '展开置顶' : '折叠置顶'}
+              onClick={() => setCollapsedFlatGroupIds((prev) => {
+                const next = new Set(prev)
+                if (next.has(PINNED_AGENT_GROUP_KEY)) next.delete(PINNED_AGENT_GROUP_KEY)
+                else next.add(PINNED_AGENT_GROUP_KEY)
+                return next
+              })}
+              className="grid size-5 place-items-center rounded text-foreground/45 opacity-0 transition-opacity titlebar-no-drag hover:bg-foreground/[0.08] hover:text-foreground/70 group-hover/date-header:opacity-100"
+            >
+              <ChevronRight
+                size={12}
+                className={cn('transition-transform duration-fast', isPinnedAgentGroupCollapsed ? '' : 'rotate-90')}
+              />
+            </button>
+          </div>
+        ),
       })
-      for (const item of pinnedAgentSessionTrees) {
-        pushSessionTreeRows(item, false, false, workspaceNameMap)
+      if (!isPinnedAgentGroupCollapsed) {
+        for (const item of pinnedAgentSessionTrees) {
+          pushSessionTreeRows(item, false, false, workspaceNameMap)
+        }
       }
     }
 
@@ -3240,11 +3264,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleToggleGroupCollapse,
     handleTogglePinAgent,
     handleToggleStarAgent,
+    isPinnedAgentGroupCollapsed,
     handleWorkspaceRename,
     pinnedAgentSessionTrees,
     projectDropIndicator,
     relativeTimeNow,
     sessionHoverPreviewEnabled,
+    setCollapsedFlatGroupIds,
     workspaceNameMap,
     currentWorkspaceId,
   ])
@@ -3687,7 +3713,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   }
 
   // ===== 展开状态：完整侧边栏 =====
-  const isPinnedAgentGroupCollapsed = collapsedFlatGroupIds.has(PINNED_AGENT_GROUP_KEY)
 
   /**
    * 渲染单个工作区组（真实工作区 or 合成「自动任务」组）。
@@ -4727,6 +4752,8 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
   hideSessions = false,
 }: AgentProjectGroupItemProps): React.ReactElement {
   const isCurrent = group.workspace.id === currentWorkspaceId
+  /** 折叠时会话行整体隐藏，用状态点在 header 上提示「这个项目下有会话在跑」，避免看不到进行中的会话。 */
+  const groupStatus = collapsed ? getWorkspaceGroupStatus(group.sessions, agentIndicatorMap) : 'idle'
 
   const [renamingWorkspace, setRenamingWorkspace] = React.useState(false)
   const [workspaceEditName, setWorkspaceEditName] = React.useState('')
@@ -4846,6 +4873,12 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               ? <Clock size={13} className="flex-shrink-0 text-foreground/40" />
               : <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
             }
+            {groupStatus !== 'idle' && (
+              <span
+                title={groupStatus === 'running' ? '有会话正在进行' : groupStatus === 'blocked' ? '有会话等待处理' : '有会话已完成'}
+                className={cn('size-1.5 flex-shrink-0 rounded-full', STATUS_DOT_CLASS[groupStatus])}
+              />
+            )}
             <span className="flex min-w-0 items-center">
               <MarqueeText text={group.workspace.name} className="min-w-0 text-[13px] font-medium leading-[18px]" />
               {isCurrent && (
