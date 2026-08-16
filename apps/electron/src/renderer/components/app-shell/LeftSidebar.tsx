@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, FolderInput, GripVertical, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, Folder, FolderOpen, FolderInput, GripVertical, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
@@ -4871,7 +4871,10 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
           >
             {isAutomationGroup
               ? <Clock size={13} className="flex-shrink-0 text-foreground/40" />
-              : <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
+              // 参考 Heptabase：闭合 Folder = 折叠，张开 FolderOpen = 正在显示内容
+              : collapsed
+                ? <Folder size={13} className="flex-shrink-0 text-foreground/40" />
+                : <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
             }
             {groupStatus !== 'idle' && (
               <span
@@ -4882,7 +4885,9 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
             <span className="flex min-w-0 items-center">
               <MarqueeText text={group.workspace.name} className="min-w-0 text-[13px] font-medium leading-[18px]" />
               {isCurrent && (
-                <span className="workspace-selected-triangle flex-shrink-0" aria-hidden="true" />
+                <span className="ml-1.5 shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
+                  当前
+                </span>
               )}
             </span>
             <span className="min-w-[4px] flex-1" aria-hidden="true" />
