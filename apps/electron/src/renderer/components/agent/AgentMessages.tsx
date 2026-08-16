@@ -214,6 +214,10 @@ interface AgentMessagesProps {
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
+  /** 将本轮回复标记为 Todo */
+  onCreateTodo?: (text: string) => void
   /** 将单条 Agent 历史选区写为当前 RichTextInput 的内联 mention。 */
   onAddHistoryQuote?: (quote: QuotedSelection) => boolean
   /** 已发送的 Agent 历史引用 chip 点击后请求定位与高亮。 */
@@ -607,9 +611,12 @@ interface AgentTranscriptHistoryProps {
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
+  onCreateTodo?: (text: string) => void
   onRetry?: () => void
   onRetryInNewSession?: () => void
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
 }
 
 /**
@@ -630,9 +637,12 @@ const AgentTranscriptHistory = React.forwardRef<AgentTranscriptHistoryHandle, Ag
   onFork,
   onRewind,
   onAgentHistoryQuoteClick,
+  onCreateTodo,
   onRetry,
   onRetryInNewSession,
   onCompact,
+  onRelinkProjectRoot,
+  onRestoreProjectRoot,
 }, ref): React.ReactElement {
   const { scrollRef, isAtBottom, stopScroll } = useStickToBottomContext()
   const virtualizer = useVirtualizer({
@@ -809,9 +819,12 @@ const AgentTranscriptHistory = React.forwardRef<AgentTranscriptHistoryHandle, Ag
               onFork={shouldDisableActions ? undefined : onFork}
               onRewind={shouldDisableActions ? undefined : onRewind}
               onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+              onCreateTodo={shouldDisableActions ? undefined : onCreateTodo}
               onRetry={shouldDisableActions ? undefined : onRetry}
               onRetryInNewSession={shouldDisableActions ? undefined : onRetryInNewSession}
               onCompact={shouldDisableActions ? undefined : onCompact}
+              onRelinkProjectRoot={shouldDisableActions ? undefined : onRelinkProjectRoot}
+              onRestoreProjectRoot={shouldDisableActions ? undefined : onRestoreProjectRoot}
               historyTurn={groupHistoryTurns.get(group)}
               isStreaming={isLive || undefined}
               stoppedByUser={isLastAssistantTurn || undefined}
@@ -839,6 +852,9 @@ export const AgentMessages = React.memo(function AgentMessages({
   onFork,
   onRewind,
   onCompact,
+  onCreateTodo,
+  onRelinkProjectRoot,
+  onRestoreProjectRoot,
   onAddHistoryQuote,
   onAgentHistoryQuoteClick,
   historyQuoteNavigation,
@@ -1219,9 +1235,12 @@ export const AgentMessages = React.memo(function AgentMessages({
                 onFork={onFork}
                 onRewind={onRewind}
                 onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+                onCreateTodo={onCreateTodo}
                 onRetry={onRetry}
                 onRetryInNewSession={onRetryInNewSession}
                 onCompact={onCompact}
+                onRelinkProjectRoot={onRelinkProjectRoot}
+                onRestoreProjectRoot={onRestoreProjectRoot}
               />
 
               {/* 有实时助手内容时：显示运行指示器或占位（防止 streaming 结束到 Actions Bar 出现之间的高度跳动） */}

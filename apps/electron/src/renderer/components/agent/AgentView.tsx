@@ -48,6 +48,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { ThinkingLevelSlider, normalizeToUiIndex, uiIndexToLevel, STANDARD_UI_THINKING_LEVELS, UI_THINKING_LEVELS } from '@/components/ui/thinking-level-slider'
 import {
   AlertDialog,
@@ -65,6 +67,8 @@ import { registerShortcut } from '@/lib/shortcut-registry'
 import { supportsChannelPlanQuota, channelPlanQuotaRefreshVersionAtom } from '@/lib/channel-plan-quota'
 import { previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
+import { todoPlanningGroupsAtom } from '@/atoms/planning-atoms'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import {
   agentStreamingStatesAtom,
   agentSessionViewStreamStateAtomFamily,
@@ -245,6 +249,13 @@ interface SDKMessageRecord {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** 消息「标记为 Todo」的默认截止时间：当天 23:59:59.999 */
+function endOfToday(value: number | Date = Date.now()): number {
+  const date = new Date(value)
+  date.setHours(23, 59, 59, 999)
+  return date.getTime()
 }
 
 function getUserTextFromSDKMessage(message: SDKMessage): string | null {
@@ -2560,6 +2571,94 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     }
   }, [sessionId, agentChannelId, agentModelId, sessionMetaChannelId, openSession, setAgentSessions])
 
+  /** 本地项目根目录不可用时的恢复操作：重新关联新文件夹 / 在原路径新建空文件夹 */
+  const { relinkWorkspaceProjectRoot, restoreWorkspaceProjectRoot } = useWorkspaceActions()
+  const [restoreProjectRootDialogOpen, setRestoreProjectRootDialogOpen] = React.useState(false)
+  const [restoringProjectRoot, setRestoringProjectRoot] = React.useState(false)
+
+  const handleRelinkProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    const folder = await window.electronAPI.openFolderDialog()
+    if (!folder) return
+    const updated = await relinkWorkspaceProjectRoot(currentWorkspaceId, folder.path)
+    if (updated) toast.success('本地项目根已重新关联', { description: folder.path })
+  }, [currentWorkspaceId, relinkWorkspaceProjectRoot])
+
+  const handleOpenRestoreProjectRootDialog = React.useCallback((): void => {
+    setRestoreProjectRootDialogOpen(true)
+  }, [])
+
+  const handleRestoreProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    setRestoringProjectRoot(true)
+    try {
+      const updated = await restoreWorkspaceProjectRoot(currentWorkspaceId)
+      if (updated) {
+        toast.success('已在原路径新建空项目文件夹', { description: updated.projectRootPath })
+        setRestoreProjectRootDialogOpen(false)
+      }
+    } finally {
+      setRestoringProjectRoot(false)
+    }
+  }, [currentWorkspaceId, restoreWorkspaceProjectRoot])
+
+  /** 标记为 Todo：弹出对话框让用户编辑标题、选择分组后再确认创建 */
+  const planningGroups = useAtomValue(todoPlanningGroupsAtom)
+  const [todoDialogOpen, setTodoDialogOpen] = React.useState(false)
+  const [todoDraftTitle, setTodoDraftTitle] = React.useState('')
+  const [todoSourceText, setTodoSourceText] = React.useState('')
+  const [todoGroupId, setTodoGroupId] = React.useState('__none__')
+  const [creatingTodo, setCreatingTodo] = React.useState(false)
+
+  const createTodoForCurrentSession = React.useCallback(async (title: string, groupId: string, sourceText?: string): Promise<boolean> => {
+    const normalizedTitle = title.trim()
+    if (!normalizedTitle) {
+      toast.error('Todo 标题不能为空')
+      return false
+    }
+    if (normalizedTitle.length > 500) {
+      toast.error('Todo 标题不能超过 500 字')
+      return false
+    }
+
+    try {
+      await window.electronAPI.createTodo({
+        title: normalizedTitle,
+        notes: sourceText?.trim() && sourceText.trim() !== normalizedTitle ? sourceText.trim() : undefined,
+        dueAt: endOfToday(),
+        groupId: groupId === '__none__' ? undefined : groupId,
+        sessionId,
+        workspaceId: currentWorkspaceId ?? undefined,
+      })
+      toast.success('已添加 Todo', { description: '已关联当前 Agent 会话' })
+      return true
+    } catch (error) {
+      console.error('[AgentView] 创建 Todo 失败:', error)
+      toast.error('创建 Todo 失败', { description: String(error) })
+      return false
+    }
+  }, [currentWorkspaceId, sessionId])
+
+  const handleOpenReplyTodoDialog = React.useCallback((text: string): void => {
+    const sourceText = text.trim()
+    const firstLine = sourceText.split('\n').map((line) => line.trim()).find(Boolean) ?? sourceText
+    setTodoSourceText(sourceText)
+    setTodoDraftTitle(firstLine.replace(/^#{1,6}\s+/, '').slice(0, 500))
+    setTodoGroupId('__none__')
+    setTodoDialogOpen(true)
+  }, [])
+
+  const handleCreateReplyTodo = React.useCallback(async (): Promise<void> => {
+    setCreatingTodo(true)
+    try {
+      if (await createTodoForCurrentSession(todoDraftTitle, todoGroupId, todoSourceText)) {
+        setTodoDialogOpen(false)
+      }
+    } finally {
+      setCreatingTodo(false)
+    }
+  }, [createTodoForCurrentSession, todoDraftTitle, todoGroupId, todoSourceText])
+
   /** 快照回退：同一会话内回退到指定消息点，恢复文件 + 截断对话 */
   const [rewindTargetUuid, setRewindTargetUuid] = React.useState<string | null>(null)
 
@@ -3026,6 +3125,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           onFork={isLegacyTranscript ? undefined : handleFork}
           onRewind={isLegacyTranscript ? undefined : handleRewindRequest}
           onCompact={handleCompact}
+          onCreateTodo={handleOpenReplyTodoDialog}
+          onRelinkProjectRoot={handleRelinkProjectRoot}
+          onRestoreProjectRoot={handleOpenRestoreProjectRootDialog}
         />
 
         {/* 权限请求横幅 */}
@@ -3208,6 +3310,38 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         onOpenChange={setCoworkOpen}
       />
     </AgentSessionProvider>
+
+    <Dialog open={todoDialogOpen} onOpenChange={setTodoDialogOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>标记为 Todo</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <label className="grid gap-2 text-sm font-medium">任务标题
+            <textarea value={todoDraftTitle} onChange={(event) => setTodoDraftTitle(event.target.value)} rows={3} className="min-h-20 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30" />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">Todo 分组
+            <Select value={todoGroupId} onValueChange={setTodoGroupId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">不分组</SelectItem>{planningGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}</SelectContent></Select>
+          </label>
+        </div>
+        <DialogFooter><Button type="button" variant="ghost" onClick={() => setTodoDialogOpen(false)}>取消</Button><Button type="button" onClick={() => void handleCreateReplyTodo()} disabled={creatingTodo || !todoDraftTitle.trim()}><ListTodo size={15} />添加 Todo</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog open={restoreProjectRootDialogOpen} onOpenChange={setRestoreProjectRootDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>在原路径新建空文件夹？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将在该本地项目原路径创建空文件夹。此操作不会恢复被删除的文件。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={restoringProjectRoot}>取消</AlertDialogCancel>
+          <AlertDialogAction disabled={restoringProjectRoot} onClick={() => void handleRestoreProjectRoot()}>
+            {restoringProjectRoot ? '创建中...' : '新建空文件夹'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     {/* 回退确认弹窗 */}
     <AlertDialog

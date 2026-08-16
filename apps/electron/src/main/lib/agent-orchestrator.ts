@@ -39,7 +39,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
+import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -961,6 +961,37 @@ export class AgentOrchestrator {
               payload: 'https://git-scm.com/download/win'
             }
           ],
+          canRetry: false
+        })
+        return
+      }
+    }
+
+    // 1.5 工作区绑定的本地项目根目录由用户管理。根目录被删除、替换为文件或无法访问时，
+    // 绝不能进入 SDK/Agent 初始化链路，以免后续文件工具通过 mkdir 间接重建该目录。
+    // 注意：仅当 workspace.projectRootPath 已设置时才检查——未设置时 cwd 决策会走
+    // Kanban Project 分支，由 resolveSessionCwd 的 project_directory_unavailable 分支兜底，
+    // 两者互斥，不会重复报错。
+    if (workspaceId) {
+      const preflightWorkspace = getAgentWorkspace(workspaceId)
+      if (!preflightWorkspace) {
+        reportPreflightError({
+          code: 'workspace_not_found',
+          title: '项目不存在',
+          message: `指定的 Agent 项目不存在或已删除: ${workspaceId}`,
+          actions: [],
+          canRetry: false
+        })
+        return
+      }
+      const preflightProjectRootStatus = getLocalProjectRootStatus(preflightWorkspace.projectRootPath)
+      if (preflightProjectRootStatus && preflightProjectRootStatus !== 'available') {
+        reportPreflightError({
+          code: 'local_project_root_unavailable',
+          title: '本地项目根目录不可用',
+          message: `本地项目根目录不存在或无法访问：${preflightWorkspace.projectRootPath}。请重新选择项目文件夹。`,
+          details: [`目录状态: ${preflightProjectRootStatus}`],
+          actions: [],
           canRetry: false
         })
         return

@@ -489,6 +489,8 @@ export type ErrorCode =
   | 'claude_binary_not_found'
   | 'agent_runtime_not_found'
   | 'project_directory_unavailable'
+  | 'local_project_root_unavailable'
+  | 'workspace_not_found'
   | 'session_busy'
   | 'unknown_error'
 
