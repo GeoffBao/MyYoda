@@ -11,10 +11,11 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, GripVertical, Clock, CalendarDays, ChevronRight, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MoreHorizontal, FolderOpen, FolderInput, GripVertical, Clock, CalendarDays, ChevronRight, ChevronDown, ChevronUp, GitBranch, Download, Loader2, RotateCw, Layers, LayoutDashboard, PenTool, Library, House, Blocks, ClipboardList, Compass } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
+import { VirtualSidebarList, type VirtualSidebarRow } from '@/components/ui/virtual-sidebar-list'
 import { ReleaseNotesPopover } from '@/components/settings/ReleaseNotesPopover'
 import { useReleaseNotes } from '@/hooks/useReleaseNotes'
 import { SidebarToggleButton } from './SidebarToggleButton'
@@ -615,6 +616,7 @@ function deleteSetEntry<T>(prev: Set<T>, value: T): Set<T> {
 }
 
 export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.ReactElement {
+  const sessionHoverPreviewEnabled = useAtomValue(sessionHoverPreviewEnabledAtom)
   const [activeView, setActiveView] = useAtom(activeViewAtom)
   const discoverFeedUnread = useAtomValue(discoverFeedUnreadAtom)
   const discoverCommunityUnread = useAtomValue(discoverCommunityUnreadAtom)
@@ -2742,6 +2744,511 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     />
   )
 
+  // Chat 历史展平为固定行：日期标题、置顶标题和每个会话各占一行，供虚拟列表
+  // 按需挂载。不要把整个日期组作为一行，否则大量会话仍会同时留在 DOM。
+  const newChatShortcutLabel = getAcceleratorDisplay(getActiveAccelerator('new-session'))
+
+  const chatActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
+    const rows: VirtualSidebarRow[] = []
+    if (pinnedConversations.length > 0) {
+      rows.push({
+        id: 'chat-pinned-heading',
+        estimateSize: 30,
+        content: <div className="pl-[18px] pr-3.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">置顶</div>,
+      })
+      for (const conv of pinnedConversations) {
+        rows.push({
+          id: `chat-pinned-${conv.id}`,
+          estimateSize: 34,
+          content: (
+            <div className="px-2">
+              <div className="ml-4">
+                <ConversationItem
+                  conversation={conv}
+                  active={conv.id === activeSessionId}
+                  streaming={streamingIds.has(conv.id)}
+                  showPinIcon={false}
+                  relativeTimeNow={relativeTimeNow}
+                  onSelect={handleSelectConversation}
+                  onRequestDelete={handleRequestDelete}
+                  onRename={handleRename}
+                  onTogglePin={handleTogglePin}
+                  onToggleArchive={handleToggleArchive}
+                />
+              </div>
+            </div>
+          ),
+        })
+      }
+    }
+
+    rows.push({
+      id: 'chat-history-heading',
+      estimateSize: 34,
+      content: (
+        <div className="group/chat-section relative flex items-center px-2 pt-2 pb-1">
+          <span className="ml-[4px] px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">对话</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="新建对话"
+                onClick={() => { void handleNewConversation() }}
+                className="absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-foreground/30 transition-colors hover:bg-foreground/[0.055] hover:text-foreground/65 titlebar-no-drag"
+              >
+                <Plus size={13} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {`新建对话${newChatShortcutLabel ? ` (${newChatShortcutLabel})` : ''}`}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      ),
+    })
+
+    for (const group of conversationGroups) {
+      rows.push({
+        id: `chat-date-${group.label}`,
+        estimateSize: 30,
+        content: <div className="ml-[4px] px-3.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">{group.label}</div>,
+      })
+      for (const conv of group.items) {
+        rows.push({
+          id: `chat-${conv.id}`,
+          estimateSize: 34,
+          content: (
+            <div className="px-2">
+              <ConversationItem
+                conversation={conv}
+                active={conv.id === activeSessionId}
+                streaming={streamingIds.has(conv.id)}
+                showPinIcon={!!conv.pinned}
+                relativeTimeNow={relativeTimeNow}
+                onSelect={handleSelectConversation}
+                onRequestDelete={handleRequestDelete}
+                onRename={handleRename}
+                onTogglePin={handleTogglePin}
+                onToggleArchive={handleToggleArchive}
+              />
+            </div>
+          ),
+        })
+      }
+    }
+    return rows
+  }, [activeSessionId, conversationGroups, handleNewConversation, handleRename, handleRequestDelete, handleSelectConversation, handleToggleArchive, handleTogglePin, newChatShortcutLabel, pinnedConversations, relativeTimeNow, streamingIds])
+
+  const chatArchivedVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
+    const rows: VirtualSidebarRow[] = []
+    for (const group of conversationGroups) {
+      rows.push({
+        id: `chat-archived-date-${group.label}`,
+        estimateSize: 30,
+        content: <div className="px-3 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">{group.label}</div>,
+      })
+      for (const conv of group.items) {
+        rows.push({
+          id: `chat-archived-${conv.id}`,
+          estimateSize: 34,
+          content: (
+            <div className="px-3">
+              <ConversationItem
+                conversation={conv}
+                active={conv.id === activeSessionId}
+                streaming={streamingIds.has(conv.id)}
+                showPinIcon={!!conv.pinned}
+                relativeTimeNow={relativeTimeNow}
+                onSelect={handleSelectConversation}
+                onRequestDelete={handleRequestDelete}
+                onRename={handleRename}
+                onTogglePin={handleTogglePin}
+                onToggleArchive={handleToggleArchive}
+              />
+            </div>
+          ),
+        })
+      }
+    }
+    return rows
+  }, [activeSessionId, conversationGroups, handleRename, handleRequestDelete, handleSelectConversation, handleToggleArchive, handleTogglePin, relativeTimeNow, streamingIds])
+
+  const agentArchivedVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
+    const rows: VirtualSidebarRow[] = []
+    for (const group of archivedAgentSessionGroups) {
+      rows.push({
+        id: `agent-archived-date-${group.label}`,
+        estimateSize: 30,
+        content: <div className="px-3 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">{group.label}</div>,
+      })
+      for (const item of group.items) {
+        const childCount = item.childSessions.length
+        const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
+        const treeActive = treeContainsSessionId(item, activeSessionId)
+        const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
+        const expandedChildren = expandedDelegationParentIds.has(item.session.id)
+          || (activeChildVisible && !collapsedDelegationParentIds.has(item.session.id))
+        rows.push({
+          id: `agent-archived-${item.session.id}`,
+          estimateSize: 34,
+          content: (
+            <div className="px-3">
+              <AgentSessionItem
+                session={item.session}
+                active={treeActive}
+                indicatorStatus={rowStatus}
+                showPinIcon={!!item.session.pinned}
+                disableMiniMap={!sessionHoverPreviewEnabled}
+                childSummary={childCount > 0
+                  ? {
+                    total: childCount,
+                    completed: getSessionTreeProgress(item, agentIndicatorMap).completed,
+                    expanded: expandedChildren,
+                    onToggle: () => handleToggleDelegationParent(item.session.id, expandedChildren),
+                  }
+                  : undefined}
+                workspaceName={item.session.workspaceId ? workspaceNameMap.get(item.session.workspaceId) : undefined}
+                relativeTimeNow={relativeTimeNow}
+                onSelect={handleSelectAgentSession}
+                onRequestDelete={handleRequestDelete}
+                onRequestMove={handleRequestMove}
+                onRename={handleAgentRename}
+                onTogglePin={handleTogglePinAgent}
+                onToggleStar={handleToggleStarAgent}
+                onToggleArchive={handleToggleArchiveAgent}
+              />
+            </div>
+          ),
+        })
+        if (expandedChildren) {
+          for (const childSession of item.childSessions) {
+            rows.push({
+              id: `agent-archived-child-${childSession.id}`,
+              estimateSize: 34,
+              content: (
+                <div className="ml-6 border-l border-foreground/10 pl-2 pr-3">
+                  <DelegatedChildSessionItem
+                    session={childSession}
+                    activeSessionId={activeSessionId}
+                    agentIndicatorMap={agentIndicatorMap}
+                    relativeTimeNow={relativeTimeNow}
+                    workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
+                    onSelect={handleSelectAgentSession}
+                    onRequestDelete={handleRequestDelete}
+                    onRequestMove={handleRequestMove}
+                    onRename={handleAgentRename}
+                    onTogglePin={handleTogglePinAgent}
+                    onToggleStar={handleToggleStarAgent}
+                    onToggleArchive={handleToggleArchiveAgent}
+                  />
+                </div>
+              ),
+            })
+          }
+        }
+      }
+    }
+    return rows
+  }, [activeSessionId, agentIndicatorMap, archivedAgentSessionGroups, collapsedDelegationParentIds, expandedDelegationParentIds, handleAgentRename, handleRequestDelete, handleRequestMove, handleSelectAgentSession, handleToggleArchiveAgent, handleToggleDelegationParent, handleTogglePinAgent, handleToggleStarAgent, relativeTimeNow, sessionHoverPreviewEnabled, workspaceNameMap])
+
+  const agentActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
+    const rows: VirtualSidebarRow[] = []
+
+    const pushSessionTreeRows = (
+      item: AgentSessionTreeItem,
+      isAutomationGroup: boolean,
+      showPinIcon: boolean,
+      workspaceNameMapForRow?: Map<string, string>,
+      projectWorkspaceId?: string,
+    ): void => {
+      const childCount = item.childSessions.length
+      const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
+      const treeActive = treeContainsSessionId(item, activeSessionId)
+      const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
+      const expandedChildren = expandedDelegationParentIds.has(item.session.id)
+        || (activeChildVisible && !collapsedDelegationParentIds.has(item.session.id))
+
+      rows.push({
+        id: `agent-${item.session.id}`,
+        estimateSize: 34,
+        content: (
+          <div
+            className="ml-4"
+            onDragOver={projectWorkspaceId ? (event) => handleProjectDragOver(event, projectWorkspaceId) : undefined}
+            onDragLeave={projectWorkspaceId ? handleProjectDragLeave : undefined}
+            onDrop={projectWorkspaceId ? (event) => handleProjectDrop(event, projectWorkspaceId) : undefined}
+          >
+            <AgentSessionItem
+              session={item.session}
+              active={treeActive}
+              indicatorStatus={rowStatus}
+              showPinIcon={showPinIcon && !!item.session.pinned}
+              disableMiniMap={!sessionHoverPreviewEnabled}
+              childSummary={childCount > 0
+                ? {
+                  total: childCount,
+                  completed: getSessionTreeProgress(item, agentIndicatorMap).completed,
+                  expanded: expandedChildren,
+                  onToggle: () => handleToggleDelegationParent(item.session.id, expandedChildren),
+                }
+                : undefined}
+              workspaceName={isAutomationGroup && item.session.workspaceId ? workspaceNameMapForRow?.get(item.session.workspaceId) : undefined}
+              relativeTimeNow={relativeTimeNow}
+              onSelect={handleSelectAgentSession}
+              onRequestDelete={handleRequestDelete}
+              onRequestMove={handleRequestMove}
+              onRename={handleAgentRename}
+              onTogglePin={handleTogglePinAgent}
+              onToggleStar={handleToggleStarAgent}
+              onToggleArchive={handleToggleArchiveAgent}
+            />
+          </div>
+        ),
+      })
+
+      if (childCount > 0 && expandedChildren) {
+        for (const childSession of item.childSessions) {
+          rows.push({
+            id: `agent-child-${childSession.id}`,
+            estimateSize: 34,
+            content: (
+              <div
+                className="ml-7 border-l border-foreground/10 pl-2"
+                onDragOver={projectWorkspaceId ? (event) => handleProjectDragOver(event, projectWorkspaceId) : undefined}
+                onDragLeave={projectWorkspaceId ? handleProjectDragLeave : undefined}
+                onDrop={projectWorkspaceId ? (event) => handleProjectDrop(event, projectWorkspaceId) : undefined}
+              >
+                <DelegatedChildSessionItem
+                  session={childSession}
+                  activeSessionId={activeSessionId}
+                  agentIndicatorMap={agentIndicatorMap}
+                  relativeTimeNow={relativeTimeNow}
+                  workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMapForRow?.get(childSession.workspaceId) : undefined}
+                  onSelect={handleSelectAgentSession}
+                  onRequestDelete={handleRequestDelete}
+                  onRequestMove={handleRequestMove}
+                  onRename={handleAgentRename}
+                  onTogglePin={handleTogglePinAgent}
+                  onToggleStar={handleToggleStarAgent}
+                  onToggleArchive={handleToggleArchiveAgent}
+                />
+              </div>
+            ),
+          })
+        }
+      }
+    }
+
+    if (pinnedAgentSessionTrees.length > 0) {
+      rows.push({
+        id: 'agent-pinned-heading',
+        estimateSize: 30,
+        content: <div className="pl-[18px] pr-3.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">置顶</div>,
+      })
+      for (const item of pinnedAgentSessionTrees) {
+        pushSessionTreeRows(item, false, false, workspaceNameMap)
+      }
+    }
+
+    rows.push({
+      id: 'agent-project-heading',
+      estimateSize: 34,
+      content: (
+        <div className="px-2 pt-2 pb-1 flex items-center justify-between">
+          <span className="px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">项目</span>
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateProjectFromFolder()}
+                  className="size-6 flex items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.06] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                  aria-label="从本地文件夹创建项目"
+                >
+                  <FolderInput size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">从本地文件夹创建项目</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setCreateProjectOpen(true)}
+                  className="size-6 flex items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.06] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                  aria-label="新建空白项目"
+                >
+                  <Plus size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">新建空白项目</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      ),
+    })
+
+    for (const group of displayProjectGroups) {
+      const isAuto = group.workspace.id === AUTOMATION_GROUP_ID
+      const collapsed = collapsedWorkspaceIds.has(group.workspace.id)
+      const extraCount = expandedExtraCounts.get(group.workspace.id) ?? 0
+      const visibleRaw = getVisibleAgentProjectSessions({
+        group,
+        activeSessionId,
+        agentIndicatorMap,
+        relativeTimeNow,
+        extraCount,
+      })
+      // 自动任务组：由父组件统一「最多 4 个 + 显示更多/收起」折叠，内部不再做活跃/时间窗/分页的二次筛选，
+      // 按 recency 平铺渲染，避免组内出现活跃优先排序或额外的「显示更多」按钮造成双重折叠。
+      const visible = isAuto
+        ? { ...visibleRaw, sessions: visibleRaw.treeItems, hiddenCount: 0 }
+        : visibleRaw
+
+      rows.push({
+        id: `agent-project-${group.workspace.id}`,
+        estimateSize: 34,
+        content: (
+          <div className="px-2">
+            <AgentProjectGroupItem
+              group={group}
+              isAutomationGroup={isAuto}
+              workspaceNameMap={isAuto ? workspaceNameMap : undefined}
+              currentWorkspaceId={currentWorkspaceId}
+              extraCount={extraCount}
+              collapsed={collapsed}
+              onClearProjectBinding={handleClearProjectBinding}
+              activeSessionId={activeSessionId}
+              agentIndicatorMap={agentIndicatorMap}
+              expandedDelegationParentIds={expandedDelegationParentIds}
+              collapsedDelegationParentIds={collapsedDelegationParentIds}
+              relativeTimeNow={relativeTimeNow}
+              dragging={dragProjectId === group.workspace.id}
+              dropPosition={projectDropIndicator?.id === group.workspace.id ? projectDropIndicator.position : null}
+              onShowMore={handleShowMoreSessions}
+              onCollapseExtra={handleCollapseExtraSessions}
+              onSelectProject={isAuto ? handleToggleGroupCollapse : handleSelectProject}
+              onNewSession={isAuto ? noopAsync : createAgentSessionInWorkspace}
+              onDragStart={handleProjectDragStart}
+              onDragOver={handleProjectDragOver}
+              onDragLeave={handleProjectDragLeave}
+              onDrop={handleProjectDrop}
+              onDragEnd={handleProjectDragEnd}
+              onConfigureProject={isAuto ? noopVoid : (workspaceId) => {
+                handleSelectProject(workspaceId)
+                handleOpenMcpManagement()
+              }}
+              onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
+              onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
+              canDeleteWorkspace={isAuto ? false : canDeleteWorkspace(group.workspace)}
+              onSelectSession={handleSelectAgentSession}
+              onRequestDelete={handleRequestDelete}
+              onRequestMove={handleRequestMove}
+              onRename={handleAgentRename}
+              onTogglePin={handleTogglePinAgent}
+              onToggleStar={handleToggleStarAgent}
+              onToggleArchive={handleToggleArchiveAgent}
+              onToggleDelegationParent={handleToggleDelegationParent}
+              hideSessions
+            />
+          </div>
+        ),
+      })
+
+      if (!collapsed) {
+        if (visible.treeItems.length === 0) {
+          rows.push({
+            id: `agent-project-empty-${group.workspace.id}`,
+            estimateSize: 28,
+            content: <div className="ml-5 px-1.5 py-0.5 text-[12px] text-foreground/22 select-none">暂无会话</div>,
+          })
+        } else {
+          for (const item of visible.sessions) pushSessionTreeRows(item, isAuto, true, workspaceNameMap, group.workspace.id)
+          if (visible.hiddenCount > 0 || extraCount > 0) {
+            rows.push({
+              id: `agent-project-controls-${group.workspace.id}`,
+              estimateSize: 34,
+              content: (
+                <div className="ml-4 flex items-center gap-0.5 pt-0.5">
+                  {visible.hiddenCount > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`显示更多会话，还有 ${visible.hiddenCount} 个`}
+                          onClick={() => handleShowMoreSessions(group.workspace.id)}
+                          className="flex size-7 items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.04] hover:text-foreground/65 transition-colors titlebar-no-drag"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">{`显示更多会话（还有 ${visible.hiddenCount} 个）`}</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {extraCount > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="收起额外会话"
+                          onClick={() => handleCollapseExtraSessions(group.workspace.id)}
+                          className="flex size-7 items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.04] hover:text-foreground/65 transition-colors titlebar-no-drag"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">收起额外会话</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              ),
+            })
+          }
+        }
+      }
+    }
+
+    return rows
+  }, [
+    activeSessionId,
+    agentIndicatorMap,
+    collapsedDelegationParentIds,
+    collapsedWorkspaceIds,
+    createAgentSessionInWorkspace,
+    displayProjectGroups,
+    dragProjectId,
+    expandedDelegationParentIds,
+    expandedExtraCounts,
+    handleAgentRename,
+    handleClearProjectBinding,
+    handleCollapseExtraSessions,
+    handleCreateProjectFromFolder,
+    handleOpenMcpManagement,
+    handleProjectDragEnd,
+    handleProjectDragLeave,
+    handleProjectDragOver,
+    handleProjectDragStart,
+    handleProjectDrop,
+    handleRequestDelete,
+    handleRequestDeleteWorkspace,
+    handleRequestMove,
+    handleSelectAgentSession,
+    handleSelectProject,
+    handleShowMoreSessions,
+    handleToggleArchiveAgent,
+    handleToggleDelegationParent,
+    handleToggleGroupCollapse,
+    handleTogglePinAgent,
+    handleToggleStarAgent,
+    handleWorkspaceRename,
+    pinnedAgentSessionTrees,
+    projectDropIndicator,
+    relativeTimeNow,
+    sessionHoverPreviewEnabled,
+    workspaceNameMap,
+    currentWorkspaceId,
+  ])
+
   // ===== 折叠状态：精简图标视图 =====
   // 折叠/展开按钮已迁移至 TabBar（紧邻标签标题，见 TabBar.tsx），与标签栏天然对齐，
   // 这里不重复渲染。点击该按钮才切换折叠态，不再有悬停自动预览。
@@ -3451,450 +3958,21 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         </div>
       )}
 
-      {/* 项目中心入口已移除：Project 导航改由下方 Sessions | Projects Tab 承担 */}
-
-      {/* 自动任务组已并入项目区（SidebarProjectsTab 顶部合成组，方案 A）；这里不再独立渲染 */}
-
-      {/* 置顶区：常驻在会话/项目 Tab 切换器上方，跨 Tab 可见 */}
-      {mode === 'chat' && viewMode === 'active' && pinnedConversations.length > 0 && (
-        <div className="pt-2 pb-1 flex-shrink-0 titlebar-no-drag">
-          <div className="px-3 pb-1">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">置顶</span>
-          </div>
-          <div
-            className=""
-          >
-            <div className="px-2">
-              {/* max-h + overflow-y-auto 作为安全网：置顶区不在主滚动容器内，展开全部置顶后条目过多时仍能自身滚动，
-                  不会把下方会话/项目列表挤出可视区域（参考 Proma 置顶始终可见的思路） */}
-              <div className="ml-4 flex max-h-[320px] flex-col gap-0.5 overflow-y-auto scrollbar-thin">
-                {(pinnedOverflowExpanded ? pinnedConversations : pinnedConversations.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((conv) => (
-                  <ConversationItem
-                    key={`pinned-${conv.id}`}
-                    conversation={conv}
-                    active={conv.id === activeSessionId}
-                    streaming={streamingIds.has(conv.id)}
-                    showPinIcon={false}
-                    relativeTimeNow={relativeTimeNow}
-                    onSelect={handleSelectConversation}
-                    onRequestDelete={handleRequestDelete}
-                    onRename={handleRename}
-                    onTogglePin={handleTogglePin}
-                    onToggleArchive={handleToggleArchive}
-                  />
-                ))}
-                {pinnedChatOverflow > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setPinnedOverflowExpanded((prev) => !prev)}
-                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-                  >
-                    {pinnedOverflowExpanded ? '收起' : `显示更多 (${pinnedChatOverflow})`}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mode === 'agent' && agentStatusFilter !== 'archived' && pinnedAgentSessions.length > 0 && (
-        <div className="pt-2 pb-1 flex-shrink-0 titlebar-no-drag">
-          <div className="group/date-header flex items-center justify-between px-3 pb-1">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">置顶</span>
-            <button
-              type="button"
-              aria-label={isPinnedAgentGroupCollapsed ? '展开置顶' : '折叠置顶'}
-              onClick={() => setCollapsedFlatGroupIds((prev) => {
-                const next = new Set(prev)
-                if (next.has(PINNED_AGENT_GROUP_KEY)) next.delete(PINNED_AGENT_GROUP_KEY)
-                else next.add(PINNED_AGENT_GROUP_KEY)
-                return next
-              })}
-              className="grid size-5 place-items-center rounded text-foreground/45 transition-colors titlebar-no-drag hover:bg-foreground/[0.08] hover:text-foreground/70"
-            >
-              <ChevronRight
-                size={12}
-                className={cn('transition-transform duration-fast', isPinnedAgentGroupCollapsed ? '' : 'rotate-90')}
-              />
-            </button>
-          </div>
-          {!isPinnedAgentGroupCollapsed && (
-            <div className="px-2">
-              {/* max-h + overflow-y-auto 作为安全网：置顶区不在主滚动容器内，展开全部置顶后条目过多时仍能自身滚动，
-                  不会把下方项目/会话列表挤出可视区域（参考 Proma 置顶始终可见的思路） */}
-              <div className="ml-4 flex max-h-[320px] flex-col gap-0.5 overflow-y-auto scrollbar-thin">
-                {(pinnedOverflowExpanded ? pinnedAgentSessionTrees : pinnedAgentSessionTrees.slice(0, PINNED_SESSION_VISIBLE_LIMIT)).map((item) => {
-                  const childCount = item.childSessions.length
-                  const childProgress = getSessionTreeProgress(item, agentIndicatorMap)
-                  const delegatedChildCount = item.childSessions.filter((child) => child.parentSessionId === item.session.id && !!child.sourceDelegationId).length
-                  const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
-                  const treeActive = treeContainsSessionId(item, activeSessionId)
-                  const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
-                  const shouldAutoExpand = activeChildVisible || rowStatus === 'running' || rowStatus === 'blocked'
-                  const expandedChildren = expandedDelegationParentIds.has(item.session.id)
-                    || (shouldAutoExpand && !collapsedDelegationParentIds.has(item.session.id))
-
-                  return (
-                    <div key={`pinned-${item.session.id}`} className="flex flex-col gap-0.5">
-                      <AgentSessionItem
-                        session={item.session}
-                        active={treeActive}
-                        indicatorStatus={rowStatus}
-                        showPinIcon={false}
-                        childSummary={childProgress.total > 0
-                          ? {
-                            ...childProgress,
-                            ...(childCount > 0
-                              ? {
-                                  expanded: expandedChildren,
-                                  onToggle: () => handleToggleDelegationParent(item.session.id, expandedChildren),
-                                }
-                              : {}),
-                          }
-                          : undefined}
-                        delegationChildCount={delegatedChildCount}
-                        workspaceName={
-                          item.session.workspaceId
-                            ? workspaceNameMap.get(item.session.workspaceId)
-                            : undefined
-                        }
-                        onClearProjectBinding={handleClearProjectBinding}
-                        sessionGroups={sessionGroups}
-                        onMoveToGroup={handleMoveToGroup}
-                        onCreateGroup={handleRequestCreateGroup}
-                        {...agentSessionItemLabelProps}
-                        relativeTimeNow={relativeTimeNow}
-                        onSelect={handleSelectAgentSession}
-                        onRequestDelete={handleRequestDelete}
-                        onRequestMove={handleRequestMove}
-                        onRename={handleAgentRename}
-                        onTogglePin={handleTogglePinAgent}
-                        onToggleStar={handleToggleStarAgent}
-                        onToggleArchive={handleToggleArchiveAgent}
-                      />
-
-                      {childCount > 0 && expandedChildren && (
-                        <div className="ml-3 pl-2 flex flex-col gap-0.5">
-                          {item.childSessions.map((childSession) => (
-                            <ChildSessionItem
-                              key={childSession.id}
-                              session={childSession}
-                              activeSessionId={activeSessionId}
-                              agentIndicatorMap={agentIndicatorMap}
-                              relativeTimeNow={relativeTimeNow}
-                              workspaceName={
-                                childSession.workspaceId
-                                  ? workspaceNameMap.get(childSession.workspaceId)
-                                  : undefined
-                              }
-                              onClearProjectBinding={handleClearProjectBinding}
-                              sessionGroups={sessionGroups}
-                              onMoveToGroup={handleMoveToGroup}
-                              onCreateGroup={handleRequestCreateGroup}
-                              {...agentSessionItemLabelProps}
-                              onSelect={handleSelectAgentSession}
-                              onRequestDelete={handleRequestDelete}
-                              onRequestMove={handleRequestMove}
-                              onRename={handleAgentRename}
-                              onTogglePin={handleTogglePinAgent}
-                              onToggleStar={handleToggleStarAgent}
-                              onToggleArchive={handleToggleArchiveAgent}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {pinnedAgentOverflow > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setPinnedOverflowExpanded((prev) => !prev)}
-                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-                  >
-                    {pinnedOverflowExpanded ? '收起' : `显示更多 (${pinnedAgentOverflow})`}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 项目/会话列表标题行（回归 Proma：Agent 模式左侧以项目分组为主导，无筛选菜单；
-          右侧常驻「从本地文件夹创建项目」+「新建项目」入口；归档视图下隐藏，改为归档专用标题） */}
-      {mode === 'agent' && agentStatusFilter !== 'archived' && (
-        <div className="flex items-center justify-between px-3 pt-1 pb-1 border-b border-border/50">
-          <span className="px-1.5 text-[11px] font-medium text-foreground/35 select-none">项目</span>
-          <span className="flex items-center gap-0.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="从本地文件夹创建项目"
-                  onClick={() => void handleCreateProjectFromFolder()}
-                  className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
-                >
-                  <FolderOpen size={13} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">从本地文件夹创建项目</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="新建项目"
-                  onClick={() => setCreateProjectOpen(true)}
-                  className="grid size-6 place-items-center rounded-md text-foreground/50 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
-                >
-                  <Plus size={14} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">新建项目</TooltipContent>
-            </Tooltip>
-          </span>
-        </div>
-      )}
-
-      {/* Chat 模式 active 视图：对话历史（置顶区已上移至筛选菜单上方） */}
+      {/* Chat 模式 active 视图：置顶 + 对话历史，结构与 Agent active 视图保持一致 */}
       {mode === 'chat' && viewMode === 'active' ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-3 pt-2 pb-1 flex-shrink-0 border-t border-border/50">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">对话</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
-            {conversationGroups.map((group) => (
-              <div key={group.label} className="mb-1">
-                <div className="px-1.5 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
-                  {group.label}
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  {group.items.map((conv) => (
-                    <ConversationItem
-                      key={conv.id}
-                      conversation={conv}
-                      active={conv.id === activeSessionId}
-                      streaming={streamingIds.has(conv.id)}
-                      showPinIcon={!!conv.pinned}
-                      relativeTimeNow={relativeTimeNow}
-                      onSelect={handleSelectConversation}
-                      onRequestDelete={handleRequestDelete}
-                      onRename={handleRename}
-                      onTogglePin={handleTogglePin}
-                      onToggleArchive={handleToggleArchive}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : mode === 'agent' && agentGroupBy === 'date' ? (
-        <div className="flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
-          {/* 分组方式：日期（默认）——活跃 / 已归档 / 全部统一走这套渲染，
-              具体显示哪些会话由 agentProjectGroups 内部按 agentStatusFilter 过滤决定 */}
-          <div className="sidebar-workspace-list pt-2">
-                <div className="flex flex-col gap-0.5">
-                  {displayProjectGroups
-                    .filter((group) => group.workspace.id === currentWorkspaceId)
-                    .map(renderWorkspaceGroupItem)}
-                </div>
-          </div>
-        </div>
-      ) : mode === 'agent' && agentStatusFilter === 'archived' ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-3 pt-2 pb-1 flex-shrink-0 border-t border-border/50">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">已归档会话</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
-            {archivedAgentSessionGroups.length > 0 ? (
-              archivedAgentSessionGroups.map((group) => (
-                <div key={group.label} className="mb-1">
-                  <div className="px-1.5 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
-                    {group.label}
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    {group.items.map((item) => {
-                      const childCount = item.childSessions.length
-                      const childProgress = getSessionTreeProgress(item, agentIndicatorMap)
-                      const delegatedChildCount = item.childSessions.filter((child) => child.parentSessionId === item.session.id && !!child.sourceDelegationId).length
-                      const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
-                      const treeActive = treeContainsSessionId(item, activeSessionId)
-                      const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
-                      const shouldAutoExpand = activeChildVisible || rowStatus === 'running' || rowStatus === 'blocked'
-                      const expandedChildren = expandedDelegationParentIds.has(item.session.id)
-                        || (shouldAutoExpand && !collapsedDelegationParentIds.has(item.session.id))
-
-                      return (
-                        <div key={`archived-${item.session.id}`} className="flex flex-col gap-0.5">
-                          <AgentSessionItem
-                            session={item.session}
-                            active={treeActive}
-                            indicatorStatus={rowStatus}
-                            showPinIcon={!!item.session.pinned}
-                            childSummary={childProgress.total > 0
-                              ? {
-                                ...childProgress,
-                                ...(childCount > 0
-                                  ? {
-                                      expanded: expandedChildren,
-                                      onToggle: () => handleToggleDelegationParent(item.session.id, expandedChildren),
-                                    }
-                                  : {}),
-                              }
-                              : undefined}
-                            delegationChildCount={delegatedChildCount}
-                            workspaceName={item.session.workspaceId ? workspaceNameMap.get(item.session.workspaceId) : undefined}
-                            onClearProjectBinding={handleClearProjectBinding}
-                            sessionGroups={sessionGroups}
-                            onMoveToGroup={handleMoveToGroup}
-                            onCreateGroup={handleRequestCreateGroup}
-                            {...agentSessionItemLabelProps}
-                            relativeTimeNow={relativeTimeNow}
-                            onSelect={handleSelectAgentSession}
-                            onRequestDelete={handleRequestDelete}
-                            onRequestMove={handleRequestMove}
-                            onRename={handleAgentRename}
-                            onTogglePin={handleTogglePinAgent}
-                            onToggleStar={handleToggleStarAgent}
-                            onToggleArchive={handleToggleArchiveAgent}
-                          />
-
-                          {childCount > 0 && expandedChildren && (
-                            <div className="ml-3 pl-2 flex flex-col gap-0.5">
-                              {item.childSessions.map((childSession) => (
-                                <ChildSessionItem
-                                  key={childSession.id}
-                                  session={childSession}
-                                  activeSessionId={activeSessionId}
-                                  agentIndicatorMap={agentIndicatorMap}
-                                  relativeTimeNow={relativeTimeNow}
-                                  workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
-                                  onClearProjectBinding={handleClearProjectBinding}
-                                  sessionGroups={sessionGroups}
-                                  onMoveToGroup={handleMoveToGroup}
-                                  onCreateGroup={handleRequestCreateGroup}
-                                  {...agentSessionItemLabelProps}
-                                  onSelect={handleSelectAgentSession}
-                                  onRequestDelete={handleRequestDelete}
-                                  onRequestMove={handleRequestMove}
-                                  onRename={handleAgentRename}
-                                  onTogglePin={handleTogglePinAgent}
-                                  onToggleStar={handleToggleStarAgent}
-                                  onToggleArchive={handleToggleArchiveAgent}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="px-2 py-8 text-center text-[13px] text-foreground/35">暂无已归档会话</div>
-            )}
-          </div>
-        </div>
-      ) : mode === 'agent' && agentGroupBy === 'project' ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <SidebarProjectsTab sessionHandlers={projectTabSessionHandlers} />
-        </div>
-      ) : mode === 'agent' ? (
-        <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
-          {/* 状态 / 自定义分组 / 不分组同样保留任务族层级。 */}
-          {(() => {
-            // 折叠：超出 PROJECT_SESSION_PREVIEW_LIMIT 的会话默认隐藏，点击「显示更多」展开全部
-            const totalFlatSessions = agentFlatModeTrees.length
-            const hiddenFlat = !flatModeExpanded && totalFlatSessions > PROJECT_SESSION_PREVIEW_LIMIT
-              ? totalFlatSessions - PROJECT_SESSION_PREVIEW_LIMIT
-              : 0
-
-            const flatContent = agentGroupBy === 'none' ? (
-              agentFlatModeTrees.length > 0 ? (
-                <div className="flex flex-col gap-0.5">
-                  {agentFlatModeTrees.slice(0, hiddenFlat > 0 ? PROJECT_SESSION_PREVIEW_LIMIT : undefined).map(renderAgentFlatSessionTree)}
-                </div>
-              ) : (
-                <div className="px-2 py-8 text-center text-[13px] text-foreground/35">暂无会话</div>
-              )
-            ) : agentFlatModeGroups.length > 0 ? (
-              (() => {
-                let rendered = 0
-                const visibleGroups: React.ReactElement[] = []
-                for (const group of agentFlatModeGroups) {
-                  if (hiddenFlat > 0 && rendered >= PROJECT_SESSION_PREVIEW_LIMIT) break
-                  const groupItems = hiddenFlat > 0
-                    ? group.items.slice(0, Math.max(0, PROJECT_SESSION_PREVIEW_LIMIT - rendered))
-                    : group.items
-                  rendered += groupItems.length
-                  const flatGroupKey = group.groupId ?? group.label
-                  const isFlatGroupCollapsed = collapsedFlatGroupIds.has(flatGroupKey)
-                  visibleGroups.push(
-                    <div key={flatGroupKey} className="mb-1">
-                      <div className="group/date-header flex items-center justify-between px-1.5 pt-2 pb-1 first:pt-0">
-                        <span className="text-[11px] font-medium text-foreground/40 select-none">{group.label}</span>
-                        <button
-                          type="button"
-                          aria-label={isFlatGroupCollapsed ? `展开${group.label}` : `折叠${group.label}`}
-                          onClick={() => setCollapsedFlatGroupIds((prev) => {
-                            const next = new Set(prev)
-                            if (next.has(flatGroupKey)) next.delete(flatGroupKey)
-                            else next.add(flatGroupKey)
-                            return next
-                          })}
-                          className="grid size-5 place-items-center rounded text-foreground/35 opacity-0 transition-opacity titlebar-no-drag hover:bg-foreground/[0.08] hover:text-foreground/70 group-hover/date-header:opacity-100"
-                        >
-                          <ChevronRight
-                            size={12}
-                            className={cn('transition-transform duration-fast', isFlatGroupCollapsed ? '' : 'rotate-90')}
-                          />
-                        </button>
-                      </div>
-                      {!isFlatGroupCollapsed && (
-                        <div className="flex flex-col gap-0.5">
-                          {groupItems.map(renderAgentFlatSessionTree)}
-                        </div>
-                      )}
-                    </div>
-                  )
-                }
-                return <>{visibleGroups}</>
-              })()
-            ) : (
-              <div className="px-2 py-8 text-center text-[13px] text-foreground/35">暂无会话</div>
-            )
-
-            return (
-              <>
-                {flatContent}
-                {hiddenFlat > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFlatModeExpanded(true)}
-                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-                  >
-                    显示更多 ({hiddenFlat})
-                  </button>
-                )}
-                {flatModeExpanded && totalFlatSessions > PROJECT_SESSION_PREVIEW_LIMIT && (
-                  <button
-                    type="button"
-                    onClick={() => setFlatModeExpanded(false)}
-                    className="text-left px-1.5 py-1 rounded-md text-[12px] text-foreground/35 hover:bg-foreground/[0.03] hover:text-foreground/60 transition-colors titlebar-no-drag"
-                  >
-                    收起
-                  </button>
-                )}
-              </>
-            )
-          })()}
-        </div>
+        <VirtualSidebarList
+          key="chat-active-list"
+          className="flex-1"
+          rows={chatActiveVirtualRows}
+          activeRowId={activeSessionId ? `chat-${activeSessionId}` : null}
+        />
+      ) : mode === 'agent' && viewMode === 'active' ? (
+        <VirtualSidebarList
+          key="agent-active-list"
+          className="flex-1 px-2 pb-3"
+          rows={agentActiveVirtualRows}
+          activeRowId={activeSessionId ? `agent-${activeSessionId}` : null}
+        />
       ) : (
         <>
           {/* 归档视图标题栏（仅 Chat 模式可达：Agent 模式归档已并入上方「分组方式：日期」+「状态：已归档/全部」） */}
@@ -4312,6 +4390,56 @@ const ChildSessionItem = React.memo(function ChildSessionItem({
   )
 })
 
+interface DelegatedChildSessionItemProps {
+  session: AgentSessionMeta
+  activeSessionId: string | null
+  agentIndicatorMap: Map<string, SessionIndicatorStatus>
+  relativeTimeNow: number
+  workspaceName?: string
+  onSelect: (id: string, title: string) => void
+  onRequestDelete: (id: string) => void
+  onRequestMove: (id: string) => void
+  onRename: (id: string, newTitle: string) => Promise<void>
+  onTogglePin: (id: string, cascade: boolean) => Promise<void>
+  onToggleStar: (id: string) => Promise<void>
+  onToggleArchive: (id: string) => Promise<void>
+}
+
+/** 归档虚拟列表专用的轻量委派子会话行：不接入分组菜单，避免归档场景加载额外依赖。 */
+const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem({
+  session,
+  activeSessionId,
+  agentIndicatorMap,
+  relativeTimeNow,
+  workspaceName,
+  onSelect,
+  onRequestDelete,
+  onRequestMove,
+  onRename,
+  onTogglePin,
+  onToggleStar,
+  onToggleArchive,
+}: DelegatedChildSessionItemProps): React.ReactElement {
+  const status = getSessionStatus(session, agentIndicatorMap)
+
+  return (
+    <AgentSessionItem
+      session={session}
+      active={session.id === activeSessionId}
+      indicatorStatus={status}
+      relativeTimeNow={relativeTimeNow}
+      workspaceName={workspaceName}
+      onSelect={onSelect}
+      onRequestDelete={onRequestDelete}
+      onRequestMove={onRequestMove}
+      onRename={onRename}
+      onTogglePin={onTogglePin}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+    />
+  )
+})
+
 // ===== 工作区分组历史 =====
 
 interface DraftSessionRecallSectionProps {
@@ -4433,6 +4561,67 @@ function ProjectSessionList({
   )
 }
 
+interface VisibleAgentProjectSessions {
+  treeItems: AgentSessionTreeItem[]
+  sessions: AgentSessionTreeItem[]
+  hiddenCount: number
+  activeIds: Set<string>
+}
+
+function getVisibleAgentProjectSessions({
+  group,
+  activeSessionId,
+  agentIndicatorMap,
+  relativeTimeNow,
+  extraCount,
+  previousActiveIds = new Set<string>(),
+}: {
+  group: AgentProjectGroup
+  activeSessionId: string | null
+  agentIndicatorMap: Map<string, SessionIndicatorStatus>
+  relativeTimeNow: number
+  extraCount: number
+  previousActiveIds?: ReadonlySet<string>
+}): VisibleAgentProjectSessions {
+  const recentCutoff = relativeTimeNow - PROJECT_SESSION_RECENT_WINDOW_MS
+  const treeItems = buildAgentSessionTrees(group.sessions)
+  const activeSessions = treeItems
+    .filter((item) => (
+      ACTIVE_SESSION_STATUSES.has(getSessionTreeStatus(item, agentIndicatorMap))
+      || (item.session.id === activeSessionId && previousActiveIds.has(item.session.id))
+    ))
+    .slice()
+    .sort((a, b) => {
+      const delta = ACTIVE_SESSION_STATUS_PRIORITY[getSessionTreeStatus(a, agentIndicatorMap)]
+        - ACTIVE_SESSION_STATUS_PRIORITY[getSessionTreeStatus(b, agentIndicatorMap)]
+      if (delta !== 0) return delta
+      return b.session.updatedAt - a.session.updatedAt
+    })
+  const activeIds = collectAgentSessionTreeIds(activeSessions)
+  const fillSessions = treeItems
+    .filter((item) => !activeIds.has(item.session.id) && item.session.updatedAt >= recentCutoff)
+    .slice(0, PROJECT_SESSION_PREVIEW_LIMIT)
+  const collapsedSessions = [...activeSessions, ...fillSessions]
+  const collapsedIds = new Set(collapsedSessions.map((item) => item.session.id))
+  const remainingSessions = treeItems.filter((item) => !collapsedIds.has(item.session.id))
+  const extraSessions = remainingSessions.slice(0, extraCount)
+  const sessionsWithoutPinned = [...collapsedSessions, ...extraSessions]
+  const currentSession = activeSessionId && !isAgentSessionVisibleInTrees(sessionsWithoutPinned, activeSessionId)
+    ? treeItems.find((item) => treeContainsSessionId(item, activeSessionId)) ?? null
+    : null
+  const sessions = currentSession
+    ? [...activeSessions, currentSession, ...fillSessions, ...extraSessions]
+    : sessionsWithoutPinned
+
+  return {
+    treeItems,
+    sessions,
+    hiddenCount: Math.max(0, treeItems.length - sessions.length),
+    activeIds,
+  }
+}
+
+/** 项目分组历史 */
 interface AgentProjectGroupItemProps {
   group: AgentProjectGroup
   currentWorkspaceId: string | null
@@ -4477,6 +4666,8 @@ interface AgentProjectGroupItemProps {
   onToggleStar: (id: string) => Promise<void>
   onToggleArchive: (id: string) => Promise<void>
   onToggleDelegationParent: (id: string, expanded: boolean) => void
+  /** 虚拟侧栏只复用项目头部，项目会话行由外层 VirtualSidebarList 单独挂载。 */
+  hideSessions?: boolean
 }
 
 const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
@@ -4519,6 +4710,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
   onToggleStar,
   onToggleArchive,
   onToggleDelegationParent,
+  hideSessions = false,
 }: AgentProjectGroupItemProps): React.ReactElement {
   const isCurrent = group.workspace.id === currentWorkspaceId
 
@@ -4560,66 +4752,21 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
       setRenamingWorkspace(false)
     }
   }
-  const recentCutoff = relativeTimeNow - PROJECT_SESSION_RECENT_WINDOW_MS
-  // 折叠时：所有"活跃"会话（运行中 / 阻塞 / 未查看的已完成）必须展示，
-  // 不受 PROJECT_SESSION_PREVIEW_LIMIT 与 3 天窗口限制；活跃部分内部按
-  // blocked > running > completed 优先级排序（与 railRecentItems 对齐），
-  // 同优先级保留 group.sessions 的 updatedAt 倒序。
-  // 当前选中的会话（activeSessionId）也必须出现在折叠列表中，无论 updatedAt 多旧、
-  // 状态如何，确保从搜索结果打开旧会话时左侧栏立即可见，不必等待 agent 完成。
-  // 非活跃部分仍保留原"最近 3 天 + 至多 5 条"预览策略，作为额外补充展示。
-  // 用户点击"显示更多"会在折叠基线之上每次再额外展开 PROJECT_SESSION_EXPAND_STEP 条。
-  // 会话列表恒定按时间平铺（不再按 craft Project 分子组），项目导航已上移到 ProjectSwitcher。
-  const treeItems = sortSessionTrees(buildAgentSessionTrees(group.sessions), 'recency')
   const prevActiveIdsRef = React.useRef<Set<string>>(new Set())
-  const activeSessions = treeItems
-    .filter((item) =>
-      ACTIVE_SESSION_STATUSES.has(getSessionTreeStatus(item, agentIndicatorMap))
-      // 当用户点击"查看"时，会话的 completed 指示器被清除，但它仍是当前选中会话——
-      // 若它上一帧还在 activeSessions 中，保持其位置不变以避免视觉跳动
-      || (item.session.id === activeSessionId && prevActiveIdsRef.current.has(item.session.id))
-    )
-    .slice()
-    .sort((a, b) => {
-      const delta = ACTIVE_SESSION_STATUS_PRIORITY[getSessionTreeStatus(a, agentIndicatorMap)]
-        - ACTIVE_SESSION_STATUS_PRIORITY[getSessionTreeStatus(b, agentIndicatorMap)]
-      if (delta !== 0) return delta
-      return getSessionTreeActivityAt(b) - getSessionTreeActivityAt(a)
-    })
-  const activeIds = collectAgentSessionTreeIds(activeSessions)
+  const visibleAgentProjectSessions = getVisibleAgentProjectSessions({
+    group,
+    activeSessionId,
+    agentIndicatorMap,
+    relativeTimeNow,
+    extraCount,
+    previousActiveIds: prevActiveIdsRef.current,
+  })
+  const { treeItems, activeIds } = visibleAgentProjectSessions
   React.useEffect(() => { prevActiveIdsRef.current = activeIds })
-  // 非活跃部分按自然策略（最近 3 天窗口 + 预览上限）计算，且不依赖当前选中态，
-  // 保持 group.sessions 的 updatedAt 倒序——这样点击已可见会话时顺序保持稳定，
-  // 不会因为它变成 activeSessionId 而被提到顶部。
-  const fillSessions = treeItems
-    .filter((item) =>
-      !activeIds.has(item.session.id)
-      && getSessionTreeActivityAt(item) >= recentCutoff
-    )
-    .slice(0, PROJECT_SESSION_PREVIEW_LIMIT)
-  // 先拼不含置顶项的可见列表
-  const collapsedSessions = [...activeSessions, ...fillSessions]
-  const collapsedIds = new Set(collapsedSessions.map((item) => item.session.id))
-  const remainingSessions = treeItems.filter((item) => !collapsedIds.has(item.session.id))
-  const extraSessions = extraCount > 0 ? remainingSessions.slice(0, extraCount) : []
-  const sessionsWithoutPinned = [...collapsedSessions, ...extraSessions]
-  // 仅当选中会话不在当前可见列表中时才置顶（如搜索结果打开旧会话），
-  // 若会话已在可见区域则保持原位不跳
-  const currentSession = activeSessionId && !isAgentSessionVisibleInTrees(sessionsWithoutPinned, activeSessionId)
-    ? treeItems.find((item) => treeContainsSessionId(item, activeSessionId)) ?? null
-    : null
-  const pinnedCurrent = currentSession ? [currentSession] : []
-  let sessions = pinnedCurrent.length > 0
-    ? [...activeSessions, ...pinnedCurrent, ...fillSessions, ...extraSessions]
-    : sessionsWithoutPinned
-  let hiddenCount = Math.max(0, treeItems.length - sessions.length)
-
   // 自动任务组：由父组件统一「最多 4 个 + 显示更多/收起」折叠，内部不再做活跃/时间窗/分页的二次筛选，
   // 按 recency 平铺渲染，避免组内出现活跃优先排序或额外的「显示更多」按钮造成双重折叠。
-  if (isAutomationGroup) {
-    sessions = treeItems
-    hiddenCount = 0
-  }
+  const sessions = isAutomationGroup ? treeItems : visibleAgentProjectSessions.sessions
+  const hiddenCount = isAutomationGroup ? 0 : visibleAgentProjectSessions.hiddenCount
 
   return (
     <section
@@ -4774,6 +4921,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
       </div>
       )}
 
+      {!hideSessions && (
       <ProjectSessionList
         id={`project-sessions-${group.workspace.id}`}
         collapsed={collapsed}
@@ -4937,6 +5085,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
           </div>
         )}
       </ProjectSessionList>
+      )}
       {dropPosition === 'after' && (
         <div className="absolute -bottom-0.5 left-3 right-3 h-0.5 rounded-full bg-primary z-10" />
       )}
