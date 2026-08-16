@@ -746,6 +746,18 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
     suppressAutoExpandRef.current = false
   }, [anyFeatureActiveValue])
+  // 功能组展开期间，点击功能组外部任意位置（侧边栏其他模块 / 会话列表 / 内容区）自动收起。
+  React.useEffect(() => {
+    if (featuresCollapsed) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (target && featuresModuleRef.current && !featuresModuleRef.current.contains(target)) {
+        setFeaturesCollapsed(true)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [featuresCollapsed])
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
   const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
