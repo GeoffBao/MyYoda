@@ -16,19 +16,25 @@ const STATUS_PRIORITY: Record<SessionIndicatorStatus, number> = {
 
 /**
  * 找到会话在当前可见集合中的根节点。
- * 父会话缺失时保留自身为根；遇到损坏的循环关系也退化为自身，避免隐藏会话。
+ * 父会话缺失时保留自身为根，避免隐藏会话；遇到损坏的循环关系也退化为自身。
+ * 但委派子会话（isDelegatedChildSession）是例外：它们的存在意义完全依附于父会话，
+ * 若父会话尚未到达 renderer（冗生启动常见时序竞态），宁可暂时不渲染也不能退化为独立根行，
+ * 否则父会话到达后会瞬间从根节点切换为嵌套节点，产生可见的闪烁/重复。
  */
 function findRootSessionId(
   session: AgentSessionMeta,
   byId: Map<string, AgentSessionMeta>,
-): string {
+): string | undefined {
   let current = session
   const visited = new Set<string>([session.id])
 
   while (current.parentSessionId) {
     const parent = byId.get(current.parentSessionId)
-    // 上层祖先被筛掉时，以最近仍可见的祖先为根，而不是把每个后代都拆成根行。
-    if (!parent) return current.id
+    if (!parent) {
+      if (isDelegatedChildSession(current)) return undefined
+      // 上层祖先被筛掉时，以最近仍可见的祖先为根，而不是把每个后代都拆成根行。
+      return current.id
+    }
     if (visited.has(parent.id)) return session.id
     visited.add(parent.id)
     current = parent
@@ -75,6 +81,8 @@ export function buildAgentSessionTrees(
 
   for (const session of visibleSessions) {
     const rootId = findRootSessionId(session, byId)
+    // 孤儿委派子会话（父会话尚未到达）暂不进树，等父会话到达后自然挂载，避免先显示为根再合并进嵌套节点的闪烁。
+    if (rootId === undefined) continue
     rootIdBySessionId.set(session.id, rootId)
     if (rootId === session.id) continue
     const children = childrenByRootId.get(rootId) ?? []

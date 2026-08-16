@@ -47,8 +47,8 @@ import { AgentStreamForwarder } from './agent-stream-forwarder'
 // ===== 实例创建 =====
 
 const eventBus = new AgentEventBus()
-const useUtilityAgentRuntime = process.env.PROMA_AGENT_RUNTIME !== 'in-process'
-  && process.env.PROMA_AGENT_RUNTIME !== 'off'
+const useUtilityAgentRuntime = process.env.MYYODA_AGENT_RUNTIME !== 'in-process'
+  && process.env.MYYODA_AGENT_RUNTIME !== 'off'
 const adapter = useUtilityAgentRuntime
   ? new PiUtilityAdapter(agentRuntimeClient)
   : new PiAgentAdapter()

@@ -42,6 +42,25 @@ describe('buildAgentSessionTrees', () => {
     expect(trees.map((tree) => tree.session.id)).toEqual(['orphan'])
   })
 
+  test('委派子会话的父会话尚未到达时暂不渲染为根，避免父会话到达后重复/闪烁', () => {
+    const trees = buildAgentSessionTrees([
+      session('delegated-orphan', { parentSessionId: 'missing', sourceDelegationId: 'delegation-1' }),
+      session('normal'),
+    ])
+
+    expect(trees.map((tree) => tree.session.id)).toEqual(['normal'])
+  })
+
+  test('委派子会话父会话到达后，正常挂载为子节点（非孤儿场景不受影响）', () => {
+    const trees = buildAgentSessionTrees([
+      session('delegated-child', { parentSessionId: 'parent', sourceDelegationId: 'delegation-1' }),
+      session('parent'),
+    ])
+
+    expect(trees.map((tree) => tree.session.id)).toEqual(['parent'])
+    expect(trees[0]?.childSessions.map((child) => child.id)).toEqual(['delegated-child'])
+  })
+
   test('可见父节点的上层祖先被过滤时，后代仍挂到最近可见父节点', () => {
     const trees = buildAgentSessionTrees([
       session('child', { parentSessionId: 'filtered-root' }),
