@@ -214,9 +214,6 @@ interface AgentMessagesProps {
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
   onCompact?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
-  onCreateTodo?: (text: string) => void
   /** 将单条 Agent 历史选区写为当前 RichTextInput 的内联 mention。 */
   onAddHistoryQuote?: (quote: QuotedSelection) => boolean
   /** 已发送的 Agent 历史引用 chip 点击后请求定位与高亮。 */
@@ -305,12 +302,12 @@ function EmptyState({ sessionId, workspaceId }: { sessionId: string; workspaceId
   return <WelcomeEmptyState sessionId={sessionId} workspaceId={workspaceId} />
 }
 
-function AssistantLogo({ model }: { model?: string }): React.ReactElement {
+function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   if (model) {
     return (
       <img
-        src={getModelLogo(model, resolveModelProvider(model, channels))}
+        src={getModelLogo(model, resolveModelProvider(model, channels, channelId))}
         alt={model}
         className="size-[30px] rounded-[9px] object-cover"
       />
@@ -610,11 +607,8 @@ interface AgentTranscriptHistoryProps {
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-  onCreateTodo?: (text: string) => void
   onRetry?: () => void
   onRetryInNewSession?: () => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
   onCompact?: () => void
 }
 
@@ -636,11 +630,8 @@ const AgentTranscriptHistory = React.forwardRef<AgentTranscriptHistoryHandle, Ag
   onFork,
   onRewind,
   onAgentHistoryQuoteClick,
-  onCreateTodo,
   onRetry,
   onRetryInNewSession,
-  onRelinkProjectRoot,
-  onRestoreProjectRoot,
   onCompact,
 }, ref): React.ReactElement {
   const { scrollRef, isAtBottom, stopScroll } = useStickToBottomContext()
@@ -818,11 +809,8 @@ const AgentTranscriptHistory = React.forwardRef<AgentTranscriptHistoryHandle, Ag
               onFork={shouldDisableActions ? undefined : onFork}
               onRewind={shouldDisableActions ? undefined : onRewind}
               onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
-              onCreateTodo={shouldDisableActions ? undefined : onCreateTodo}
               onRetry={shouldDisableActions ? undefined : onRetry}
               onRetryInNewSession={shouldDisableActions ? undefined : onRetryInNewSession}
-              onRelinkProjectRoot={shouldDisableActions ? undefined : onRelinkProjectRoot}
-              onRestoreProjectRoot={shouldDisableActions ? undefined : onRestoreProjectRoot}
               onCompact={shouldDisableActions ? undefined : onCompact}
               historyTurn={groupHistoryTurns.get(group)}
               isStreaming={isLive || undefined}
@@ -848,11 +836,8 @@ export const AgentMessages = React.memo(function AgentMessages({
   stoppedByUser,
   onRetry,
   onRetryInNewSession,
-  onRelinkProjectRoot,
-  onRestoreProjectRoot,
   onFork,
   onRewind,
-  onCreateTodo,
   onCompact,
   onAddHistoryQuote,
   onAgentHistoryQuoteClick,
@@ -972,7 +957,8 @@ export const AgentMessages = React.memo(function AgentMessages({
   // 从 streamState 属性中计算派生值
   const streamingContent = streamState?.content ?? ''
   const streamingModelId = streamState?.model || sessionModelId
-  const agentStreamingModel = streamingModelId ? resolveModelDisplayName(streamingModelId, channels) : undefined
+  const streamingChannelId = streamState?.channelId
+  const agentStreamingModel = streamingModelId ? resolveModelDisplayName(streamingModelId, channels, streamingChannelId) : undefined
   const retrying = streamState?.retrying
   const startedAt = streamState?.startedAt
 
@@ -1233,11 +1219,8 @@ export const AgentMessages = React.memo(function AgentMessages({
                 onFork={onFork}
                 onRewind={onRewind}
                 onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
-                onCreateTodo={onCreateTodo}
                 onRetry={onRetry}
                 onRetryInNewSession={onRetryInNewSession}
-                onRelinkProjectRoot={onRelinkProjectRoot}
-                onRestoreProjectRoot={onRestoreProjectRoot}
                 onCompact={onCompact}
               />
 
@@ -1258,7 +1241,7 @@ export const AgentMessages = React.memo(function AgentMessages({
                   <MessageHeader
                     model={agentStreamingModel}
                     time={formatMessageTime(Date.now())}
-                    logo={<AssistantLogo model={streamingModelId} />}
+                    logo={<AssistantLogo model={streamingModelId} channelId={streamingChannelId} />}
                   />
                   <MessageContent>
                     {retrying && <RetryingNotice retrying={retrying} />}

@@ -106,10 +106,6 @@ export interface SDKMessageRendererProps {
   sessionModelId?: string
   /** 用户引用历史消息中的文本时回调 */
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-  /** 将本轮回复标记为 Todo */
-  onCreateTodo?: (text: string) => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
 }
 
 // ===== system 消息：上下文压缩分割线 =====
@@ -290,12 +286,12 @@ function extractToolResultForTask(message: SDKUserMessage, resultBlock: SDKToolR
 
 // ===== 助手头像 =====
 
-function AssistantLogo({ model }: { model?: string }): React.ReactElement {
+function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   if (model) {
     return (
       <img
-        src={getModelLogo(model, resolveModelProvider(model, channels))}
+        src={getModelLogo(model, resolveModelProvider(model, channels, channelId))}
         alt={model}
         className="size-[30px] rounded-[9px] object-cover"
       />
@@ -415,13 +411,9 @@ export interface AssistantTurnRendererProps {
   sessionModelId?: string
   /** 用户引用历史消息中的文本时回调 */
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-  /** 将本轮回复标记为 Todo */
-  onCreateTodo?: (text: string) => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
 }
 
-export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, isStreaming, stoppedByUser, sessionModelId, onCreateTodo, onRelinkProjectRoot, onRestoreProjectRoot }: AssistantTurnRendererProps): React.ReactElement | null {
+export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
   const channels = useAtomValue(channelsAtom)
   // 收集所有 assistant 消息的内容块，保留 parent_tool_use_id 关联
   interface EnrichedBlock {
@@ -564,9 +556,9 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
   return (
     <Message from="assistant">
       <MessageHeader
-        model={turn.model ? resolveModelDisplayName(turn.model, channels) : undefined}
+        model={turn.model ? resolveModelDisplayName(turn.model, channels, turn.channelId) : undefined}
         time={turn.createdAt ? formatMessageTime(turn.createdAt) : undefined}
-        logo={<AssistantLogo model={turn.model} />}
+        logo={<AssistantLogo model={turn.model} channelId={turn.channelId} />}
       />
       <MessageContent>
         <TurnFileMapProvider map={turnFileMap}>
@@ -709,9 +701,9 @@ export function SDKMessageRenderer({
       <Message from="assistant">
         {showHeader && (
           <MessageHeader
-            model={model ? resolveModelDisplayName(model, channels) : undefined}
+            model={model ? resolveModelDisplayName(model, channels, aMsg._channelId) : undefined}
             time={meta.createdAt ? formatMessageTime(meta.createdAt) : undefined}
-            logo={<AssistantLogo model={model} />}
+            logo={<AssistantLogo model={model} channelId={aMsg._channelId} />}
           />
         )}
         <MessageContent>
@@ -1373,10 +1365,6 @@ export interface MessageGroupRendererProps {
   sessionModelId?: string
   /** 用户引用历史消息中的文本时回调 */
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
-  /** 将本轮回复标记为 Todo */
-  onCreateTodo?: (text: string) => void
-  onRelinkProjectRoot?: () => void
-  onRestoreProjectRoot?: () => void
 }
 
 /**
@@ -1425,7 +1413,7 @@ export function getGroupId(group: MessageGroup): string {
 
 // getGroupPreview 已迁移至 @myyoda/session-core（本文件从该包 import 并 re-export）
 
-export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, historyTurn, isStreaming, stoppedByUser, sessionModelId, onAgentHistoryQuoteClick, onCreateTodo, onRelinkProjectRoot, onRestoreProjectRoot }: MessageGroupRendererProps): React.ReactElement | null {
+export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, historyTurn, isStreaming, stoppedByUser, sessionModelId, onAgentHistoryQuoteClick }: MessageGroupRendererProps): React.ReactElement | null {
   const groupId = getGroupId(group)
 
   if (group.type === 'user') {
@@ -1469,9 +1457,6 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
         isStreaming={isStreaming}
         stoppedByUser={stoppedByUser}
         sessionModelId={sessionModelId}
-        onCreateTodo={onCreateTodo}
-        onRelinkProjectRoot={onRelinkProjectRoot}
-        onRestoreProjectRoot={onRestoreProjectRoot}
       />
     </div>
   )
@@ -1490,7 +1475,4 @@ export const MessageGroupRenderer = React.memo(function MessageGroupRenderer({ g
   && previous.sessionModelId === next.sessionModelId
   && previous.externalMetadataSignature === next.externalMetadataSignature
   && previous.onAgentHistoryQuoteClick === next.onAgentHistoryQuoteClick
-  && previous.onCreateTodo === next.onCreateTodo
-  && previous.onRelinkProjectRoot === next.onRelinkProjectRoot
-  && previous.onRestoreProjectRoot === next.onRestoreProjectRoot
 ))

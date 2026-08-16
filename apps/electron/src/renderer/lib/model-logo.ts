@@ -383,6 +383,7 @@ export function getChannelLogo(channel: { provider: ProviderType; baseUrl: strin
  */
 export function resolveModelDisplayName(modelId: string, channels: import('@myyoda/shared').Channel[], channelId?: string): string {
   for (const channel of channels) {
+    if (channelId && channel.id !== channelId) continue
     for (const model of channel.models) {
       if (model.id === modelId && model.name && model.name !== model.id) {
         return model.name
@@ -393,10 +394,11 @@ export function resolveModelDisplayName(modelId: string, channels: import('@myyo
 }
 
 /**
- * 根据模型 ID 在渠道列表中查找供应商类型
+ * 根据模型 ID 在渠道列表中查找供应商类型；提供 channelId 时只查该渠道。
  */
 export function resolveModelProvider(modelId: string, channels: import('@myyoda/shared').Channel[], channelId?: string): ProviderType | undefined {
   for (const channel of channels) {
+    if (channelId && channel.id !== channelId) continue
     for (const model of channel.models) {
       if (model.id === modelId) {
         return channel.provider
