@@ -175,6 +175,7 @@ import type { KanbanProject } from './kanban/types'
 import { SidebarModule } from './SidebarModule'
 import { SidebarProjectsTab, type ProjectSessionHandlers } from './SidebarProjectsTab'
 import { formatSidebarModuleCount } from './sidebar-module-model'
+import { anyFeatureActive, shouldShowFeatureItem, type FeatureItemKind } from './sidebar-features-model'
 
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
 import { AgentSessionItem, SessionItemActions, STATUS_DOT_CLASS } from './AgentSessionItem'
@@ -728,19 +729,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开。
-  // 注意：「发现」已是与「功能」并列的独立入口行，不应触发功能组展开（否则双击发现会误展开功能组）。
-  const anyFeatureActive =
-    activeView === 'planning'
-    || activeView === 'agent-skills'
-    || activeView === 'repo-wiki'
-    || activeView === 'excalidraw-gallery'
-    || activeView === 'excalidraw-editor'
-    || (mode === 'agent' && codeMainView === 'tasks' && activeView === 'conversations')
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠。
+  // 双模式：菜单模式（用户手动展开，显示全部二级目录）/ 指示模式（外部入口激活视图时自动展开，只显示激活项）。
+  // 注意：「发现」是独立入口行（位于搜索与功能之间，Agent / Chat 模式均显示），不应触发功能组展开（否则双击发现会误展开功能组）。
+  const featureCtx = { activeView, mode, codeMainView }
+  const anyFeatureActiveValue = anyFeatureActive(featureCtx)
   const [featuresCollapsed, setFeaturesCollapsed] = React.useState(true)
+  const [featuresShowingAll, setFeaturesShowingAll] = React.useState(false)
+  const featuresModuleRef = React.useRef<HTMLDivElement | null>(null)
+  // 功能组内点击二级目录时置位，抑制 anyFeatureActive 变化触发的自动展开（点击后要收起）。
+  const suppressAutoExpandRef = React.useRef(false)
   React.useEffect(() => {
-    if (anyFeatureActive) setFeaturesCollapsed(false)
-  }, [anyFeatureActive])
+    if (anyFeatureActiveValue && !suppressAutoExpandRef.current) {
+      setFeaturesCollapsed(false)
+      setFeaturesShowingAll(false)
+    }
+    suppressAutoExpandRef.current = false
+  }, [anyFeatureActiveValue])
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
   const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
@@ -1081,6 +1086,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
     setActiveView('discover')
   }, [activeView, setActiveView])
+
+  /** 功能组内点击二级目录：打开对应视图后自动收起功能组 */
+  const navigateFromFeatureGroup = React.useCallback((action: () => void): void => {
+    suppressAutoExpandRef.current = true
+    action()
+    setFeaturesCollapsed(true)
+  }, [])
 
   /** 打开唯一正式任务看板；重复点击保持当前页面，不隐式退回会话。 */
   const handleOpenTaskBoard = React.useCallback((): void => {
@@ -3872,6 +3884,19 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         />
       </div>
 
+      {/* 发现：官方内容流 + 社区讨论 + 反馈（Agent / Chat 模式均显示的独立入口行，位于搜索与功能之间） */}
+      <div className="sidebar-module-zone px-3 pt-0.5 pb-0.5">
+        <SidebarModule
+          icon={Compass}
+          title="发现"
+          active={activeView === 'discover'}
+          count={discoverUnreadTotal > 0 ? discoverUnreadTotal : undefined}
+          badgeTone="accent"
+          onClick={handleOpenDiscover}
+          ariaLabel="发现"
+        />
+      </div>
+
       {/* 功能模块区：Task 日历 / 看板 / 画布 / 插件 / 知识库 收敛为可折叠「功能」组（默认折叠，回归 Proma 简洁样式） */}
       <div className="sidebar-module-zone px-3 pt-1 pb-0.5">
         <SidebarModule
@@ -3983,21 +4008,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           </div>
         </SidebarModule>
       </div>
-
-      {/* 发现：官方内容流 + 社区讨论 + 反馈（与「功能」并列的独立入口行） */}
-      {mode === 'agent' && (
-        <div className="sidebar-module-zone px-3 pt-0.5 pb-0.5">
-          <SidebarModule
-            icon={Compass}
-            title="发现"
-            active={activeView === 'discover'}
-            count={discoverUnreadTotal > 0 ? discoverUnreadTotal : undefined}
-            badgeTone="accent"
-            onClick={handleOpenDiscover}
-            ariaLabel="发现"
-          />
-        </div>
-      )}
 
       {/* Chat 模式 active 视图：置顶 + 对话历史，结构与 Agent active 视图保持一致 */}
       {mode === 'chat' && viewMode === 'active' ? (
