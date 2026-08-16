@@ -15,7 +15,7 @@
 
 ## 同步步骤（每晚执行）
 
-1. `cd /Users/admin/Workspace/ClaudeCode/LuxAgents && git checkout main && git pull origin main && git fetch upstream`
+1. `cd /Users/admin/Workspace/ClaudeCode/MyYoda && git checkout main && git pull origin main && git fetch upstream`
 2. `LAST=$(cat scripts/upstream-sync/LAST_SYNCED_UPSTREAM)`；`git log $LAST..upstream/main --oneline` 列出新提交。
    - **无新提交**：直接结束，不要发版。
 3. 逐个 `git show <commit> --stat` + 完整 diff，评估适配方式。
