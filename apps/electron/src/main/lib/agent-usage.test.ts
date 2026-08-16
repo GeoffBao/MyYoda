@@ -49,7 +49,7 @@ describe('agent-usage scanSessionLines', () => {
     const agg = scanSessionLines(lines, META)
     const day = agg.days['2026-08-01']
     expect(day).toBeDefined()
-    expect(day!.totalTokens).toBe(100 + 50 + 5)
+    expect(day!.totalTokens).toBe(100 + 20 + 5 + 50)
     expect(day!.inputTokens).toBe(100)
     expect(day!.outputTokens).toBe(50)
     expect(day!.cacheReadTokens).toBe(20)
@@ -198,7 +198,7 @@ describe('agent-usage computeTodayBucket', () => {
         days: {
           [todayKey]: {
             messages: 3,
-            totalTokens: 155,
+            totalTokens: 175,
             inputTokens: 100,
             outputTokens: 50,
             cacheReadTokens: 20,
@@ -224,8 +224,8 @@ describe('agent-usage computeTodayBucket', () => {
     const today = computeTodayBucket(sessions, now)
     expect(today.day).toBe(todayKey)
     expect(today.messages).toBe(3)
-    expect(today.totalTokens).toBe(155)
-    expect(today.models).toEqual([{ modelId: 'claude-sonnet-4', provider: 'anthropic', totalTokens: 155 }])
+    expect(today.totalTokens).toBe(175)
+    expect(today.models).toEqual([{ modelId: 'claude-sonnet-4', provider: 'anthropic', totalTokens: 175 }])
   })
 
   test('跨多个会话累加同一天的数据', () => {
