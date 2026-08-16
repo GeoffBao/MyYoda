@@ -1,4 +1,4 @@
-# session-cleanermyyoda CLI 参考
+# session-cleaner MyYoda CLI 参考
 
 本技能是 `myyoda` CLI 的薄封装。本文件给维护者解释**底层格式**与**CLI 行为**，便于排查问题。
 真正的解析逻辑在 `@myyoda/session-core`（仓库内唯一真源），不要在技能里重抄。
