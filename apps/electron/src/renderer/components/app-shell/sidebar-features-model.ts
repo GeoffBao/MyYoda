@@ -4,7 +4,7 @@
 import type { AppMode } from '@/atoms/app-mode'
 import type { CodeMainView } from '@/atoms/project-atoms'
 
-export type FeatureItemKind = 'planning' | 'board' | 'canvas' | 'skills' | 'wiki'
+export type FeatureItemKind = 'planning' | 'board' | 'canvas' | 'skills' | 'messaging' | 'wiki'
 
 export interface FeatureViewContext {
   activeView: string
@@ -18,6 +18,7 @@ export const FEATURE_ITEMS: ReadonlyArray<{ kind: FeatureItemKind; agentOnly: bo
   { kind: 'board', agentOnly: true },
   { kind: 'canvas', agentOnly: true },
   { kind: 'skills', agentOnly: true },
+  { kind: 'messaging', agentOnly: true },
   { kind: 'wiki', agentOnly: true },
 ]
 
@@ -34,6 +35,8 @@ export function isFeatureItemActive(kind: FeatureItemKind, ctx: FeatureViewConte
       return ctx.activeView === 'excalidraw-gallery' || ctx.activeView === 'excalidraw-editor'
     case 'skills':
       return ctx.activeView === 'agent-skills'
+    case 'messaging':
+      return ctx.activeView === 'messaging'
     case 'wiki':
       return ctx.activeView === 'repo-wiki'
   }
