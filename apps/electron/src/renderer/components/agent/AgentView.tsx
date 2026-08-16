@@ -2992,8 +2992,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     sessionAgentRuntime,
     backgroundWaiting,
     sessionId,
-    agentThinking,
-    setAgentThinking,
     streaming,
     handleAttachContent,
     handleCompact,
