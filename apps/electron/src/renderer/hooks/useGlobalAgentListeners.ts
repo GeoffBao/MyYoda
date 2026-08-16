@@ -616,6 +616,21 @@ export function useGlobalAgentListeners(): void {
               map.set(status.sessionId, restoreQueuedMessageToFront(map.get(status.sessionId) ?? [], dispatched.message))
               return map
             })
+          } else {
+            // renderer 重载等场景丢失在途记录：用 status 携带的信息重建最小展示条目，
+            // 避免消息在主进程队首被抑制但队列 UI 不可见。
+            const fallbackMessage: import('@/lib/agent-message-queue').AgentQueuedMessage = {
+              id: status.messageId,
+              text: status.rawUserMessage ?? status.userMessage,
+              createdAt: status.startedAt,
+            }
+            store.set(agentSessionMessageQueueAtom, (prev) => {
+              const current = prev.get(status.sessionId) ?? []
+              if (current.some((item) => item.id === status.messageId)) return prev
+              const map = new Map(prev)
+              map.set(status.sessionId, restoreQueuedMessageToFront(current, fallbackMessage))
+              return map
+            })
           }
           const optimisticUuid = `queued-${status.messageId}`
           store.set(liveMessagesMapAtom, (prev) => {

@@ -15,6 +15,11 @@ function makeInput(sessionId: string, messageId: string): AgentDeferredQueueMess
     userMessage: `message-${messageId}`,
     rawUserMessage: `raw-${messageId}`,
     channelId: 'channel-1',
+    displaySnapshot: {
+      id: messageId,
+      text: `raw-${messageId}`,
+      createdAt: Date.now(),
+    },
   }
 }
 
@@ -192,5 +197,45 @@ describe('AgentQueueCoordinator（排队消息主进程调度）', () => {
     coordinator.onRunComplete('s1', 'm1', false, false)
     expect(startCalls).toHaveLength(2)
     expect(startCalls[1]?.input.queueMessageId).toBe('m2')
+  })
+
+  test('Given 展示投影随入队暂存 When listSnapshots Then 按队列顺序返回未派发消息（供 renderer 重载重建 UI）', () => {
+    let active = true
+    const { coordinator } = makeCoordinator({ isActive: () => active })
+    coordinator.enqueue(makeInput('s1', 'm1'))
+    coordinator.enqueue(makeInput('s1', 'm2'))
+
+    expect(coordinator.listSnapshots('s1').map((snapshot) => snapshot.id)).toEqual(['m1', 'm2'])
+    expect(coordinator.listSnapshots('unknown')).toEqual([])
+
+    // 派发中的消息不再出现在快照里（renderer 拉取时不会把已 started 的消息加回队列）
+    active = false
+    coordinator.onRunComplete('s1', undefined, false, false)
+    expect(coordinator.listSnapshots('s1').map((snapshot) => snapshot.id)).toEqual(['m2'])
+
+    // 取消后不再返回
+    coordinator.cancel({ sessionId: 's1', messageId: 'm2' })
+    expect(coordinator.listSnapshots('s1')).toEqual([])
+  })
+
+  test('Given 派发失败放回队首 When listSnapshots Then 快照包含失败消息的展示投影', () => {
+    const { coordinator } = makeCoordinator()
+    coordinator.enqueue(makeInput('s1', 'm1'))
+    coordinator.onRunFailed('s1', 'm1')
+
+    const snapshots = coordinator.listSnapshots('s1')
+    expect(snapshots.map((snapshot) => snapshot.id)).toEqual(['m1'])
+    expect(snapshots[0]?.text).toBe('raw-m1')
+  })
+
+  test('Given 入队时未带展示投影 When listSnapshots Then 过滤该条目不返回', () => {
+    let active = true
+    const { coordinator } = makeCoordinator({ isActive: () => active })
+    const withoutSnapshot = { ...makeInput('s1', 'm1') }
+    delete withoutSnapshot.displaySnapshot
+    coordinator.enqueue(withoutSnapshot)
+    coordinator.enqueue(makeInput('s1', 'm2'))
+
+    expect(coordinator.listSnapshots('s1').map((snapshot) => snapshot.id)).toEqual(['m2'])
   })
 })

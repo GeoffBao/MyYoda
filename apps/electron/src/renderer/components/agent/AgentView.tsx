@@ -518,6 +518,30 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const [queuedMessages, setQueuedMessages] = useAtom(agentMessageQueueAtomFamily(sessionId))
   const workspaces = useAtomValue(agentWorkspacesAtom)
+
+  // ===== 队列展示投影水合 =====
+  // renderer 重载后队列 atom 清空，但主进程 deferred queue 仍在：挂载时从主进程拉回
+  // 展示投影重建队列 UI。合并幂等：本地已存在的消息保留，只补回缺失的旧消息（旧消息在前，
+  // 保持 FIFO 顺序）。
+  React.useEffect(() => {
+    let cancelled = false
+    void window.electronAPI.getAgentQueuedMessages(sessionId)
+      .then((snapshots) => {
+        if (cancelled || snapshots.length === 0) return
+        setQueuedMessages((prev) => {
+          const existingIds = new Set(prev.map((message) => message.id))
+          const missing = snapshots
+            .filter((snapshot) => !existingIds.has(snapshot.id))
+            .map((snapshot) => snapshot as AgentQueuedMessage)
+          if (missing.length === 0) return prev
+          return [...missing, ...prev]
+        })
+      })
+      .catch((error) => {
+        console.warn('[AgentView] 恢复主进程队列展示投影失败:', error)
+      })
+    return () => { cancelled = true }
+  }, [sessionId, setQueuedMessages])
   // 保持 channelId 稳定：初始化前使用上次有效值，避免工具栏抖动
   const stableChannelIdRef = React.useRef(agentChannelId)
   if (agentChannelId) stableChannelIdRef.current = agentChannelId
@@ -1110,6 +1134,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       mentionedSessionIds: payload.mentions.mentionedSessionIds,
       mentionedTodoIds: payload.mentions.mentionedTodoIds,
       mentionedCalendarEventIds: payload.mentions.mentionedCalendarEventIds,
+      // 展示投影随入队一起交给主进程暂存，renderer 重载后据此重建队列 UI
+      displaySnapshot: message,
     }
   }, [agentModelId, currentWorkspaceId, permissionMode, sessionId])
 

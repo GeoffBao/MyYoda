@@ -3,11 +3,13 @@ import type {
   AgentDeferredQueueMessageInput,
   AgentMoveQueuedMessageInput,
   AgentQueuedMessageControlInput,
+  AgentQueuedMessageSnapshot,
   AgentQueuedMessageStatus,
 } from '@myyoda/shared'
 
 interface QueueEntry {
   input: AgentDeferredQueueMessageInput
+  displaySnapshot?: AgentQueuedMessageSnapshot
 }
 
 /** 派发中的条目：保留完整 input，失败时才能把消息放回队首。 */
@@ -54,9 +56,18 @@ export class AgentQueueCoordinator {
   enqueue(input: AgentDeferredQueueMessageInput): void {
     const queue = this.queues.get(input.sessionId) ?? []
     if (queue.some((entry) => entry.input.queueMessageId === input.queueMessageId)) return
-    queue.push({ input })
+    queue.push({ input, displaySnapshot: input.displaySnapshot })
     this.queues.set(input.sessionId, queue)
     this.tryDispatch(input.sessionId)
+  }
+
+  /** 返回指定会话当前队列的展示投影（不含已派发条目），供 renderer 重载后重建队列 UI。 */
+  listSnapshots(sessionId: string): AgentQueuedMessageSnapshot[] {
+    const queue = this.queues.get(sessionId)
+    if (!queue) return []
+    return queue
+      .map((entry) => entry.displaySnapshot)
+      .filter((snapshot): snapshot is AgentQueuedMessageSnapshot => snapshot !== undefined)
   }
 
   cancel(input: AgentQueuedMessageControlInput): boolean {
@@ -110,7 +121,7 @@ export class AgentQueueCoordinator {
     if (dispatching?.messageId !== queueMessageId) return
     this.dispatching.delete(sessionId)
     const queue = this.queues.get(sessionId) ?? []
-    queue.unshift({ input: dispatching.input })
+    queue.unshift({ input: dispatching.input, displaySnapshot: dispatching.input.displaySnapshot })
     this.queues.set(sessionId, queue)
     this.suppressed.set(sessionId, queueMessageId)
     const webContents = this.options.getWebContents(sessionId)

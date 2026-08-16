@@ -1575,6 +1575,44 @@ export interface AgentSendInput {
 export interface AgentDeferredQueueMessageInput extends AgentSendInput {
   /** 渲染进程生成的消息 ID（队列展示与乐观消息去重共用） */
   queueMessageId: string
+  /**
+   * 队列展示投影（renderer 入队时的完整消息快照）。
+   * 主进程仅暂存不消费，供 renderer 重载后通过 GET_QUEUED_MESSAGES 重建队列 UI。
+   */
+  displaySnapshot?: AgentQueuedMessageSnapshot
+}
+
+/**
+ * 队列消息的展示投影（renderer → 主进程暂存 → 重载后恢复）。
+ * 字段与 renderer 侧 AgentQueuedMessage 保持一致（含引用选区与附件元数据），
+ * 保证队列 UI 展示与撤回/提升操作在 renderer 重载后仍完整可用。
+ */
+export interface AgentQueuedMessageSnapshot {
+  id: string
+  text: string
+  createdAt: number
+  quotedSelection?: {
+    text: string
+    filePath: string
+    sourceType?: 'file' | 'agent-history' | 'scratch-pad'
+    sourceLabel?: string
+    messageId?: string
+    messageRole?: 'user' | 'assistant' | 'system'
+    startLine?: number
+    endLine?: number
+    selectionStart?: number
+    selectionEnd?: number
+    turn?: number
+    capturedAt: number
+  }
+  fileReferenceBlock?: string
+  attachments?: Array<{
+    filename: string
+    mediaType: string
+    size: number
+    targetPath: string
+  }>
+  additionalDirectories?: string[]
 }
 
 /** 流式追加消息的输入参数（Agent 流式中发送新消息） */
@@ -2456,6 +2494,8 @@ export const AGENT_IPC_CHANNELS = {
   QUEUE_MESSAGE: 'agent:queue-message',
   /** 排队消息交给主进程 deferred queue 调度（等待当前 run 结束后自动启动） */
   ENQUEUE_QUEUED_MESSAGE: 'agent:enqueue-queued-message',
+  /** 获取主进程 deferred queue 的展示投影（renderer 重载后重建队列 UI） */
+  GET_QUEUED_MESSAGES: 'agent:get-queued-messages',
   /** 取消队列消息 */
   CANCEL_QUEUED_MESSAGE: 'agent:cancel-queued-message',
   /** 调整主进程队列顺序 */

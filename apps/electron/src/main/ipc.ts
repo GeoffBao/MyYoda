@@ -321,7 +321,7 @@ import {
   searchAgentSessionMessages,
   searchAgentSessionReferences,
 } from './lib/agent-session-manager'
-import { runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, enqueueAgentQueuedMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, pokeAgentQueuedMessages, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
+import { runAgent, stopAgent, generateAgentTitle, saveFilesToAgentSession, saveFilesToWorkspaceFiles, isAgentSessionActive, queueAgentMessage, enqueueAgentQueuedMessage, cancelAgentQueuedMessage, moveAgentQueuedMessage, clearAgentQueuedMessages, getAgentQueuedMessageSnapshots, pokeAgentQueuedMessages, updateAgentPermissionMode, rewindAgentSession, setVisibleAgentSession } from './lib/agent-service'
 import { spawnExpertCowork } from './lib/agent-cowork'
 import { permissionService } from './lib/agent-permission-service'
 import { askUserService } from './lib/agent-ask-user-service'
@@ -3592,6 +3592,14 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.ENQUEUE_QUEUED_MESSAGE,
     async (event, input: import('@myyoda/shared').AgentDeferredQueueMessageInput): Promise<void> => {
       enqueueAgentQueuedMessage(input, event.sender)
+    }
+  )
+
+  // 获取主进程 deferred queue 的展示投影（renderer 重载后重建队列 UI）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_QUEUED_MESSAGES,
+    async (_, sessionId: string): Promise<import('@myyoda/shared').AgentQueuedMessageSnapshot[]> => {
+      return getAgentQueuedMessageSnapshots(sessionId)
     }
   )
 

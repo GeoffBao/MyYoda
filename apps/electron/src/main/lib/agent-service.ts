@@ -649,6 +649,11 @@ export function clearAgentQueuedMessages(sessionId: string): void {
   agentQueueCoordinator.clear(sessionId)
 }
 
+/** 返回指定会话 deferred queue 的展示投影（renderer 重载后重建队列 UI）。 */
+export function getAgentQueuedMessageSnapshots(sessionId: string): import('@myyoda/shared').AgentQueuedMessageSnapshot[] {
+  return agentQueueCoordinator.listSnapshots(sessionId)
+}
+
 /** 渠道配置变化后重新评估各会话队列（ipc.ts 渠道 handler 调用）。 */
 export function pokeAgentQueuedMessages(): void {
   agentQueueCoordinator.pokeAll()
