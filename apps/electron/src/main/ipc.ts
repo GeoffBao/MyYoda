@@ -3595,11 +3595,15 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 获取主进程 deferred queue 的展示投影（renderer 重载后重建队列 UI）
+  // 获取主进程 deferred queue 的展示投影（renderer 重载后重建队列 UI）。
+  // renderer 重新挂载/窗口重开是天然的重连信号：顺手 poke 一次，
+  // 让因 webContents 缺失而搁置的派发在 renderer 回来后恢复。
   ipcMain.handle(
     AGENT_IPC_CHANNELS.GET_QUEUED_MESSAGES,
     async (_, sessionId: string): Promise<import('@myyoda/shared').AgentQueuedMessageSnapshot[]> => {
-      return getAgentQueuedMessageSnapshots(sessionId)
+      const snapshots = getAgentQueuedMessageSnapshots(sessionId)
+      pokeAgentQueuedMessages()
+      return snapshots
     }
   )
 

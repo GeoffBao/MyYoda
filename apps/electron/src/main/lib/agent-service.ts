@@ -28,6 +28,7 @@ import type {
   AgentDeferredQueueMessageInput,
   AgentQueuedMessageControlInput,
   AgentMoveQueuedMessageInput,
+  AgentQueuedMessageSnapshot,
   MyYodaPermissionMode,
   AgentExternalRunSource,
   AgentMessage,
@@ -650,7 +651,7 @@ export function clearAgentQueuedMessages(sessionId: string): void {
 }
 
 /** 返回指定会话 deferred queue 的展示投影（renderer 重载后重建队列 UI）。 */
-export function getAgentQueuedMessageSnapshots(sessionId: string): import('@myyoda/shared').AgentQueuedMessageSnapshot[] {
+export function getAgentQueuedMessageSnapshots(sessionId: string): AgentQueuedMessageSnapshot[] {
   return agentQueueCoordinator.listSnapshots(sessionId)
 }
 
