@@ -110,6 +110,11 @@ export function isChildSession(session: AgentSessionMeta): boolean {
   return Boolean(session.parentSessionId)
 }
 
+/** 委派子会话必须跟随父会话展示，不能在父会话尚未加载时降级为根会话。 */
+export function isDelegatedChildSession(session: AgentSessionMeta): boolean {
+  return !!session.parentSessionId && !!session.sourceDelegationId
+}
+
 function fallbackSessionStatus(session: AgentSessionMeta): SessionIndicatorStatus {
   if (session.delegationStatus === 'running') return 'running'
   if (session.delegationStatus === 'failed') return 'blocked'

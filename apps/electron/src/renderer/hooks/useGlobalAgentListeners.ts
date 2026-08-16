@@ -729,7 +729,7 @@ export function useGlobalAgentListeners(): void {
                     const resolvedBoundary = {
                       ...(current[duplicateIndex] as unknown as Record<string, unknown>),
                     }
-                    delete resolvedBoundary._promaPendingAfterLiveAssistant
+                    delete resolvedBoundary._myyodaPendingAfterLiveAssistant
                     const next = [...current]
                     next[duplicateIndex] = resolvedBoundary as unknown as SDKMessage
                     map.set(sessionId, next)
@@ -741,12 +741,12 @@ export function useGlobalAgentListeners(): void {
 
               if (msgRecord.type === 'assistant') {
                 const pendingBoundaryIndex = current.findIndex((message) =>
-                  (message as Record<string, unknown>)._promaPendingAfterLiveAssistant === true
+                  (message as Record<string, unknown>)._myyodaPendingAfterLiveAssistant === true
                 )
                 if (pendingBoundaryIndex >= 0) {
                   const pendingBoundary = current[pendingBoundaryIndex] as unknown as Record<string, unknown>
                   const resolvedBoundary = { ...pendingBoundary }
-                  delete resolvedBoundary._promaPendingAfterLiveAssistant
+                  delete resolvedBoundary._myyodaPendingAfterLiveAssistant
                   map.set(sessionId, [
                     ...current.slice(0, pendingBoundaryIndex),
                     payload.message,

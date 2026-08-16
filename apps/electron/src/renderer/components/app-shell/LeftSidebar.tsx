@@ -108,6 +108,7 @@ import {
   getSessionTreeProgress,
   getSessionTreeStatus,
   hasTaskDraftAncestor,
+  isDelegatedChildSession,
   isTaskTree,
   sortSessionTrees,
   splitTaskTreeChildren,
@@ -986,6 +987,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const filtered = agentSessions.filter((s) =>
         s.pinned
         && !draftSessionIds.has(s.id)
+        && !isDelegatedChildSession(s)
         && !hasPinnedVisibleParent(s, sessionsById)
       )
       return sortAgentSessionsByUpdatedAtDesc(filtered)

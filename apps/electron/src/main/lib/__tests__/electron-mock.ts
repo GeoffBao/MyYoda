@@ -108,6 +108,34 @@ export function mockElectronModule(overrides: Record<string, unknown> = {}): voi
     webContents: {
       fromId: () => ({ send: () => undefined }),
     },
+    // agent-runtime-client 以值导入 utilityProcess / MessageChannelMain；
+    // 测试中不真正 fork utility 进程，仅需可解析的桩实现。
+    utilityProcess: {
+      fork: () => ({
+        on: () => undefined,
+        postMessage: () => undefined,
+        kill: () => undefined,
+      }),
+    },
+    MessageChannelMain: class MessageChannelMain {
+      port1 = createMockPort()
+      port2 = createMockPort()
+    },
+    MessagePortMain: class MessagePortMain {
+      on(): undefined { return undefined }
+      start(): undefined { return undefined }
+      postMessage(): undefined { return undefined }
+      close(): undefined { return undefined }
+    },
     ...overrides,
   }))
+}
+
+function createMockPort(): { on: () => undefined; start: () => undefined; postMessage: () => undefined; close: () => undefined } {
+  return {
+    on: () => undefined,
+    start: () => undefined,
+    postMessage: () => undefined,
+    close: () => undefined,
+  }
 }
