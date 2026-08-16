@@ -1,21 +1,22 @@
 # 侧边栏「功能」组自动折叠设计：菜单模式 + 指示模式
 
-日期：2026-08-16 · 状态：待用户审阅 · 涉及文件：`apps/electron/src/renderer/components/app-shell/LeftSidebar.tsx`
+日期：2026-08-16 · 状态：已按用户评审修订（点击二级目录后保持展开 + 只显示激活项，对齐项目会话列表「折叠态 peek」交互），已实施（commit `563ba15e7`）
 
 ## 一、背景与目标
 
 现状：「功能」组（计划 / 看板 / 画布 / 插件 / 知识库，`LeftSidebar.tsx` 的 `featuresCollapsed` 受控折叠组）默认折叠，点击头部展开后**保持展开**；点击二级目录打开视图后功能组不收起，且存在「任一功能视图激活时自动展开」的 `useEffect`（`anyFeatureActive`）。
 
-用户诉求：把「功能」组当「一次性菜单」使用——点开 → 选择二级目录 → 自动收起；点开但没点二级目录（点了别处/空白）→ 也自动收起。同时保留自动展开能力，但自动展开时**只显示当前激活的那一个二级目录项**（类似「项目下当前会话」只显示需要的部分），而不是整组铺开。
+用户诉求：把「功能」组当「一次性菜单」使用——点开 → 选择二级目录 → 打开视图后**只显示激活项**（其余项隐藏，保持展开）；点开但没点二级目录（点了别处/空白）→ 整体自动收起。同时保留自动展开能力，但自动展开时**只显示当前激活的那一个二级目录项**（对齐「项目会话列表」折叠态 peek 交互，2026-08-14 定稿的交互），而不是整组铺开。
 
 ## 二、行为规格（已与用户确认，不再讨论）
 
 | 场景 | 行为 |
 |---|---|
 | 手动点开「功能」头部 | 菜单模式：显示全部二级目录（计划 / 看板 / 画布 / 插件 / 知识库，后四项仅 Agent 模式） |
-| 点击某个二级目录项 | 打开对应视图 + 功能组自动收起（核心诉求） |
-| 点开后点击侧边栏其他区域 / 空白 / 内容区 | 功能组自动收起（无二级目录被选中） |
+| 点击某个二级目录项 | 打开对应视图 + 功能组**保持展开**，但只显示激活项（其余隐藏，高亮激活项）——修订后行为 |
+| 点开后点击侧边栏其他区域 / 空白 / 内容区 | 功能组整体自动收起（无二级目录被选中） |
 | 从折叠态图标、快捷键等外部入口激活功能视图 | 指示模式：功能组自动展开，**只显示当前激活的那一项**并高亮，其余项隐藏 |
+| 退出功能视图（回到会话 / 发现等） | 功能组自动折叠（`anyFeatureActive` 变 false） |
 | 指示模式下点击功能组头部 | 收起；再次点开进入菜单模式（显示全部） |
 | Chat 模式 | 功能组仅「计划」一项，两种模式行为无感知差异，逻辑一致生效 |
 
@@ -30,23 +31,22 @@ const [featuresCollapsed, setFeaturesCollapsed] = React.useState(true)
 // true = 菜单模式（用户手动展开，显示全部二级目录）
 // false = 指示模式（自动展开，只显示激活项）
 const [featuresShowingAll, setFeaturesShowingAll] = React.useState(false)
-// 抑制「功能组内点击」后 anyFeatureActive 变化触发的自动展开
-const suppressAutoExpandRef = React.useRef(false)
 ```
 
 ### 3.2 自动展开 effect（改造现有）
 
 ```ts
 React.useEffect(() => {
-  if (anyFeatureActive && !suppressAutoExpandRef.current) {
+  if (anyFeatureActive) {
     setFeaturesCollapsed(false)
-    setFeaturesShowingAll(false) // 外部激活 → 指示模式，只显示激活项
+    setFeaturesShowingAll(false) // 有激活视图 → 展开 + 指示模式，只显示激活项
+  } else {
+    setFeaturesCollapsed(true) // 无激活视图（回到会话/发现）→ 默认折叠
   }
-  suppressAutoExpandRef.current = false
 }, [anyFeatureActive])
 ```
 
-关键点：当前 `useEffect` 在点击二级目录后（`anyFeatureActive` 变 true）会把功能组**重新展开**，与「点击后自动收起」冲突。用 `suppressAutoExpandRef` 在功能组内点击时置位，effect 消费后复位，一次性抑制。
+关键点：早期设计（点击后整体收起）需要 `suppressAutoExpandRef` 抑制「点击后收起」与「自动展开」的冲突；修订后点击二级目录的目标状态（展开 + 指示模式）与 effect 一致，**不再需要 suppress**，effect 单一跟随 `anyFeatureActive`，逻辑更简。
 
 ### 3.3 功能组头部切换（onCollapsedChange）
 
@@ -63,9 +63,8 @@ onCollapsedChange={(next) => {
 
 ```ts
 const navigateFromFeatureGroup = (action: () => void): void => {
-  suppressAutoExpandRef.current = true
-  action()                      // 打开对应视图（复用现有 handleOpen*）
-  setFeaturesCollapsed(true)    // 自动收起
+  action()                    // 打开对应视图（复用现有 handleOpen*）
+  setFeaturesShowingAll(false) // 同步切指示模式（与 effect 一致，消除中间帧）
 }
 ```
 
@@ -108,7 +107,7 @@ React.useEffect(() => {
 
 | 情况 | 处理 |
 |---|---|
-| 指示模式下点二级目录（该项已激活） | 视为普通点击：`handleOpen*` 对已激活项会切回会话（现有 toggle 行为），随后收起 |
+| 指示模式下点激活项本身（如计划页点「计划」） | `handleOpen*` 对已激活项 toggle 回会话（现有行为）→ `anyFeatureActive` 变 false → effect 折叠，语义=退出该功能视图 |
 | 指示模式下点击非激活项（不可见，无入口） | 不发生；指示模式只显示激活项 |
 | 点击功能组头部快速连续切换 | 受控 state 同步，无额外风险 |
 | 模式切换（Agent ↔ Chat） | 不重置 `featuresCollapsed` / `featuresShowingAll`；Chat 下只有计划一项，两种模式渲染一致 |
@@ -123,10 +122,11 @@ React.useEffect(() => {
 
 ## 六、测试点
 
-1. 手动展开 → 显示全部 5 项；点击「计划」→ 计划页打开且功能组收起
-2. 手动展开 → 点击侧边栏空白/会话列表 → 功能组收起
+1. 手动展开 → 显示全部 5 项；点击「计划」→ 计划页打开，功能组保持展开且**只显示「计划」一项**（其余隐藏，计划高亮）
+2. 手动展开 → 点击侧边栏空白/会话列表 → 功能组整体收起
 3. 折叠态点「看板」图标 → 展开态功能组自动展开且只显示「看板」一项（高亮）
 4. 快捷键打开「计划」→ 同 3 的指示模式
 5. 指示模式点头部 → 收起；再点开 → 菜单模式显示全部
-6. Chat 模式下重复 1-5（只有「计划」）
-7. 功能组收起状态下打开功能视图后回到会话 → `anyFeatureActive` 变 false，无异常展开
+6. 指示模式点激活项本身 → 退出该功能视图回会话，功能组折叠
+7. 在功能视图内点会话 → 回会话且功能组折叠（`anyFeatureActive` 变 false）
+8. Chat 模式下重复 1-7（只有「计划」）
