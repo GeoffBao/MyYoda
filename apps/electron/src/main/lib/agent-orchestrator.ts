@@ -80,6 +80,11 @@ import { browserController } from './browser-controller'
 
 // ===== 类型定义 =====
 
+type PiAgentAdapterLike = Pick<
+  PiAgentAdapter,
+  'query' | 'abort' | 'dispose' | 'setPermissionMode' | 'sendQueuedMessage'
+>
+
 /**
  * 会话控制信号回调
  *
@@ -333,7 +338,7 @@ ${directoryLines}
 // ===== AgentOrchestrator =====
 
 export class AgentOrchestrator {
-  private adapter: PiAgentAdapter
+  private adapter: PiAgentAdapterLike
   private eventBus: AgentEventBus
   private activeSessions = new Map<string, number>()
   private nextRunGeneration = 0
@@ -407,7 +412,7 @@ export class AgentOrchestrator {
     }
   }
 
-  constructor(adapter: PiAgentAdapter, eventBus: AgentEventBus) {
+  constructor(adapter: PiAgentAdapterLike, eventBus: AgentEventBus) {
     this.adapter = adapter
     this.eventBus = eventBus
   }
@@ -2046,6 +2051,13 @@ ${workContext}`
         }
 
         let shouldRetryFromError = false
+        let queryIterator: AsyncIterator<PiRunSourceEvent> | undefined
+        const closeQueryIterator = async (): Promise<void> => {
+          const iterator = queryIterator
+          queryIterator = undefined
+          if (!iterator?.return) return
+          await iterator.return()
+        }
 
         try {
           // stop 可能发生在 active slot 建立后、Pi adapter active session 创建前。
@@ -2059,7 +2071,7 @@ ${workContext}`
 
           // 获取异步迭代器（手动 .next() 以支持 Promise.race 中断）
           const queryIterable = this.adapter.query(queryOptions)
-          const queryIterator = queryIterable[Symbol.asyncIterator]()
+          queryIterator = queryIterable[Symbol.asyncIterator]()
 
           // 手动事件循环：Promise.race（Pi runtime event vs result drain timeout）
           let pendingNext: Promise<IteratorResult<PiRunSourceEvent>> | null = null
@@ -2104,7 +2116,16 @@ ${workContext}`
               console.warn(`[Agent 编排] drain timeout: SDK iterator 在 result 后 ${RESULT_DRAIN_TIMEOUT_MS}ms 内未关闭，强制退出`)
               pendingNext?.catch(() => {})
               pendingNext = null
-              queryIterator.return?.(undefined as never).catch(() => {})
+              try {
+                await this.adapter.abort(sessionId)
+              } catch (error) {
+                console.warn(`[Agent 编排] drain timeout abort failed: ${sessionId}`, error)
+              } finally {
+                await Promise.race([
+                  closeQueryIterator().catch(() => {}),
+                  new Promise<void>((resolve) => setTimeout(resolve, RESULT_DRAIN_TIMEOUT_MS)),
+                ])
+              }
               break
             }
 
@@ -2471,6 +2492,7 @@ ${workContext}`
 
           // 错误 break 触发了 → 继续循环
           if (shouldRetryFromError) {
+            await closeQueryIterator()
             continue
           }
 
@@ -2807,7 +2829,9 @@ ${workContext}`
     browserController.cancelSession(sessionId)
     if (runGeneration != null) this.stoppedBySessions.set(sessionId, runGeneration)
     this.queuedMessageUuids.delete(sessionId)
-    this.adapter.abort(sessionId)
+    void Promise.resolve(this.adapter.abort(sessionId)).catch((error) => {
+      console.warn(`[Agent 编排] 中止会话失败: ${sessionId}`, error)
+    })
     console.log(`[Agent 编排] 已中止会话: ${sessionId}`)
   }
 
