@@ -115,11 +115,9 @@ function externalRun(sessionId: string) {
 
 const activeTestRuns = new Map<string, string>()
 function emit(sessionId: string, payload: Parameters<AgentServiceModule['agentEventBus']['emit']>[1]): void {
-  // 真实流程里 run 结束时 agent-service 会通过 endRun 关闭 EventBus run scope；
-  // 测试连续注入同一会话的多次 external_run_started 前，先关闭上一轮 scope。
-  if (payload.kind === 'myyoda_event' && payload.event.type === 'external_run_started') {
-    const previous = activeTestRuns.get(sessionId)
-    if (previous) realEventBus.endRun(sessionId, previous)
+  // EventBus 已不再追踪 run scope（随 v0.17.26 baseline 回滚移除）；此处仅保留本地
+  // bookkeeping 供测试断言使用，无需再显式关闭上一轮 scope。
+  if (payload.kind === 'myyoda_event' && payload.event.type === 'external_run_started' && payload.event.runId) {
     activeTestRuns.set(sessionId, payload.event.runId)
   }
   realEventBus.emit(sessionId, payload)

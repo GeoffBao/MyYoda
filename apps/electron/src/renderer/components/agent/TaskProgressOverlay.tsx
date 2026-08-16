@@ -243,7 +243,7 @@ export function TaskProgressOverlay({ activities, streaming, contextCompaction }
             )}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[min(420px,calc(100vw-2rem))] rounded-md border-border/60 bg-background p-2" side="top" align="center">
+        <PopoverContent className="w-[min(420px,calc(100vw-2rem))] rounded-md border-border/60 bg-background/95 p-2 backdrop-blur-sm" side="top" align="center">
           {displayCompaction
             ? <CompactionProgressDetails progress={displayCompaction} />
             : <TaskProgressCard activities={displayActivities} alwaysExpanded />}

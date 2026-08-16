@@ -70,30 +70,6 @@ export function createAgentQueuedMessage(
   return message
 }
 
-export function upsertAgentLiveMessageByUuid(
-  messages: SDKMessage[],
-  incoming: SDKMessage,
-): SDKMessage[] {
-  const incomingUuid = (incoming as unknown as Record<string, unknown>).uuid
-  if (typeof incomingUuid !== 'string' || incomingUuid.length === 0) {
-    return [...messages, incoming]
-  }
-
-  const existingIndex = messages.findIndex((message) => (
-    (message as unknown as Record<string, unknown>).uuid === incomingUuid
-  ))
-  if (existingIndex === -1) return [...messages, incoming]
-
-  const existing = messages[existingIndex]!
-  const merged = {
-    ...(existing as unknown as Record<string, unknown>),
-    ...(incoming as unknown as Record<string, unknown>),
-  } as unknown as SDKMessage
-  const next = [...messages]
-  next[existingIndex] = merged
-  return next
-}
-
 export function removeQueuedMessage(
   queue: AgentQueuedMessage[],
   messageId: string,

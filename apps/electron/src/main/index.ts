@@ -91,7 +91,6 @@ import { initializeReleaseNotes } from './lib/release-notes-service'
 import { seedBuiltinExperts } from './lib/expert-service'
 import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
 import { stopAllAgents, killOrphanedClaudeSubprocesses, isAgentSessionActive, hasActiveAgentSessions } from './lib/agent-service'
-import { agentRuntimeClient } from './lib/agent-runtime-client'
 import { disposePiMcpConnections } from './lib/adapters/pi-mcp-tools'
 import { browserController } from './lib/browser-controller'
 import { agentTerminalController } from './lib/agent-terminal'
@@ -614,15 +613,6 @@ async function bootstrap(): Promise<void> {
   // 必须在其他初始化之前执行，确保环境变量正确加载
   await safeAwait('initializeRuntime', () => initializeRuntime())
 
-  // Phase 1: start the isolated Pi runtime host. The main process still owns
-  // orchestration and Electron capabilities during this migration phase.
-  if (process.env.MYYODA_AGENT_RUNTIME !== 'in-process' && process.env.MYYODA_AGENT_RUNTIME !== 'off') {
-    await safeAwait('startAgentRuntime', async () => {
-      const state = await agentRuntimeClient.start()
-      console.info(`[AgentRuntime] utility ready: pid=${state.pid ?? 'unknown'} bootId=${state.bootId}`)
-    })
-  }
-
   // 同步默认 Skills 模板到 ~/.myyoda/default-skills/
   safeRun('seedDefaultSkills', seedDefaultSkills)
   safeRun('seedDefaultExpertTemplates', seedDefaultExpertTemplates)
@@ -823,7 +813,6 @@ app.on('before-quit', () => {
 
   // 中止所有活跃的 Agent 和 Chat 子进程
   stopAllAgents()
-  void agentRuntimeClient.stop()
   browserController.dispose()
   agentTerminalController.disposeAll()
   stopAllGenerations()

@@ -319,7 +319,7 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
     }
 
     return (
-      <TooltipProvider disableHoverableContent>
+      <TooltipProvider>
         <MentionErrorBoundary>
       <div
         ref={containerRef}

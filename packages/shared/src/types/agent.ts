@@ -606,9 +606,9 @@ export interface AgentToolResultImage {
 export type AgentPlanModeChangeSource = 'initial' | 'tool' | 'permission'
 
 /**
- * 旧 AgentMessage JSONL 的扁平事件格式。
+ * Agent 事件流类型
  *
- * 仅用于读取历史记录；Pi-native live runtime 不再生成或归约此协议。
+ * 从 SDK 消息转换而来的扁平事件流，用于驱动 UI 渲染。
  */
 export type AgentEvent =
   // 文本流式输出
@@ -687,9 +687,9 @@ export type MyYodaEvent =
   | { type: 'context_window'; contextWindow: number }
   | { type: 'permission_mode_changed'; mode: MyYodaPermissionMode }
   | { type: 'title_updated'; title: string }
-  | { type: 'external_run_started'; source: AgentExternalRunSource; sessionId: string; runId: string; title?: string; workspaceId?: string; modelId?: string; channelId?: string; startedAt: number; userMessage?: string; userMessageUuid?: string; session?: AgentSessionMeta }
+  | { type: 'external_run_started'; source: AgentExternalRunSource; sessionId: string; runId?: string; title?: string; workspaceId?: string; modelId?: string; channelId?: string; startedAt: number; userMessage?: string; userMessageUuid?: string; session?: AgentSessionMeta }
   /** 普通桌面会话已开始执行；runId 是竞态隔离的唯一身份。 */
-  | { type: 'run_started'; runId: string; startedAt: number }
+  | { type: 'run_started'; runId?: string; startedAt: number }
   | { type: 'run_resumed'; sessionId: string; runId?: string }
   /** 会话无进展看门狗触发：长时间无任何 SDK 消息判定卡死，已强制终止 */
   | { type: 'watchdog_timeout'; sessionId: string; timeoutMs: number }
@@ -734,54 +734,10 @@ export interface CoworkChildInfo {
   modelId?: string
 }
 
-/** assistant partial 的增量块操作。 */
-export type AgentAssistantDeltaOperation =
-  | { type: 'append_text'; blockIndex: number; text: string }
-  | { type: 'append_thinking'; blockIndex: number; thinking: string }
-  | { type: 'append_block'; blockIndex: number; block: SDKContentBlock }
-  | { type: 'replace_block'; blockIndex: number; block: SDKContentBlock }
-  | { type: 'truncate_blocks'; length: number }
-
-/** assistant partial 中可能变化的轻量消息元数据。 */
-export interface AgentAssistantDeltaMetadata {
-  usage?: SDKAssistantMessage['message']['usage']
-  model?: string
-  stopReason?: string
-  parentToolUseId?: string | null
-  sessionId?: string
-  channelModelId?: string
-  channelId?: string
-  channelProvider?: ProviderType
-}
-
-/**
- * main → renderer 的 canonical assistant 增量。
- *
- * reset 只用于首帧或结构无法安全增量表达时；正常文本流只传 append_text，
- * 避免累计全文在 main、IPC、Jotai 和 React 之间重复复制。
- */
-export interface AgentAssistantMessageDelta {
-  kind: 'assistant_message_delta'
-  /** 顶层 Agent run 的唯一身份；同一 run 内 retry/compaction continuation 不改变。 */
-  runId: string
-  messageId: string
-  /** 同一 run/messageId 内严格单调递增；retry reset 开始新 attempt 但不回退序号。 */
-  sequence: number
-  reset?: SDKAssistantMessage
-  operations: AgentAssistantDeltaOperation[]
-  /** main -> renderer 调度器已合并多个连续 delta，sequence 允许出现跳跃。 */
-  coalesced?: boolean
-  metadata?: AgentAssistantDeltaMetadata
-}
-
-/** 主进程内部 EventBus 与 renderer IPC 的统一 payload。 */
+/** IPC 传输的统一 payload（替代 AgentEvent） */
 export type AgentStreamPayload =
   | { kind: 'sdk_message'; message: SDKMessage }
   | { kind: 'myyoda_event'; event: MyYodaEvent }
-  | AgentAssistantMessageDelta
-
-/** @deprecated AgentStreamPayload 已直接包含 renderer canonical delta。 */
-export type AgentRendererStreamPayload = AgentStreamPayload
 
 // ===== Kanban / Projects / Tasks IPC 契约 =====
 
@@ -1568,10 +1524,8 @@ export interface AgentSendInput {
   mentionedTodoIds?: string[]
   /** 用户通过日程引用 mention 指定的日程 ID 列表 */
   mentionedCalendarEventIds?: string[]
-  /** 渲染进程生成的流式开始时间戳，仅用于展示和耗时计算。 */
+  /** 渲染进程生成的流式开始时间戳，主进程原样回传到 STREAM_COMPLETE，确保竞态保护比较的是同一个值 */
   startedAt?: number
-  /** 主进程为每次 send 分配的 opaque run identity；外部入口可预先指定。 */
-  runId?: string
   /** 用户点击错误消息的重试时，指向本轮开始前应删除的错误 UUID。 */
   retryOfErrorUuid?: string
   /** 触发来源：用户手动、定时任务、父 Agent 委派、Task Conductor 编排（用于 UI 区分标记） */
@@ -1697,33 +1651,19 @@ export interface StopTaskInput {
 /**
  * Agent 流式事件（主进程 → 渲染进程推送）
  */
-export interface AgentRunEvent {
+export interface AgentStreamEvent {
   /** 会话 ID */
   sessionId: string
-  /** 事件所属 run；旧的 out-of-run 产品事件可缺省。 */
-  runId?: string
-  /** run 内 EventBus 投递序号；旧的 out-of-run 产品事件可缺省。 */
-  sequence?: number
-  occurredAt?: number
-  /** 单一 canonical payload。 */
-  payload: AgentRendererStreamPayload
+  /** 事件数据（新格式） */
+  payload: AgentStreamPayload
+  /** @deprecated 兼容旧格式，Phase 2 后移除 */
+  event?: AgentEvent
 }
-
-/** Electron IPC 保留旧导出名；实际协议为 AgentRunEvent。 */
-export type AgentStreamEvent = AgentRunEvent
 
 /**
- * Agent 流式完成事件载荷（主进程 → 渲染进程）。
- * 消息已在主进程落盘；renderer 收到完成事件后自行按页刷新，避免传输整段历史。
+ * Agent 流式完成事件载荷（主进程 → 渲染进程）
+ * 包含已持久化的消息列表，避免异步重新加载的竞态窗口。
  */
-export interface AgentStreamErrorPayload {
-  sessionId: string
-  runId?: string
-  /** run_started 前的合法 preflight 错误用它匹配 renderer 乐观状态。 */
-  startedAt?: number
-  error: string
-}
-
 export interface AgentStreamCompletePayload {
   sessionId: string
   /** 精确匹配本轮运行，迟到终态不得结束其他 run。 */
@@ -1734,6 +1674,8 @@ export interface AgentStreamCompletePayload {
   sourceDelegationId?: string
   /** 完成会话所属的 Task DAG 节点 ID；用于避免子任务节点完成通知竞态 */
   taskNodeId?: string
+  /** 已持久化的完整消息列表 */
+  messages?: AgentMessage[]
   /** 是否由用户手动中止 */
   stoppedByUser?: boolean
   /** 本轮流式开始时间戳（用于区分新旧流，防止旧流的 complete 事件重置新流状态） */
@@ -2078,16 +2020,10 @@ export const AGENT_IPC_CHANNELS = {
   // 会话管理
   /** 获取会话列表 */
   LIST_SESSIONS: 'agent:list-sessions',
-  /** 按 ID 获取单条会话元数据（启动恢复归档 Tab 时使用） */
-  GET_SESSION_META: 'agent:get-session-meta',
-  /** 获取活跃/归档会话的数量，不传输完整元数据 */
-  GET_SESSION_COUNTS: 'agent:get-session-counts',
   /** 创建会话 */
   CREATE_SESSION: 'agent:create-session',
   /** 获取会话 SDKMessage（Phase 4 新格式） */
   GET_SDK_MESSAGES: 'agent:get-sdk-messages',
-  /** 分页获取会话尾部 SDKMessage，避免长历史一次性进入 renderer */
-  GET_SDK_MESSAGES_PAGE: 'agent:get-sdk-messages-page',
   /** 更新会话标题 */
   UPDATE_TITLE: 'agent:update-title',
   /** 更新会话模型选择 */
@@ -2165,7 +2101,6 @@ export const AGENT_IPC_CHANNELS = {
   CLOSE_BROWSER_TAB: 'agent:close-browser-tab',
   GET_BROWSER_STATE: 'agent:get-browser-state',
   SET_BROWSER_LAYOUT: 'agent:set-browser-layout',
-  HIDE_BROWSER_PRESENTATION: 'agent:hide-browser-presentation',
   NAVIGATE_BROWSER: 'agent:navigate-browser',
   GO_BACK_BROWSER: 'agent:go-back-browser',
   GO_FORWARD_BROWSER: 'agent:go-forward-browser',

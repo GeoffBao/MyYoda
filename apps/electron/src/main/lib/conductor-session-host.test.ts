@@ -29,7 +29,7 @@ function createDependencies(): {
   persistedMessages: AgentMessage[]
   callbacks: {
     onError: (error: string) => void
-    onComplete: (options?: {
+    onComplete: (messages?: AgentMessage[], options?: {
       stoppedByUser?: boolean
       resultSubtype?: string
       resultErrors?: string[]
@@ -49,7 +49,7 @@ function createDependencies(): {
   const persistedMessages: AgentMessage[] = []
   let callbacks: {
     onError: (error: string) => void
-    onComplete: (options?: {
+    onComplete: (messages?: AgentMessage[], options?: {
       stoppedByUser?: boolean
       resultSubtype?: string
       resultErrors?: string[]
@@ -297,7 +297,7 @@ describe('MyYodaConductorSessionHost', () => {
       usage: { input_tokens: 12, output_tokens: 7 },
     } as unknown as AgentMessage
 
-    testDeps.callbacks.onComplete({ backgroundTasksPending: true })
+    testDeps.callbacks.onComplete(undefined, { backgroundTasksPending: true })
     expect(events).toEqual([])
 
     testDeps.persistedMessages.push(sdkResult)
