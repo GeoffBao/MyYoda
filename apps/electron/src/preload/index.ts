@@ -139,6 +139,11 @@ import type {
   WeChatConfig,
   WeChatBridgeState,
   AgentQueueMessageInput,
+  AgentDeferredQueueMessageInput,
+  AgentQueuedMessageControlInput,
+  AgentMoveQueuedMessageInput,
+  AgentQueuedMessageSnapshot,
+  AgentQueuedMessageStatus,
   PendingRequestsSnapshot,
   Automation,
   CreateAutomationInput,
@@ -811,6 +816,16 @@ export interface ElectronAPI {
 
   /** 流式追加发送 Agent 消息（Agent 运行中） */
   queueAgentMessage: (input: AgentQueueMessageInput) => Promise<string>
+  /** 将等待当前 run 结束的消息交给主进程 deferred queue 调度 */
+  enqueueAgentQueuedMessage: (input: AgentDeferredQueueMessageInput) => Promise<void>
+  /** 获取主进程 deferred queue 的展示投影（renderer 重载后重建队列 UI） */
+  getAgentQueuedMessages: (sessionId: string) => Promise<AgentQueuedMessageSnapshot[]>
+  /** 取消主进程 deferred queue 中的消息 */
+  cancelAgentQueuedMessage: (input: AgentQueuedMessageControlInput) => Promise<boolean>
+  /** 调整主进程 deferred queue 顺序 */
+  moveAgentQueuedMessage: (input: AgentMoveQueuedMessageInput) => Promise<boolean>
+  /** 主进程 deferred queue 状态变更（started / failed） */
+  onAgentQueuedMessageStatus: (callback: (status: AgentQueuedMessageStatus) => void) => () => void
 
   // ===== Agent 后台任务管理 =====
 
@@ -2389,6 +2404,23 @@ const electronAPI: ElectronAPI = {
   // Agent 队列消息
   queueAgentMessage: (input: AgentQueueMessageInput) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.QUEUE_MESSAGE, input)
+  },
+  enqueueAgentQueuedMessage: (input: AgentDeferredQueueMessageInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ENQUEUE_QUEUED_MESSAGE, input)
+  },
+  getAgentQueuedMessages: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_QUEUED_MESSAGES, sessionId)
+  },
+  cancelAgentQueuedMessage: (input: AgentQueuedMessageControlInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CANCEL_QUEUED_MESSAGE, input)
+  },
+  moveAgentQueuedMessage: (input: AgentMoveQueuedMessageInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MOVE_QUEUED_MESSAGE, input)
+  },
+  onAgentQueuedMessageStatus: (callback: (status: AgentQueuedMessageStatus) => void) => {
+    const listener = (_: unknown, status: AgentQueuedMessageStatus): void => callback(status)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.QUEUED_MESSAGE_STATUS, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.QUEUED_MESSAGE_STATUS, listener) }
   },
 
   // Agent 后台任务管理

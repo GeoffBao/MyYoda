@@ -25,6 +25,10 @@ import type {
   AgentStreamEvent,
   AgentStreamPayload,
   AgentQueueMessageInput,
+  AgentDeferredQueueMessageInput,
+  AgentQueuedMessageControlInput,
+  AgentMoveQueuedMessageInput,
+  AgentQueuedMessageSnapshot,
   MyYodaPermissionMode,
   AgentExternalRunSource,
   AgentMessage,
@@ -38,9 +42,14 @@ import { getAgentSessionMeta, listAgentSessions, updateAgentSessionMeta } from '
 import { setAgentStopper, setHeadlessAgentRunner } from './agent-headless-runner-registry'
 import { getHeadlessAgentRunTarget } from './agent-headless-run-target'
 import { assertRegisteredSessionUpload, resolveRegisteredUploadWorkspace } from './agent-upload-boundary-policy'
-import { listAgentWorkspaces } from './agent-workspace-manager'
+import { listAgentWorkspaces, getWorkspaceAttachedFiles } from './agent-workspace-manager'
 import { sendAgentStreamComplete } from './agent-completion-payload'
 import { AgentStreamForwarder } from './agent-stream-forwarder'
+import { AgentQueueCoordinator } from './agent-queue-coordinator'
+import { permissionService } from './agent-permission-service'
+import { askUserService } from './agent-ask-user-service'
+import { exitPlanService } from './agent-exit-plan-service'
+import { listChannels } from './channel-manager'
 
 // ===== 实例创建 =====
 
@@ -151,6 +160,73 @@ function publishRunStopped(
   })
 }
 
+// ===== Deferred queue 调度器（排队消息主进程调度） =====
+
+/** 与渲染进程原 dispatchQueuedMessage 的调度前置检查保持一致。 */
+function canDispatchQueuedMessage(sessionId: string, input: AgentDeferredQueueMessageInput): boolean {
+  const meta = getAgentSessionMeta(sessionId)
+  // 用户手动停止后等待下一次明确发送，不自动续发。
+  if (meta?.stoppedByUser) return false
+  // 只读 legacy 会话（需 continuation 的 Claude 历史会话）不能作为新 run 启动。
+  if (meta?.legacyTranscript?.continuationRequired) return false
+  // 阻塞中的交互请求（权限/AskUser/ExitPlan 审批）不能被自动派发打断。
+  if (
+    permissionService.getPendingRequests().some((request) => request.sessionId === sessionId) ||
+    askUserService.getPendingRequests().some((request) => request.sessionId === sessionId) ||
+    exitPlanService.getPendingRequests().some((request) => request.sessionId === sessionId)
+  ) {
+    return false
+  }
+  if (!input.channelId) return false
+  const hasAvailableModel = listChannels().some((channel) => (
+    channel.enabled && channel.models.some((model) => model.enabled)
+  ))
+  return hasAvailableModel
+}
+
+function getParentDir(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  const idx = normalized.lastIndexOf('/')
+  if (idx <= 0) return ''
+  return normalized.slice(0, idx)
+}
+
+/**
+ * 派发时补齐会话级附加目录/文件（渲染进程原 dispatch 在发送前做的合并）：
+ * 会话 attachedDirectories + attachedFiles 父目录 + 工作区 attachedFiles 父目录 + 入队时携带的目录。
+ */
+function enrichDeferredQueueInput(input: AgentDeferredQueueMessageInput): AgentDeferredQueueMessageInput {
+  try {
+    const meta = getAgentSessionMeta(input.sessionId)
+    const dirs = new Set<string>(input.additionalDirectories ?? [])
+    for (const dir of meta?.attachedDirectories ?? []) dirs.add(dir)
+    const workspaceId = input.workspaceId ?? meta?.workspaceId
+    const workspaceSlug = workspaceId
+      ? listAgentWorkspaces().find((workspace) => workspace.id === workspaceId)?.slug
+      : undefined
+    const workspaceFiles = workspaceSlug ? getWorkspaceAttachedFiles(workspaceSlug) : []
+    for (const file of [...(meta?.attachedFiles ?? []), ...workspaceFiles]) {
+      const parent = getParentDir(file)
+      if (parent) dirs.add(parent)
+    }
+    return dirs.size > 0 ? { ...input, additionalDirectories: Array.from(dirs) } : input
+  } catch {
+    return input
+  }
+}
+
+const agentQueueCoordinator = new AgentQueueCoordinator({
+  isActive: (sessionId) => orchestrator.isActive(sessionId),
+  getWebContents: (sessionId) => sessionWebContents.get(sessionId) ?? getMainRendererWebContents(),
+  startRun: async (input, webContents) => {
+    await runAgent(enrichDeferredQueueInput(input), webContents)
+  },
+  sendStatus: (webContents, status) => {
+    if (!webContents.isDestroyed()) webContents.send(AGENT_IPC_CHANNELS.QUEUED_MESSAGE_STATUS, status)
+  },
+  canDispatch: canDispatchQueuedMessage,
+})
+
 // ===== EventBus IPC 转发中间件 =====
 
 /**
@@ -185,6 +261,11 @@ eventBus.use((sessionId, payload, next) => {
       console.error(`[EventBus] wc.send 失败: sessionId=${sessionId}, payload.kind=${(payload as Record<string, unknown>)?.kind}`, err)
     }
   }
+  // 后台任务完成通知：解除该会话的 backgroundWaiting，重新评估 deferred queue。
+  const message = (payload as { kind?: string; message?: { type?: string; subtype?: string } })?.message
+  if (payload.kind === 'sdk_message' && message?.type === 'system' && message?.subtype === 'task_notification') {
+    agentQueueCoordinator.onBackgroundTaskComplete(sessionId)
+  }
   next()
 })
 
@@ -213,6 +294,8 @@ export async function runAgent(
 ): Promise<void> {
   // 更新 webContents 映射（允许覆盖 — 由 orchestrator.activeSessions 处理真正的并发保护）
   registerWebContents(input.sessionId, webContents)
+  // deferred queue 派发的 run 携带队列消息 ID（内部扩展，不进入持久化）
+  const queueMessageId = (input as Partial<AgentDeferredQueueMessageInput>).queueMessageId
   // 开始新一轮执行时清除"完成未确认"标记
   try {
     updateAgentSessionMeta(input.sessionId, { completedButUnconfirmed: false })
@@ -232,6 +315,9 @@ export async function runAgent(
       }
     } catch { /* 新会话可能尚未写入索引 */ }
   }
+  // 记录本轮完成方式，供 try 块尾部（onComplete 未触发的异常路径）复用
+  let completedBackgroundTasksPending = false
+  let completedStoppedByUser = false
   try {
     await orchestrator.sendMessage(input, {
       onError: (error) => {
@@ -243,6 +329,14 @@ export async function runAgent(
         }
       },
       onComplete: (messages, opts) => {
+        completedBackgroundTasksPending = opts?.backgroundTasksPending === true
+        completedStoppedByUser = opts?.stoppedByUser === true
+        agentQueueCoordinator.onRunComplete(
+          input.sessionId,
+          queueMessageId,
+          completedBackgroundTasksPending,
+          completedStoppedByUser,
+        )
         publishRunStopped(input.sessionId, opts?.stoppedByUser, opts?.startedAt)
         if (!webContents.isDestroyed()) {
           sendAgentStreamComplete(webContents, input, {
@@ -277,6 +371,13 @@ export async function runAgent(
         }
       },
     }, extensions)
+    // onComplete 未触发的拒绝路径（如新 run 被并发保护拒绝）也要重新评估队列。
+    agentQueueCoordinator.onRunComplete(
+      input.sessionId,
+      queueMessageId,
+      completedBackgroundTasksPending,
+      completedStoppedByUser,
+    )
   } catch (err) {
     console.error('[Agent 服务] runAgent 未处理异常:', err)
     const errorMessage = err instanceof Error ? err.message : '未知错误'
@@ -285,6 +386,11 @@ export async function runAgent(
         sessionId: input.sessionId,
         error: errorMessage,
       })
+    }
+    // 队列派发的消息失败时放回队首并通知渲染进程回滚展示（在 stream complete 之前送达，
+    // 保证渲染进程能先恢复队列条目再清理本轮流式状态）。
+    agentQueueCoordinator.onRunFailed(input.sessionId, queueMessageId)
+    if (!webContents.isDestroyed()) {
       sendAgentStreamComplete(webContents, input, {
         messages: [],
         ...getCompletionSessionOrigin(input.sessionId),
@@ -338,6 +444,10 @@ export async function runAgentHeadless(
     registerWebContents(runInput.sessionId, wc)
   }
 
+  // 记录本轮完成方式，供 try 块尾部（onComplete 未触发的异常路径）复用
+  let completedBackgroundTasksPending = false
+  let completedStoppedByUser = false
+
   try {
     await orchestrator.sendMessage(runInput, {
       onError: (error) => {
@@ -354,6 +464,14 @@ export async function runAgentHeadless(
         // 不再经回调传输完整 messages（上游 #1627 性能优化）；
         // conductor 等调用方通过磁盘读取兜底，options 仍完整传递。
         callbacks.onComplete(undefined, opts)
+        completedBackgroundTasksPending = opts?.backgroundTasksPending === true
+        completedStoppedByUser = opts?.stoppedByUser === true
+        agentQueueCoordinator.onRunComplete(
+          runInput.sessionId,
+          undefined,
+          completedBackgroundTasksPending,
+          completedStoppedByUser,
+        )
         publishRunStopped(runInput.sessionId, opts?.stoppedByUser, opts?.startedAt)
         // 同步到渲染进程
         if (wc && !wc.isDestroyed()) {
@@ -400,6 +518,7 @@ export async function runAgentHeadless(
         })
       },
     })
+    agentQueueCoordinator.onRunComplete(runInput.sessionId, undefined, completedBackgroundTasksPending, completedStoppedByUser)
   } catch (err) {
     console.error('[Agent 服务] runAgentHeadless 未处理异常:', err)
     const errorMessage = err instanceof Error ? err.message : '未知错误'
@@ -509,6 +628,36 @@ export async function queueAgentMessage(
     input.mentionedTodoIds,
     input.mentionedCalendarEventIds,
   )
+}
+
+// ===== Deferred queue 操作（排队消息主进程调度） =====
+
+/** 将等待当前 run 结束的消息交给主进程调度器。 */
+export function enqueueAgentQueuedMessage(input: AgentDeferredQueueMessageInput, webContents: WebContents): void {
+  registerWebContents(input.sessionId, webContents)
+  agentQueueCoordinator.enqueue(input)
+}
+
+export function cancelAgentQueuedMessage(input: AgentQueuedMessageControlInput): boolean {
+  return agentQueueCoordinator.cancel(input)
+}
+
+export function moveAgentQueuedMessage(input: AgentMoveQueuedMessageInput): boolean {
+  return agentQueueCoordinator.move(input)
+}
+
+export function clearAgentQueuedMessages(sessionId: string): void {
+  agentQueueCoordinator.clear(sessionId)
+}
+
+/** 返回指定会话 deferred queue 的展示投影（renderer 重载后重建队列 UI）。 */
+export function getAgentQueuedMessageSnapshots(sessionId: string): AgentQueuedMessageSnapshot[] {
+  return agentQueueCoordinator.listSnapshots(sessionId)
+}
+
+/** 渠道配置变化后重新评估各会话队列（ipc.ts 渠道 handler 调用）。 */
+export function pokeAgentQueuedMessages(): void {
+  agentQueueCoordinator.pokeAll()
 }
 
 // ===== 文件操作 =====

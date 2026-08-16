@@ -34,7 +34,6 @@ import {
   agentModelIdAtom,
   agentChannelIdAtom,
   agentPermissionModeMapAtom,
-  agentDefaultPermissionModeAtom,
   stoppedByUserSessionsAtom,
   agentPlanModeSessionsAtom,
   currentAgentSessionIdAtom,
@@ -79,8 +78,7 @@ import { getAgentCompletionMarkers, notifyAgentCompletion } from '@/lib/agent-co
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
-import { buildQueuedMessageSendPayload, removeQueuedMessage, restoreQueuedMessageToFront, shouldAutoDispatchQueuedMessage } from '@/lib/agent-message-queue'
-import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
+import { removeQueuedMessage, restoreQueuedMessageToFront } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
 /** 触发右侧文件浏览器自动定位的写入类工具集合 */
@@ -563,207 +561,90 @@ export function useGlobalAgentListeners(): void {
     /** 正在执行的 git 突变 Bash 命令：toolUseId → sessionId（完成后触发 diff 刷新） */
     const pendingGitMutateTools = new Map<string, string>()
 
-    const queuedDispatchInFlight = new Set<string>()
-    const queuedDispatchScheduled = new Set<string>()
-    // IPC 拒绝后保留失败的队首，直到用户调整队列，避免订阅回调触发自动重试风暴。
-    const queuedDispatchSuppressedMessageIds = new Map<string, string>()
+    // ===== 主进程 deferred queue 状态同步（排队消息已改为 main 调度，renderer 只保留展示投影） =====
+    // 已派发但未完成的消息：失败时用于恢复队列展示；成功消费后随 stream complete 清理。
+    const dispatchedQueuedMessages = new Map<string, { message: import('@/lib/agent-message-queue').AgentQueuedMessage; startedAt: number }>()
 
-    const dispatchQueuedMessage = (sessionId: string): void => {
-      if (queuedDispatchInFlight.has(sessionId)) return
-
-      const queuedMessages = store.get(agentSessionMessageQueueAtom).get(sessionId) ?? []
-      if (queuedDispatchSuppressedMessageIds.get(sessionId) === queuedMessages[0]?.id) return
-      queuedDispatchSuppressedMessageIds.delete(sessionId)
-      const streamState = store.get(agentStreamingStatesAtom).get(sessionId)
-      const session = store.get(agentSessionsAtom).find((item) => item.id === sessionId)
-      if (session?.legacyTranscript?.continuationRequired) return
-
-      const channelId = session?.channelId
-        ?? store.get(agentSessionChannelMapAtom).get(sessionId)
-        ?? store.get(agentChannelIdAtom)
-      const modelId = session?.modelId
-        ?? store.get(agentSessionModelMapAtom).get(sessionId)
-        ?? store.get(agentModelIdAtom)
-      const channels = store.get(channelsAtom)
-      const hasAvailableModel = channels.some((channel) => (
-        channel.enabled && channel.models.some((model) => model.enabled)
-      ))
-      const hasBlockingRequests =
-        (store.get(allPendingPermissionRequestsAtom).get(sessionId)?.length ?? 0) > 0 ||
-        (store.get(allPendingAskUserRequestsAtom).get(sessionId)?.length ?? 0) > 0 ||
-        (store.get(allPendingExitPlanRequestsAtom).get(sessionId)?.length ?? 0) > 0
-
-      if (!shouldAutoDispatchQueuedMessage({
-        queueLength: queuedMessages.length,
-        running: streamState?.running ?? false,
-        backgroundWaiting: streamState?.backgroundWaiting ?? false,
-        stoppedByUser: store.get(stoppedByUserSessionsAtom).has(sessionId),
-        hasBlockingRequests,
-        hasChannel: Boolean(channelId),
-        hasAvailableModel,
-      })) {
-        return
-      }
-
-      const message = queuedMessages[0]
-      if (!message || !channelId) return
-
-      const streamStartedAt = Date.now()
-      const quotedSelectionBlock = message.quotedSelection
-        ? buildQuotedSelectionBlock(message.quotedSelection)
-        : ''
-      const payload = buildQueuedMessageSendPayload(message, quotedSelectionBlock)
-      let dequeued = false
-      queuedDispatchInFlight.add(sessionId)
-      store.set(agentSessionMessageQueueAtom, (prev) => {
-        const current = prev.get(sessionId) ?? []
-        if (current[0]?.id !== message.id) return prev
-        const map = new Map(prev)
-        const next = removeQueuedMessage(current, message.id)
-        if (next.length === 0) map.delete(sessionId)
-        else map.set(sessionId, next)
-        dequeued = true
-        return map
+    const cleanupQueuedMessageStatus = window.electronAPI.onAgentQueuedMessageStatus((status) => {
+      unstable_batchedUpdates(() => {
+        if (status.status === 'started') {
+          // 主进程已启动本轮 run：从展示队列移除消息，插入乐观用户消息
+          let startedMessage: import('@/lib/agent-message-queue').AgentQueuedMessage | undefined
+          store.set(agentSessionMessageQueueAtom, (prev) => {
+            const current = prev.get(status.sessionId) ?? []
+            const message = current.find((item) => item.id === status.messageId)
+            if (!message) return prev
+            startedMessage = message
+            const next = removeQueuedMessage(current, status.messageId)
+            const map = new Map(prev)
+            if (next.length === 0) map.delete(status.sessionId)
+            else map.set(status.sessionId, next)
+            return map
+          })
+          if (startedMessage) {
+            dispatchedQueuedMessages.set(status.messageId, { message: startedMessage, startedAt: status.startedAt })
+          }
+          const optimisticUuid = `queued-${status.messageId}`
+          store.set(liveMessagesMapAtom, (prev) => {
+            const current = prev.get(status.sessionId) ?? []
+            if (current.some((item) => (item as unknown as { uuid?: string }).uuid === optimisticUuid)) return prev
+            const optimisticMessage: SDKMessage = {
+              type: 'user',
+              uuid: optimisticUuid,
+              message: { content: [{ type: 'text', text: status.rawUserMessage ?? status.userMessage }] },
+              parent_tool_use_id: null,
+              _createdAt: status.startedAt,
+              _myyodaLiveRunStartedAt: status.startedAt,
+            } as unknown as SDKMessage
+            const map = new Map(prev)
+            map.set(status.sessionId, [...current, optimisticMessage])
+            return map
+          })
+          store.set(agentStreamErrorsAtom, (prev) => {
+            if (!prev.has(status.sessionId)) return prev
+            const map = new Map(prev)
+            map.delete(status.sessionId)
+            return map
+          })
+        } else {
+          // failed：主进程已把消息放回队首并抑制自动重试，恢复展示队列并移除乐观消息
+          const dispatched = dispatchedQueuedMessages.get(status.messageId)
+          dispatchedQueuedMessages.delete(status.messageId)
+          if (dispatched) {
+            store.set(agentSessionMessageQueueAtom, (prev) => {
+              const map = new Map(prev)
+              map.set(status.sessionId, restoreQueuedMessageToFront(map.get(status.sessionId) ?? [], dispatched.message))
+              return map
+            })
+          } else {
+            // renderer 重载等场景丢失在途记录：用 status 携带的信息重建最小展示条目，
+            // 避免消息在主进程队首被抑制但队列 UI 不可见。
+            const fallbackMessage: import('@/lib/agent-message-queue').AgentQueuedMessage = {
+              id: status.messageId,
+              text: status.rawUserMessage ?? status.userMessage,
+              createdAt: status.startedAt,
+            }
+            store.set(agentSessionMessageQueueAtom, (prev) => {
+              const current = prev.get(status.sessionId) ?? []
+              if (current.some((item) => item.id === status.messageId)) return prev
+              const map = new Map(prev)
+              map.set(status.sessionId, restoreQueuedMessageToFront(current, fallbackMessage))
+              return map
+            })
+          }
+          const optimisticUuid = `queued-${status.messageId}`
+          store.set(liveMessagesMapAtom, (prev) => {
+            const current = prev.get(status.sessionId) ?? []
+            const next = current.filter((item) => (item as unknown as { uuid?: string }).uuid !== optimisticUuid)
+            if (next.length === current.length) return prev
+            const map = new Map(prev)
+            if (next.length === 0) map.delete(status.sessionId)
+            else map.set(status.sessionId, next)
+            return map
+          })
+        }
       })
-      if (!dequeued) {
-        queuedDispatchInFlight.delete(sessionId)
-        return
-      }
-
-      const optimisticMessageUuid = `queued-${message.id}`
-      const optimisticMessage: SDKMessage = {
-        type: 'user',
-        uuid: optimisticMessageUuid,
-        message: { content: [{ type: 'text', text: payload.rawText }] },
-        parent_tool_use_id: null,
-        _createdAt: streamStartedAt,
-        _myyodaLiveRunStartedAt: streamStartedAt,
-      } as unknown as SDKMessage
-      store.set(liveMessagesMapAtom, (prev) => {
-        const map = new Map(prev)
-        map.set(sessionId, [...(map.get(sessionId) ?? []), optimisticMessage])
-        return map
-      })
-      store.set(agentStreamErrorsAtom, (prev) => {
-        if (!prev.has(sessionId)) return prev
-        const map = new Map(prev)
-        map.delete(sessionId)
-        return map
-      })
-      store.set(agentStreamingStatesAtom, (prev) => {
-        const map = new Map(prev)
-        map.set(sessionId, {
-          running: true,
-          model: modelId || undefined,
-          startedAt: streamStartedAt,
-          inputTokens: prev.get(sessionId)?.inputTokens,
-          contextWindow: prev.get(sessionId)?.contextWindow,
-        })
-        return map
-      })
-
-      const rollbackFailedDispatch = (): void => {
-        queuedDispatchSuppressedMessageIds.set(sessionId, message.id)
-        store.set(agentSessionMessageQueueAtom, (prev) => {
-          const map = new Map(prev)
-          map.set(sessionId, restoreQueuedMessageToFront(map.get(sessionId) ?? [], message))
-          return map
-        })
-        store.set(liveMessagesMapAtom, (prev) => {
-          const current = prev.get(sessionId) ?? []
-          const next = current.filter((item) => (item as unknown as { uuid?: string }).uuid !== optimisticMessageUuid)
-          if (next.length === current.length) return prev
-          const map = new Map(prev)
-          if (next.length === 0) map.delete(sessionId)
-          else map.set(sessionId, next)
-          return map
-        })
-        store.set(agentStreamingStatesAtom, (prev) => {
-          const current = prev.get(sessionId)
-          if (!current || current.startedAt !== streamStartedAt) return prev
-          const map = new Map(prev)
-          map.set(sessionId, { ...current, running: false })
-          return map
-        })
-      }
-
-      const queuedAdditionalDirectories = message.additionalDirectories ?? []
-      const workspaceId = session?.workspaceId ?? store.get(currentAgentWorkspaceIdAtom) ?? undefined
-      const attachedDirectories = store.get(agentAttachedDirectoriesMapAtom).get(sessionId)
-        ?? session?.attachedDirectories
-        ?? []
-      const attachedFiles = store.get(agentAttachedFilesMapAtom).get(sessionId)
-        ?? session?.attachedFiles
-        ?? []
-      const workspaceAttachedFiles = workspaceId
-        ? (store.get(workspaceAttachedFilesMapAtom).get(workspaceId) ?? [])
-        : []
-      const additionalDirectories = Array.from(new Set([
-        ...attachedDirectories,
-        ...[...attachedFiles, ...workspaceAttachedFiles].map(getParentDir).filter(Boolean),
-        ...queuedAdditionalDirectories,
-      ]))
-      const permissionMode = store.get(agentPermissionModeMapAtom).get(sessionId)
-        ?? session?.permissionMode
-        ?? store.get(agentDefaultPermissionModeAtom)
-
-      try {
-        const sendPromise = window.electronAPI.sendAgentMessage({
-          sessionId,
-          userMessage: payload.sdkText,
-          rawUserMessage: payload.rawText,
-          channelId,
-          modelId: modelId || undefined,
-          workspaceId,
-          startedAt: streamStartedAt,
-          permissionModeOverride: permissionMode,
-          ...(additionalDirectories.length > 0 && { additionalDirectories }),
-          ...(payload.mentions.mentionedSkills.length > 0 && { mentionedSkills: payload.mentions.mentionedSkills }),
-          ...(payload.mentions.mentionedMcpServers.length > 0 && { mentionedMcpServers: payload.mentions.mentionedMcpServers }),
-          ...(payload.mentions.mentionedSessionIds.length > 0 && { mentionedSessionIds: payload.mentions.mentionedSessionIds }),
-          ...(payload.mentions.mentionedTodoIds.length > 0 && { mentionedTodoIds: payload.mentions.mentionedTodoIds }),
-          ...(payload.mentions.mentionedCalendarEventIds.length > 0 && { mentionedCalendarEventIds: payload.mentions.mentionedCalendarEventIds }),
-        })
-        queuedDispatchInFlight.delete(sessionId)
-        void sendPromise.catch((error) => {
-          console.error('[GlobalAgentListeners] 自动发送队列消息失败:', error)
-          rollbackFailedDispatch()
-          toast.error('自动发送队列消息失败', { description: String(error) })
-        })
-      } catch (error) {
-        queuedDispatchInFlight.delete(sessionId)
-        console.error('[GlobalAgentListeners] 自动发送队列消息初始化失败:', error)
-        rollbackFailedDispatch()
-        toast.error('自动发送队列消息失败', { description: String(error) })
-      }
-    }
-
-    const scheduleQueuedMessageDispatch = (sessionId: string): void => {
-      if (queuedDispatchScheduled.has(sessionId)) return
-      queuedDispatchScheduled.add(sessionId)
-      queueMicrotask(() => {
-        queuedDispatchScheduled.delete(sessionId)
-        dispatchQueuedMessage(sessionId)
-      })
-    }
-
-    const scheduleAllQueuedMessageDispatches = (): void => {
-      for (const sessionId of store.get(agentSessionMessageQueueAtom).keys()) {
-        scheduleQueuedMessageDispatch(sessionId)
-      }
-    }
-
-    const queuedDispatchUnsubscribers = [
-      store.sub(agentSessionMessageQueueAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentStreamingStatesAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentSessionsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentSessionChannelMapAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentChannelIdAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingPermissionRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingAskUserRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingExitPlanRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(channelsAtom, scheduleAllQueuedMessageDispatches),
-    ]
+    })
 
     /** 构建导航到指定会话的回调 */
     const makeNavigateToSession = (sessionId: string, sessionTitle: string) => () => {
@@ -1635,8 +1516,12 @@ export function useGlobalAgentListeners(): void {
           return prev
         })
 
-        if (!backgroundTasksPending) {
-          scheduleQueuedMessageDispatch(data.sessionId)
+        // 主进程协调器会在 run 完成时自行推进 deferred queue，渲染进程无需再触发派发。
+        // 这里仅清理已成功消费的队列消息在途记录（失败回滚已在 'failed' 状态中处理）。
+        if (data.startedAt != null) {
+          for (const [messageId, dispatched] of dispatchedQueuedMessages) {
+            if (dispatched.startedAt === data.startedAt) dispatchedQueuedMessages.delete(messageId)
+          }
         }
 
         // 非正常结束时显示截断提示
@@ -1907,7 +1792,7 @@ export function useGlobalAgentListeners(): void {
       cleanupError()
       cleanupTitleUpdated()
       cleanupTodoAgentSessionReady()
-      queuedDispatchUnsubscribers.forEach((unsubscribe) => unsubscribe())
+      cleanupQueuedMessageStatus()
       clearInterval(pruneTimer)
       window.removeEventListener('focus', onWindowFocus)
     }
