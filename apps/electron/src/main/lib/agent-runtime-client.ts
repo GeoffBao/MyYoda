@@ -185,7 +185,8 @@ export class AgentRuntimeClient {
     const generation = ++this.generation
     this.state = { ...this.state, status: 'starting', lastError: undefined }
     const runtimeProcess = utilityProcess.fork(this.entryPath, [], {
-      env: { ...process.env, ...this.env, PROMA_AGENT_SESSION_ID: this.sessionId },
+      serviceName: 'MyYoda Runtime',
+      env: { ...process.env, ...this.env, MYYODA_AGENT_SESSION_ID: this.sessionId },
     })
     this.runtimeProcess = runtimeProcess
     const processEvents = runtimeProcess as unknown as {
