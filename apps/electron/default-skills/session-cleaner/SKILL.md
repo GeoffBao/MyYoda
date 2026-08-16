@@ -9,7 +9,7 @@ license: AGPL-3.0-only
 
 把 `~/.myyoda/agent-sessions/<id>.jsonl` 里被流式快照污染过的会话，清洗为干净 Markdown 对话。
 
-本技能是 `myyoda` CLI 的**薄封装**：所有解析 / 快照去重 / 渲染逻辑都在 `@myyoda/session-core`（仓库内唯一真源），由 `luxcoder session` 命令暴露。技能本身不解析 JSONL，只负责教你按正确的顺序调用myyoda CLI。
+本技能是 `myyoda` CLI 的**薄封装**：所有解析 / 快照去重 / 渲染逻辑都在 `@myyoda/session-core`（仓库内唯一真源），由 `myyoda session` 命令暴露。技能本身不解析 JSONL，只负责教你按正确的顺序调用 myyoda CLI。
 
 > 历史：v1 曾自带一份 Python parser（独立重抄会话格式，会随内部格式漂移）。v2 起改为调用仓库内的 `myyoda` CLI，格式知识只存一处。
 
@@ -90,9 +90,9 @@ myyoda session export <id> --out cleaned/<id>.clean.md
 > [工具: Bash command=ls assets ×3]
 ```
 
-##myyoda CLI 定位
+## MyYoda CLI 定位
 
-- **打包版（生产）**：`myyoda` 二进制随桌面 App 分发；主进程注入 `$MYYODA_CLI`。优先 `"$MYYODA_CLI" session ...`，或 PATH 上的 `luxcoder session ...`。
+- **打包版（生产）**：`myyoda` 二进制随桌面 App 分发；主进程注入 `$MYYODA_CLI`。优先 `"$MYYODA_CLI" session ...`，或 PATH 上的 `myyoda session ...`。
 - **开发/源码环境**：若 `myyoda` 不在 PATH，用 `bun <repo>/apps/cli/src/index.ts session ...` 直接跑源码。
 - **配置目录**：CLI 默认读 `~/.myyoda`；开发模式数据在 `~/.myyoda-dev`，加 `--dev` 或设 `MYYODA_DEV=1`（兼容回退 `PROMA_DEV=1`）。
 
