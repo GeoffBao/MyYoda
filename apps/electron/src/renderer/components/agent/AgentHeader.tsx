@@ -2,13 +2,14 @@
  * AgentHeader — Agent 会话头部
  *
  * 复用 SessionHeader；重命名时同步更新 Tab 标题和会话列表的新鲜度排序。
- * 若会话绑定了工作区，在标题旁显示工作区名 badge（含颜色圆点）。
+ * 标题上方常驻面包屑：会话绑定了项目时显示项目名 + 工作目录；未绑定项目时回退显示
+ * 所属工作区名 + 工作区文件目录，保证任意会话都能一眼看出「属于哪、在哪个地址」。
  */
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { GitBranch, Layers, Pencil } from 'lucide-react'
-import { agentSessionsAtom } from '@/atoms/agent-atoms'
+import { agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { tabsAtom, updateTabTitle } from '@/atoms/tab-atoms'
 import { serverKanbanProjectsAtom, codeMainViewAtom, pendingTaskEditorTargetAtom } from '@/atoms/project-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
@@ -23,12 +24,34 @@ interface AgentHeaderProps {
   sessionId: string
 }
 
+/** 根据工作区 slug 异步取工作区文件目录绝对路径（~/.myyoda/agent-workspaces/{slug}/workspace-files），
+ * 仅用于未绑定项目的会话头部面包屑回退显示。slug 变化时重新拉取，切换前不残留旧值。 */
+function useWorkspaceFilesPath(workspaceSlug: string | undefined): string | null {
+  const [path, setPath] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!workspaceSlug) {
+      setPath(null)
+      return
+    }
+    let cancelled = false
+    setPath(null)
+    window.electronAPI.getWorkspaceFilesPath(workspaceSlug)
+      .then((resolved) => { if (!cancelled) setPath(resolved) })
+      .catch((error) => { console.error('[AgentHeader] 获取工作区文件目录失败:', error) })
+    return () => { cancelled = true }
+  }, [workspaceSlug])
+
+  return path
+}
+
 export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement | null {
   const sessions = useAtomValue(agentSessionsAtom)
   const session = sessions.find((s) => s.id === sessionId) ?? null
   const setAgentSessions = useSetAtom(agentSessionsAtom)
   const setTabs = useSetAtom(tabsAtom)
   const projects = useAtomValue(serverKanbanProjectsAtom)
+  const workspaces = useAtomValue(agentWorkspacesAtom)
   const setPendingTaskEditorTarget = useSetAtom(pendingTaskEditorTargetAtom)
   const setCodeMainView = useSetAtom(codeMainViewAtom)
   const setActiveView = useSetAtom(activeViewAtom)
@@ -37,11 +60,16 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
   // 仓库分支会与实际状态漂移且无法自愈；挂载/窗口聚焦时静默核对并回写。
   useSessionGitBranchSync(session)
 
-  if (!session) return null
-
-  const project = session.projectId
+  const project = session?.projectId
     ? projects.find((p) => p.id === session.projectId) ?? null
     : null
+  const workspace = !project && session?.workspaceId
+    ? workspaces.find((w) => w.id === session.workspaceId) ?? null
+    : null
+  const workspacePath = useWorkspaceFilesPath(workspace?.slug)
+
+  if (!session) return null
+
   const gitBadgeText = formatSessionGitBadge(session)
 
   const handleRename = async (title: string): Promise<void> => {
@@ -83,7 +111,19 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
             ) : null}
           </span>
         )
-        : undefined}
+        : workspace
+          ? (
+            <span className="flex min-w-0 items-center gap-1 truncate" title={workspacePath ?? undefined}>
+              <span className="truncate">{workspace.name}</span>
+              {workspacePath ? (
+                <>
+                  <span className="shrink-0 text-muted-foreground/35">·</span>
+                  <span className="truncate text-muted-foreground/70">{workspacePath}</span>
+                </>
+              ) : null}
+            </span>
+          )
+          : undefined}
       badge={gitBadgeText
         ? (
           <>
