@@ -26,6 +26,7 @@ import {
   RECENTLY_MODIFIED_TTL_MS,
   applyAgentEvent,
   clearAgentStreamError,
+  resumeAgentStreamState,
   isRetryEventForCurrentStream,
   liveMessagesMapAtom,
   agentSessionModelMapAtom,
@@ -138,25 +139,17 @@ function isRunScopedRetryEvent(event: AgentEvent): event is Extract<AgentEvent, 
     || event.type === 'retry_cancelled'
 }
 
-function deltaToLegacyEvents(delta: AgentAssistantDelta): AgentEvent[] {
-  switch (delta.type) {
-    case 'text_delta':
-      return delta.delta ? [{ type: 'text_delta', text: delta.delta }] : []
-    case 'toolcall_start':
-    case 'toolcall_end': {
-      const toolCall = delta.toolCall
-      if (!toolCall) return []
-      return [{
-        type: 'tool_start',
-        toolName: toolCall.name,
-        toolUseId: toolCall.id,
-        input: toolCall.arguments ?? {},
-        parentToolUseId: undefined,
-      }]
-    }
-    default:
-      return []
-  }
+function deltaToLegacyControlEvents(delta: AgentAssistantDelta): AgentEvent[] {
+  if (delta.type !== 'toolcall_start' && delta.type !== 'toolcall_end') return []
+  const toolCall = delta.toolCall
+  if (!toolCall) return []
+  return [{
+    type: 'tool_start',
+    toolName: toolCall.name,
+    toolUseId: toolCall.id,
+    input: toolCall.arguments ?? {},
+    parentToolUseId: undefined,
+  }]
 }
 
 function applyAssistantDeltaToPreview(
@@ -228,18 +221,15 @@ function createAssistantDeltaPreview(payload: AgentAssistantDeltaPayload, metada
     session_id: payload.session_id,
     uuid: payload.uuid,
     _partial: true,
-    _createdAt: Date.now(),
+    _createdAt: payload.runStartedAt ?? Date.now(),
     ...metadata,
   } as SDKAssistantMessage
 }
 
-function deltaPayloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
-  if (payload.kind !== 'sdk_delta') return []
-  return payload.delta.deltas.flatMap(deltaToLegacyEvents)
-}
-
 function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
-  if (payload.kind === 'sdk_delta') return deltaPayloadToLegacyEvents(payload)
+  // sdk_delta 的文本和 thinking 已直接写入 liveMessages；只保留工具启动控制状态，
+  // 避免每个 token 都触发第二份 AgentStreamState 更新和渲染路径。
+  if (payload.kind === 'sdk_delta') return payload.delta.deltas.flatMap(deltaToLegacyControlEvents)
   if (payload.kind === 'myyoda_event') {
     const evt = payload.event
     switch (evt.type) {
@@ -339,9 +329,7 @@ function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
       }
       const events: AgentEvent[] = []
       for (const block of aMsg.message.content) {
-        if (block.type === 'text' && 'text' in block) {
-          events.push({ type: 'text_complete', text: (block as { text: string }).text, isIntermediate: false, parentToolUseId: aMsg.parent_tool_use_id ?? undefined })
-        } else if (block.type === 'tool_use') {
+        if (block.type === 'tool_use') {
           const tb = block as SDKContentBlock & { id: string; name: string; input: Record<string, unknown> }
           const intent = (tb.input._intent as string | undefined)
             ?? (tb.name === 'Bash' ? (tb.input.description as string | undefined) : undefined)
@@ -667,7 +655,6 @@ export function useGlobalAgentListeners(): void {
         const map = new Map(prev)
         map.set(sessionId, {
           running: true,
-          content: '',
           toolActivities: [],
           model: modelId || undefined,
           startedAt: streamStartedAt,
@@ -1082,6 +1069,22 @@ export function useGlobalAgentListeners(): void {
             }
             return map
           })
+
+          // 文本/思考恢复后只收束一次 retry 或已完成的压缩状态；正常 token
+          // 不会触碰 AgentStreamState，从而避免重新引入逐 token 的第二次 Map 更新。
+          const hasAssistantActivity = deltaPayload.deltas.some((delta) => delta.type !== 'start')
+          if (hasAssistantActivity) {
+            store.set(agentStreamingStatesAtom, (prev) => {
+              const current = prev.get(sessionId)
+              const shouldResume = current?.retrying !== undefined
+                || current?.contextCompaction?.status === 'success'
+                || current?.contextCompaction?.status === 'noop'
+              if (!current || !shouldResume) return prev
+              const map = new Map(prev)
+              map.set(sessionId, resumeAgentStreamState(current))
+              return map
+            })
+          }
         }
 
         if (payload.kind === 'sdk_message') {
@@ -1093,15 +1096,18 @@ export function useGlobalAgentListeners(): void {
           } else if (msgRecord.type === 'system' && msgRecord.subtype === 'thinking_tokens') {
             // thinking_tokens 是高频进度估算，只更新流式状态，不进入消息转录。
           } else if (!msgRecord.isReplay) {
+            // 当前 run 的 assistant 消息沿用 run 起始时间，与首个 Delta 预览和乐观 header 保持一致。
+            const activeRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
             // 为实时消息补充 _createdAt 时间戳（与持久化时的逻辑一致），
             // 避免 AssistantTurnRenderer 因缺少时间戳导致 header 时间消失
             if (typeof msgRecord._createdAt !== 'number') {
-              msgRecord._createdAt = Date.now()
+              msgRecord._createdAt = msgRecord.type === 'assistant'
+                ? (activeRunStartedAt ?? Date.now())
+                : Date.now()
             }
 
             // 队列自动派发会在上一轮实时消息尚未落盘刷新时开始下一轮。
             // 标记每条实时消息所属 run，渲染层即可把上一轮立即视为完成并自动收起过程块。
-            const activeRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
             if (activeRunStartedAt != null) {
               msgRecord._myyodaLiveRunStartedAt = activeRunStartedAt
             }
@@ -1192,7 +1198,6 @@ export function useGlobalAgentListeners(): void {
               }
               const current: AgentStreamState = existing ?? {
                 running: true,
-                content: '',
                 toolActivities: [],
                 model: undefined,
                 // 无 run 标识的历史事件才允许 fallback；带标识的 retry 必须已在上方匹配。

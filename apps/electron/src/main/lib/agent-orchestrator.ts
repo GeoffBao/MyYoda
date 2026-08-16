@@ -2306,6 +2306,10 @@ ${workContext}`
                   const partialOutput = stripPiAssistantError(assistantMsg)
                   if (modelId) partialOutput._channelModelId = modelId
                   partialOutput._channelProvider = channel.provider
+                  const partialRecord = partialOutput as SDKAssistantMessage & { _createdAt?: number }
+                  if (typeof partialRecord._createdAt !== 'number') {
+                    partialRecord._createdAt = streamStartedAt
+                  }
                   accumulatedMessages.push(partialOutput)
                   // 复用 Pi 的 uuid，让这条正常 markdown 输出替换掉最后一帧局部消息。
                   this.eventBus.emit(sessionId, {
@@ -2408,10 +2412,14 @@ ${workContext}`
                   }
                   // 为 assistant 消息注入渠道信息，确保持久化后能正确匹配模型显示名与 Agent SDK 窗口
                   if (msg.type === 'assistant') {
-                    if (modelId) {
-                      ;(msg as Record<string, unknown>)._channelModelId = modelId
+                    const assistantRecord = msg as Record<string, unknown>
+                    if (typeof assistantRecord._createdAt !== 'number') {
+                      assistantRecord._createdAt = streamStartedAt
                     }
-                    ;(msg as Record<string, unknown>)._channelProvider = channel.provider
+                    if (modelId) {
+                      assistantRecord._channelModelId = modelId
+                    }
+                    assistantRecord._channelProvider = channel.provider
                   }
                   accumulatedMessages.push(msg)
                 }

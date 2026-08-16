@@ -286,7 +286,7 @@ function extractToolResultForTask(message: SDKUserMessage, resultBlock: SDKToolR
 
 // ===== 助手头像 =====
 
-function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
+export function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   if (model) {
     return (
