@@ -94,6 +94,18 @@ npx skills add <owner/repo@skill> -g -y
 
 The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
 
+## MyYoda-Specific Installation Notes
+
+**MyYoda 只从工作区 `skills/` 目录加载 Skill**（如 `~/.myyoda/agent-workspaces/<workspace>/skills/`）。`npx skills add` 默认安装到 `.agents/skills/` 等位置**不会被 MyYoda 加载**，安装后必须手动移动（`mv`）到当前工作区的 `skills/` 目录，刷新后才会出现在 Agent 技能列表中。
+
+在 MyYoda 中安装 Skill 的推荐流程：
+
+1. `npx skills add <owner/repo@skill>`（可先 `npx skills find <query>` 搜索）
+2. 将安装产物移动/复制到当前工作区的 `skills/<skill-name>/` 目录
+3. 告知用户在 Agent 能力中心刷新技能列表以加载新 Skill
+
+如果安装的是打包的 `.skill` 文件，也可用 `skill-creator` 的 `package_skill.py` 解包后放入 `skills/` 目录。
+
 ## Common Skill Categories
 
 When searching, consider these common categories:
