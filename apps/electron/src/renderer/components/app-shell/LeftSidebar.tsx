@@ -175,7 +175,7 @@ import type { KanbanProject } from './kanban/types'
 import { SidebarModule } from './SidebarModule'
 import { SidebarProjectsTab, type ProjectSessionHandlers } from './SidebarProjectsTab'
 import { formatSidebarModuleCount } from './sidebar-module-model'
-import { anyFeatureActive, shouldShowFeatureItem, type FeatureItemKind } from './sidebar-features-model'
+import { anyFeatureActive, shouldShowFeatureItem } from './sidebar-features-model'
 
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
 import { AgentSessionItem, SessionItemActions, STATUS_DOT_CLASS } from './AgentSessionItem'
