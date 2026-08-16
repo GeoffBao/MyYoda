@@ -3249,6 +3249,20 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     currentWorkspaceId,
   ])
 
+  const activeAgentRowId = React.useMemo(() => {
+    if (!activeSessionId) return null
+    const directRow = agentActiveVirtualRows.find((row) => (
+      row.id === `agent-${activeSessionId}` || row.id === `agent-child-${activeSessionId}`
+    ))
+    if (directRow) return directRow.id
+
+    const parentItem = [
+      ...pinnedAgentSessionTrees,
+      ...displayProjectGroups.flatMap((group) => buildAgentSessionTrees(group.sessions)),
+    ].find((item) => treeContainsSessionId(item, activeSessionId))
+    return parentItem ? `agent-${parentItem.session.id}` : null
+  }, [activeSessionId, agentActiveVirtualRows, displayProjectGroups, pinnedAgentSessionTrees])
+
   // ===== 折叠状态：精简图标视图 =====
   // 折叠/展开按钮已迁移至 TabBar（紧邻标签标题，见 TabBar.tsx），与标签栏天然对齐，
   // 这里不重复渲染。点击该按钮才切换折叠态，不再有悬停自动预览。
@@ -3971,7 +3985,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           key="agent-active-list"
           className="flex-1 px-2 pb-3"
           rows={agentActiveVirtualRows}
-          activeRowId={activeSessionId ? `agent-${activeSessionId}` : null}
+          activeRowId={activeAgentRowId}
         />
       ) : (
         <>
@@ -4816,7 +4830,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
           <button
             type="button"
             aria-expanded={!collapsed}
-            aria-controls={`project-sessions-${group.workspace.id}`}
+            aria-controls={hideSessions ? undefined : `project-sessions-${group.workspace.id}`}
             onClick={(e) => {
               e.stopPropagation()
               onSelectProject(group.workspace.id)
