@@ -190,7 +190,7 @@ export function MessageAction({
 
   if (tooltip) {
     return (
-      <TooltipProvider>
+      <TooltipProvider disableHoverableContent>
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent>
