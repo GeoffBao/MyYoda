@@ -71,6 +71,7 @@ import { todoPlanningGroupsAtom } from '@/atoms/planning-atoms'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import {
   agentStreamingStatesAtom,
+  agentSessionStreamingStateAtomFamily,
   agentSessionInputStreamStateAtomFamily,
   agentChannelIdAtom,
   agentModelIdAtom,
@@ -108,7 +109,6 @@ import {
   allPendingAskUserRequestsAtom,
   allPendingPermissionRequestsAtom,
   allPendingExitPlanRequestsAtom,
-  finalizeStreamingActivities,
 } from '@/atoms/agent-atoms'
 import { projectOnboardingSessionIdsAtom } from '@/atoms/project-onboarding-atoms'
 import { repoMapToolsAtom, settingsOpenAtom } from '@/atoms/settings-tab'
@@ -389,7 +389,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const persistedSDKMessagesRef = React.useRef<SDKMessage[]>([])
   persistedSDKMessagesRef.current = persistedSDKMessages
   const setStreamingStates = useSetAtom(agentStreamingStatesAtom)
-  // 只订阅输入区/工具栏需要的低频流状态。逐 token content/toolActivities 由
+  // 只订阅输入区/工具栏需要的低频流状态。逐 token content 由
   // AgentMessages 独立消费，不能让 3000 行 AgentView 和输入框跟随每个 token 重渲染。
   const streamViewState = useAtomValue(agentSessionInputStreamStateAtomFamily(sessionId))
   const streaming = streamViewState.running
@@ -982,7 +982,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        toolActivities: [],
         model: agentModelId || undefined,
         channelId,
         startedAt: streamStartedAt,
@@ -1144,7 +1143,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                toolActivities: [],
                 inputTokens: state.inputTokens,
                 outputTokens: state.outputTokens,
                 cacheReadTokens: state.cacheReadTokens,
@@ -1160,7 +1158,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               map.set(sessionId, {
                 running: false,
                 backgroundWaiting: state.backgroundWaiting,
-                toolActivities: [],
                 contextCompaction: state.contextCompaction,
               })
             } else {
@@ -1171,7 +1168,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           setLiveMessagesMap((prev) => {
             if (!prev.has(sessionId)) return prev
             // 仍在运行中，不清除实时消息（与 streamingStates 保护逻辑一致）
-            const streamingState = store.get(agentStreamingStatesAtom).get(sessionId)
+            const streamingState = store.get(agentSessionStreamingStateAtomFamily(sessionId))
             if (streamingState?.running) return prev
             const map = new Map(prev)
             map.delete(sessionId)
@@ -1249,7 +1246,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const existing = prev.get(sessionId)
         map.set(sessionId, {
           running: true,
-          toolActivities: [],
           model: snapshot.modelId,
           startedAt: streamStartedAt,
           inputTokens: existing?.inputTokens,
@@ -2242,7 +2238,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
         startedAt: streamStartedAt,
@@ -2351,7 +2346,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const map = new Map(prev)
       const current = prev.get(sessionId) ?? {
         running: true,
-        toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
         startedAt: streamStartedAt,
@@ -2446,7 +2440,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       const existing = prev.get(sessionId)
       map.set(sessionId, {
         running: true,
-        toolActivities: [],
         model: agentModelId || undefined,
         channelId: agentChannelId,
         startedAt: streamStartedAt,
@@ -2492,7 +2485,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const map = new Map(prev)
         map.set(meta.id, {
           running: true,
-          toolActivities: [],
           model: agentModelId || undefined,
           channelId: agentChannelId,
           startedAt: streamStartedAt,

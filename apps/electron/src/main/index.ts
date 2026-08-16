@@ -429,10 +429,11 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      // 实验：恢复 Chromium 的后台调度节流，避免隐藏窗口的 renderer 持续占用主线程。
-      // 当前排队消息自动投递仍由 renderer 消费 STREAM_COMPLETE；隐藏窗口下可能延后，
-      // 这是本分支需要与卡顿改善一起验证的行为代价。
-      backgroundThrottling: true,
+      // 排队消息的自动投递依赖 renderer 消费 STREAM_COMPLETE；窗口被遮挡、最小化或失焦时
+      // 不能让 Chromium 降速该事件循环，否则下一条消息会等到用户重新激活窗口才发送。
+      // upstream #1696/#1699 将 backgroundThrottling 改为 true 与"排队消息改为主进程调度"成对设计；
+      // 本次同步未移植主进程队列调度迁移（风险/收益评估后搁置），因此保持 false 避免隐藏窗口下队列消息延迟回归。
+      backgroundThrottling: false,
     },
     ...titleBarOptions,
   })
