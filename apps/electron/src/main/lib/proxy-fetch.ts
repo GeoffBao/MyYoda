@@ -5,7 +5,6 @@
  * 用于渠道配置了代理地址时，让 AI API 请求走指定代理。
  */
 
-import { net } from 'electron'
 import { ProxyAgent, fetch as undiciFetch } from 'undici'
 import type { RequestInfo, RequestInit } from 'undici'
 
@@ -61,6 +60,9 @@ export async function fetchWithSystemFallback(
   try {
     return await primaryFetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) })
   } catch (primaryError) {
+    // electron 在测试环境（bun test 串行）下顶层静态导入会报 `Export named 'net' not found`，
+    // 必须函数内懒加载（与 ipc.ts 既有模式一致），避免拖垮间接依赖本模块的测试文件
+    const { net } = await import('electron')
     try {
       return await net.fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) })
     } catch {
