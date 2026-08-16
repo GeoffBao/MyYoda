@@ -19,7 +19,7 @@ import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
-import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, RewindSessionResult, SkillActivation } from '@myyoda/shared'
+import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE, PROVIDER_DEFAULT_URLS, THINKING_SIGNATURE_ERROR_CODE, THINKING_SIGNATURE_ERROR_MESSAGE, THINKING_SIGNATURE_ERROR_TITLE, isPersistableSDKSystemMessage, normalizeMcpTransportType, inferAgentSdkContextWindow, inferReasoningTransport, resolveReasoningProfile, collectSkillActivations, mergeSkillActivations } from '@myyoda/shared'
 import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
@@ -152,6 +152,19 @@ function isMissingActiveQueueChannelError(error: unknown): boolean {
 
 function isPartialSDKMessage(message: SDKMessage): boolean {
   return (message as Record<string, unknown>)._partial === true
+}
+
+function isAssistantDeltaSDKMessage(message: SDKMessage): message is SDKMessage & {
+  type: 'assistant_delta'
+  uuid: string
+  delta: AgentAssistantDeltaPayload['deltas'][number]
+  session_id?: string
+  _channelModelId?: string
+} {
+  const record = message as Record<string, unknown>
+  return record.type === 'assistant_delta'
+    && typeof record.uuid === 'string'
+    && !!record.delta
 }
 
 /**
@@ -2141,6 +2154,19 @@ ${workContext}`
 
             pendingNext = null
             let msg = iterResult.value
+            if (isAssistantDeltaSDKMessage(msg)) {
+              this.eventBus.emit(sessionId, {
+                kind: 'sdk_delta',
+                delta: {
+                  uuid: msg.uuid,
+                  deltas: [msg.delta],
+                  session_id: msg.session_id,
+                  runStartedAt: streamStartedAt,
+                  _channelModelId: msg._channelModelId,
+                },
+              })
+              continue
+            }
             const isPartialMessage = isPartialSDKMessage(msg)
             if (msg.type === 'result') {
               const skillActivations = mergeSkillActivations(

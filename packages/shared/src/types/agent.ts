@@ -736,10 +736,39 @@ export interface CoworkChildInfo {
   modelId?: string
 }
 
-/** IPC 传输的统一 payload（替代 AgentEvent） */
+/** Pi AssistantMessageEvent 的可序列化增量；不携带累计 partial，避免跨进程复制整段输出。 */
+export type AgentAssistantDelta =
+  | { type: 'start' }
+  | { type: 'text_start'; contentIndex: number }
+  | { type: 'text_delta'; contentIndex: number; delta: string }
+  | { type: 'text_end'; contentIndex: number; content: string }
+  | { type: 'thinking_start'; contentIndex: number }
+  | { type: 'thinking_delta'; contentIndex: number; delta: string }
+  | { type: 'thinking_end'; contentIndex: number; content: string }
+  | { type: 'toolcall_start'; contentIndex: number; toolCall?: AgentToolCallDelta }
+  | { type: 'toolcall_delta'; contentIndex: number; delta: string; toolCall?: AgentToolCallDelta }
+  | { type: 'toolcall_end'; contentIndex: number; toolCall: AgentToolCallDelta }
+
+export interface AgentToolCallDelta {
+  id: string
+  name: string
+  arguments?: Record<string, unknown>
+}
+
+export interface AgentAssistantDeltaPayload {
+  uuid: string
+  deltas: AgentAssistantDelta[]
+  session_id?: string
+  /** 产生该 Delta 的 Agent run 起始时间；仅存在于运行时 payload，不写入 JSONL。 */
+  runStartedAt?: number
+  _channelModelId?: string
+}
+
+/** SDK 消息与 AgentAssistantDeltaPayload 分离，Delta 只存在于运行时，不写入 JSONL。 */
 export type AgentStreamPayload =
   | { kind: 'sdk_message'; message: SDKMessage }
   | { kind: 'myyoda_event'; event: MyYodaEvent }
+  | { kind: 'sdk_delta'; delta: AgentAssistantDeltaPayload }
 
 // ===== Kanban / Projects / Tasks IPC 契约 =====
 

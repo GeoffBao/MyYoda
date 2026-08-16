@@ -1,7 +1,7 @@
 /**
  * Pi Agent SDK 适配器
  *
- * Proma 内部继续使用 SDKMessage 兼容协议，避免渲染层、Jotai 状态、
+ * MyYoda 内部继续使用 SDKMessage 兼容协议，避免渲染层、Jotai 状态、
  * JSONL 持久化和历史会话展示在 SDK 迁移时一起改名。
  */
 
@@ -24,6 +24,8 @@ import type {
   SendQueuedMessageOptions,
   SDKMessage,
   TypedError,
+  AgentAssistantDelta,
+  AgentToolCallDelta,
   SDKUserMessageInput,
   SkillActivation,
 } from '@myyoda/shared'
@@ -53,6 +55,7 @@ import type {
   ToolDefinition,
 } from '@earendil-works/pi-coding-agent'
 import type { Transport as PiAgentTransport } from '@earendil-works/pi-ai'
+import type { AssistantMessageEvent } from '@earendil-works/pi-ai'
 import type { AgentToolResult, AgentToolUpdateCallback } from '@earendil-works/pi-agent-core'
 import type { AssistantMessage } from '@earendil-works/pi-ai/compat'
 import { Type, type TSchema } from 'typebox'
@@ -79,7 +82,6 @@ import {
   restorePiInput,
 } from './pi-message-adapter'
 import { DEFAULT_CONTEXT_WINDOW, buildModel } from './pi-model-registry'
-import { createPartialMessageCoalescer, type PartialMessageCoalescer } from './pi-streaming-control'
 import { PendingPromptSkillActivationTracker } from './pi-skill-activation-tracker'
 import { createPiRetryTerminalGate, mapPiNativeRetryEvent } from './pi-retry-control'
 import { isClaudeSubscriptionLimitError } from './pi-subscription-limit'
@@ -96,10 +98,7 @@ type BashToolOptions = import('@earendil-works/pi-coding-agent').BashToolOptions
 type SkillLoadResult = ReturnType<ResourceLoader['getSkills']>
 
 const PI_NATIVE_MAX_RETRIES = 8
-const PI_NATIVE_MAX_TOTAL_RETRIES = 8
 const PI_NATIVE_RETRY_BASE_DELAY_MS = 1_000
-const PI_NATIVE_MAX_TOTAL_DELAY_MS = 5 * 60_000
-const PI_NATIVE_RETRY_JITTER_RATIO = 0.2
 const MAX_AUTOMATIC_COMPACTION_CONTINUATIONS = 20
 
 /** Pi SDK 查询选项（扩展通用 AgentQueryInput） */
@@ -230,6 +229,49 @@ export function createPiAssistantUuidTracker(createUuid: () => string = randomUU
   }
 }
 
+function toolCallDeltaFromPartial(event: Extract<AssistantMessageEvent, { type: 'toolcall_start' | 'toolcall_delta' }>): AgentToolCallDelta | undefined {
+  const block = event.partial.content[event.contentIndex]
+  if (!block || block.type !== 'toolCall') return undefined
+  return {
+    id: block.id,
+    name: displayToolName(block.name, block.arguments as Record<string, unknown>),
+    ...(event.type === 'toolcall_delta' ? {} : { arguments: {} }),
+  }
+}
+
+/** Extract only the small structured delta from Pi's cumulative message_update event. */
+export function serializePiAssistantDelta(event: AssistantMessageEvent): AgentAssistantDelta | undefined {
+  switch (event.type) {
+    case 'start': return { type: 'start' }
+    case 'text_start': return { type: 'text_start', contentIndex: event.contentIndex }
+    case 'text_delta': return { type: 'text_delta', contentIndex: event.contentIndex, delta: event.delta }
+    case 'text_end': return { type: 'text_end', contentIndex: event.contentIndex, content: event.content }
+    case 'thinking_start': return { type: 'thinking_start', contentIndex: event.contentIndex }
+    case 'thinking_delta': return { type: 'thinking_delta', contentIndex: event.contentIndex, delta: event.delta }
+    case 'thinking_end': return { type: 'thinking_end', contentIndex: event.contentIndex, content: event.content }
+    case 'toolcall_start': {
+      const toolCall = toolCallDeltaFromPartial(event)
+      return { type: 'toolcall_start', contentIndex: event.contentIndex, ...(toolCall ? { toolCall } : {}) }
+    }
+    case 'toolcall_delta': {
+      const toolCall = toolCallDeltaFromPartial(event)
+      return { type: 'toolcall_delta', contentIndex: event.contentIndex, delta: event.delta, ...(toolCall ? { toolCall } : {}) }
+    }
+    case 'toolcall_end':
+      return {
+        type: 'toolcall_end',
+        contentIndex: event.contentIndex,
+        toolCall: {
+          id: event.toolCall.id,
+          name: displayToolName(event.toolCall.name, event.toolCall.arguments as Record<string, unknown>),
+          arguments: event.toolCall.arguments as Record<string, unknown>,
+        },
+      }
+    default:
+      return undefined
+  }
+}
+
 export interface PiRemoteConnectionSettings {
   httpProxy?: string
   transport?: PiAgentTransport
@@ -243,9 +285,6 @@ interface AsyncQueue<T> {
   close: () => void
   next: () => Promise<IteratorResult<T>>
 }
-
-/** Pi 原生每个 delta 都携带累计消息；20fps 足够流畅，同时避免 IPC/React 事件风暴。 */
-const PI_PARTIAL_UPDATE_INTERVAL_MS = 50
 
 function getCaseInsensitiveRuntimeEnvValue(env: Record<string, string> | undefined, key: string): string | undefined {
   if (!env) return undefined
@@ -1462,14 +1501,11 @@ export class PiAgentAdapter implements AgentProviderAdapter {
     active.onSkillActivated = input.onSkillActivated
     let unsubscribe: (() => void) | undefined
     let requestProxyDispatcher: Dispatcher | undefined
-    let partialAssistantCoalescer: PartialMessageCoalescer<{ message: AssistantMessage; uuid: string }> | undefined
 
     const cleanupActiveSession = (): void => {
       try {
         unsubscribe?.()
         unsubscribe = undefined
-        partialAssistantCoalescer?.dispose()
-        partialAssistantCoalescer = undefined
         if (!active.disposed) {
           active.disposed = true
           rejectPendingInterruptPrompts(active, createAbortError())
@@ -1548,15 +1584,10 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         compaction: { enabled: true, reserveTokens: autoCompactionReserveTokens },
         // Pi 原生 retry 通过 agent.continue() 在同一 transcript 中恢复，能保留已完成的
         // tool_result；不能用外层重投原始 prompt 替代，否则会重复执行副作用工具。
-        // 单段和整轮均最多 8 次；累计 backoff 最多 5 分钟。±20% jitter 避免多个
-        // 客户端在固定指数退避边界同时重试。provider retry 保持默认 0，避免嵌套计数。
         retry: {
           enabled: true,
           maxRetries: PI_NATIVE_MAX_RETRIES,
-          maxTotalRetries: PI_NATIVE_MAX_TOTAL_RETRIES,
           baseDelayMs: PI_NATIVE_RETRY_BASE_DELAY_MS,
-          maxTotalDelayMs: PI_NATIVE_MAX_TOTAL_DELAY_MS,
-          jitterRatio: PI_NATIVE_RETRY_JITTER_RATIO,
         },
         ...buildPiRemoteConnectionSettings(input),
       })
@@ -1687,7 +1718,6 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       } as unknown as SDKMessage)
 
       const assistantUuidTracker = createPiAssistantUuidTracker()
-      let lastPartialAssistant: AssistantMessage | undefined
       // Pi 会在 native retry 前先发出 error assistant，再以 agent_end.willRetry 标记。
       // 延迟向 orchestrator 透传该 error，避免它先触发外层重试而重放整个 prompt。
       const retryTerminalGate = createPiRetryTerminalGate<{
@@ -1713,7 +1743,6 @@ export class PiAgentAdapter implements AgentProviderAdapter {
       const assistantUuidFor = (): string => assistantUuidTracker.get()
       const resetAssistantStream = (): void => {
         assistantUuidTracker.reset()
-        lastPartialAssistant = undefined
       }
 
       const emitTerminalRetryError = (terminalRetryError: {
@@ -1727,14 +1756,6 @@ export class PiAgentAdapter implements AgentProviderAdapter {
         resetAssistantStream()
       }
 
-      partialAssistantCoalescer = createPartialMessageCoalescer(({ message, uuid }) => {
-        const converted = convertPiMessage(message, session.sessionId, input.model, {
-          final: false,
-          uuid,
-        })
-        if (converted?.type === 'assistant') queue.push(converted)
-      }, PI_PARTIAL_UPDATE_INTERVAL_MS)
-
       unsubscribe = session.subscribe((event: AgentSessionEvent) => {
         try {
           switch (event.type) {
@@ -1747,29 +1768,31 @@ export class PiAgentAdapter implements AgentProviderAdapter {
             }
             case 'message_update': {
               if (!isAssistantPiMessage(event.message)) break
-              lastPartialAssistant = event.message
-              // Pi 的 partial 是累计全文。合并为最多 20fps 的最新帧，避免每 token 都在
-              // main → IPC → renderer 路径重复复制整段消息；message_end 始终立即透传。
-              partialAssistantCoalescer?.schedule({ message: event.message, uuid: assistantUuidFor() })
+              const assistantUuid = assistantUuidFor()
+              const delta = serializePiAssistantDelta(event.assistantMessageEvent)
+              if (delta) {
+                queue.push({
+                  type: 'assistant_delta',
+                  uuid: assistantUuid,
+                  delta,
+                  session_id: session.sessionId,
+                  ...(input.model && { _channelModelId: input.model }),
+                } as unknown as SDKMessage)
+              }
               break
             }
             case 'message_end': {
-              partialAssistantCoalescer?.flush()
               if (active.interrupting && isAbortedAssistantMessage(event.message)) {
-                if (lastPartialAssistant) {
-                  const converted = convertPiMessage(lastPartialAssistant, session.sessionId, input.model, {
-                    final: true,
-                    uuid: assistantUuidFor(),
-                  })
-                  if (converted?.type === 'assistant') queue.push(converted)
-                }
+                const converted = convertPiMessage(event.message, session.sessionId, input.model, {
+                  uuid: assistantUuidFor(),
+                })
+                if (converted?.type === 'assistant') queue.push(converted)
                 resetAssistantStream()
                 break
               }
               const isAssistant = isAssistantPiMessage(event.message)
               const assistantUuid = isAssistant ? assistantUuidFor() : undefined
               const converted = convertPiMessage(event.message, session.sessionId, input.model, {
-                final: true,
                 ...(assistantUuid && { uuid: assistantUuid }),
               })
               const shouldDeferNativeOverflow = isAssistant
@@ -1861,7 +1884,6 @@ export class PiAgentAdapter implements AgentProviderAdapter {
               )
               break
             case 'auto_retry_start':
-            case 'auto_retry_attempt_start':
             case 'auto_retry_end':
               for (const retry of mapPiNativeRetryEvent(event, { runStartedAt: retryRunStartedAt })) input.onRetry?.(retry)
               break

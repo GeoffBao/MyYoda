@@ -70,7 +70,7 @@ import { channelsAtom } from '@/atoms/chat-atoms'
 import { previewFileMapAtom } from '@/atoms/preview-atoms'
 import type { NotificationSoundType } from '@/types/settings'
 import { toast } from 'sonner'
-import type { AgentStreamEvent, AgentStreamCompletePayload, AgentEvent, AgentStreamPayload, SDKAssistantMessage, SDKMessage, SDKUserMessage, SDKSystemMessage, SDKContentBlock, SDKUserContentBlock, MyYodaEvent, AgentSessionMeta, ProviderType } from '@myyoda/shared'
+import type { AgentStreamEvent, AgentStreamCompletePayload, AgentEvent, AgentStreamPayload, AgentAssistantDelta, AgentAssistantDeltaPayload, SDKAssistantMessage, SDKMessage, SDKUserMessage, SDKSystemMessage, SDKContentBlock, SDKUserContentBlock, MyYodaEvent, AgentSessionMeta, ProviderType } from '@myyoda/shared'
 import { inferAgentSdkContextWindow, inferContextWindow } from '@myyoda/shared'
 import { buildExternalAgentRunActivation, shouldActivateExternalAgentRun } from '@/lib/external-agent-run'
 import { upsertAgentSession, mergeFetchedAgentSessions } from '@/lib/agent-session-list'
@@ -138,7 +138,108 @@ function isRunScopedRetryEvent(event: AgentEvent): event is Extract<AgentEvent, 
     || event.type === 'retry_cancelled'
 }
 
+function deltaToLegacyEvents(delta: AgentAssistantDelta): AgentEvent[] {
+  switch (delta.type) {
+    case 'text_delta':
+      return delta.delta ? [{ type: 'text_delta', text: delta.delta }] : []
+    case 'toolcall_start':
+    case 'toolcall_end': {
+      const toolCall = delta.toolCall
+      if (!toolCall) return []
+      return [{
+        type: 'tool_start',
+        toolName: toolCall.name,
+        toolUseId: toolCall.id,
+        input: toolCall.arguments ?? {},
+        parentToolUseId: undefined,
+      }]
+    }
+    default:
+      return []
+  }
+}
+
+function applyAssistantDeltaToPreview(
+  message: SDKAssistantMessage,
+  delta: AgentAssistantDelta,
+): SDKAssistantMessage {
+  const content = [...message.message.content] as SDKContentBlock[]
+  const index = 'contentIndex' in delta ? delta.contentIndex : undefined
+  const ensureBlock = (fallback: SDKContentBlock): number => {
+    if (index == null) {
+      content.push(fallback)
+      return content.length - 1
+    }
+    while (content.length <= index) content.push({ type: 'text', text: '' })
+    return index
+  }
+  const existing = index != null ? content[index] : undefined
+  switch (delta.type) {
+    case 'text_start':
+      content[ensureBlock({ type: 'text', text: '' })] = { type: 'text', text: '' }
+      break
+    case 'text_delta': {
+      const blockIndex = ensureBlock({ type: 'text', text: '' })
+      const text = existing?.type === 'text' && 'text' in existing && typeof existing.text === 'string' ? existing.text : ''
+      content[blockIndex] = { type: 'text', text: text + delta.delta }
+      break
+    }
+    case 'text_end':
+      content[ensureBlock({ type: 'text', text: '' })] = { type: 'text', text: delta.content }
+      break
+    case 'thinking_start':
+      content[ensureBlock({ type: 'thinking', thinking: '' })] = { type: 'thinking', thinking: '' }
+      break
+    case 'thinking_delta': {
+      const blockIndex = ensureBlock({ type: 'thinking', thinking: '' })
+      const thinking = existing?.type === 'thinking' && 'thinking' in existing && typeof existing.thinking === 'string' ? existing.thinking : ''
+      content[blockIndex] = { type: 'thinking', thinking: thinking + delta.delta }
+      break
+    }
+    case 'thinking_end':
+      content[ensureBlock({ type: 'thinking', thinking: '' })] = { type: 'thinking', thinking: delta.content }
+      break
+    case 'toolcall_start':
+    case 'toolcall_delta':
+    case 'toolcall_end': {
+      const toolCall = delta.toolCall
+      if (!toolCall) break
+      const blockIndex = ensureBlock({ type: 'tool_use', id: toolCall.id, name: toolCall.name, input: {} })
+      const previous = content[blockIndex]
+      content[blockIndex] = {
+        type: 'tool_use',
+        id: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.arguments ?? (previous?.type === 'tool_use' && 'input' in previous ? previous.input : {}),
+      }
+      break
+    }
+    case 'start':
+      break
+  }
+  return { ...message, message: { ...message.message, content }, _partial: true } as SDKAssistantMessage
+}
+
+function createAssistantDeltaPreview(payload: AgentAssistantDeltaPayload, metadata: Partial<SDKAssistantMessage>): SDKAssistantMessage {
+  return {
+    type: 'assistant',
+    message: { content: [] },
+    parent_tool_use_id: null,
+    session_id: payload.session_id,
+    uuid: payload.uuid,
+    _partial: true,
+    _createdAt: Date.now(),
+    ...metadata,
+  } as SDKAssistantMessage
+}
+
+function deltaPayloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
+  if (payload.kind !== 'sdk_delta') return []
+  return payload.delta.deltas.flatMap(deltaToLegacyEvents)
+}
+
 function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
+  if (payload.kind === 'sdk_delta') return deltaPayloadToLegacyEvents(payload)
   if (payload.kind === 'myyoda_event') {
     const evt = payload.event
     switch (evt.type) {
@@ -936,6 +1037,53 @@ export function useGlobalAgentListeners(): void {
         }
 
         // Phase 2: 直接累积 SDKMessage 到 liveMessagesMapAtom（跳过 replay 消息，避免与持久化消息重复）
+        if (payload.kind === 'sdk_delta') {
+          const deltaPayload = payload.delta
+          const currentRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
+          // Delta 必须携带产生它的 run 标识。迟到的旧 run Delta 不能借用当前 run，
+          // 否则会被 live-group-set 误判为新一轮消息；无标识的旧协议事件也不强行归类。
+          if (currentRunStartedAt != null && deltaPayload.runStartedAt !== currentRunStartedAt) return
+          const deltaRunStartedAt = deltaPayload.runStartedAt
+          const sessionModelMap = store.get(agentSessionModelMapAtom)
+          const defaultModelId = store.get(agentModelIdAtom)
+          const modelId = deltaPayload._channelModelId ?? sessionModelMap.get(sessionId) ?? defaultModelId ?? undefined
+          const sessionChannelMap = store.get(agentSessionChannelMapAtom)
+          const defaultChannelId = store.get(agentChannelIdAtom)
+          const channelId = sessionChannelMap.get(sessionId) ?? defaultChannelId ?? undefined
+          const provider = store.get(channelsAtom).find((c) => c.id === channelId)?.provider
+          store.set(liveMessagesMapAtom, (prev) => {
+            const map = new Map(prev)
+            const current = map.get(sessionId) ?? []
+            const existingIndex = current.findIndex((message) => {
+              const record = message as unknown as Record<string, unknown>
+              if (record.uuid !== deltaPayload.uuid) return false
+              return deltaRunStartedAt == null || record._myyodaLiveRunStartedAt === deltaRunStartedAt
+            })
+            const existing = existingIndex >= 0 && current[existingIndex]?.type === 'assistant'
+              ? current[existingIndex] as SDKAssistantMessage
+              : createAssistantDeltaPreview(deltaPayload, {
+                ...(modelId ? { _channelModelId: modelId } : {}),
+                ...(provider ? { _channelProvider: provider } : {}),
+                ...(deltaRunStartedAt != null ? { _myyodaLiveRunStartedAt: deltaRunStartedAt } : {}),
+              })
+            const nextMessage = deltaPayload.deltas.reduce(applyAssistantDeltaToPreview, existing)
+            // live-group-set 依赖 run 标记区分当前队列轮次；Delta 预览也必须携带它，
+            // 否则 transcript 已有 assistant，但会被误判为非 live 并额外渲染 smooth fallback。
+            const markedMessage = deltaRunStartedAt != null
+              && (nextMessage as unknown as Record<string, unknown>)._myyodaLiveRunStartedAt !== deltaRunStartedAt
+              ? { ...nextMessage, _myyodaLiveRunStartedAt: deltaRunStartedAt } as SDKAssistantMessage
+              : nextMessage
+            if (existingIndex >= 0) {
+              const next = [...current]
+              next[existingIndex] = markedMessage
+              map.set(sessionId, next)
+            } else {
+              map.set(sessionId, [...current, markedMessage])
+            }
+            return map
+          })
+        }
+
         if (payload.kind === 'sdk_message') {
           const msgRecord = payload.message as Record<string, unknown>
           // prompt_suggestion 不是对话转录消息，不能进入 liveMessages（会被错误渲染到最后一条助手消息中）
@@ -979,9 +1127,8 @@ export function useGlobalAgentListeners(): void {
               const map = new Map(prev)
               const current = map.get(sessionId) ?? []
 
-              // UUID 去重 / partial upsert：
-              // - 队列用户消息已被乐观注入，SDK 再次推送时跳过
-              // - Pi message_update 使用稳定 uuid 标记 _partial，最终 message_end 用同一 uuid 替换
+              // 队列用户消息仍可能与 SDK 推送同 UUID；Delta 预览先写入临时 assistant，
+              // 终态 SDK message 到达后用同 UUID 替换并校正最终内容。
               const incomingUuid = msgRecord.uuid as string | undefined
               if (incomingUuid) {
                 const existingIndex = current.findIndex((m) => (m as Record<string, unknown>).uuid === incomingUuid)

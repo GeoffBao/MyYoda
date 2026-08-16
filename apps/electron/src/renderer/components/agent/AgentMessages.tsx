@@ -1026,7 +1026,8 @@ export const AgentMessages = React.memo(function AgentMessages({
 
   const transitioning = needsInstant || transitioningCooldown
 
-  // 合并持久化 + 实时 SDKMessage；历史 group 后续仅接收本 turn 消息，避免全历史依赖扩散。
+  // 合并持久化 + 实时 SDKMessage：同一 UUID 的 live 消息替换历史快照，避免
+  // 历史会话快速续跑时 live atom 尚未清空而把同一 assistant 渲染两次。
   const allSDKMessages = React.useMemo(() => {
     const persisted = persistedSDKMessages ?? []
     const live = liveMessages ?? []
@@ -1035,37 +1036,30 @@ export const AgentMessages = React.memo(function AgentMessages({
       ;(message as Record<string, unknown>)._myyodaStableKey = key
       return message
     }
-    const keyOf = (message: SDKMessage): string =>
-      (message as Record<string, unknown>)._myyodaStableKey as string
-
-    const persistedWithKeys = persisted.map(stampStableKey)
-    const liveWithKeys = live.map(stampStableKey)
-    if (streaming || liveWithKeys.length === 0 || persistedWithKeys.length === 0) {
-      return [...persistedWithKeys, ...liveWithKeys]
+    const hasUuid = (message: SDKMessage): boolean => {
+      const uuid = (message as Record<string, unknown>).uuid
+      return typeof uuid === 'string' && uuid.length > 0
     }
-
-    // 流式结束后的刷新中，持久化消息尾部可能已经包含 live 序列。
-    // 只替换有序尾部重叠，避免按内容全局去重误删历史中的相同问答。
-    let overlap = Math.min(persistedWithKeys.length, liveWithKeys.length)
-    for (; overlap > 0; overlap--) {
-      const persistedStart = persistedWithKeys.length - overlap
-      const liveStart = liveWithKeys.length - overlap
-      let matches = true
-      for (let i = 0; i < overlap; i++) {
-        if (keyOf(persistedWithKeys[persistedStart + i]!) !== keyOf(liveWithKeys[liveStart + i]!)) {
-          matches = false
-          break
+    const result: SDKMessage[] = []
+    const uuidIndexes = new Map<string, number>()
+    const upsert = (message: SDKMessage): void => {
+      const stamped = stampStableKey(message)
+      if (hasUuid(stamped)) {
+        const key = (stamped as Record<string, unknown>)._myyodaStableKey as string
+        const existingIndex = uuidIndexes.get(key)
+        if (existingIndex != null) {
+          result[existingIndex] = stamped
+          return
         }
+        uuidIndexes.set(key, result.length)
       }
-      if (matches) break
+      result.push(stamped)
     }
 
-    if (overlap === 0) return [...persistedWithKeys, ...liveWithKeys]
-    return [
-      ...persistedWithKeys.slice(0, persistedWithKeys.length - overlap),
-      ...liveWithKeys,
-    ]
-  }, [persistedSDKMessages, liveMessages, streaming])
+    for (const message of persisted) upsert(message)
+    for (const message of live) upsert(message)
+    return result
+  }, [persistedSDKMessages, liveMessages])
   const hasContent = allSDKMessages.length > 0
   // 跨 turn task_notification 是历史 Task 卡片唯一需要追踪的外部元数据。
   // 普通 token/live snapshot 不改变此签名，MessageGroupRenderer comparator 因而可忽略全消息数组新引用。
