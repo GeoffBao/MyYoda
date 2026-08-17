@@ -3046,3 +3046,14 @@ html.theme-custom body {
   display: none !important;
 }
 
+
+/* ===== Agent 长会话历史懒渲染（content-visibility） =====
+ * 会话历史无虚拟化，数千条消息的 group 全部挂进 DOM 后首次渲染极慢。
+ * content-visibility: auto 让视口外 group 跳过 layout/paint，滚动到时再渲染；
+ * DOM 树保持完整（quote 导航 querySelector/选区/距底部滚动恢复均不受影响）。
+ * contain-intrinsic-size 的 auto 关键字：渲染过即记住真实尺寸，未渲染时用 600px 估算（接近单轮消息组平均高度）。
+ * 仅在历史组启用；流式 live 组必须逐帧渲染，不加。 */
+.agent-transcript-group-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
