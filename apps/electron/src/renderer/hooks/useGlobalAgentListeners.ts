@@ -654,7 +654,6 @@ export function useGlobalAgentListeners(): void {
             return map
           })
         }
-        }
       })
     })
 
