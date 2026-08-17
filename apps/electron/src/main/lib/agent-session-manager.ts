@@ -731,6 +731,53 @@ function sanitizeOversizedMessage(msg: SDKMessage, originalLength: number): SDKM
 }
 
 /**
+ * 剥离单条已持久化 SDKMessage 行中的 base64 图片块（存量治理）。
+ *
+ * 历史版本 sanitizeOversizedMessage 不识别 Pi 的 {type:'image', data, mimeType} 格式，
+ * 导致超限大图被原样写入 JSONL。此函数对存量行做同语义的图片块替换：
+ * 兼容 Claude SDK {source.data} 与 Pi {data} 两种格式，剥离后保留截断标记。
+ *
+ * @returns 替换后的行（无空格 JSON）；若该行不含可剥离的图片块返回 null。
+ */
+export function stripImageBlocksFromStoredMessage(line: string): string | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(line)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+  const msg = parsed as Record<string, unknown>
+  const message = msg.message as Record<string, unknown> | undefined
+  const content = message?.content
+  if (!Array.isArray(content)) return null
+
+  let changed = false
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue
+    const record = block as Record<string, unknown>
+    if (record.type !== 'tool_result') continue
+    const inner = record.content
+    if (!Array.isArray(inner)) continue
+    for (let index = 0; index < inner.length; index++) {
+      const item = inner[index]
+      if (!item || typeof item !== 'object') continue
+      const itemRecord = item as Record<string, unknown>
+      if (itemRecord.type !== 'image') continue
+      const source = itemRecord.source as Record<string, unknown> | undefined
+      const data = typeof itemRecord.data === 'string'
+        ? itemRecord.data
+        : typeof source?.data === 'string' ? source.data : undefined
+      if (!data) continue
+      inner[index] = { type: 'image', _truncated: true, _originalLength: data.length }
+      changed = true
+    }
+  }
+
+  return changed ? JSON.stringify(msg) : null
+}
+
+/**
  * 读取会话的所有 SDKMessage（兼容旧 AgentMessage 格式）
  *
  * 旧格式（有 `role` 字段）会被转换为近似的 SDKMessage。

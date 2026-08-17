@@ -692,6 +692,12 @@ export const STORAGE_IPC_CHANNELS = {
   CLEANUP_TEMP: 'storage:cleanup-temp',
   /** 仅清理「发现」面板视频缓存 */
   CLEANUP_DISCOVER: 'storage:cleanup-discover',
+  /** 预览清理已归档会话数据将释放的空间（dry-run） */
+  PREVIEW_ARCHIVED_CLEANUP: 'storage:preview-archived-cleanup',
+  /** 预览存量 JSONL 可剥离的 base64 大图体积（dry-run） */
+  PREVIEW_STRIP_IMAGES: 'storage:preview-strip-images',
+  /** 执行存量 JSONL 大图剥离 */
+  STRIP_IMAGES: 'storage:strip-images',
 } as const
 
 /** 用量统计 IPC 通道 */

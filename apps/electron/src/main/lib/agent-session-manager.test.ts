@@ -234,6 +234,47 @@ describe('Agent 会话 JSONL 读取', () => {
       .toThrow('JSONL 第 2 行解析失败')
   })
 
+  test('Given Pi 顶层 data 图片块 When 单行剥离 Then 替换为截断标记且返回新行', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'c1', content: [{ type: 'image', data: 'x'.repeat(5000), mimeType: 'image/png' }] }] },
+      parent_tool_use_id: null,
+    })
+
+    const stripped = manager.stripImageBlocksFromStoredMessage(line)
+
+    expect(stripped).not.toBeNull()
+    expect(stripped).not.toContain('x'.repeat(5000))
+    expect(stripped).toContain('"_truncated":true')
+    expect(stripped).toContain('"_originalLength":5000')
+  })
+
+  test('Given Claude source.data 图片块 When 单行剥离 Then 同样替换为截断标记', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'c2',
+          content: [{ type: 'image', source: { type: 'base64', data: 'y'.repeat(5000), media_type: 'image/png' } }],
+        }],
+      },
+      parent_tool_use_id: null,
+    })
+
+    const stripped = manager.stripImageBlocksFromStoredMessage(line)
+
+    expect(stripped).not.toBeNull()
+    expect(stripped).not.toContain('y'.repeat(5000))
+    expect(stripped).toContain('"_originalLength":5000')
+  })
+
+  test('Given 不含图片块的行或损坏 JSON When 单行剥离 Then 返回 null 不修改', () => {
+    const plain = JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: '纯文本' }] } })
+    expect(manager.stripImageBlocksFromStoredMessage(plain)).toBeNull()
+    expect(manager.stripImageBlocksFromStoredMessage('{ 损坏行')).toBeNull()
+  })
+
   test('Given Pi 格式超大图片块（type/data/mimeType 顶层字段） When 追加消息 Then base64 被剥离为截断标记', () => {
     const sessionId = 'session-pi-oversized-image'
     writeAgentSessionsIndex([{
