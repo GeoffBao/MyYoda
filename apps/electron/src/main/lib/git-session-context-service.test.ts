@@ -199,6 +199,35 @@ describe('git-session-context-service', () => {
     expect(sh(repo, ['branch', '--show-current'])).toBe('main')
     expect(updates).toHaveLength(0)
   })
+
+  test('Given Local mode with only ignored files When switching branch Then proceeds without false dirty rejection', () => {
+    const repo = makeRepo()
+    // .gitignore 已忽略 *.secret：只写忽略文件，没有任何真实未提交改动
+    writeFileSync(join(repo, 'credentials.secret'), 'ignored\n', 'utf-8')
+
+    const result = prepareSessionGitContext({
+      sessionId: 'session-ignored-only',
+      repoPath: repo,
+      executionMode: 'local',
+      branch: 'feature/alpha',
+    })
+
+    expect(result.context.branch).toBe('feature/alpha')
+    expect(sh(repo, ['branch', '--show-current'])).toBe('feature/alpha')
+    expect(existsSync(join(repo, 'credentials.secret'))).toBe(true)
+  })
+
+  test('Given Local mode with dirty working tree When switching branch Then error message names both branches', () => {
+    const repo = makeRepo()
+    writeFileSync(join(repo, 'dirty.txt'), 'dirty\n', 'utf-8')
+
+    expect(() => prepareSessionGitContext({
+      sessionId: 'session-message',
+      repoPath: repo,
+      executionMode: 'local',
+      branch: 'feature/alpha',
+    })).toThrow('当前分支 main → 目标分支 feature/alpha')
+  })
 })
 
 // 会话头部 Git 分支徽章依赖 session.gitBranch 这个持久化字段。Agent 若绕过 UI 直接用
