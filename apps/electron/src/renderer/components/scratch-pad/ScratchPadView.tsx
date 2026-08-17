@@ -28,7 +28,7 @@ import {
 import type { ScratchPadViewVariant } from '@/atoms/tab-atoms'
 import {
   agentDiffPanelTabAtom,
-  agentSidePanelOpenAtom,
+  currentSessionSidePanelOpenAtom,
   currentAgentSessionIdAtom,
   currentAgentWorkspaceIdAtom,
   agentWorkspacesAtom,
@@ -284,7 +284,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
   const setConversations = useSetAtom(conversationsAtom)
   const setConversationDrafts = useSetAtom(conversationDraftsAtom)
   const setAgentSideChatMap = useSetAtom(agentSideChatMapAtom)
-  const setAgentSidePanelOpen = useSetAtom(agentSidePanelOpenAtom)
+  const setAgentSidePanelOpen = useSetAtom(currentSessionSidePanelOpenAtom)
   const setAgentSidePanelTabMap = useSetAtom(agentDiffPanelTabAtom)
   const setCurrentAgentSessionId = useSetAtom(currentAgentSessionIdAtom)
   const setAppMode = useSetAtom(appModeAtom)
