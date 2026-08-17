@@ -19,7 +19,7 @@
 
 ---
 
-## Task 1: 共享类型改造（feedback → GitHub、新增 wiki 类型）
+## Task 1: 共享类型改造（feedback → GitHub、新增 wiki 类型） ✅
 
 **Files:**
 - Modify: `packages/shared/src/types/feedback.ts`（整体重写）
@@ -230,7 +230,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 2: Wiki 页面树与媒体重写纯逻辑（TDD）
+## Task 2: Wiki 页面树与媒体重写纯逻辑（TDD） ✅
 
 **Files:**
 - Create: `apps/electron/src/main/lib/wiki-pages.ts`
@@ -437,7 +437,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 3: 反馈 Issue 模板与去重纯逻辑（TDD）
+## Task 3: 反馈 Issue 模板与去重纯逻辑（TDD） ✅
 
 **Files:**
 - Create: `apps/electron/src/main/lib/feedback-format.ts`
@@ -645,7 +645,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 4: config-paths 新增路径
+## Task 4: config-paths 新增路径 ✅
 
 **Files:**
 - Modify: `apps/electron/src/main/lib/config-paths.ts:679-683`（`getFeedbackConfigPath` 注释）、`:688-696`（`getFeedbackDraftsDir` 之后追加）
@@ -705,7 +705,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 5: feedback-service 重构为 GitHub Issues 提交
+## Task 5: feedback-service 重构为 GitHub Issues 提交 ✅
 
 **Files:**
 - Modify: `apps/electron/src/main/lib/feedback-service.ts`（整体替换，约 400 行）
@@ -1263,7 +1263,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 6: wiki-service（git 浅克隆管线 + 本地 fixture 集成测试）
+## Task 6: wiki-service（git 浅克隆管线 + 本地 fixture 集成测试） ✅
 
 **Files:**
 - Create: `apps/electron/src/main/lib/wiki-service.ts`
@@ -1556,7 +1556,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 7: IPC 与 preload 接线
+## Task 7: IPC 与 preload 接线 ✅
 
 **Files:**
 - Modify: `apps/electron/src/main/ipc.ts:5194-5260`（反馈区块整体替换 + 草稿 handlers）、`:5300 附近`（discover 区块追加 wiki handlers）
@@ -1773,7 +1773,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 8: FeedbackSettings 改为 GitHub PAT 配置
+## Task 8: FeedbackSettings 改为 GitHub PAT 配置 ✅
 
 **Files:**
 - Modify: `apps/electron/src/renderer/components/settings/FeedbackSettings.tsx`（整体替换，约 150 行）
@@ -1962,7 +1962,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 9: FeedbackDialog 公开提示与草稿列表 + FeedbackSection 文案
+## Task 9: FeedbackDialog 公开提示与草稿列表 + FeedbackSection 文案 ✅
 
 **Files:**
 - Modify: `apps/electron/src/renderer/components/feedback/FeedbackDialog.tsx`（7 处定点编辑）
@@ -2220,7 +2220,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 10: Wiki atoms + WikiBrowser 组件 + HelpSection 重构
+## Task 10: Wiki atoms + WikiBrowser 组件 + HelpSection 重构 ✅
 
 **Files:**
 - Modify: `apps/electron/src/renderer/atoms/discover-atoms.ts`（追加 wiki atoms）
@@ -2471,7 +2471,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "fe
 
 ---
 
-## Task 11: Notion 残留清理 + 全量回归
+## Task 11: Notion 残留清理 + 全量回归 ✅
 
 **Files:**
 - Modify: 清理残留 Notion 引用（grep 结果逐一处理）
@@ -2515,7 +2515,7 @@ git commit --trailer "Co-Authored-By: MyYoda <MyYoda@noreply.github.com>" -m "re
 
 ---
 
-## Task 12: 手动验证清单（真实环境）
+## Task 12: 手动验证清单（真实环境） ✅
 
 > 需要真实的 fine-grained PAT 与网络环境；每项验证后打勾。
 
