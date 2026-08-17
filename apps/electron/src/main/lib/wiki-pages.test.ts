@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildPageTreeFromFileNames,
+  friendlyWikiError,
   isWikiPageNameSafe,
   parseSidebar,
   rewriteWikiMedia,
@@ -70,5 +71,21 @@ describe('rewriteWikiMedia', () => {
   test('绝对 http 图片与 data URI 原样保留', () => {
     const md = '![a](https://example.com/x.png) ![b](data:image/png;base64,xx)'
     expect(rewriteWikiMedia(md, register)).toBe(md)
+  })
+})
+
+describe('friendlyWikiError', () => {
+  test('git 仓库不存在 → 文档库尚未创建', () => {
+    const out = friendlyWikiError("fatal: remote error: Repository not found.")
+    expect(out).toContain('尚未创建')
+  })
+
+  test('网络错误 → 提示检查代理', () => {
+    const out = friendlyWikiError('fatal: unable to access xxx: Could not resolve host: github.com')
+    expect(out).toContain('代理')
+  })
+
+  test('其他错误 → 通用文案', () => {
+    expect(friendlyWikiError('boom')).toBe('文档库拉取失败，请稍后重试')
   })
 })

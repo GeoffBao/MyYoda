@@ -19,6 +19,9 @@ import {
 } from '@/atoms/discover-atoms'
 import { ReleaseNoteMarkdown } from '@/components/settings/ReleaseNoteMarkdown'
 
+/** GitHub Wiki 网页地址（空态外链用） */
+const WIKI_HTML_BASE = 'https://github.com/GeoffBao/MyYoda/wiki'
+
 /** 拍平页面树（搜索用） */
 function flatten(nodes: WikiPageNode[]): WikiPageNode[] {
   return nodes.flatMap((node) => [node, ...flatten(node.children)])
@@ -164,6 +167,15 @@ export function WikiBrowser(): React.ReactElement {
         <div className="mt-3 rounded-lg bg-accent/40 px-3 py-4 text-center text-xs text-muted-foreground">
           {result.error ?? '文档库还是空的：维护者还没有创建任何 wiki 页面'}
           <div className="mt-1 text-[10px] text-muted-foreground/70">可点击右上角刷新重试</div>
+          <a
+            href={WIKI_HTML_BASE}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1 text-primary transition-colors hover:underline"
+          >
+            <ExternalLink size={11} />
+            打开 GitHub Wiki
+          </a>
         </div>
       ) : (
         <div className="mt-2 space-y-0.5">

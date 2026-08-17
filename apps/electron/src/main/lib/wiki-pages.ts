@@ -73,6 +73,17 @@ export function isWikiPageNameSafe(name: string): boolean {
   return true
 }
 
+/** 把 git 原始错误映射为面向用户的友好文案 */
+export function friendlyWikiError(message: string): string {
+  if (/not found|does not exist/i.test(message)) {
+    return '文档库尚未创建：维护者还没有在 GitHub Wiki 上创建任何页面'
+  }
+  if (/could not resolve host|timed out|unable to access|proxy|network/i.test(message)) {
+    return '网络无法访问 GitHub，请检查代理设置后重试'
+  }
+  return '文档库拉取失败，请稍后重试'
+}
+
 /** 把 wiki markdown 中的相对路径图片解析为 raw URL 并注册远程媒体代理；绝对 http/data 图片原样保留 */
 export function rewriteWikiMedia(
   markdown: string,

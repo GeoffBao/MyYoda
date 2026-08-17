@@ -20,6 +20,7 @@ import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { registerRemoteMediaUrl } from './discover-remote-media'
 import {
   buildPageTreeFromFileNames,
+  friendlyWikiError,
   isWikiPageNameSafe,
   parseSidebar,
   rewriteWikiMedia,
@@ -115,8 +116,10 @@ async function doRefresh(cacheDir: string): Promise<boolean> {
     writeWikiMeta(cacheDir, { lastFetchedAt: Date.now(), commitHash: hash })
     return true
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    writeWikiMeta(cacheDir, { ...readWikiMeta(cacheDir), error: `文档库拉取失败：${message}` })
+    const rawMessage = error instanceof Error ? error.message : String(error)
+    console.warn('[wiki] 刷新失败:', rawMessage)
+    const message = friendlyWikiError(rawMessage)
+    writeWikiMeta(cacheDir, { ...readWikiMeta(cacheDir), error: message })
     return false
   }
 }
