@@ -959,6 +959,13 @@ export function canRunCurrentSessionCompaction(toolNames: string[]): boolean {
   return toolNames.length === 1 && toolNames[0] === 'CompactContext'
 }
 
+/** AskUserQuestion 必须暂停整个工具批次，不能与后续动作混合执行。 */
+export function shouldBlockToolForAskUserQuestion(toolNames: string[], toolName: string): boolean {
+  return toolName !== 'AskUserQuestion'
+    && toolNames.includes('AskUserQuestion')
+    && toolNames.length > 1
+}
+
 /**
  * Pi emits `agent_end` before it decides whether an error needs overflow
  * compaction. Keep this one error class local until the matching compaction
@@ -1001,6 +1008,13 @@ export function installCurrentSessionCompactionHooks(session: AgentSession): voi
     const toolNames = context.assistantMessage.content
       .filter((block) => block.type === 'toolCall')
       .map((block) => block.name)
+    if (shouldBlockToolForAskUserQuestion(toolNames, context.toolCall.name)) {
+      return {
+        block: true,
+        reason: 'AskUserQuestion 会暂停 Agent，不能与其他工具在同一批次执行。请在收到用户回答后再调用后续工具。',
+      }
+    }
+
     const includesCompaction = toolNames.includes('CompactContext')
     if (!includesCompaction || canRunCurrentSessionCompaction(toolNames)) return previousResult
 
