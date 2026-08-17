@@ -1330,13 +1330,15 @@ export interface ElectronAPI {
   getLatestReleaseVersion: () => Promise<string | undefined>
   getCombinedReleaseNotes: () => Promise<string>
 
-  // ===== 用户反馈（→ Notion）=====
+  // ===== 用户反馈（→ GitHub Issues）=====
   feedbackSubmit: (input: import('@myyoda/shared').FeedbackSubmitInput, appVersion?: string, platform?: string) => Promise<import('@myyoda/shared').FeedbackSubmitResult>
-  feedbackTestConnection: (config: import('@myyoda/shared').FeedbackNotionConfig) => Promise<import('@myyoda/shared').FeedbackTestConnectionResult>
-  feedbackGetConfig: () => Promise<{ configured: boolean; databaseId: string }>
-  feedbackSaveConfig: (config: import('@myyoda/shared').FeedbackNotionConfig) => Promise<void>
+  feedbackTestConnection: (config: import('@myyoda/shared').FeedbackGithubConfig) => Promise<import('@myyoda/shared').FeedbackTestConnectionResult>
+  feedbackGetConfig: () => Promise<{ configured: boolean; repo: string; legacyNotionDetected: boolean }>
+  feedbackSaveConfig: (config: import('@myyoda/shared').FeedbackGithubConfig) => Promise<void>
   feedbackCaptureWindow: () => Promise<{ filePath: string; dataUrl: string } | null>
   feedbackPickImages: () => Promise<Array<{ filePath: string; dataUrl: string }>>
+  feedbackListDrafts: () => Promise<import('@myyoda/shared').FeedbackDraftItem[]>
+  feedbackDeleteDraft: (fileName: string) => Promise<boolean>
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
   discoverGetFeed: (force?: boolean) => Promise<import('@myyoda/shared').DiscoverFeedResult>
@@ -1353,6 +1355,10 @@ export interface ElectronAPI {
   discoverDeleteVideoCache: (itemId: string, version: string) => Promise<void>
   onVideoDownloadProgress: (listener: (event: import('@myyoda/shared').VideoDownloadProgressEvent) => void) => () => void
   onVideoDownloadDone: (listener: (event: import('@myyoda/shared').VideoDownloadDoneEvent) => void) => () => void
+  discoverGetWikiPages: (force?: boolean) => Promise<import('@myyoda/shared').WikiPagesResult>
+  discoverGetWikiPage: (name: string) => Promise<import('@myyoda/shared').WikiPageContent>
+  discoverRefreshWiki: () => Promise<import('@myyoda/shared').WikiPagesResult>
+  onWikiUpdated: (listener: (event: { commitHash: string }) => void) => () => void
 
   // 工作区文件变化通知
   onCapabilitiesChanged: (callback: () => void) => () => void
@@ -3163,7 +3169,7 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(RELEASE_NOTES_IPC_CHANNELS.COMBINED)
   },
 
-  // ===== 用户反馈（→ Notion）=====
+  // ===== 用户反馈（→ GitHub Issues）=====
   feedbackSubmit: (input, appVersion, platform) => {
     return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.SUBMIT, input, appVersion, platform)
   },
@@ -3186,6 +3192,14 @@ const electronAPI: ElectronAPI = {
 
   feedbackPickImages: () => {
     return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.PICK_IMAGES)
+  },
+
+  feedbackListDrafts: () => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.LIST_DRAFTS)
+  },
+
+  feedbackDeleteDraft: (fileName) => {
+    return ipcRenderer.invoke(FEEDBACK_IPC_CHANNELS.DELETE_DRAFT, fileName)
   },
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
@@ -3256,6 +3270,28 @@ const electronAPI: ElectronAPI = {
     return () => {
       ipcRenderer.removeListener(DISCOVER_IPC_CHANNELS.VIDEO_DOWNLOAD_DONE, handler)
     }
+  },
+
+  onWikiUpdated: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { commitHash: string }): void => {
+      listener(payload)
+    }
+    ipcRenderer.on(DISCOVER_IPC_CHANNELS.WIKI_UPDATED, handler)
+    return () => {
+      ipcRenderer.removeListener(DISCOVER_IPC_CHANNELS.WIKI_UPDATED, handler)
+    }
+  },
+
+  discoverGetWikiPages: (force) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_WIKI_PAGES, force)
+  },
+
+  discoverGetWikiPage: (name) => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.GET_WIKI_PAGE, name)
+  },
+
+  discoverRefreshWiki: () => {
+    return ipcRenderer.invoke(DISCOVER_IPC_CHANNELS.REFRESH_WIKI)
   },
 
   // ===== 飞书集成 =====
