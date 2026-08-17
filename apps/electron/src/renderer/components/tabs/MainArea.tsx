@@ -417,7 +417,8 @@ export function MainArea(): React.ReactElement {
                 ) : tabs.length === 0 ? (
                   <WelcomeView />
                 ) : contentTabId ? (
-                  <div className="flex-1 min-h-0 titlebar-no-drag">
+                  <div key={contentTabId} className="flex-1 min-h-0 titlebar-no-drag animate-session-content-in">
+                    {/* 会话内容使用 contentTabId（Agent 即时，Chat/Preview deferred），key 变化时重新播放入场动画。 */}
                     <TabContent tabId={contentTabId} />
                   </div>
                 ) : null}
