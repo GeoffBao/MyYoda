@@ -78,7 +78,7 @@ import { getAgentCompletionMarkers, notifyAgentCompletion } from '@/lib/agent-co
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
-import { removeQueuedMessage, restoreQueuedMessageToFront } from '@/lib/agent-message-queue'
+import { removeQueuedMessage, restoreQueuedMessageToFront, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
 /** 触发右侧文件浏览器自动定位的写入类工具集合 */
@@ -568,6 +568,17 @@ export function useGlobalAgentListeners(): void {
     const cleanupQueuedMessageStatus = window.electronAPI.onAgentQueuedMessageStatus((status) => {
       unstable_batchedUpdates(() => {
         if (status.status === 'started') {
+          // 主进程在启动 deferred run 前先发送 started 投影。这里必须先建立完整的
+          // 当前 run 状态，否则首个 SDK/tool 事件到达前会被当成空闲；后续事件只能
+          // 隐式创建一个没有 startedAt 的状态，导致续跑的运行计时和 run 边界丢失。
+          store.set(agentStreamingStatesAtom, (prev) => {
+            const current = prev.get(status.sessionId)
+            // 不让迟到的队列状态覆盖已经开始的新一轮 run。
+            if (current?.startedAt != null && current.startedAt > status.startedAt) return prev
+            const map = new Map(prev)
+            map.set(status.sessionId, createQueuedAgentStreamState(current, status.startedAt))
+            return map
+          })
           // 主进程已启动本轮 run：从展示队列移除消息，插入乐观用户消息
           let startedMessage: import('@/lib/agent-message-queue').AgentQueuedMessage | undefined
           store.set(agentSessionMessageQueueAtom, (prev) => {
@@ -642,6 +653,7 @@ export function useGlobalAgentListeners(): void {
             else map.set(status.sessionId, next)
             return map
           })
+        }
         }
       })
     })
