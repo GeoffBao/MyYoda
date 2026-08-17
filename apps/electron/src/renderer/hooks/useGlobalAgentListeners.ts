@@ -900,7 +900,7 @@ export function useGlobalAgentListeners(): void {
           activateExternalAgentRun(payload.event)
         }
 
-        const runStartedEvent = payload.kind === 'proma_event' && payload.event.type === 'run_started'
+        const runStartedEvent = payload.kind === 'myyoda_event' && payload.event.type === 'run_started'
           ? payload.event
           : null
         if (runStartedEvent) {
