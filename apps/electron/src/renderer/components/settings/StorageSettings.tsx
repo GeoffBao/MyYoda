@@ -68,6 +68,13 @@ interface StripImagesResult {
   errors: string[]
 }
 
+/** 操作结果统一视图：deletedCount（文件/项数）与 affectedSessions（会话数）二选一 */
+interface ActionFeedback {
+  freedBytes: number
+  processedCount: number
+  errors: string[]
+}
+
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B'
   if (bytes < 1024) return `${bytes} B`
@@ -205,7 +212,7 @@ export function StorageSettings(): React.ReactElement {
   const [stats, setStats] = React.useState<StorageStats | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [cleaningKey, setCleaningKey] = React.useState<string | null>(null)
-  const [lastResult, setLastResult] = React.useState<CleanupResult | null>(null)
+  const [lastResult, setLastResult] = React.useState<ActionFeedback | null>(null)
   const [autoCleanupTemp, setAutoCleanupTemp] = React.useState(true)
   const [autoCleanupDays, setAutoCleanupDays] = React.useState(0)
   const [expandedSessions, setExpandedSessions] = React.useState(false)
@@ -238,7 +245,14 @@ export function StorageSettings(): React.ReactElement {
   }, [loadStats])
 
   const showResult = (result: CleanupResult | StripImagesResult): void => {
-    setLastResult(result as CleanupResult)
+    const processedCount = 'deletedCount' in result
+      ? result.deletedCount
+      : result.affectedSessions
+    setLastResult({
+      freedBytes: result.freedBytes,
+      processedCount,
+      errors: result.errors,
+    })
   }
 
   const handleCleanTemp = async (): Promise<void> => {
@@ -308,11 +322,15 @@ export function StorageSettings(): React.ReactElement {
     }
   }
 
-  /** 归档清理：先预览，确认后执行 */
+  /** 归档清理：先预览，确认后执行；无可回收数据时直接提示 */
   const handlePreviewArchive = async (): Promise<void> => {
     setArchivePreview(null)
     try {
       const preview = await window.electronAPI.previewArchivedCleanup(autoCleanupDays) as PreviewCleanupResult
+      if (preview.reclaimableBytes <= 0) {
+        setLastResult({ freedBytes: 0, processedCount: 0, errors: [] })
+        return
+      }
       setArchivePreview(preview)
       setArchiveConfirmOpen(true)
     } catch (e) {
@@ -338,11 +356,15 @@ export function StorageSettings(): React.ReactElement {
     }
   }
 
-  /** 存量大图剥离：先预览，确认后执行 */
+  /** 存量大图剥离：先预览，确认后执行；无可回收数据时直接提示 */
   const handlePreviewStrip = async (): Promise<void> => {
     setStripPreview(null)
     try {
       const preview = await window.electronAPI.previewStripImages() as PreviewCleanupResult
+      if (preview.reclaimableBytes <= 0) {
+        setLastResult({ freedBytes: 0, processedCount: 0, errors: [] })
+        return
+      }
       setStripPreview(preview)
       setStripConfirmOpen(true)
     } catch (e) {
@@ -514,7 +536,7 @@ export function StorageSettings(): React.ReactElement {
         <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
           {lastResult.freedBytes > 0 ? (
             <span className="text-emerald-600 dark:text-emerald-400">
-              已释放 {formatBytes(lastResult.freedBytes)}，删除 {lastResult.deletedCount} 个文件
+              已释放 {formatBytes(lastResult.freedBytes)}，处理 {lastResult.processedCount} 项
             </span>
           ) : (
             <span className="text-muted-foreground">没有需要清理的数据</span>

@@ -186,21 +186,21 @@ describe('孤儿数据清理门控', () => {
 })
 
 describe('存量大图剥离', () => {
-  test('Given 含 Pi 格式内嵌大图的会话 When 预览 Then 报告可回收体积与受影响会话数', () => {
+  test('Given 含 Pi 格式内嵌大图的会话 When 预览 Then 报告可回收体积与受影响会话数', async () => {
     writeSessionJsonl('strip-preview', oversizedImageLine('call-strip', 100_000) + '\n')
     writeAgentSessionsIndex([{ id: 'strip-preview', title: '大图会话' }])
 
-    const preview = storageService.previewStripOversizedImages()
+    const preview = await storageService.previewStripOversizedImages()
     expect(preview.affectedCount).toBe(1)
     expect(preview.reclaimableBytes).toBeGreaterThan(0)
     expect(preview.reclaimableBytes).toBeLessThanOrEqual(100_000)
   })
 
-  test('Given 无内嵌大图的会话 When 预览 Then 报告零回收', () => {
+  test('Given 无内嵌大图的会话 When 预览 Then 报告零回收', async () => {
     writeSessionJsonl('strip-none', JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: '普通消息' }] } }) + '\n')
     writeAgentSessionsIndex([{ id: 'strip-none', title: '普通会话' }])
 
-    const preview = storageService.previewStripOversizedImages()
+    const preview = await storageService.previewStripOversizedImages()
     expect(preview.reclaimableBytes).toBe(0)
   })
 
@@ -220,8 +220,8 @@ describe('存量大图剥离', () => {
     expect(after).toContain('截图成功')
   })
 
-  test('Given 已剥离过的会话 When 再次预览 Then 零回收（幂等）', () => {
-    const preview = storageService.previewStripOversizedImages()
+  test('Given 已剥离过的会话 When 再次预览 Then 零回收（幂等）', async () => {
+    const preview = await storageService.previewStripOversizedImages()
     expect(preview.reclaimableBytes).toBe(0)
   })
 })

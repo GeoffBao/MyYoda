@@ -6,7 +6,7 @@
  * 由设置面板"磁盘管理"Tab 和启动时自动清理逻辑调用。
  */
 
-import { existsSync, statSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, statSync, unlinkSync, readdirSync } from 'node:fs'
 import { rmSyncWithRetry } from './fs-retry'
 import { promises as fsPromises } from 'node:fs'
 import { join, basename, relative, isAbsolute } from 'node:path'
@@ -822,6 +822,9 @@ export async function cleanupStorage(options: CleanupOptions): Promise<CleanupRe
  * 与 cleanupArchivedSessions 相同的筛选口径：已归档且超过 beforeDays 天未更新。
  */
 export function previewArchivedCleanup(beforeDays: number): PreviewCleanupResult {
+  if (!Number.isFinite(beforeDays) || beforeDays <= 0) {
+    return { reclaimableBytes: 0, affectedCount: 0 }
+  }
   const cutoff = Date.now() - beforeDays * 24 * 60 * 60 * 1000
   const sessions = listAgentSessions()
   const sdkDir = getSdkConfigDir()
@@ -863,6 +866,8 @@ export function previewArchivedCleanup(beforeDays: number): PreviewCleanupResult
 
 /** 文件级粗筛阈值：小于该体积的 JSONL 不可能有可观的图片剥离收益，直接跳过 */
 const STRIP_IMAGE_MIN_BYTES = 64 * 1024
+/** 行级粗筛阈值：短行不可能包含值得剥离的大图，跳过 JSON.parse */
+const STRIP_LINE_MIN_CHARS = 4096
 
 interface StripSessionResult {
   reclaimableBytes: number
@@ -878,20 +883,22 @@ interface StripSessionResult {
  */
 async function stripSessionImages(filePath: string, beforeMtime: number, beforeSize: number): Promise<StripSessionResult> {
   const result: StripSessionResult = { reclaimableBytes: 0, linesChanged: 0, skippedActive: false }
-  try {
-    const afterStat = statSync(filePath)
-    if (afterStat.mtimeMs !== beforeMtime || afterStat.size !== beforeSize) {
-      result.skippedActive = true
-      return result
+  const isUnchanged = (): boolean => {
+    try {
+      const stat = statSync(filePath)
+      return stat.mtimeMs === beforeMtime && stat.size === beforeSize
+    } catch {
+      return false
     }
-  } catch {
+  }
+  if (!isUnchanged()) {
     result.skippedActive = true
     return result
   }
 
   let raw: string
   try {
-    raw = readFileSync(filePath, 'utf-8')
+    raw = await fsPromises.readFile(filePath, 'utf-8')
   } catch {
     result.skippedActive = true
     return result
@@ -902,6 +909,11 @@ async function stripSessionImages(filePath: string, beforeMtime: number, beforeS
   const out: string[] = []
   for (const line of lines) {
     if (!line.trim()) {
+      out.push(line)
+      continue
+    }
+    // 行长粗筛：短行不可能包含值得剥离的大图，跳过 JSON.parse 开销。
+    if (line.length < STRIP_LINE_MIN_CHARS) {
       out.push(line)
       continue
     }
@@ -919,8 +931,16 @@ async function stripSessionImages(filePath: string, beforeMtime: number, beforeS
     out.push(stripped)
   }
 
+  // 写回前再次复核 mtime/size，最小化读取→写入之间的 TOCTOU 窗口；
+  // 复核失败（会话仍在写入）时未落盘，回收量必须归零避免虚报。
   if (changed) {
-    writeTextFileAtomic(filePath, out.join('\n'))
+    if (isUnchanged()) {
+      writeTextFileAtomic(filePath, out.join('\n'))
+    } else {
+      result.skippedActive = true
+      result.reclaimableBytes = 0
+      result.linesChanged = 0
+    }
   }
   return result
 }
@@ -929,34 +949,43 @@ async function stripSessionImages(filePath: string, beforeMtime: number, beforeS
  * 预览存量会话 JSONL 中可剥离的 base64 大图体积（dry-run，不写盘）。
  * 只统计替换后字节数会减少的行；顺带返回受影响的会话数。
  */
-export function previewStripOversizedImages(): PreviewCleanupResult {
+/**
+ * 预览存量会话 JSONL 中可剥离的 base64 大图体积（dry-run，不写盘）。
+ * 只统计替换后字节数会减少的行；顺带返回受影响的会话数。
+ * 行长粗筛 + 异步 I/O，避免 252MB 级存量同步全量 parse 阻塞主进程。
+ */
+export async function previewStripOversizedImages(): Promise<PreviewCleanupResult> {
   const dir = getAgentSessionsDir()
   let reclaimableBytes = 0
   let affectedCount = 0
   if (!existsSync(dir)) return { reclaimableBytes, affectedCount }
 
+  let files: string[]
   try {
-    const files = readdirSync(dir)
-    for (const file of files) {
-      if (!file.endsWith('.jsonl')) continue
-      const fullPath = join(dir, file)
-      let sessionReclaim = 0
-      try {
-        const raw = readFileSync(fullPath, 'utf-8')
-        for (const line of raw.split('\n')) {
-          if (!line.trim()) continue
-          const stripped = stripImageBlocksFromStoredMessage(line)
-          if (stripped === null) continue
-          const delta = line.length - stripped.length
-          if (delta > 0) sessionReclaim += delta
-        }
-      } catch { /* skip */ }
-      if (sessionReclaim > 0) {
-        reclaimableBytes += sessionReclaim
-        affectedCount++
+    files = await fsPromises.readdir(dir)
+  } catch {
+    return { reclaimableBytes, affectedCount }
+  }
+
+  for (const file of files) {
+    if (!file.endsWith('.jsonl')) continue
+    const fullPath = join(dir, file)
+    let sessionReclaim = 0
+    try {
+      const raw = await fsPromises.readFile(fullPath, 'utf-8')
+      for (const line of raw.split('\n')) {
+        if (line.length < STRIP_LINE_MIN_CHARS) continue
+        const stripped = stripImageBlocksFromStoredMessage(line)
+        if (stripped === null) continue
+        const delta = line.length - stripped.length
+        if (delta > 0) sessionReclaim += delta
       }
+    } catch { /* skip */ }
+    if (sessionReclaim > 0) {
+      reclaimableBytes += sessionReclaim
+      affectedCount++
     }
-  } catch { /* skip */ }
+  }
 
   return { reclaimableBytes, affectedCount }
 }
