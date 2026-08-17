@@ -1,7 +1,7 @@
 /**
  * FeedbackSection — 「发现」面板的反馈分区
  *
- * 复用现有 Notion 反馈弹窗：引导卡片 + 打开按钮。
+ * 复用现有反馈弹窗（GitHub Issues）：引导卡片 + 打开按钮。
  */
 import * as React from 'react'
 import { useSetAtom } from 'jotai'

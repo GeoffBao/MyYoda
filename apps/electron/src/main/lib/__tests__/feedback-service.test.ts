@@ -269,7 +269,7 @@ describe('submitFeedback', () => {
       expect(result.issueUrl).toBe('https://github.com/GeoffBao/MyYoda/issues/42')
 
       expect(createdIssueBody).not.toBeNull()
-      const body = createdIssueBody as { title: string; body: string; labels: string[] }
+      const body = createdIssueBody!
       expect(body.title.startsWith('[Bug 报告] ')).toBe(true)
       expect(body.body).toContain('<!-- 来自 MyYoda 应用内反馈 -->')
       expect(body.body).toContain('![截图 1](https://github.com/user-attachments/assets/abc-123)')

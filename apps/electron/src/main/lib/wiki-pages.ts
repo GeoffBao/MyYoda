@@ -20,11 +20,11 @@ interface SidebarItem {
 function parseSidebarLine(line: string): SidebarItem | null {
   const match = /^( *)\*\s+\[([^\]]+)\]\(([^)\s]+)\)\s*$/.exec(line)
   if (!match) return null
-  let name = match[3]
+  let name = match[3]!
   name = name.replace(/^\.\//, '')
   if (name.toLowerCase().endsWith('.md')) name = name.slice(0, -3)
   if (name.startsWith('_')) return null
-  return { depth: Math.floor(match[1].length / 2), title: match[2], name }
+  return { depth: Math.floor(match[1]!.length / 2), title: match[2]!, name }
 }
 
 /** 由带深度的条目构建树（栈式归并） */
@@ -33,9 +33,9 @@ export function buildPageTreeFromItems(items: SidebarItem[]): WikiPageNode[] {
   const stack: WikiPageNode[] = []
   for (const item of items) {
     const node: WikiPageNode = { name: item.name, title: item.title, depth: item.depth, children: [] }
-    while (stack.length > 0 && stack[stack.length - 1].depth >= item.depth) stack.pop()
+    while (stack.length > 0 && stack[stack.length - 1]!.depth >= item.depth) stack.pop()
     if (stack.length === 0) roots.push(node)
-    else stack[stack.length - 1].children.push(node)
+    else stack[stack.length - 1]!.children.push(node)
     stack.push(node)
   }
   return roots
@@ -80,7 +80,7 @@ export function rewriteWikiMedia(
 ): string {
   return markdown.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (whole, alt: string, src: string) => {
     if (/^https?:\/\//i.test(src) || src.startsWith('data:')) return whole
-    const clean = src.split('#')[0].replace(/^\.\//, '')
+    const clean = src.split('#')[0]!.replace(/^\.\//, '')
     const resolved = `${WIKI_RAW_BASE}/${clean}`
     const proxied = register(resolved)
     return `![${alt}](${proxied ?? resolved})`

@@ -21,11 +21,11 @@ describe('parseSidebar', () => {
     expect(tree.fromSidebar).toBe(true)
     expect(tree.nodes).toHaveLength(2)
     expect(tree.nodes[0]).toEqual({ name: 'Home', title: '首页', depth: 0, children: [] })
-    const guide = tree.nodes[1]
+    const guide = tree.nodes[1]!
     expect(guide.children).toHaveLength(1)
-    expect(guide.children[0].name).toBe('Install')
-    expect(guide.children[0].children).toHaveLength(1)
-    expect(guide.children[0].children[0].name).toBe('Install-CN')
+    expect(guide.children[0]!.name).toBe('Install')
+    expect(guide.children[0]!.children).toHaveLength(1)
+    expect(guide.children[0]!.children[0]!.name).toBe('Install-CN')
   })
 
   test('空内容返回空树 fromSidebar=false', () => {
@@ -40,7 +40,7 @@ describe('buildPageTreeFromFileNames', () => {
     const tree = buildPageTreeFromFileNames(['Guide.md', 'Home.md', '_Sidebar.md', 'FAQ.md'])
     expect(tree.fromSidebar).toBe(false)
     expect(tree.nodes.map((n) => n.name)).toEqual(['Home', 'FAQ', 'Guide'])
-    expect(tree.nodes[0].title).toBe('Home')
+    expect(tree.nodes[0]!.title).toBe('Home')
   })
 })
 

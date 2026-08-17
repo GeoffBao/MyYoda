@@ -5,7 +5,7 @@
  * - 详细描述 ≤5000 字，实时计数
  * - 截图 ≤5：截屏（截当前窗口，弹窗自身自动隐藏）+ 上传
  * - 可选联系方式（回复用）
- * - 提交到用户 Notion 数据库；未配置时引导去设置
+ * - 提交到 GitHub Issues（GeoffBao/MyYoda 公开仓库）；未配置时引导去设置
  */
 
 import * as React from 'react'

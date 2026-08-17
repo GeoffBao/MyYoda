@@ -27,7 +27,7 @@ function flatten(nodes: WikiPageNode[]): WikiPageNode[] {
 /** 取正文首个一级标题（页面视图标题优先用，无则用文件名） */
 function extractHeading(markdown: string): string | null {
   const match = /^#\s+(.+)$/m.exec(markdown)
-  return match ? match[1].trim() : null
+  return match ? match[1]!.trim() : null
 }
 
 export function WikiBrowser(): React.ReactElement {
