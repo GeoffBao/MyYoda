@@ -20,7 +20,7 @@ import {
 import { useAtomValue } from 'jotai'
 import { thinkingExpandedAtom } from '@/atoms/chat-atoms'
 import { cn } from '@/lib/utils'
-import { MessageResponse } from '@/components/ai-elements/message'
+import { MarkdownStreamingContext, MessageResponse } from '@/components/ai-elements/message'
 import { getToolIcon, extractFilePath } from './tool-utils'
 import { getToolPhrase, getToolResultSummary, shouldShowToolKindLabel } from './tool-phrase'
 import { ToolResultRenderer } from './tool-result-renderers'
@@ -28,6 +28,7 @@ import { PreviewOpenButton } from './tool-result-renderers/preview-open-button'
 import { getTaskGetStatusLabel, parseTaskGetResult, type ParsedTaskGetResult } from './tool-result-renderers/task-get-result'
 import { parseTaskListResult, type ParsedTaskListItem } from './tool-result-renderers/task-list-result'
 import { formatDuration } from './AgentMessages'
+import { useSmoothStream } from '@myyoda/ui'
 import type {
   SDKContentBlock,
   SDKMessage,
@@ -658,6 +659,31 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
   )
 }
 
+function StreamingTextBlock({
+  text,
+  isStreaming,
+  basePath,
+  basePaths,
+}: {
+  text: string
+  isStreaming?: boolean
+  basePath?: string
+  basePaths?: string[]
+}): React.ReactElement {
+  const { displayedContent } = useSmoothStream({
+    content: text,
+    isStreaming: isStreaming ?? false,
+  })
+
+  // 逐字追赶显示的文本仍在增长中时标记 streaming：跳过语言自动检测等昂贵推断，
+  // 排空后（displayedContent === text）context 默认 false，MessageResponse 静态渲染时再检测一次。
+  return (
+    <MarkdownStreamingContext.Provider value={!!isStreaming && displayedContent !== text}>
+      <MessageResponse basePath={basePath} basePaths={basePaths}>{displayedContent}</MessageResponse>
+    </MarkdownStreamingContext.Provider>
+  )
+}
+
 // ===== ContentBlock 主组件 =====
 
 export function ContentBlock({ block, allMessages, basePath, basePaths, animate = false, index = 0, dimmed = false, childBlocks, isStreaming }: ContentBlockProps): React.ReactElement | null {
@@ -666,7 +692,12 @@ export function ContentBlock({ block, allMessages, basePath, basePaths, animate 
     const textBlock = block as SDKTextBlock
     if (!textBlock.text) return null
     return (
-      <MessageResponse basePath={basePath} basePaths={basePaths}>{textBlock.text}</MessageResponse>
+      <StreamingTextBlock
+        text={textBlock.text}
+        isStreaming={isStreaming}
+        basePath={basePath}
+        basePaths={basePaths}
+      />
     )
   }
 

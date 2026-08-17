@@ -78,7 +78,7 @@ import { getAgentCompletionMarkers, notifyAgentCompletion } from '@/lib/agent-co
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
-import { removeQueuedMessage, restoreQueuedMessageToFront } from '@/lib/agent-message-queue'
+import { removeQueuedMessage, restoreQueuedMessageToFront, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
 /** 触发右侧文件浏览器自动定位的写入类工具集合 */
@@ -568,6 +568,17 @@ export function useGlobalAgentListeners(): void {
     const cleanupQueuedMessageStatus = window.electronAPI.onAgentQueuedMessageStatus((status) => {
       unstable_batchedUpdates(() => {
         if (status.status === 'started') {
+          // 主进程在启动 deferred run 前先发送 started 投影。这里必须先建立完整的
+          // 当前 run 状态，否则首个 SDK/tool 事件到达前会被当成空闲；后续事件只能
+          // 隐式创建一个没有 startedAt 的状态，导致续跑的运行计时和 run 边界丢失。
+          store.set(agentStreamingStatesAtom, (prev) => {
+            const current = prev.get(status.sessionId)
+            // 不让迟到的队列状态覆盖已经开始的新一轮 run。
+            if (current?.startedAt != null && current.startedAt > status.startedAt) return prev
+            const map = new Map(prev)
+            map.set(status.sessionId, createQueuedAgentStreamState(current, status.startedAt))
+            return map
+          })
           // 主进程已启动本轮 run：从展示队列移除消息，插入乐观用户消息
           let startedMessage: import('@/lib/agent-message-queue').AgentQueuedMessage | undefined
           store.set(agentSessionMessageQueueAtom, (prev) => {
@@ -584,7 +595,10 @@ export function useGlobalAgentListeners(): void {
           if (startedMessage) {
             dispatchedQueuedMessages.set(status.messageId, { message: startedMessage, startedAt: status.startedAt })
           }
-          const optimisticUuid = `queued-${status.messageId}`
+          // uuid 直接用 messageId（不再加 `queued-` 前缀）：主进程 dispatch 时把
+          // 同一个 messageId 作为 userMessageUuid 传给 persistUserMessage，乐观消息与后续持久化
+          // 消息 uuid 一致才能正确去重（#1717）。
+          const optimisticUuid = status.messageId
           store.set(liveMessagesMapAtom, (prev) => {
             const current = prev.get(status.sessionId) ?? []
             if (current.some((item) => (item as unknown as { uuid?: string }).uuid === optimisticUuid)) return prev
@@ -632,7 +646,7 @@ export function useGlobalAgentListeners(): void {
               return map
             })
           }
-          const optimisticUuid = `queued-${status.messageId}`
+          const optimisticUuid = status.messageId
           store.set(liveMessagesMapAtom, (prev) => {
             const current = prev.get(status.sessionId) ?? []
             const next = current.filter((item) => (item as unknown as { uuid?: string }).uuid !== optimisticUuid)
@@ -884,6 +898,33 @@ export function useGlobalAgentListeners(): void {
 
         if (payload.kind === 'myyoda_event' && payload.event.type === 'external_run_started') {
           activateExternalAgentRun(payload.event)
+        }
+
+        const runStartedEvent = payload.kind === 'myyoda_event' && payload.event.type === 'run_started'
+          ? payload.event
+          : null
+        if (runStartedEvent) {
+          // 队列 run 会先通过独立 IPC 发送 started 投影，但该投影可能在窗口
+          // 重载或跨 renderer 路由时丢失。run_started 是同一轮的第二个权威启动信号，
+          // 必须在首个 SDK/tool 事件之前恢复 running、startedAt 和正常的 live UI。
+          store.set(agentStreamingStatesAtom, (prev) => {
+            const current = prev.get(sessionId)
+            // 迟到的旧 run_started 不能重新激活当前更新的一轮运行；同一 run
+            // 已处于 running 时保留已有模型和上下文数据，避免重复初始化。
+            if (current?.startedAt != null && (
+              current.startedAt > runStartedEvent.startedAt
+              || (current.startedAt === runStartedEvent.startedAt && current.running)
+            )) return prev
+            const map = new Map(prev)
+            map.set(sessionId, createQueuedAgentStreamState(current, runStartedEvent.startedAt))
+            return map
+          })
+          store.set(unviewedCompletedSessionIdsAtom, (prev) => {
+            if (!prev.has(sessionId)) return prev
+            const next = new Set(prev)
+            next.delete(sessionId)
+            return next
+          })
         }
 
         // 自动任务会话被用户接管（毕业）：向用户提示，后续定时运行将新建独立会话
