@@ -8,11 +8,12 @@
  */
 import * as React from 'react'
 import { useAtom, useSetAtom } from 'jotai'
-import { BookOpen, CircleHelp, Keyboard } from 'lucide-react'
+import { BookMarked, BookOpen, CircleHelp, Keyboard } from 'lucide-react'
 import { tabsAtom, activeTabIdAtom, openTab, TUTORIAL_TAB_ID } from '@/atoms/tab-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
 import { shortcutGuideOpenAtom } from '@/atoms/shortcut-guide'
+import { WikiBrowser } from './WikiBrowser'
 
 interface HelpEntry {
   icon: React.ComponentType<{ size?: number | string; className?: string }>
@@ -89,6 +90,14 @@ export function HelpSection(): React.ReactElement {
           </div>
         )
       })}
+      <div className="mt-3 border-t border-border/60 pt-4">
+        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground/80">
+          <BookMarked size={14} className="text-muted-foreground" />
+          在线文档
+          <span className="text-[11px] font-normal text-muted-foreground">来自 GitHub Wiki，维护者在线更新</span>
+        </div>
+        <WikiBrowser />
+      </div>
     </div>
   )
 }
