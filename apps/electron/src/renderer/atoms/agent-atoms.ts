@@ -494,14 +494,24 @@ export const workspaceGitDiffRefreshVersionAtom = atom(0)
 
 // ===== 侧面板 Atoms =====
 
-/** 侧面板是否打开（全局共享，所有会话共用一个状态） */
-export const agentSidePanelOpenAtom = atomWithStorage<boolean>('myyoda-agent-sidepanel-open', true)
+/** 侧面板是否打开：按 Agent 会话持久化，未存储的会话默认打开。 */
+export const agentSidePanelOpenMapAtom = atomWithStorage<Record<string, boolean>>(
+  'myyoda-agent-sidepanel-open-by-session',
+  {},
+  undefined,
+  { getOnInit: true },
+)
+
+/** 指定 Agent 会话的侧面板开关。 */
+export const agentSidePanelOpenAtomFamily = atomFamily((sessionId: string) => atom(
+  (get) => get(agentSidePanelOpenMapAtom)[sessionId] ?? true,
+  (_get, set, isOpen: boolean) => {
+    set(agentSidePanelOpenMapAtom, (previous) => ({ ...previous, [sessionId]: isOpen }))
+  },
+))
 
 /** 侧面板宽度（全局共享，用户拖拽后持久化） */
 export const agentSidePanelWidthAtom = atomWithStorage<number>('myyoda-agent-sidepanel-width', 280)
-
-/** @deprecated 保留以兼容旧代码，但实际所有 session 都读全局 atom */
-export const agentSidePanelOpenMapAtom = atom<Map<string, boolean>>(new Map())
 
 export type AgentSidePanelTab = 'files' | 'session' | 'workspace' | 'changes' | 'chat'
 
@@ -546,12 +556,17 @@ export const agentFileChangesCurrentRunAtom = atom<Map<string, string>>(new Map(
  */
 export const agentDiffDataAtom = atom(new Map<string, UnstagedChangesResult>())
 
-/** 当前会话的侧面板是否打开（派生只读：全局共享，但仅在有当前会话且为 Agent 模式时显示） */
-export const currentSessionSidePanelOpenAtom = atom<boolean>((get) => {
-  const currentId = get(currentAgentSessionIdAtom)
-  if (!currentId) return false
-  return get(agentSidePanelOpenAtom)
-})
+/** 当前会话的侧面板是否打开，并将写入定向到当前会话。 */
+export const currentSessionSidePanelOpenAtom = atom(
+  (get) => {
+    const currentId = get(currentAgentSessionIdAtom)
+    return currentId ? get(agentSidePanelOpenAtomFamily(currentId)) : false
+  },
+  (get, set, isOpen: boolean) => {
+    const currentId = get(currentAgentSessionIdAtom)
+    if (currentId) set(agentSidePanelOpenAtomFamily(currentId), isOpen)
+  },
+)
 
 /** 当前会话的工作路径 Map — sessionId → path */
 export const agentSessionPathMapAtom = atom<Map<string, string>>(new Map())

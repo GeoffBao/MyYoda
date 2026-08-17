@@ -652,9 +652,14 @@ export function appendSDKMessages(id: string, messages: SDKMessage[]): void {
   const filePath = getAgentSessionMessagesPath(id)
 
   try {
+    // 整批只做一次同步追写：逐条 appendFileSync 会为每条消息各做一次 open/write/close，
+    // 一轮输出常见几十条消息，在多 Agent 并发下会持续阶段性阻塞主进程，
+    // 进而延迟键盘事件的 IPC 转发（表现为 renderer 内无长任务但输入延迟高）。
+    let payload = ''
     for (const message of messages) {
-      appendFileSync(filePath, serializeSDKMessageForStorage(message) + '\n', 'utf-8')
+      payload += serializeSDKMessageForStorage(message) + '\n'
     }
+    appendFileSync(filePath, payload, 'utf-8')
   } catch (error) {
     console.error(`[Agent 会话] 追加 SDKMessage 失败 (${id}):`, error)
     throw new Error('追加 SDKMessage 失败')

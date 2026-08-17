@@ -17,12 +17,12 @@ import { appModeAtom } from './app-mode'
 import { codeMainViewAtom } from './project-atoms'
 import { activeViewAtom } from './active-view'
 import { automationFormAtom } from './automation-atoms'
-import { agentSidePanelOpenAtom, currentAgentSessionIdAtom } from './agent-atoms'
+import { currentSessionSidePanelOpenAtom, currentAgentSessionIdAtom } from './agent-atoms'
 
 /**
  * 右侧文件面板（相关文件/文件改动）当前是否实际占用宽度、挤窄 MainArea。
  * 与 AppShell 内 `showRightPanel` 的判定条件保持一致（Agent 模式 + 会话主视图 + 会话列表视图 +
- * 有当前会话 + 定时任务表单未打开），并另加上面板自身的展开/折叠状态（agentSidePanelOpenAtom）——
+ * 有当前会话 + 定时任务表单未打开），并另加上面板自身的展开/折叠状态（currentSessionSidePanelOpenAtom）——
  * SidePanel 关闭时会 `!w-0`，此时 MainArea 仍能伸展到窗口真实右边缘，不应计入避让。
  */
 export const rightFilePanelVisibleAtom = atom((get) => {
@@ -31,7 +31,7 @@ export const rightFilePanelVisibleAtom = atom((get) => {
   const activeView = get(activeViewAtom)
   const currentSessionId = get(currentAgentSessionIdAtom)
   const automationForm = get(automationFormAtom)
-  const isPanelOpen = get(agentSidePanelOpenAtom)
+  const isPanelOpen = get(currentSessionSidePanelOpenAtom)
   return appMode === 'agent'
     && codeMainView === 'session'
     && activeView === 'conversations'
