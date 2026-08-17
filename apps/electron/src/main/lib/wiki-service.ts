@@ -10,7 +10,7 @@
  * 纯逻辑（解析/重写）在 wiki-pages.ts，本文件只做 IO 编排。
  */
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { WebContents } from 'electron'
@@ -44,11 +44,23 @@ async function runGit(args: string[], cwd?: string): Promise<string> {
   return stdout.trim()
 }
 
+/** 缓存目录有效性：不存在视为待克隆；存在但缺 .git 或 .git/HEAD 视为克隆半成品（网络中断遗留） */
+function isValidWikiCache(cacheDir: string): boolean {
+  if (!existsSync(cacheDir)) return true
+  if (!existsSync(join(cacheDir, '.git'))) return false
+  if (!existsSync(join(cacheDir, '.git', 'HEAD'))) return false
+  return true
+}
+
 /** 确保本地缓存存在并更新到远端最新；返回当前 commit hash */
 export async function refreshWikiCache(
   cacheDir: string = getDiscoverWikiCacheDir(),
   remoteUrl: string = getDefaultWikiRemoteUrl(),
 ): Promise<string> {
+  // 半成品缓存清理后重克（否则后续 clone/fetch 会永久失败，需用户手删目录）
+  if (!isValidWikiCache(cacheDir)) {
+    rmSync(cacheDir, { recursive: true, force: true })
+  }
   if (existsSync(join(cacheDir, '.git'))) {
     await runGit(['fetch', '--depth', '1', 'origin'], cacheDir)
     await runGit(['reset', '--hard', 'FETCH_HEAD'], cacheDir)

@@ -90,3 +90,24 @@ describe('wiki-service（本地 fixture 仓库）', () => {
     expect(() => getWikiPage('NoSuchPage', cacheDir)).toThrow()
   })
 })
+
+describe('wiki-service 半成品缓存自愈', () => {
+  test('缓存目录存在但无 .git（克隆中断遗留）→ 清理后重克成功', async () => {
+    const brokenDir = mkdtempSync(join(tmpdir(), 'wiki-broken-'))
+    writeFileSync(join(brokenDir, 'junk.txt'), 'partial')
+    const hash = await refreshWikiCache(brokenDir, `file://${fixture}`)
+    expect(hash).toMatch(/^[0-9a-f]{40}$/)
+    const result = await getWikiPages(null, true, brokenDir)
+    expect(result.tree.nodes.map((n) => n.name)).toContain('Home')
+    expect(result.tree.nodes.map((n) => n.name)).toContain('Guide')
+    rmSync(brokenDir, { recursive: true, force: true })
+  })
+
+  test('缓存有 .git 但缺 HEAD → 同样自愈', async () => {
+    const brokenDir = mkdtempSync(join(tmpdir(), 'wiki-broken-head-'))
+    mkdirSync(join(brokenDir, '.git'), { recursive: true })
+    const hash = await refreshWikiCache(brokenDir, `file://${fixture}`)
+    expect(hash).toMatch(/^[0-9a-f]{40}$/)
+    rmSync(brokenDir, { recursive: true, force: true })
+  })
+})
