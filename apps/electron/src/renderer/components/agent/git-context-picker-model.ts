@@ -75,6 +75,35 @@ export function isSameBoundRepo(boundRepoPath: string | undefined, targetRepoPat
   return target.startsWith(`${bound}/`) || target.startsWith(`${bound}\\`)
 }
 
+/**
+ * Local 模式发送前解析最终分支：用户「未显式选择」分支时，跟随仓库实际 checkout
+ * 的当前分支，而不是坚持发送时已经过期的选择器快照。
+ *
+ * 背景：选择器只在挂载时加载一次分支列表，若加载后用户在终端（或其他 Local 会话）
+ * 切换了分支，发送时旧快照会触发一次意外的分支切换；仓库有未提交改动时还会被主进程
+ * 守卫拦住报错。Local 模式的语义是与终端共享同一工作目录，默认选择跟随真实状态
+ * 更符合直觉（显式选择的分支仍按原语义尝试切换，由主进程守卫保护）。
+ *
+ * detached HEAD 时 getGitRepoStatus 的 branch 是字符串 'HEAD'（git rev-parse
+ * --abbrev-ref HEAD 的产物）而非 null，这里显式视为「无当前分支」保持原选择——
+ * 原分支（若存在）从 detached 状态切回是安全的，而把 'HEAD' 作为目标会让
+ * prepareSessionGitContext 的 `git switch HEAD` 直接 fatal。
+ */
+export function resolveLocalSendBranch(input: {
+  executionMode: GitExecutionMode
+  branch: string
+  newBranchName?: string
+  explicit?: boolean
+  currentBranch: string | null
+}): string {
+  if (input.executionMode !== 'local') return input.branch
+  if (input.newBranchName) return input.branch
+  if (input.explicit) return input.branch
+  if (!input.currentBranch || input.currentBranch === 'HEAD') return input.branch
+  if (input.currentBranch === input.branch) return input.branch
+  return input.currentBranch
+}
+
 /** 会话头部 Git 上下文常驻小徽标文案；无 gitBranch 时返回 null（会话未绑定 Git 上下文） */
 export function formatSessionGitBadge(meta: {
   gitBranch?: string

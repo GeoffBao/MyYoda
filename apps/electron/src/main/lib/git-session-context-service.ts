@@ -56,6 +56,19 @@ function hasDirtyChanges(repoPath: string): boolean {
   return runGit(repoPath, ['status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching']).length > 0
 }
 
+/**
+ * 是否存在「真实」未提交改动（不含被忽略文件）。
+ *
+ * 与 hasDirtyChanges 的差别：--ignored 会把 node_modules、.worktrees、构建产物等
+ * 忽略项也计入“脏”，导致大多数仓库恒为脏；Local 分支切换前的保护性检查若用它，
+ * 会拦下所有跨分支切换（即使工作树实际干净），误报“工作区存在未提交改动”。
+ * git switch 不会触碰被忽略/未跟踪的文件（目标分支同名文件冲突时 git 自身会拒绝），
+ * 因此切换保护只应关心已跟踪文件的真实改动与未跟踪文件。
+ */
+function hasUncommittedChanges(repoPath: string): boolean {
+  return runGit(repoPath, ['status', '--porcelain=v1', '--untracked-files=all']).length > 0
+}
+
 function ensureValidBranchName(repoPath: string, branchName: string): void {
   if (!branchName.trim()) throw new Error('分支名不能为空')
   runGit(repoPath, ['check-ref-format', '--branch', branchName])
@@ -230,8 +243,12 @@ function prepareLocalContext(
   const targetBranch = input.newBranchName ?? input.branch
   if (input.newBranchName) ensureValidBranchName(repoRoot, input.newBranchName)
   const currentBranch = getCurrentBranch(repoRoot)
-  if (currentBranch !== targetBranch && hasDirtyChanges(repoRoot)) {
-    throw new Error('工作区存在未提交改动，已阻止 Local 分支切换')
+  if (currentBranch !== targetBranch && hasUncommittedChanges(repoRoot)) {
+    throw new Error(
+      `工作区存在未提交改动，已阻止 Local 分支切换` +
+      `（当前分支 ${currentBranch || '(detached HEAD)'} → 目标分支 ${targetBranch}）。` +
+      '请先在终端提交或暂存这些改动后重试，或改用 Worktree 模式隔离执行。',
+    )
   }
   const occupiedPath = parseWorktreeBranches(repoRoot).get(targetBranch)
   if (occupiedPath && resolve(occupiedPath) !== repoRoot) {

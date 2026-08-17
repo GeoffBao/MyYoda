@@ -23,6 +23,12 @@ export interface DraftGitContextSelection {
   branch: string
   newBranchName?: string
   slug?: string
+  /**
+   * 分支是否为用户显式选择（下拉点选 / 新建分支），而非加载时的默认快照。
+   * 发送时 Local 模式的默认快照会跟随仓库真实当前分支（见 resolveLocalSendBranch），
+   * 避免终端侧切分支后旧快照触发意外切换或误报未提交改动；显式选择保持不变。
+   */
+  explicit?: boolean
 }
 
 /** 会话已绑定的 Git 上下文（重开空会话时回显，避免误建第二个 worktree） */
@@ -75,6 +81,7 @@ export function DraftGitContextPicker({
   const [query, setQuery] = React.useState('')
   const [newBranchName, setNewBranchName] = React.useState('')
   const [loading, setLoading] = React.useState(false)
+  const [branchExplicit, setBranchExplicit] = React.useState(false)
   const [branchPopoverOpen, setBranchPopoverOpen] = React.useState(false)
   const [newBranchPopoverOpen, setNewBranchPopoverOpen] = React.useState(false)
   const [newBranchDraft, setNewBranchDraft] = React.useState('')
@@ -111,6 +118,7 @@ export function DraftGitContextPicker({
     let cancelled = false
     setBranches([])
     setBranch('')
+    setBranchExplicit(false)
     setIsGitRepo(false)
     setNewBranchName('')
     setQuery('')
@@ -189,8 +197,9 @@ export function DraftGitContextPicker({
       branch,
       newBranchName: newBranchName.trim() || undefined,
       slug: newBranchName.trim() || undefined,
+      explicit: branchExplicit,
     })
-  }, [branch, isDraft, isGitRepo, mode, newBranchName, emitSelection, repoPath])
+  }, [branch, isDraft, isGitRepo, mode, newBranchName, emitSelection, repoPath, branchExplicit])
 
   const updateMode = React.useCallback((nextMode: GitExecutionMode) => {
     setMode(nextMode)
@@ -201,6 +210,7 @@ export function DraftGitContextPicker({
 
   const confirmNewBranch = React.useCallback(() => {
     setNewBranchName(newBranchDraft.trim())
+    setBranchExplicit(true)
     setNewBranchPopoverOpen(false)
   }, [newBranchDraft])
 
@@ -319,6 +329,7 @@ export function DraftGitContextPicker({
                       key={candidate.ref}
                       onSelect={() => {
                         if (localOccupied) updateMode('worktree')
+                        setBranchExplicit(true)
                         setBranch(candidate.name)
                         setBranchPopoverOpen(false)
                       }}

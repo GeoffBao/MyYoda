@@ -29,6 +29,7 @@ import { AskUserBanner } from './AskUserBanner'
 import { ExitPlanModeBanner } from './ExitPlanModeBanner'
 import { DraftProjectPicker } from './DraftProjectPicker'
 import { DraftGitContextPicker, type DraftGitContextSelection } from './DraftGitContextPicker'
+import { resolveLocalSendBranch } from './git-context-picker-model'
 import { ExpertCoworkPicker } from './ExpertCoworkPicker'
 import { useExpertOptions } from '@/components/agent-experts/useExpertOptions'
 import { PlanModeDashedBorder } from './PlanModeDashedBorder'
@@ -2099,12 +2100,33 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   const prepareDraftGitContextForSend = React.useCallback(async (additionalDirectoriesForRun: Set<string>): Promise<boolean> => {
     if (!canPrepareDraftGitContext || !draftGitContextSelection) return true
+    // Local 模式且分支为用户未显式选择的默认快照时，发送前跟随仓库真实当前分支：
+    // 选择器只在挂载时加载一次分支列表，终端侧（或其他 Local 会话）切换分支后，
+    // 旧快照会触发一次意外切换，仓库有未提交改动时还会被主进程守卫拦下误报错。
+    let gitBranch = draftGitContextSelection.branch
+    if (
+      draftGitContextSelection.executionMode === 'local'
+      && !draftGitContextSelection.newBranchName
+      && !draftGitContextSelection.explicit
+    ) {
+      try {
+        const status = await window.electronAPI.getGitRepoStatus(draftGitContextSelection.repoPath)
+        gitBranch = resolveLocalSendBranch({
+          executionMode: draftGitContextSelection.executionMode,
+          branch: draftGitContextSelection.branch,
+          currentBranch: status?.branch ?? null,
+        })
+      } catch (error) {
+        // 仓库状态读取失败时保持原选择，由主进程守卫兜底
+        console.warn('[AgentView] 发送前读取仓库当前分支失败，保持原选择:', error)
+      }
+    }
     try {
       const result = await window.electronAPI.prepareSessionGitContext({
         sessionId,
         repoPath: draftGitContextSelection.repoPath,
         executionMode: draftGitContextSelection.executionMode,
-        branch: draftGitContextSelection.branch,
+        branch: gitBranch,
         newBranchName: draftGitContextSelection.newBranchName,
         slug: draftGitContextSelection.slug,
       })
