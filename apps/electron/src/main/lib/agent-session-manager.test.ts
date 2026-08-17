@@ -233,6 +233,109 @@ describe('Agent 会话 JSONL 读取', () => {
     expect(() => manager.truncateSDKMessages('session-truncate-bad-line', 'assistant-1'))
       .toThrow('JSONL 第 2 行解析失败')
   })
+
+  test('Given Pi 格式超大图片块（type/data/mimeType 顶层字段） When 追加消息 Then base64 被剥离为截断标记', () => {
+    const sessionId = 'session-pi-oversized-image'
+    writeAgentSessionsIndex([{
+      id: sessionId,
+      title: '大图会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 2,
+    }])
+    const hugeBase64 = 'a'.repeat(300_000)
+    const message = {
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'call-pi-screenshot',
+          content: [{ type: 'image', data: hugeBase64, mimeType: 'image/png' }],
+        }],
+      },
+      parent_tool_use_id: null,
+    } as unknown as SDKMessage
+
+    manager.appendSDKMessages(sessionId, [message])
+
+    const stored = readFileSync(join(tempHome, '.myyoda', 'agent-sessions', `${sessionId}.jsonl`), 'utf-8')
+    expect(stored.length).toBeLessThan(2_000)
+    expect(stored).not.toContain(hugeBase64)
+    const persisted = JSON.parse(stored.trim()) as { message: { content: Array<{ type: string; content: Array<Record<string, unknown>> }> } }
+    const inner = persisted.message.content[0]!.content[0]!
+    expect(inner).toEqual({ type: 'image', _truncated: true, _originalLength: hugeBase64.length })
+  })
+
+  test('Given Claude SDK 格式超大图片块（source.data）When 追加消息 Then base64 同样被剥离', () => {
+    const sessionId = 'session-sdk-oversized-image'
+    writeAgentSessionsIndex([{
+      id: sessionId,
+      title: '大图会话 2',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 2,
+    }])
+    const hugeBase64 = 'b'.repeat(300_000)
+    const message = {
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'call-sdk-screenshot',
+          content: [{
+            type: 'image',
+            source: { type: 'base64', data: hugeBase64, media_type: 'image/png' },
+          }],
+        }],
+      },
+      parent_tool_use_id: null,
+    } as unknown as SDKMessage
+
+    manager.appendSDKMessages(sessionId, [message])
+
+    const stored = readFileSync(join(tempHome, '.myyoda', 'agent-sessions', `${sessionId}.jsonl`), 'utf-8')
+    expect(stored.length).toBeLessThan(2_000)
+    expect(stored).not.toContain(hugeBase64)
+    const persisted = JSON.parse(stored.trim()) as { message: { content: Array<{ type: string; content: Array<Record<string, unknown>> }> } }
+    const inner = persisted.message.content[0]!.content[0]!
+    expect(inner).toEqual({ type: 'image', _truncated: true, _originalLength: hugeBase64.length })
+  })
+
+  test('Given 同批消息中文本块与图片块并存 When 追加消息 Then 文本块保留、图片块剥离', () => {
+    const sessionId = 'session-mixed-blocks'
+    writeAgentSessionsIndex([{
+      id: sessionId,
+      title: '混合块会话',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 2,
+    }])
+    const hugeBase64 = 'c'.repeat(300_000)
+    const message = {
+      type: 'user',
+      message: {
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'call-mixed',
+          content: [
+            { type: 'text', text: '截图成功' },
+            { type: 'image', data: hugeBase64, mimeType: 'image/png' },
+          ],
+        }],
+      },
+      parent_tool_use_id: null,
+    } as unknown as SDKMessage
+
+    manager.appendSDKMessages(sessionId, [message])
+
+    const stored = readFileSync(join(tempHome, '.myyoda', 'agent-sessions', `${sessionId}.jsonl`), 'utf-8')
+    expect(stored).toContain('截图成功')
+    expect(stored).not.toContain(hugeBase64)
+    const persisted = JSON.parse(stored.trim()) as { message: { content: Array<{ type: string; content: Array<Record<string, unknown>> }> } }
+    const blocks = persisted.message.content[0]!.content
+    expect(blocks[0]).toEqual({ type: 'text', text: '截图成功' })
+    expect(blocks[1]).toEqual({ type: 'image', _truncated: true, _originalLength: hugeBase64.length })
+  })
 })
 
 describe('Agent 会话 runtime 元数据', () => {

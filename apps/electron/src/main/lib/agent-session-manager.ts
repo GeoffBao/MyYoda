@@ -706,14 +706,16 @@ function sanitizeOversizedMessage(msg: SDKMessage, originalLength: number): SDKM
         if (typeof block.content === 'string' && block.content.length > truncationThreshold) {
           block.content = block.content.slice(0, TRUNCATED_PREVIEW_LENGTH) + truncationNote
         }
-        // 剥离 base64 图片数据
+        // 剥离 base64 图片数据。兼容两种 SDK 落盘格式：
+        // - Claude SDK: { type: 'image', source: { type: 'base64', data, media_type } }
+        // - Pi runtime: { type: 'image', data, mimeType }（截图工具直接内嵌顶层 data）
         if (Array.isArray(block.content)) {
           block.content = block.content.map((item: Record<string, unknown>) => {
-            if (item?.type === 'image' && (item.source as Record<string, unknown>)?.data) {
-              const dataLen = String((item.source as Record<string, unknown>).data).length
-              return { type: 'image', _truncated: true, _originalLength: dataLen }
-            }
-            return item
+            if (item?.type !== 'image') return item
+            const source = item.source as Record<string, unknown> | undefined
+            const data = typeof item.data === 'string' ? item.data : typeof source?.data === 'string' ? source.data : undefined
+            if (!data) return item
+            return { type: 'image', _truncated: true, _originalLength: data.length }
           })
         }
       }
