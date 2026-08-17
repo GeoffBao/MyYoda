@@ -2539,8 +2539,10 @@ ${workContext}`
             }
           }
 
-          // 错误 break 触发了 → 继续循环
+          // 错误 break 触发了 → 先关闭旧 iterator（否则 PiUtilityAdapter.query 的 finally
+          // 不会执行，旧 AgentRuntimeClient 的 utility 子进程永不回收，每个 ~190MB 泄漏）
           if (shouldRetryFromError) {
+            await closeQueryIterator()
             continue
           }
 
