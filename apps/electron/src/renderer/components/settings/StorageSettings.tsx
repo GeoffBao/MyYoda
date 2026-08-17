@@ -240,6 +240,7 @@ export function StorageSettings(): React.ReactElement {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="0">禁用</SelectItem>
+                <SelectItem value="3">3 天</SelectItem>
                 <SelectItem value="7">7 天</SelectItem>
                 <SelectItem value="30">30 天</SelectItem>
                 <SelectItem value="90">90 天</SelectItem>

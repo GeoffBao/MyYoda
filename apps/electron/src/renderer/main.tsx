@@ -573,6 +573,9 @@ function UpdaterInitializer(): React.ReactElement | null {
  * 定时任务初始化组件
  *
  * 加载全部定时任务，并订阅主进程的变更事件（运行完成/状态变化）刷新列表。
+ * 会话列表只做初始加载 + draft 对账：不随 automation 变更全量重拉（数百会话时
+ * 单次 listAgentSessions 约 3MB IPC 传输并触发全树重渲染），日常由 LeftSidebar
+ * 聚焦刷新和各组件增量更新维护。
  */
 function AutomationInitializer(): null {
   const setAutomations = useSetAtom(automationsAtom)
@@ -581,20 +584,19 @@ function AutomationInitializer(): null {
   const workspaceScope = useAtomValue(planningWorkspaceScopeAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
 
+  // 初始加载一次会话列表并做 draft 双向对账（防漂移，自愈历史脏数据）：
+  // 1) 补入：真空会话（未发消息、无 SDK 运行痕迹、标题仍为默认）补入 draft；
+  // 2) 移除：已真正发过消息 / 已绑定 SDK 运行 / 已重命名的会话从 draft 移除。
+  // 背景：draft 标记在 useCreateSession 创建时默认写入，正常由 AgentView handleSend
+  // 等发送路径移除；但 PlanningView 启动 Todo Agent、external run、automation 注入等
+  // 路径可能漏掉移除，导致已发消息的会话被持久化 draft 标记永久隐藏（重启也无效）。
+  // 此处以索引权威状态为准双向收敛：不用 createdAt !== updatedAt 判定（历史空会话
+  // 的 updatedAt 可能被 touch，仅凭时间差会误移出 draft），改用 messageCount/sdkSessionId/
+  // piSessionFile/title 等"确已发消息"信号。
   useEffect(() => {
-    const load = (): void => {
-      window.electronAPI.listAutomations(workspaceScope, currentWorkspaceId ?? undefined).then(setAutomations).catch(console.error)
+    const loadSessionsOnce = (): void => {
       window.electronAPI.listAgentSessions().then((sessions) => {
         setAgentSessions(sessions)
-        // 双向对账 draft 集合（防漂移，自愈历史脏数据）：
-        // 1) 补入：真空会话（未发消息、无 SDK 运行痕迹、标题仍为默认）补入 draft；
-        // 2) 移除：已真正发过消息 / 已绑定 SDK 运行 / 已重命名的会话从 draft 移除。
-        // 背景：draft 标记在 useCreateSession 创建时默认写入，正常由 AgentView handleSend
-        // 等发送路径移除；但 PlanningView 启动 Todo Agent、external run、automation 注入等
-        // 路径可能漏掉移除，导致已发消息的会话被持久化 draft 标记永久隐藏（重启也无效）。
-        // 此处以索引权威状态为准双向收敛：不用 createdAt !== updatedAt 判定（历史空会话
-        // 的 updatedAt 可能被 touch，仅凭时间差会误移出 draft），改用 messageCount/sdkSessionId/
-        // piSessionFile/title 等"确已发消息"信号。
         setDraftSessionIds((prev) => {
           const next = new Set(prev)
           let changed = false
@@ -615,10 +617,17 @@ function AutomationInitializer(): null {
         })
       }).catch(console.error)
     }
-    load()
-    const unsub = window.electronAPI.onAutomationChanged(load)
+    loadSessionsOnce()
+  }, [setAgentSessions, setDraftSessionIds])
+
+  useEffect(() => {
+    const loadAutomations = (): void => {
+      window.electronAPI.listAutomations(workspaceScope, currentWorkspaceId ?? undefined).then(setAutomations).catch(console.error)
+    }
+    loadAutomations()
+    const unsub = window.electronAPI.onAutomationChanged(loadAutomations)
     return unsub
-  }, [setAutomations, setAgentSessions, setDraftSessionIds, workspaceScope, currentWorkspaceId])
+  }, [setAutomations, workspaceScope, currentWorkspaceId])
 
   return null
 }
