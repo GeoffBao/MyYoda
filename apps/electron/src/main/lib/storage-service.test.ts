@@ -100,9 +100,15 @@ describe('存储统计（top 大文件 + 孤儿检测）', () => {
       type: 'user',
       message: { content: [{ type: 'text', text: 'x'.repeat(20_000) }] },
     })
+    // orphan 与 session-large 体积必须严格不相等：两者并列时 topItems 的排序平局依赖
+    // readdir 目录枚举顺序（跨平台不保证一致，Linux/Windows 实测会得到不同结果）。
+    const orphan = JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'text', text: 'x'.repeat(5_000) }] },
+    })
     writeSessionJsonl('session-small', small + '\n')
     writeSessionJsonl('session-large', large + '\n')
-    writeSessionJsonl('orphan-leftover', large + '\n')
+    writeSessionJsonl('orphan-leftover', orphan + '\n')
     writeAgentSessionsIndex([
       { id: 'session-small', title: '小会话' },
       { id: 'session-large', title: '大会话', updatedAt: 5, archived: true },
