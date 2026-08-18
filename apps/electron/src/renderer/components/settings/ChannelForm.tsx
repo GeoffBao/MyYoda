@@ -88,7 +88,7 @@ interface ChannelFormProps {
 /** 所有可选供应商（'qwen' 已并入 'qwen-anthropic'，仅为兼容存量渠道保留 ProviderType，不再出现在新建下拉） */
 const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'anthropic-oauth', 'openai', 'openai-responses', 'openai-codex', 'xai', 'google', 'deepseek', 'kimi-api', 'kimi-coding', 'opencode-go-openai', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'qwen-anthropic', 'qwen-token-plan', 'minimax', 'ark-coding-plan', 'doubao', 'doubao-api', 'xiaomi', 'xiaomi-token-plan', 'openrouter', 'nuwa', 'custom']
 
-/** 需要用 messages 端点测试的供应商预设模型 */
+/** 需要用 messages 端点测试的供应商预设模型（均为官方真实存在的模型，供无用户模型时测试连接用；custom 不预设——自定义服务模型名不可知，必须由用户添加） */
 const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
   deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   'kimi-api': ['kimi-k3', 'kimi-k2.6'],
@@ -96,6 +96,13 @@ const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
   xiaomi: ['mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2-omni', 'mimo-v2-flash'],
   'xiaomi-token-plan': ['mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2-omni', 'mimo-v2-flash'],
   'qwen-token-plan': ['qwen3.8-max-preview', 'qwen3.7-max', 'qwen3.7-flash', 'qwen3.6-flash'],
+  openai: ['gpt-4o-mini'],
+  'openai-responses': ['gpt-4o-mini'],
+  zhipu: ['glm-4-flash'],
+  qwen: ['qwen-turbo'],
+  openrouter: ['openai/gpt-4o-mini'],
+  // doubao / doubao-api 不预设：火山方舟的 model 是用户自建 endpoint ID，不存在通用真实模型名
+  // nuwa 不预设：聚合平台模型名不可确定，不瞎连
 }
 
 /** 供应商选项（用于 SettingsSelect） */
@@ -1452,7 +1459,11 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
             label="此服务不提供模型列表端点"
             description="部分自建/中转服务没有 /models 接口，勾选后禁用「从供应商获取」，模型全部手动添加"
             checked={skipModelListFetch}
-            onCheckedChange={setSkipModelListFetch}
+            onCheckedChange={(checked) => {
+              setSkipModelListFetch(checked)
+              // 勾选后清掉旧的拉取失败提示，避免红色错误与琥珀引导并存
+              if (checked) setFetchResult(null)
+            }}
           />
           {skipModelListFetch && (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 px-1">
@@ -1480,7 +1491,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                 : <XCircle size={12} />}
             <span>
               {!fetchResult.success && fetchResult.errorType === 'not_found'
-                ? '该服务未提供模型列表端点（/models），请使用下方输入框手动添加模型 ID'
+                ? provider === 'google'
+                  // Google 官方有 /v1beta/models，404 更可能是 baseUrl 拼错，展示服务端原文而非「不提供端点」引导
+                  ? fetchResult.message
+                  : '该服务未提供模型列表端点（/models），请使用下方输入框手动添加模型 ID'
                 : fetchResult.message}
             </span>
           </div>
