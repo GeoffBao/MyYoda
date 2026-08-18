@@ -30,6 +30,15 @@ async function getAnalyzer(): Promise<TreeSitterAnalyzer> {
 }
 
 /**
+ * 退出前同步 flush 符号缓存（before-quit 调用）：清除防抖定时器并立即落盘。
+ */
+export function flushRepoMapCacheSync(): void {
+  if (defaultAnalyzer) {
+    defaultAnalyzer.flushCacheSync();
+  }
+}
+
+/**
  * Extract symbols from files
  * @param filePaths - Array of file paths to extract symbols from
  * @param options - Symbol extraction options

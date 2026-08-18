@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { getRepoMap } from './vendor/src/index'
+import { getRepoMap, flushRepoMapCacheSync } from './vendor/src/index'
 
 export interface RepoMapMentionContext {
   /** 对话中已提及的文件路径（绝对或相对 cwd） */
@@ -385,12 +385,21 @@ export class RepoMapService {
           acquired = true
           break
         } catch {
-          const st = fs.statSync(lock)
-          if (st && Date.now() - st.mtimeMs > 10_000) {
-            fs.rmdirSync(lock)
-            continue
+          // 锁已存在：判断是否过期（>10s）并尝试清理。statSync 也可能抛 ENOENT
+          // （并发进程恰好刚删除锁目录），需二次捕获，否则异常会向上传播中断持久化。
+          let stale = false;
+          try {
+            const st = fs.statSync(lock);
+            stale = st !== undefined && Date.now() - st.mtimeMs > 10_000;
+          } catch {
+            // 锁已被并发进程清理：视为未获取，跳出重试即可
+            break;
           }
-          break
+          if (stale) {
+            fs.rmdirSync(lock);
+            continue;
+          }
+          break;
         }
       }
       if (!acquired) return
@@ -541,6 +550,10 @@ export class RepoMapService {
       if (oldestKey) this.headCache.delete(oldestKey)
     }
     return resolved
+  }
+/** 退出前同步 flush 符号缓存（before-quit 调用）：防抖窗口内最后更新立即落盘 */
+  flushSync(): void {
+    flushRepoMapCacheSync()
   }
 }
 

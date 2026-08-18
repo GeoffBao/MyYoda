@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as syncFs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
@@ -225,5 +226,28 @@ export class CacheManager {
     }
     await this.persist()
     logger.info('[CacheManager] Cache persisted and closed')
+  }
+
+  /**
+   * 同步 flush（应用退出前调用）：清除 500ms 防抖定时器并立即同步落盘。
+   * before-quit 是同步流程，异步 close() 的写盘可能来不及完成；
+   * 退出场景单进程串行，无需写锁与 RMW 合并（简化版原子写）。
+   */
+  flushSync(): void {
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer)
+      this.writeTimer = undefined
+    }
+    if (this.cache.size === 0 || !this.initialized) return
+    try {
+      const raw = JSON.stringify(Object.fromEntries(this.cache), null, 2)
+      const tmp = `${this.dbPath}.${process.pid}.${Date.now()}.tmp`
+      syncFs.mkdirSync(path.dirname(this.dbPath), { recursive: true })
+      syncFs.writeFileSync(tmp, raw, 'utf-8')
+      syncFs.renameSync(tmp, this.dbPath)
+      logger.info('[CacheManager] flushSync 已落盘')
+    } catch (error) {
+      logger.warn('[CacheManager] flushSync 失败:', error)
+    }
   }
 }

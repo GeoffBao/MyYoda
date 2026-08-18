@@ -452,7 +452,8 @@ const manager = new PiMcpClientManager()
  * 与「图谱只建在主仓库」的约定冲突，只允许主仓库默认图（2026-08-14）。
  */
 export function sanitizeGraphifyToolArgs(args: Record<string, unknown>): Record<string, unknown> {
-  if (typeof args.project_path === 'string') {
+  // 只要存在 project_path 就剥掉（不论类型）：跨目录选图与「图谱只建在主仓库」约定冲突
+  if ('project_path' in args) {
     const { project_path: _dropped, ...rest } = args
     return rest
   }

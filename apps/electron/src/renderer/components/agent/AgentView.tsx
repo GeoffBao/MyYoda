@@ -474,10 +474,21 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     window.electronAPI.getSettings().then((s) => {
       setRepoMapToolsEnabled(s.repoMapTools ?? false)
     }).catch(() => { /* ignore */ })
-    return window.electronAPI.onRepoMapToolsStatus((state) => {
-      setRepoMapToolsState(state)
+    let cancelled = false
+    const unsubscribe = window.electronAPI.onRepoMapToolsStatus(() => {
+      // STATUS 广播不区分主仓库（其他会话/窗口的构建完成也会推到这里）：
+      // 不直接采用推送内容，统一重查当前会话 cwd 的真实状态，避免跨仓库状态覆盖（2026-08-18）。
+      // 重查结果落地前校验 cancelled：防止 cwd 切换后，旧 cwd 的飞行中重查结果覆盖新会话状态。
+      if (!repoMapToolsCwd) return
+      void window.electronAPI.getRepoMapToolsState(repoMapToolsCwd)
+        .then((state) => { if (!cancelled) setRepoMapToolsState(state) })
+        .catch(() => { /* ignore */ })
     })
-  }, [setRepoMapToolsEnabled])
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [setRepoMapToolsEnabled, repoMapToolsCwd])
 
   // cwd 变化时查询状态（纯读）
   React.useEffect(() => {
@@ -2987,7 +2998,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const tooltip = isRunning
           ? `创建中… ${state?.progress ?? ''}`
           : isDone
-            ? '图谱已就绪（点击增量更新）'
+            ? state?.graphStale
+              ? '图谱已过期（代码已更新，点击增量刷新）'
+              : '图谱已就绪（点击增量更新）'
             : isFailed
               ? `图谱创建失败（点击重试）${state?.error ? `：${state.error}` : ''}`
               : isUnavailable

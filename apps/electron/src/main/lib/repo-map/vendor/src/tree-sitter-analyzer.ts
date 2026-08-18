@@ -38,6 +38,15 @@ export class TreeSitterAnalyzer {
     logger.info('[TreeSitterAnalyzer] Initialized');
   }
 
+  /**
+   * 同步 flush 符号缓存（应用退出前调用）：清除 500ms 防抖定时器并立即落盘，
+   * 避免退出前最后 500ms 的缓存更新丢失。
+   */
+  flushCacheSync(): void {
+    if (!this.initialized) return
+    this.cacheManager.flushSync();
+  }
+
   async getRepoMap(options: RepoMapOptions): Promise<string> {
     if (!this.initialized) {
       await this.initialize();
@@ -71,21 +80,25 @@ export class TreeSitterAnalyzer {
 
       // 依赖图为空（纯定义/无跨文件引用，如独立工具模块、新项目）时 PageRank 无产出。
       // 退化为「按文件定义数排序」的基础地图，保证至少给出文件级定位信息。
+      // 复杂度 O(T)：先按文件分组定义，再按组内定义数降序摊平，避免每文件全量 filter tags。
       if (rankedDefinitions.length === 0 && tags.length > 0) {
-        const defCountByFile = new Map<string, number>()
+        const defsByFile = new Map<string, Array<{ rel_fname: string; name: string; line: number }>>()
         for (const tag of tags) {
           if (tag.kind !== 'def') continue
-          defCountByFile.set(tag.rel_fname, (defCountByFile.get(tag.rel_fname) ?? 0) + 1)
+          const list = defsByFile.get(tag.rel_fname)
+          if (list) {
+            list.push({ rel_fname: tag.rel_fname, name: tag.name, line: tag.line })
+          } else {
+            defsByFile.set(tag.rel_fname, [{ rel_fname: tag.rel_fname, name: tag.name, line: tag.line }])
+          }
         }
-        rankedDefinitions = Array.from(defCountByFile.entries())
-          .sort((a, b) => b[1] - a[1])
-          .flatMap(([file]) =>
-            tags
-              .filter((t) => t.rel_fname === file && t.kind === 'def')
-              .map((t) => ({ rel_fname: file, name: t.name, rank: defCountByFile.get(file) ?? 0, line: t.line })),
+        rankedDefinitions = Array.from(defsByFile.entries())
+          .sort((a, b) => b[1].length - a[1].length)
+          .flatMap(([file, defs]) =>
+            defs.map((d) => ({ rel_fname: file, name: d.name, rank: defs.length, line: d.line })),
           )
         logger.info(`[TreeSitterAnalyzer] 依赖图为空，退化为定义数排序地图（${rankedDefinitions.length} definitions）`)
-      };
+      }
 
       // Render tree
       const output = await this.treeRenderer.render(rankedDefinitions, chatFiles, maxLines, root);
