@@ -65,6 +65,7 @@ import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
+import { injectWecomMcpServer } from './builtin-mcp/wecom-mcp'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
 import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
@@ -1413,6 +1414,11 @@ export class AgentOrchestrator {
       const effectiveSkillsDir = workspaceSlug ? (sessionMeta?.projectId && hasProjectSkills(workspaceSlug, sessionMeta.projectId) ? getProjectSkillsDir(workspaceSlug, sessionMeta.projectId) : getWorkspaceSkillsDir(workspaceSlug)) : undefined
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
+      }
+      // 企业微信 MCP（2026-08-19）：官方 wecom-cli mcp-server 模式，optional 注入，
+      // 凭据来自 API Tab 配置（Bot ID/Secret）或本机 wecom-cli auth init。
+      if (!toolsDisabled && isBuiltinMcpUserEnabled('wecom')) {
+        injectWecomMcpServer(mcpServers)
       }
       // Graphify 知识图谱 MCP serve（2026-08-14，P3）：repoMapTools 开启 + 主仓库图存在 +
       // graphifyy[mcp] 已装时，注入 stdio server（python -m graphify.serve <主仓库 graph.json>），

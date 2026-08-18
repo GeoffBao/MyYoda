@@ -24,6 +24,8 @@ interface McpCardProps {
   statusLabel?: string
   statusTone?: 'success' | 'warning' | 'muted'
   readOnly?: boolean
+  /** 自定义图标（默认蓝色 Plug）；内置 MCP 可传品牌图标 */
+  icon?: React.ReactNode
 }
 
 export function McpCard({
@@ -37,6 +39,7 @@ export function McpCard({
   statusLabel,
   statusTone = 'muted',
   readOnly = false,
+  icon,
 }: McpCardProps): React.ReactElement {
   const isBuiltin = entry.isBuiltin === true
   const target = targetLabel ?? (entry.type === 'stdio' ? entry.command : entry.url)
@@ -61,7 +64,7 @@ export function McpCard({
     >
       <div className="flex items-start gap-3">
         <div className="rounded-xl bg-blue-500/12 p-2 text-blue-500 shadow-sm shrink-0">
-          <Plug size={18} />
+          {icon ?? <Plug size={18} />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

@@ -3,11 +3,12 @@
  */
 
 import * as React from 'react'
-import { ArrowLeft, CheckCircle2, Plug, Settings2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Settings2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
+import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 
 interface BuiltinMcpDetailSheetProps {
   open: boolean
@@ -24,6 +25,8 @@ const CATEGORY_LABELS: Record<BuiltinMcpServerSummary['category'], string> = {
   media: '媒体',
   browser: '浏览器',
   task: '任务',
+  office: '办公',
+  knowledge: '知识',
 }
 
 interface BuiltinMcpConfigInfo {
@@ -46,6 +49,13 @@ function getConfigInfo(server: BuiltinMcpServerSummary): BuiltinMcpConfigInfo {
       description: '启用后 MyYoda 会通过 npx 启动 chrome-devtools-mcp，让 Agent 可以打开真实浏览器页面、截图和检查 DOM。首次使用可能需要下载 npm 包，并要求本机安装 Chrome。',
     }
   }
+  if (server.id === 'wecom') {
+    return {
+      source: 'Agent 工具 / 企业微信',
+      description: '在企业微信 App「工作台 → 智能机器人 → 创建机器人」选择 API 模式（长连接），拿到 Bot ID / Secret 后在「API Tab → 企业微信」配置并开启（也可在本机终端执行 wecom-cli auth init 扫码授权）。≤10 人小团队全量能力；10 人以上企业当前开放文档/待办，需企业管理员配合管理机器人权限。详细步骤见企微帮助中心 doc 21677。',
+      actionLabel: '配置企业微信',
+    }
+  }
   if (server.id === 'collaboration') {
     return {
       source: '当前 Agent 工作区',
@@ -56,6 +66,20 @@ function getConfigInfo(server: BuiltinMcpServerSummary): BuiltinMcpConfigInfo {
     return {
       source: 'MyYoda 本地自动任务',
       description: '自动任务 MCP 直接使用 MyYoda 本地任务服务，无需填写额外凭据。',
+    }
+  }
+  if (server.id === 'readwise') {
+    return {
+      source: 'Agent 工具 / Readwise',
+      description: '在「API Tab → Readwise」填入 API Token（readwise.io/access_token 获取）并开启开关。Agent 即可检索你的划线笔记与 Reader 文库（只读）。官方 MCP 为 OAuth 模式，MyYoda 采用 REST API 直连。',
+      actionLabel: '配置 Readwise',
+    }
+  }
+  if (server.id === 'weread') {
+    return {
+      source: 'Agent 工具 / 微信读书',
+      description: '在「API Tab → 微信读书」填入 API Key（wrk- 开头，官方 Skill 页面登录获取）并开启开关。Agent 即可搜索书城、查看书架/划线/阅读统计（只读）。Key 是 OAuth Token 会过期，失效时重新生成。',
+      actionLabel: '配置微信读书',
     }
   }
   return {
@@ -82,7 +106,7 @@ export function BuiltinMcpDetailSheet({ open, server, onOpenChange, onConfigure 
             {server && (
               <div className="mt-4 flex items-start gap-3">
                 <div className="rounded-xl bg-blue-500/12 p-2 text-blue-500 shadow-sm shrink-0">
-                  <Plug size={18} />
+                  {getBuiltinMcpIcon(server.id)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

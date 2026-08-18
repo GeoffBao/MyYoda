@@ -31,6 +31,9 @@ import {
 } from '../automation-scheduler'
 import { getAgentSessionMeta } from '../agent-session-manager'
 import { isBuiltinMcpUserEnabled } from '../builtin-mcp/settings'
+import { getToolCredentials } from '../chat-tool-config'
+import { buildReadwiseTools } from '../chat-tools/readwise-tools'
+import { buildWereadTools } from '../chat-tools/weread-tools'
 import { buildPiCollaborationTools } from '../agent-collaboration-tools'
 import { getVisionRelayRouteLabel, inspectImageWithVisionRelay, isVisionRelayConfigured, isVisionRelayEligibleForModel } from '../vision-relay-service'
 import {
@@ -1135,6 +1138,25 @@ export async function buildPiBuiltinTools(
       tools.push(...collaborationTools as ToolDefinition[])
     } catch (error) {
       console.error('[Pi 桥接] 注入 collaboration 工具失败:', error)
+    }
+  }
+
+  // Readwise 知识桥接（2026-08-19）：官方 MCP 为 OAuth 模式，MyYoda 用 Pi 工具桥接 + REST API 静态 token。
+  // 开关开启即尝试注入（未配 Token 时工具内给出明确错误提示，不阻塞会话）。
+  if (isBuiltinMcpUserEnabled('readwise')) {
+    try {
+      tools.push(...buildReadwiseTools(sdk, () => getToolCredentials('readwise').token ?? ''))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 readwise 工具失败:', error)
+    }
+  }
+
+  // 微信读书知识桥接（2026-08-19）：官方无 MCP server，走官方 Agent Gateway + API Key，与 Readwise 同模式。
+  if (isBuiltinMcpUserEnabled('weread')) {
+    try {
+      tools.push(...buildWereadTools(sdk, () => getToolCredentials('weread').apiKey ?? ''))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 weread 工具失败:', error)
     }
   }
 

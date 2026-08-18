@@ -46,6 +46,7 @@ import { EnhancedToolsPanel } from '@/components/settings/ToolSettings'
 import { AgentExpertsView } from '@/components/agent-experts/AgentExpertsView'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
+import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 
 function buildSkillClassificationPrompt(input: {
   workspaceName: string
@@ -191,6 +192,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const configureBuiltinMcp = React.useCallback((serverId: string): void => {
     const focusMap: Partial<Record<string, ToolSettingsFocus>> = {
       'nano-banana': 'nano-banana',
+      'wecom': 'wecom',
+      'readwise': 'readwise',
+      'weread': 'weread',
     }
     const focus = focusMap[serverId]
     if (!focus) return
@@ -788,6 +792,7 @@ function McpTab({ userEntries, builtinServers, total, onOpen, onOpenBuiltin, onT
                 enabled: server.enabled,
                 isBuiltin: true,
               }}
+              icon={getBuiltinMcpIcon(server.id)}
               description={server.description}
               targetLabel={server.availabilityReason ?? 'MyYoda 运行时注入'}
               statusLabel={getBuiltinMcpStatus(server).label}

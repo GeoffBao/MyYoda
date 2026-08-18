@@ -9,6 +9,7 @@
 
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
 import { getToolCredentials, getToolState } from '../chat-tool-config'
+import { hasWecomCredentials } from './wecom-mcp'
 import { getBuiltinMcpDefinitions, type BuiltinMcpDefinition } from './baseline'
 import { isBuiltinMcpDefaultDisabled, isBuiltinMcpUserEnabled } from './settings'
 
@@ -55,6 +56,41 @@ function resolveAvailability(
       availabilityReason: available
         ? undefined
         : state.enabled ? '需要配置 Gemini API Key' : 'Nano Banana 未启用',
+    }
+  }
+
+  if (item.id === 'wecom') {
+    const available = hasWecomCredentials()
+    return {
+      enabled: true,
+      available,
+      availabilityReason: available
+        ? undefined
+        : '需要在 API Tab 配置 Bot ID / Secret，或在终端执行 wecom-cli auth init',
+    }
+  }
+
+  if (item.id === 'readwise') {
+    const token = getToolCredentials('readwise').token
+    const available = !!token?.trim()
+    return {
+      enabled: true,
+      available,
+      availabilityReason: available
+        ? undefined
+        : '需要在 API Tab 配置 Readwise API Token（readwise.io/access_token 获取）',
+    }
+  }
+
+  if (item.id === 'weread') {
+    const apiKey = getToolCredentials('weread').apiKey
+    const available = !!apiKey?.trim()
+    return {
+      enabled: true,
+      available,
+      availabilityReason: available
+        ? undefined
+        : '需要在 API Tab 配置微信读书 API Key（wrk- 开头，官方页面获取）',
     }
   }
 

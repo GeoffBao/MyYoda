@@ -1191,7 +1191,7 @@ export interface McpToolSummary {
 }
 
 /** MyYoda 内置 MCP 分类 */
-export type BuiltinMcpCategory = 'system' | 'automation' | 'collaboration' | 'memory' | 'media' | 'browser' | 'task'
+export type BuiltinMcpCategory = 'system' | 'automation' | 'collaboration' | 'memory' | 'media' | 'browser' | 'task' | 'office' | 'knowledge'
 
 /** MyYoda 内置 MCP 摘要，不写入工作区 mcp.json */
 export interface BuiltinMcpServerSummary {

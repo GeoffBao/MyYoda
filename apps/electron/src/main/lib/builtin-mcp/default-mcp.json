@@ -143,6 +143,66 @@
       "tools": [
         { "name": "create_task", "description": "创建一个 todo 状态的看板任务，不自动运行。" }
       ]
+    },
+    {
+      "id": "wecom",
+      "name": "wecom",
+      "displayName": "企业微信",
+      "description": "通过官方 wecom-cli 的 MCP server 模式，让 Agent 直接操作企业微信：发消息、查会话、管日程/待办/会议、读写文档/智能表格、查通讯录。需要已创建智能机器人（API 模式）并配置 Bot ID / Secret。",
+      "category": "office",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        { "name": "contact.get_userlist", "description": "获取通讯录可见范围内的成员列表。", "readOnly": true },
+        { "name": "msg.get_message", "description": "获取单聊/群聊消息记录。", "readOnly": true },
+        { "name": "msg.send_message", "description": "向指定用户或群聊发送消息。" },
+        { "name": "doc.create_doc", "description": "新建在线文档。" },
+        { "name": "schedule.create_schedule", "description": "创建日程并添加参与人。" },
+        { "name": "schedule.get_free_busy", "description": "查询多成员闲忙状态。", "readOnly": true },
+        { "name": "meeting.create_meeting", "description": "预定在线会议。" },
+        { "name": "todo.add_todo", "description": "创建待办任务。" }
+      ]
+    },
+    {
+      "id": "readwise",
+      "name": "readwise",
+      "displayName": "Readwise",
+      "description": "让 Agent 检索你的 Readwise 划线笔记与 Reader 文库：搜索文档、读取全文、查看划线/书单，回答问题时可引用你自己的阅读积累。需要配置 Readwise API Token。",
+      "category": "knowledge",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        { "name": "search_documents", "description": "搜索 Reader 文库中的文档。", "readOnly": true },
+        { "name": "get_document", "description": "读取 Reader 文档详情与全文。", "readOnly": true },
+        { "name": "list_documents", "description": "列出 Reader 文库文档。", "readOnly": true },
+        { "name": "list_highlights", "description": "获取最近划线段落。", "readOnly": true },
+        { "name": "list_books", "description": "列出已保存的书籍。", "readOnly": true },
+        { "name": "get_book_highlights", "description": "获取某本书的全部划线。", "readOnly": true }
+      ]
+    },
+    {
+      "id": "weread",
+      "name": "weread",
+      "displayName": "微信读书",
+      "description": "让 Agent 读取你的微信读书数据：搜索书城、查看书架与阅读进度、导出划线/笔记、阅读统计与推荐，整理读书笔记时引用你的真实阅读记录。需要配置微信读书 API Key（wrk- 开头）。",
+      "category": "knowledge",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        { "name": "search_books", "description": "搜索微信读书书城。", "readOnly": true },
+        { "name": "get_book_info", "description": "查看书籍详情、章节目录与阅读进度。", "readOnly": true },
+        { "name": "get_shelf", "description": "查看书架全部条目。", "readOnly": true },
+        { "name": "get_reading_stats", "description": "获取阅读时长、天数与偏好分析。", "readOnly": true },
+        { "name": "get_notebooks", "description": "获取所有有笔记的书籍概览（划线/想法/书签计数）。", "readOnly": true },
+        { "name": "get_underlines", "description": "获取某本书的划线原文与想法。", "readOnly": true },
+        { "name": "get_recommendations", "description": "基于阅读偏好的个性化推荐。", "readOnly": true }
+      ]
     }
   ]
 }
