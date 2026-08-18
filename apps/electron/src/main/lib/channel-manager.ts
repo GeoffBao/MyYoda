@@ -50,7 +50,7 @@ import { getKimiApiBalanceUrl, parseKimiApiBalanceResponse } from './kimi-api-ba
 import { getOpenRouterKeyUrl, parseOpenRouterKeyResponse } from './openrouter-balance'
 import { listCodexModels, listXaiModels } from './adapters/pi-model-registry'
 import { getFetchFn } from './proxy-fetch'
-import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { getEffectiveProxyUrl, resolveProxyUrlForModel } from './proxy-settings-service'
 import {
   migrateCompatibleChannelBaseUrl,
   normalizeBaseUrl,
@@ -727,7 +727,8 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
   }
 
   const apiKey = decryptKey(channel.apiKey)
-  const proxyUrl = await getEffectiveProxyUrl()
+  // 测试连接按模型粒度解析代理：与真实对话路径一致（模型直连配置时测试也直连，验证真实可达性）
+  const proxyUrl = await resolveProxyUrlForModel(channel.models, resolveFirstTestModelId(channel.models))
   const provider = inferProviderFromBaseUrl(channel.provider, channel.baseUrl)
 
   try {
@@ -1789,7 +1790,8 @@ export async function getChannelPlanQuota(channelId: string): Promise<ChannelPla
  * 适用于创建/编辑渠道时用户在保存前先验证连接。
  */
 export async function testChannelDirect(input: ChannelDirectTestInput): Promise<ChannelTestResult> {
-  const proxyUrl = await getEffectiveProxyUrl()
+  // 测试连接按模型粒度解析代理：模型配置直连时测试也直连，验证真实对话路径
+  const proxyUrl = await resolveProxyUrlForModel(input.models, input.modelId)
   const provider = inferProviderFromBaseUrl(input.provider, input.baseUrl)
 
   try {

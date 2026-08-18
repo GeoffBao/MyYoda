@@ -858,6 +858,8 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         baseUrl,
         apiKey: effectiveApiKey,
         ...(modelId ? { modelId } : {}),
+        // 模型列表一并传入：测试连接按模型粒度解析代理（直连模型测试时也直连）
+        models,
       })
       setTestResult(result)
     } catch (error) {

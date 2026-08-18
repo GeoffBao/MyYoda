@@ -493,6 +493,8 @@ export interface ChannelDirectTestInput {
   apiKey: string
   /** 用于 messages 端点测试的模型 ID；不需要模型的供应商可忽略 */
   modelId?: string
+  /** 当前表单的模型列表：测试连接按模型粒度解析代理（模型直连配置时测试也直连） */
+  models?: ChannelModel[]
 }
 
 /**
