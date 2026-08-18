@@ -98,6 +98,7 @@ import { agentTerminalController } from './lib/agent-terminal'
 import { markRunningDelegationsAsInterrupted, markStaleTaskSessionsIdle } from './lib/agent-session-manager'
 import { stopAllGenerations } from './lib/chat-service'
 import { configureUpdater, initAutoUpdater, cleanupUpdater } from './lib/updater/auto-updater'
+import { repoMapService } from './lib/repo-map/repo-map-service'
 import { startWorkspaceWatcher, stopWorkspaceWatcher } from './lib/workspace-watcher'
 import { getIsQuitting, setQuitting } from './lib/app-lifecycle'
 import { getMainWindow as getStoredMainWindow, setMainWindow as setStoredMainWindow } from './lib/main-window-store'
@@ -889,6 +890,8 @@ app.on('before-quit', () => {
   killOrphanedClaudeSubprocesses()
   // 清理更新器定时器
   cleanupUpdater()
+  // repo map 符号缓存 flush（防抖窗口内最后更新立即落盘）
+  repoMapService.flushSync()
   // 停止工作区文件监听
   stopWorkspaceWatcher()
   // 停止所有 Bridge

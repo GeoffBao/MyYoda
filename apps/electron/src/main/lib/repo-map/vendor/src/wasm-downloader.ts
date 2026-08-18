@@ -236,7 +236,10 @@ export async function downloadWasmForLanguage(language: string): Promise<Buffer 
         throw new Error('下载内容不是有效 WASM（缺少 \\0asm 魔数）')
       }
       await fs.mkdir(cacheDir, { recursive: true })
-      await fs.writeFile(wasmPath, buffer)
+      // 原子写盘：先写临时文件再 rename，避免并发下载交错写坏缓存
+      const tmpPath = `${wasmPath}.tmp-${process.pid}-${Date.now()}`
+      await fs.writeFile(tmpPath, buffer)
+      await fs.rename(tmpPath, wasmPath)
       logger.info(`Downloaded and cached WASM for ${language} (${Math.round(buffer.byteLength / 1024)} KB) from ${source}`)
       return buffer
     } catch (error) {

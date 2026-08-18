@@ -123,4 +123,21 @@ describe('写锁残留自愈（2026-08-12 review 补）', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  test('flushSync：退出前同步落盘（防抖窗口内最后更新不丢失）', async () => {
+    const dir = makeCacheDir()
+    const db = join(dir, 'file-cache.json')
+    try {
+      const cm = new CacheManager(db)
+      await cm.initialize()
+      // setFileCache 走 500ms 防抖；flushSync 应立即落盘无需等待
+      await cm.setFileCache('/flush.ts', 1, [{ name: 'fn', kind: 'def', line: 1, rel_fname: '/flush.ts', fname: 'flush.ts' }])
+      cm.flushSync()
+      const parsed = JSON.parse(readFileSync(db, 'utf-8'))
+      expect(parsed).toHaveProperty(['/flush.ts'])
+      expect(parsed['/flush.ts'].mtime).toBe(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

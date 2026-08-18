@@ -408,7 +408,7 @@ export class AgentOrchestrator {
       if (!mainRepo) return
       const graphPath = graphJsonPath(mainRepo)
       if (!existsSync(graphPath)) return
-      if (!repoMapToolsService.isGraphifyMcpAvailable()) return
+      if (!(await repoMapToolsService.isGraphifyMcpAvailable())) return
       mcpServers.graphify = {
         type: 'stdio',
         command: 'python',
@@ -1831,7 +1831,7 @@ export class AgentOrchestrator {
       // 与 repo_map 注入保持一致（新会话也能享受图谱优先约束）。
       if (agentCwd && repoMapToolsEnabled) {
         const graphifyMainRepo = await resolveMainRepoRootCached(agentCwd)
-        if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && repoMapToolsService.isGraphifyMcpAvailable()) {
+        if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && (await repoMapToolsService.isGraphifyMcpAvailable())) {
           graphifyToolsReady = true
         }
       }
@@ -1874,7 +1874,7 @@ ${workContext}`
           if (mainRepo) {
             const graphPath = graphJsonPath(mainRepo)
             if (existsSync(graphPath)) {
-              const mcpReady = repoMapToolsService.isGraphifyMcpAvailable()
+              const mcpReady = await repoMapToolsService.isGraphifyMcpAvailable()
               const graphifyGuidance = `\n\n## 代码知识图谱（graphify）\n\n当前项目已构建代码知识图谱（主仓库 ${mainRepo}/graphify-out/graph.json，worktree 会话共享）。改代码前先查影响面，理解代码结构与依赖时优先查图谱而不是反复 grep：${mcpReady ? '\n- 优先直接调用图谱工具：mcp__graphify__query_graph（找相关代码）/ mcp__graphify__get_neighbors + mcp__graphify__get_node（影响面分析）/ mcp__graphify__shortest_path（依赖路径）' : ''}\n- 影响面：graphify explain "<符号或文件名>" --graph "${graphPath}"（边带行号+EXTRACTED/INFERRED 置信）\n- 找相关代码：graphify query "<自然语言问题>" --graph "${graphPath}"\n- 查依赖路径：graphify path "<A>" "<B>" --graph "${graphPath}"\n- 图谱过期时增量刷新：cd ${mainRepo} && graphify update .`
               systemPromptAppend += graphifyGuidance
               this.recordInjectedGraphify(sessionId, graphPath)
