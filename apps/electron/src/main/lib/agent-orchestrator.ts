@@ -16,12 +16,12 @@
 
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { basename, join, dirname } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE, PROVIDER_DEFAULT_URLS, THINKING_SIGNATURE_ERROR_CODE, THINKING_SIGNATURE_ERROR_MESSAGE, THINKING_SIGNATURE_ERROR_TITLE, isPersistableSDKSystemMessage, normalizeMcpTransportType, inferAgentSdkContextWindow, inferReasoningTransport, resolveReasoningProfile, collectSkillActivations, mergeSkillActivations } from '@myyoda/shared'
-import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
+import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage, RecoveryAction } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getMainRepoRoot } from './git-diff-service'
 import { getWorkspaceAssetsDir, listWorkspaceAssetsForPrompt } from './workspace-assets'
@@ -43,6 +43,8 @@ import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, en
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
+import { loadProjectById } from '../../../../../packages/shared/src/projects/storage.ts'
+import { findRelocationCandidates } from './project-path-service'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
 import { appendVisionRelayAllowedRoot } from './vision-relay-roots'
 import { resolveAgentSessionFileRoots } from './agent-file-roots'
@@ -1314,12 +1316,32 @@ export class AgentOrchestrator {
           })
 
           if ('unavailable' in cwdResolution) {
+            const workspaceRoot = getAgentWorkspacePath(ws.slug)
+            const projectId = sessionMeta?.projectId
+            const projectSlug = projectId ? loadProjectById(workspaceRoot, projectId)?.config.slug : undefined
+            const displayPath = cwdResolution.displayPath ?? ''
+            const actions: RecoveryAction[] = [
+              { key: 'r', label: '重新关联目录', action: 'open_project_settings', payload: workspaceId },
+              { key: 'd', label: '设置默认工作区目录', action: 'open_default_workspace_settings' },
+            ]
+            // 探测重命名/移动候选：只建议不自动改，用户点击才执行关联
+            if (projectSlug && displayPath) {
+              for (const candidate of findRelocationCandidates(displayPath, basename(displayPath))) {
+                actions.push({
+                  key: 'c',
+                  label: `关联到 ${basename(candidate)}`,
+                  action: 'relocate_project',
+                  payload: JSON.stringify({ workspaceRoot, projectSlug, targetPath: candidate }),
+                })
+              }
+            }
             reportPreflightError({
               code: 'project_directory_unavailable',
               title: '项目工作目录不可用',
-              message: `该会话绑定的项目工作目录「${cwdResolution.displayPath ?? '未知路径'}」已不可访问，可能已被移动或删除。请在项目设置里重新关联或恢复该目录后再继续。`,
+              message: `该会话绑定的项目工作目录「${displayPath}」已不可访问，可能已被移动或删除。可重新关联到新目录、关联到自动探测到的候选目录，或改用全局默认工作区目录继续。`,
+              details: [`原路径: ${displayPath}`],
               canRetry: false,
-              actions: []
+              actions,
             })
             return
           }
