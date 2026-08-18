@@ -677,7 +677,7 @@ export function getFeishuConfigPath(): string {
 }
 
 /**
- * 获取反馈配置（Notion）文件路径
+ * 获取反馈配置（GitHub PAT）文件路径
  *
  * @returns ~/.myyoda/feedback.json
  */
@@ -692,6 +692,15 @@ export function getFeedbackConfigPath(): string {
  */
 export function getFeedbackDraftsDir(): string {
   return join(getConfigDir(), 'feedback-drafts')
+}
+
+/**
+ * 获取反馈去重记录文件路径
+ *
+ * @returns ~/.myyoda/feedback-submitted.json
+ */
+export function getFeedbackSubmittedPath(): string {
+  return join(getConfigDir(), 'feedback-submitted.json')
 }
 
 /**
@@ -728,6 +737,15 @@ export function getDiscoverManifestCachePath(): string {
  */
 export function getDiscoverVideoCacheDir(): string {
   return join(getDiscoverDir(), 'video-cache')
+}
+
+/**
+ * 获取「发现」Wiki 缓存目录路径（git 浅克隆目标）
+ *
+ * @returns ~/.myyoda/discover/wiki-cache
+ */
+export function getDiscoverWikiCacheDir(): string {
+  return join(getDiscoverDir(), 'wiki-cache')
 }
 
 /**

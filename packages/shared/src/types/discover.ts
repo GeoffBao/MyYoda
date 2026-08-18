@@ -171,4 +171,52 @@ export const DISCOVER_IPC_CHANNELS = {
   GET_VIDEO_STREAM_URL: 'discover:get-video-stream-url',
   /** 删除某视频的本地缓存（按 itemId+version 构造路径，不接收任意路径） */
   DELETE_VIDEO_CACHE: 'discover:delete-video-cache',
+  /** 拉取 Wiki 页面树（force 同步刷新克隆；否则读缓存并后台刷新） */
+  GET_WIKI_PAGES: 'discover:get-wiki-pages',
+  /** 读取单个 Wiki 页面正文 */
+  GET_WIKI_PAGE: 'discover:get-wiki-page',
+  /** 手动刷新 Wiki（等价 GET_WIKI_PAGES force=true，独立通道语义清晰） */
+  REFRESH_WIKI: 'discover:refresh-wiki',
+  /** Wiki 缓存已更新推送（主 → 渲染，含新 commit hash） */
+  WIKI_UPDATED: 'discover:wiki-updated',
 } as const
+
+/** Wiki 页面树节点 */
+export interface WikiPageNode {
+  /** 页面名（文件名去掉 .md，GitHub wiki 链接 slug） */
+  name: string
+  /** 显示标题（_Sidebar 链接文本；fallback 时等于 name） */
+  title: string
+  /** 缩进层级（0 起） */
+  depth: number
+  children: WikiPageNode[]
+}
+
+/** Wiki 页面树 */
+export interface WikiPageTree {
+  nodes: WikiPageNode[]
+  /** 是否来自 _Sidebar.md（false = 文件列表 fallback） */
+  fromSidebar: boolean
+}
+
+/** Wiki 列表拉取结果 */
+export interface WikiPagesResult {
+  tree: WikiPageTree
+  /** 最近一次成功刷新时间（Unix 毫秒；0 = 从未成功） */
+  fetchedAt: number
+  /** 当前缓存 commit hash */
+  commitHash: string
+  /** 上次刷新失败、当前展示的是旧缓存 */
+  fromCache: boolean
+  /** 刷新失败原因 */
+  error?: string
+}
+
+/** Wiki 单页正文 */
+export interface WikiPageContent {
+  name: string
+  /** 媒体重写后的 markdown 正文 */
+  markdown: string
+  /** GitHub wiki 网页地址 */
+  htmlUrl: string
+}

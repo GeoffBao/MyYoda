@@ -8,6 +8,8 @@ import type {
   DiscussionListResult,
   DiscoverFeedItem,
   VideoDownloadState,
+  WikiPageContent,
+  WikiPagesResult,
 } from '@myyoda/shared'
 
 /** 面板内 tab：featured 官方精选 / community 社区 / help 帮助 / feedback 反馈 */
@@ -40,3 +42,16 @@ export const discussionListResultAtom = atom<DiscussionListResult>({
 export const discussionListLoadingAtom = atom(false)
 export const discussionDetailAtom = atom<DiscussionDetail | null>(null)
 export const discussionDetailLoadingAtom = atom(false)
+
+/** Wiki 在线文档 */
+export const wikiPagesResultAtom = atom<WikiPagesResult>({
+  tree: { nodes: [], fromSidebar: false },
+  fetchedAt: 0,
+  commitHash: '',
+  fromCache: false,
+})
+export const wikiPagesLoadingAtom = atom(false)
+/** 当前打开的页面名（null = 列表视图） */
+export const wikiCurrentPageAtom = atom<string | null>(null)
+export const wikiPageContentAtom = atom<WikiPageContent | null>(null)
+export const wikiPageLoadingAtom = atom(false)

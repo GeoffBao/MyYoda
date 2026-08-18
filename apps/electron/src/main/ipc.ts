@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, DISCOVER_IPC_CHANNELS, type FeedbackNotionConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, type DiscoverContentItem, type DiscussionCategorySlug, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, EXPERT_IPC_CHANNELS, AGENT_THINKING_LEVELS, isMyYodaPermissionMode, normalizePathForCompare, PLANNING_IPC_CHANNELS, RELEASE_NOTES_IPC_CHANNELS, FEEDBACK_IPC_CHANNELS, DISCOVER_IPC_CHANNELS, type FeedbackGithubConfig, type FeedbackSubmitInput, type PlanningWorkspaceScope, type DiscoverContentItem, type DiscussionCategorySlug, MAX_ATTACHMENT_SIZE } from '@myyoda/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, EXCALIDRAW_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, USAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -5191,9 +5191,9 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // ===== 用户反馈（→ Notion）=====
+  // ===== 用户反馈（→ GitHub Issues）=====
 
-  // 提交反馈到 Notion 数据库（含截图上传，失败自动落本地草稿）
+  // 提交反馈到 GitHub Issues（含截图 user-attachments 上传，失败自动落本地草稿）
   ipcMain.handle(
     FEEDBACK_IPC_CHANNELS.SUBMIT,
     async (_event, input: FeedbackSubmitInput, appVersion?: string, platform?: string) => {
@@ -5202,10 +5202,10 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 测试 Notion 连接（token + databaseId）
+  // 测试 GitHub 凭证（PAT 是否有效且有目标仓库权限）
   ipcMain.handle(
     FEEDBACK_IPC_CHANNELS.TEST_CONNECTION,
-    async (_event, config: FeedbackNotionConfig) => {
+    async (_event, config: FeedbackGithubConfig) => {
       const { testFeedbackConnection } = await import('./lib/feedback-service')
       return testFeedbackConnection(config)
     }
@@ -5223,7 +5223,7 @@ export function registerIpcHandlers(): void {
   // 保存反馈渠道配置
   ipcMain.handle(
     FEEDBACK_IPC_CHANNELS.SAVE_CONFIG,
-    async (_event, config: FeedbackNotionConfig) => {
+    async (_event, config: FeedbackGithubConfig) => {
       const { saveFeedbackConfig } = await import('./lib/feedback-service')
       saveFeedbackConfig(config)
     }
@@ -5246,6 +5246,18 @@ export function registerIpcHandlers(): void {
       return pickFeedbackImages(event.sender)
     }
   )
+
+  // 列出本地反馈草稿（v2 可重试，v1 旧格式标记 legacy）
+  ipcMain.handle(FEEDBACK_IPC_CHANNELS.LIST_DRAFTS, async () => {
+    const { listFeedbackDrafts } = await import('./lib/feedback-service')
+    return listFeedbackDrafts()
+  })
+
+  // 删除本地反馈草稿（按文件名）
+  ipcMain.handle(FEEDBACK_IPC_CHANNELS.DELETE_DRAFT, async (_event, fileName: string) => {
+    const { deleteFeedbackDraft } = await import('./lib/feedback-service')
+    return deleteFeedbackDraft(fileName)
+  })
 
   // ===== 「发现」面板（官方内容流 + 社区 + 反馈入口）=====
 
@@ -5317,6 +5329,24 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_DISCUSSION, async (_event, number: number, force?: boolean) => {
     const { getDiscussion } = await import('./lib/community-service')
     return getDiscussion(number, force)
+  })
+
+  // 拉取 Wiki 页面树（force 同步刷新克隆；否则读缓存并后台刷新，更新经 WIKI_UPDATED 推送）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_WIKI_PAGES, async (event, force?: boolean) => {
+    const { getWikiPages } = await import('./lib/wiki-service')
+    return getWikiPages(event.sender, Boolean(force))
+  })
+
+  // 手动刷新 Wiki（等价 GET_WIKI_PAGES force=true）
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.REFRESH_WIKI, async (event) => {
+    const { getWikiPages } = await import('./lib/wiki-service')
+    return getWikiPages(event.sender, true)
+  })
+
+  // 读取单个 Wiki 页面正文
+  ipcMain.handle(DISCOVER_IPC_CHANNELS.GET_WIKI_PAGE, async (_event, name: string) => {
+    const { getWikiPage } = await import('./lib/wiki-service')
+    return getWikiPage(name)
   })
 
   // 为已下载视频文件注册 myyoda-file:// 播放 URL（token 门控，支持 Range seek）

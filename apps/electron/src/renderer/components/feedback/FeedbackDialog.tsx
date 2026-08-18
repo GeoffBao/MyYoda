@@ -5,18 +5,19 @@
  * - 详细描述 ≤5000 字，实时计数
  * - 截图 ≤5：截屏（截当前窗口，弹窗自身自动隐藏）+ 上传
  * - 可选联系方式（回复用）
- * - 提交到用户 Notion 数据库；未配置时引导去设置
+ * - 提交到 GitHub Issues（GeoffBao/MyYoda 公开仓库）；未配置时引导去设置
  */
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { toast } from 'sonner'
-import { Bug, Camera, ImagePlus, Lightbulb, Loader2, Mail, Settings2, X } from 'lucide-react'
+import { Bug, Camera, FileText, ImagePlus, Lightbulb, Loader2, Mail, Settings2, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   FEEDBACK_DESCRIPTION_MAX_LENGTH,
   FEEDBACK_MAX_SCREENSHOTS,
+  type FeedbackDraftItem,
   type FeedbackType,
 } from '@myyoda/shared'
 import { feedbackDialogOpenAtom } from '@/atoms/feedback-dialog'
@@ -53,6 +54,7 @@ export function FeedbackDialog(): React.ReactElement {
   const [capturing, setCapturing] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [configured, setConfigured] = React.useState<boolean | null>(null)
+  const [drafts, setDrafts] = React.useState<FeedbackDraftItem[]>([])
 
   // 每次打开时重新读取配置状态并重置表单
   React.useEffect(() => {
@@ -62,6 +64,10 @@ export function FeedbackDialog(): React.ReactElement {
       .feedbackGetConfig()
       .then((config) => setConfigured(config.configured))
       .catch(() => setConfigured(false))
+    void window.electronAPI
+      .feedbackListDrafts()
+      .then(setDrafts)
+      .catch(() => setDrafts([]))
   }, [open])
 
   const handleClose = (): void => {
@@ -75,6 +81,34 @@ export function FeedbackDialog(): React.ReactElement {
     setContactEmail('')
     setShowContact(false)
     setShots([])
+  }
+
+  const refreshDrafts = React.useCallback(async (): Promise<void> => {
+    try {
+      setDrafts(await window.electronAPI.feedbackListDrafts())
+    } catch {
+      setDrafts([])
+    }
+  }, [])
+
+  /** 载入草稿到表单（截图文件可能已被清理，不恢复；只恢复文字内容） */
+  const loadDraft = (draft: FeedbackDraftItem): void => {
+    setType(draft.input.type)
+    setDescription(draft.input.description)
+    if (draft.input.contactEmail?.trim()) {
+      setContactEmail(draft.input.contactEmail.trim())
+      setShowContact(true)
+    }
+    setShots([])
+  }
+
+  const removeDraft = async (fileName: string): Promise<void> => {
+    try {
+      const ok = await window.electronAPI.feedbackDeleteDraft(fileName)
+      if (ok) await refreshDrafts()
+    } catch {
+      // 删除失败静默（下次打开会重读）
+    }
   }
 
   const handleOpenChange = (next: boolean): void => {
@@ -138,9 +172,12 @@ export function FeedbackDialog(): React.ReactElement {
         navigator.platform ?? 'unknown',
       )
       if (result.success) {
-        toast.success('感谢你的反馈，已提交到 Notion')
+        toast.success('感谢你的反馈，已提交到 GitHub Issues')
+        if (result.duplicate) toast.info('该反馈此前已提交过相同内容')
+        if (result.screenshotsSkipped) toast.warning('部分截图上传失败，已按纯文字提交')
         setOpen(false)
         resetForm()
+        void refreshDrafts()
       } else if (result.draftSaved) {
         toast.error(result.error ?? '提交失败，已保存草稿', { description: result.draftPath ? `草稿位置：${result.draftPath}` : undefined, duration: 8000 })
       } else {
@@ -296,10 +333,57 @@ export function FeedbackDialog(): React.ReactElement {
               </div>
             </div>
 
+            {/* 本地草稿 */}
+            {drafts.length > 0 && (
+              <div className="mt-4 rounded-xl border border-border/70 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <FileText size={14} className="text-muted-foreground" />
+                  本地草稿（{drafts.length}）
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {drafts.map((draft) => (
+                    <div
+                      key={draft.fileName}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-accent/40 px-2.5 py-1.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-xs text-foreground/80">
+                          {draft.legacy ? '[旧格式] ' : ''}
+                          {draft.input.type === 'bug' ? 'Bug' : '建议'}：{draft.input.description.slice(0, 30) || '（无描述）'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {draft.createdAt.slice(0, 16).replace('T', ' ')}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {!draft.legacy && (
+                          <button
+                            type="button"
+                            onClick={() => loadDraft(draft)}
+                            className="rounded-lg border border-border/70 px-2 py-1 text-[11px] text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                          >
+                            载入
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void removeDraft(draft.fileName)}
+                          aria-label="删除草稿"
+                          className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 未配置提示 */}
             {configured === false && (
               <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5">
-                <span className="text-xs text-muted-foreground">尚未配置 Notion 提交渠道</span>
+                <span className="text-xs text-muted-foreground">尚未配置 GitHub 凭证</span>
                 <button
                   type="button"
                   onClick={openFeedbackSettings}
@@ -310,6 +394,11 @@ export function FeedbackDialog(): React.ReactElement {
                 </button>
               </div>
             )}
+
+            {/* 公开可见提示 */}
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-xs text-foreground/70">
+              提交后 issue 与截图将在 GitHub 上公开可见
+            </div>
           </div>
 
           {/* 底部操作 */}

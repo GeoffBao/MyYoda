@@ -1,7 +1,7 @@
 /**
  * FeedbackSection — 「发现」面板的反馈分区
  *
- * 复用现有 Notion 反馈弹窗：引导卡片 + 打开按钮。
+ * 复用现有反馈弹窗（GitHub Issues）：引导卡片 + 打开按钮。
  */
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
@@ -21,7 +21,7 @@ export function FeedbackSection(): React.ReactElement {
           <div className="min-w-0 flex-1">
             <div className="text-[14.5px] font-medium text-foreground/90">告诉我们你的想法</div>
             <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/50">
-              遇到问题或有好主意？反馈会直接进入我们的 Notion 数据库，附上截图和联系方式会帮助我们更快定位。
+              遇到问题或有好主意？反馈会公开提交到 GitHub Issues（GeoffBao/MyYoda 仓库），附上截图和联系方式会帮助我们更快定位。
             </div>
           </div>
         </div>
