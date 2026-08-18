@@ -47,6 +47,19 @@ describe('selectDraftSessionsWithContent', () => {
     expect(result[1]?.workspaceId).toBe('ws-1')
   })
 
+  test('无 workspaceId 的草稿正常返回并透出 undefined', () => {
+    const withNoWs: DraftSessionSourceItem[] = [
+      { id: 'n1', title: 't', createdAt: 100 },
+    ]
+    const result = selectDraftSessionsWithContent({
+      sessions: withNoWs,
+      draftSessionIds: new Set(['n1']),
+      draftTexts: new Map([['n1', '无工作区草稿']]),
+    })
+    expect(result.map((s) => s.id)).toEqual(['n1'])
+    expect(result[0]?.workspaceId).toBeUndefined()
+  })
+
   test('排除当前正打开的会话', () => {
     const result = selectDraftSessionsWithContent({
       sessions,

@@ -28,6 +28,7 @@ describe('findRecallableDraftSession', () => {
     { id: 'b', title: '新 Agent 会话', workspaceId: 'ws-1', createdAt: 200 },
     { id: 'c', title: '新 Agent 会话', workspaceId: 'ws-2', createdAt: 300 },
     { id: 'd', title: '新 Agent 会话', workspaceId: 'ws-1', projectId: 'proj-1', createdAt: 400 },
+    { id: 'e', title: '新 Agent 会话', createdAt: 150 }, // 无工作区（未绑定任何项目）
   ]
 
   test('无候选草稿时返回 null', () => {
@@ -78,6 +79,26 @@ describe('findRecallableDraftSession', () => {
       workspaceId: 'ws-1',
     })
     expect(result?.id).toBe('a')
+  })
+
+  test('无当前工作区时，无工作区草稿优先回收', () => {
+    const result = findRecallableDraftSession({
+      candidates: base,
+      draftSessionIds: new Set(['e']),
+      draftTexts: new Map([['e', '无工作区的草稿']]),
+      workspaceId: undefined,
+    })
+    expect(result?.id).toBe('e')
+  })
+
+  test('无当前工作区且无无工作区草稿时，跨工作区兜底取最近', () => {
+    const result = findRecallableDraftSession({
+      candidates: base,
+      draftSessionIds: new Set(['a', 'c']),
+      draftTexts: new Map([['a', 'ws-1 草稿'], ['c', 'ws-2 更新草稿']]),
+      workspaceId: undefined,
+    })
+    expect(result?.id).toBe('c')
   })
 
   test('绑定 projectId 的草稿不参与回收', () => {
