@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { FEATURE_ITEM_KINDS, isFeatureItemActive, anyFeatureActive, shouldShowFeatureItem, type FeatureViewContext } from '../sidebar-features-model'
+import { FEATURE_ITEM_KINDS, isFeatureItemActive, anyFeatureActive, type FeatureViewContext } from '../sidebar-features-model'
 
 const ctx = (overrides: Partial<FeatureViewContext> = {}): FeatureViewContext => ({
   activeView: 'conversations',
@@ -44,28 +44,5 @@ describe('anyFeatureActive', () => {
   test('Given 无功能视图激活（含 discover 视图）When 聚合判定 Then false', () => {
     expect(anyFeatureActive(ctx())).toBe(false)
     expect(anyFeatureActive(ctx({ activeView: 'discover' }))).toBe(false)
-  })
-})
-
-describe('shouldShowFeatureItem', () => {
-  test('Given 菜单模式（showingAll=true）+ agent 模式 When 过滤任意 kind Then 全部可见', () => {
-    for (const kind of FEATURE_ITEM_KINDS) {
-      expect(shouldShowFeatureItem(kind, ctx(), true)).toBe(true)
-    }
-  })
-  test('Given 菜单模式 + chat 模式 When 过滤 agentOnly 项（board/canvas/skills/wiki）Then 不可见', () => {
-    const chatCtx = ctx({ mode: 'chat' })
-    expect(shouldShowFeatureItem('planning', chatCtx, true)).toBe(true)
-    for (const kind of ['board', 'canvas', 'skills', 'messaging', 'wiki'] as const) {
-      expect(shouldShowFeatureItem(kind, chatCtx, true)).toBe(false)
-    }
-  })
-  test('Given 指示模式（showingAll=false）When 过滤 Then 仅激活项可见', () => {
-    const planningCtx = ctx({ activeView: 'planning' })
-    expect(shouldShowFeatureItem('planning', planningCtx, false)).toBe(true)
-    expect(shouldShowFeatureItem('board', planningCtx, false)).toBe(false)
-    expect(shouldShowFeatureItem('canvas', planningCtx, false)).toBe(false)
-    expect(shouldShowFeatureItem('skills', planningCtx, false)).toBe(false)
-    expect(shouldShowFeatureItem('wiki', planningCtx, false)).toBe(false)
   })
 })
