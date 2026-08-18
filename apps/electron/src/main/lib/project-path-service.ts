@@ -180,7 +180,8 @@ export function isRelocationCandidate(name: string, projectName: string): boolea
  */
 export function findRelocationCandidates(displayPath: string, projectName: string): string[] {
   if (!displayPath || !projectName) return []
-  const parent = dirname(displayPath)
+  // 配置路径可能为相对路径（历史遗留/手改），先归一为绝对路径再探测
+  const parent = dirname(resolve(displayPath))
   let entries: string[]
   try {
     entries = readdirSync(parent, { withFileTypes: true })

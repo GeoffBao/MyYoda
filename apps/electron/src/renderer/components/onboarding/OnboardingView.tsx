@@ -58,6 +58,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     }
   }
 
+  // 跳过：先清空已输入路径，避免“选了又点跳过”被意外保存
+  const handleSkipFromWorkspace = async () => {
+    setDefaultDirectory('')
+    await handleContinueFromWorkspace()
+  }
+
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-8">
       {step === 'welcome' && (
@@ -165,7 +171,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <div className="flex gap-3">
               <Button
                 variant="outline"
-                onClick={() => void handleContinueFromWorkspace()}
+                onClick={() => void handleSkipFromWorkspace()}
               >
                 跳过
               </Button>
