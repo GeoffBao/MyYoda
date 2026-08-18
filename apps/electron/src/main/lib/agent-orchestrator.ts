@@ -17,7 +17,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE, PROVIDER_DEFAULT_URLS, THINKING_SIGNATURE_ERROR_CODE, THINKING_SIGNATURE_ERROR_MESSAGE, THINKING_SIGNATURE_ERROR_TITLE, isPersistableSDKSystemMessage, normalizeMcpTransportType, inferAgentSdkContextWindow, inferReasoningTransport, resolveReasoningProfile, collectSkillActivations, mergeSkillActivations } from '@myyoda/shared'
@@ -39,7 +39,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
+import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir, getAgentDefaultWorkingDirectory } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -339,6 +339,25 @@ function buildPiAdditionalDirectoriesPrompt(directories: string[]): string {
 如需读取或修改这些目录中的内容，请直接使用绝对路径，不要先复制到当前工作目录。
 ${directoryLines}
 </attached_directories>`
+}
+
+/**
+ * 会话默认工作区目录：应用设置 + 存在性检查。
+ * 失效/不可访问时返回 undefined（会话降级到隔离沙箱，不阻断启动）。
+ */
+function resolveDefaultWorkingDirectoryForSession(): string | undefined {
+  const configured = getAgentDefaultWorkingDirectory()
+  if (!configured) return undefined
+  try {
+    if (!existsSync(configured) || !statSync(configured).isDirectory()) {
+      console.warn(`[Agent 编排] 默认工作区目录不可用，回退会话沙箱: ${configured}`)
+      return undefined
+    }
+    return configured
+  } catch (err) {
+    console.warn(`[Agent 编排] 默认工作区目录检查失败，回退会话沙箱: ${configured}`, err)
+    return undefined
+  }
 }
 
 // ===== AgentOrchestrator =====
@@ -1289,6 +1308,7 @@ export class AgentOrchestrator {
             workspaceProjectRootPath: ws.projectRootPath,
             agentCwdMode: sessionMeta?.agentCwdMode,
             projectId: sessionMeta?.projectId,
+            defaultWorkingDirectory: resolveDefaultWorkingDirectoryForSession(),
             resolveProjectCwd: (projectId) => projectRepository.resolveEffectiveCwdForProject(getAgentWorkspacePath(ws.slug), projectId),
             sandboxCwd
           })
