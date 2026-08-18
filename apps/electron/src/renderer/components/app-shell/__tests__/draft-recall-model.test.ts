@@ -8,11 +8,10 @@ describe('selectDraftSessionsWithContent', () => {
     { id: 'c', title: '新 Agent 会话', workspaceId: 'ws-2', createdAt: 200 },
   ]
 
-  test('无草稿 ID 时返回空', () => {
+  test('无草稿文本时返回空', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds: new Set(),
-      draftTexts: new Map([['a', '写了一半']]),
+      draftTexts: new Map(),
     })
     expect(result).toEqual([])
   })
@@ -20,7 +19,6 @@ describe('selectDraftSessionsWithContent', () => {
   test('过滤空内容草稿（未输入任何东西不算需要找回的）', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds: new Set(['a']),
       draftTexts: new Map([['a', '   ']]),
     })
     expect(result).toEqual([])
@@ -29,17 +27,15 @@ describe('selectDraftSessionsWithContent', () => {
   test('按 createdAt 倒序排列', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds: new Set(['a', 'b']),
       draftTexts: new Map([['a', '第一个草稿'], ['b', '第二个草稿']]),
     })
     expect(result.map((s) => s.id)).toEqual(['b', 'a'])
     expect(result[0]?.text).toBe('第二个草稿')
   })
 
-  test('跨项目返回全部工作区草稿，按 createdAt 倒序并透出 workspaceId', () => {
+  test('跨项目返回全部有内容草稿，按 createdAt 倒序并透出 workspaceId', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds: new Set(['a', 'c']),
       draftTexts: new Map([['a', '本工作区'], ['c', '别的工作区']]),
     })
     expect(result.map((s) => s.id)).toEqual(['c', 'a'])
@@ -47,23 +43,26 @@ describe('selectDraftSessionsWithContent', () => {
     expect(result[1]?.workspaceId).toBe('ws-1')
   })
 
-  test('无 workspaceId 的草稿正常返回并透出 undefined', () => {
-    const withNoWs: DraftSessionSourceItem[] = [
-      { id: 'n1', title: 't', createdAt: 100 },
-    ]
+  test('visibleSessionIds 中的会话不进区块（已有行标记，避免重复）', () => {
     const result = selectDraftSessionsWithContent({
-      sessions: withNoWs,
-      draftSessionIds: new Set(['n1']),
-      draftTexts: new Map([['n1', '无工作区草稿']]),
+      sessions,
+      draftTexts: new Map([['a', '可见行有草稿'], ['c', '不可见的其他项目草稿']]),
+      visibleSessionIds: new Set(['a']),
     })
-    expect(result.map((s) => s.id)).toEqual(['n1'])
-    expect(result[0]?.workspaceId).toBeUndefined()
+    expect(result.map((s) => s.id)).toEqual(['c'])
+  })
+
+  test('不传 visibleSessionIds 时不过滤（向后兼容）', () => {
+    const result = selectDraftSessionsWithContent({
+      sessions,
+      draftTexts: new Map([['a', '草稿'], ['c', '草稿2']]),
+    })
+    expect(result.map((s) => s.id)).toEqual(['c', 'a'])
   })
 
   test('排除当前正打开的会话', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds: new Set(['a']),
       draftTexts: new Map([['a', '正在这个会话里']]),
       excludeSessionId: 'a',
     })
@@ -79,7 +78,6 @@ describe('selectDraftSessionsWithContent', () => {
     ]
     const result = selectDraftSessionsWithContent({
       sessions: many,
-      draftSessionIds: new Set(['x1', 'x2', 'x3', 'x4']),
       draftTexts: new Map([['x1', 'a'], ['x2', 'b'], ['x3', 'c'], ['x4', 'd']]),
       maxItems: 2,
     })
