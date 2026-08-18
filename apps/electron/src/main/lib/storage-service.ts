@@ -6,7 +6,7 @@
  * 由设置面板"磁盘管理"Tab 和启动时自动清理逻辑调用。
  */
 
-import { existsSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, statSync, unlinkSync, readdirSync } from 'node:fs'
 import { rmSyncWithRetry } from './fs-retry'
 import { promises as fsPromises } from 'node:fs'
 import { join, basename, relative, isAbsolute } from 'node:path'
@@ -23,7 +23,8 @@ import {
   getConversationsDir,
   getDiscoverVideoCacheDir,
 } from './config-paths'
-import { listAgentSessions } from './agent-session-manager'
+import { listAgentSessions, stripImageBlocksFromStoredMessage } from './agent-session-manager'
+import { writeTextFileAtomic } from './safe-file'
 import { listAgentWorkspaces } from './agent-workspace-manager'
 import { isWorkspaceMetadataDir } from './storage-boundaries'
 import { assessOrphanCleanupIndex } from './storage-cleanup-policy'
@@ -49,6 +50,8 @@ export interface StorageCategory {
   orphanCount: number
   orphanItems: StorageOrphanItem[]
   orphanItemsTruncated: boolean
+  /** 体积最大的会话文件列表（仅 agent-sessions 分类填充，最多 TOP_SESSION_ITEMS 条） */
+  topItems?: StorageTopItem[]
 }
 
 export interface StorageOrphanItem {
@@ -56,6 +59,15 @@ export interface StorageOrphanItem {
   path: string
   bytes: number
   count: number
+}
+
+/** 存储分类中体积最大的会话文件（供 UI 展示「谁占了空间」） */
+export interface StorageTopItem {
+  sessionId: string
+  title: string
+  bytes: number
+  archived: boolean
+  updatedAt: number
 }
 
 export interface StorageStats {
@@ -68,6 +80,19 @@ export interface CleanupOptions {
   categories: StorageCategoryKey[]
   orphansOnly: boolean
   archivedBeforeDays: number
+  /** 孤儿数据清理必须来自用户显式确认（UI 弹窗后传 true）；启动时自动清理不传。 */
+  confirmedOrphanCleanup?: boolean
+}
+
+export interface PreviewCleanupResult {
+  reclaimableBytes: number
+  affectedCount: number
+}
+
+export interface StripImagesResult {
+  freedBytes: number
+  affectedSessions: number
+  errors: string[]
 }
 
 export interface CleanupResult {
@@ -87,10 +112,13 @@ const SKIP_DIRS = new Set([
 
 // 单次扫描最大文件数上限，防止超大工作区导致无限递归
 const MAX_FILE_SCAN = 100_000
+
+/** 磁盘管理页「体积最大会话」列表条数上限 */
+const TOP_SESSION_ITEMS = 10
 const MAX_ORPHAN_ITEM_PREVIEW = 80
 
-// 孤儿目录无法可靠区分用户仍需保留的会话工作资料，默认不展示也不允许删除。
-const ORPHAN_DATA_CLEANUP_ENABLED = false
+// 孤儿目录无法可靠区分用户仍需保留的会话工作资料，清理必须来自用户在磁盘管理页的显式确认。
+// 只读检测（大小/数量统计）不受此限制，始终执行以便 UI 展示。
 
 const PRESERVED_ORPHAN_SESSION_DIRS = new Set([
   '.context',
@@ -223,9 +251,11 @@ function getActiveWorkspaceSlugs(): Set<string> {
 async function calcAgentSessionsCategory(): Promise<StorageCategory> {
   const dir = getAgentSessionsDir()
   const activeIds = getActiveSessionIds()
+  const sessionMeta = new Map(listAgentSessions().map((s) => [s.id, s]))
   let bytes = 0, count = 0, orphanBytes = 0, orphanCount = 0
   const orphanItems: StorageOrphanItem[] = []
   let orphanItemsTruncated = false
+  const topItems: StorageTopItem[] = []
 
   if (existsSync(dir)) {
     try {
@@ -238,7 +268,8 @@ async function calcAgentSessionsCategory(): Promise<StorageCategory> {
           const id = basename(file, '.jsonl')
           bytes += stat.size
           count++
-          if (ORPHAN_DATA_CLEANUP_ENABLED && !activeIds.has(id)) {
+          const meta = sessionMeta.get(id)
+          if (!meta) {
             orphanBytes += stat.size
             orphanCount++
             orphanItemsTruncated = addOrphanItem(orphanItems, {
@@ -248,10 +279,20 @@ async function calcAgentSessionsCategory(): Promise<StorageCategory> {
               count: 1,
             }) || orphanItemsTruncated
           }
+          // 收集体积最大的会话文件（无论是否孤儿，孤儿在元数据缺失时用文件名兜底标题）
+          topItems.push({
+            sessionId: id,
+            title: meta?.title || id,
+            bytes: stat.size,
+            archived: meta?.archived === true,
+            updatedAt: meta?.updatedAt ?? stat.mtimeMs,
+          })
         } catch { /* skip */ }
       }
     } catch { /* skip */ }
   }
+
+  topItems.sort((a, b) => b.bytes - a.bytes)
 
   return {
     label: 'Agent 会话记录',
@@ -260,6 +301,7 @@ async function calcAgentSessionsCategory(): Promise<StorageCategory> {
     hasOrphans: orphanCount > 0,
     orphanBytes, orphanCount,
     orphanItems, orphanItemsTruncated,
+    topItems: topItems.slice(0, TOP_SESSION_ITEMS),
   }
 }
 
@@ -399,8 +441,8 @@ async function calcWorkspacesCategory(): Promise<StorageCategory> {
               const sub = await getDirSize(entryPath)
               bytes += sub.bytes
               count += sub.count
-              // session 目录的 ID 不在活跃列表中 → 孤儿
-              if (ORPHAN_DATA_CLEANUP_ENABLED && !activeIds.has(entry) && !activeSlugs.has(entry)) {
+              // session 目录的 ID 不在活跃列表中 → 孤儿（只读检测始终执行，清理需用户显式确认）
+              if (!activeIds.has(entry) && !activeSlugs.has(entry)) {
                 const cleanable = await getDirSize(entryPath, { skipTopLevelDirs: PRESERVED_ORPHAN_SESSION_DIRS })
                 if (cleanable.count > 0) {
                   orphanBytes += cleanable.bytes
@@ -729,11 +771,11 @@ function cleanupArchivedSessions(beforeDays: number): CleanupResult {
 }
 
 export async function cleanupStorage(options: CleanupOptions): Promise<CleanupResult> {
-  if (options.orphansOnly && !ORPHAN_DATA_CLEANUP_ENABLED) {
+  if (options.orphansOnly && !options.confirmedOrphanCleanup) {
     return {
       freedBytes: 0,
       deletedCount: 0,
-      errors: ['孤儿数据清理功能已默认关闭，未删除任何数据'],
+      errors: ['孤儿数据清理需用户在磁盘管理页显式确认后执行'],
     }
   }
 
@@ -770,4 +812,224 @@ export async function cleanupStorage(options: CleanupOptions): Promise<CleanupRe
     console.log(`[存储清理] 总计释放 ${(totalFreed / 1024 / 1024).toFixed(1)} MB, 删除 ${totalDeleted} 项`)
   }
   return { freedBytes: totalFreed, deletedCount: totalDeleted, errors: allErrors }
+}
+
+// ─── 归档清理预览 ───
+
+/**
+ * 预览「清理已归档会话数据」将释放的空间（dry-run，不删除任何文件）。
+ *
+ * 与 cleanupArchivedSessions 相同的筛选口径：已归档且超过 beforeDays 天未更新。
+ */
+export function previewArchivedCleanup(beforeDays: number): PreviewCleanupResult {
+  if (!Number.isFinite(beforeDays) || beforeDays <= 0) {
+    return { reclaimableBytes: 0, affectedCount: 0 }
+  }
+  const cutoff = Date.now() - beforeDays * 24 * 60 * 60 * 1000
+  const sessions = listAgentSessions()
+  const sdkDir = getSdkConfigDir()
+  let reclaimableBytes = 0
+  let affectedCount = 0
+
+  for (const session of sessions) {
+    if (!session.archived || session.updatedAt > cutoff) continue
+
+    const msgPath = join(getAgentSessionsDir(), `${session.id}.jsonl`)
+    if (existsSync(msgPath)) {
+      try {
+        reclaimableBytes += statSync(msgPath).size
+        affectedCount++
+      } catch { /* skip */ }
+    }
+
+    if (session.sdkSessionId) {
+      const histDir = join(sdkDir, 'file-history', session.sdkSessionId)
+      if (existsSync(histDir)) {
+        try {
+          // file-history 目录大小用同步估算；目录不存在或不可读时忽略。
+          const entries = readdirSync(histDir)
+          for (const entry of entries) {
+            try {
+              reclaimableBytes += statSync(join(histDir, entry)).size
+            } catch { /* skip */ }
+          }
+          affectedCount++
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  return { reclaimableBytes, affectedCount }
+}
+
+// ─── 存量大图剥离 ───
+
+/** 文件级粗筛阈值：小于该体积的 JSONL 不可能有可观的图片剥离收益，直接跳过 */
+const STRIP_IMAGE_MIN_BYTES = 64 * 1024
+/** 行级粗筛阈值：短行不可能包含值得剥离的大图，跳过 JSON.parse */
+const STRIP_LINE_MIN_CHARS = 4096
+
+interface StripSessionResult {
+  reclaimableBytes: number
+  linesChanged: number
+  skippedActive: boolean
+}
+
+/**
+ * 对单个会话 JSONL 执行大图剥离（读 → 逐行替换 → 原子写回）。
+ *
+ * 写回前校验 mtime 未变化：会话仍在写入（Agent 运行中）时跳过，避免
+ * 与 appendSDKMessages 的追写产生竞态丢失新消息。
+ */
+async function stripSessionImages(filePath: string, beforeMtime: number, beforeSize: number): Promise<StripSessionResult> {
+  const result: StripSessionResult = { reclaimableBytes: 0, linesChanged: 0, skippedActive: false }
+  const isUnchanged = (): boolean => {
+    try {
+      const stat = statSync(filePath)
+      return stat.mtimeMs === beforeMtime && stat.size === beforeSize
+    } catch {
+      return false
+    }
+  }
+  if (!isUnchanged()) {
+    result.skippedActive = true
+    return result
+  }
+
+  let raw: string
+  try {
+    raw = await fsPromises.readFile(filePath, 'utf-8')
+  } catch {
+    result.skippedActive = true
+    return result
+  }
+
+  const lines = raw.split('\n')
+  let changed = false
+  const out: string[] = []
+  for (const line of lines) {
+    if (!line.trim()) {
+      out.push(line)
+      continue
+    }
+    // 行长粗筛：短行不可能包含值得剥离的大图，跳过 JSON.parse 开销。
+    if (line.length < STRIP_LINE_MIN_CHARS) {
+      out.push(line)
+      continue
+    }
+    const stripped = stripImageBlocksFromStoredMessage(line)
+    if (stripped === null) {
+      out.push(line)
+      continue
+    }
+    const delta = line.length - stripped.length
+    if (delta > 0) {
+      result.reclaimableBytes += delta
+      result.linesChanged++
+      changed = true
+    }
+    out.push(stripped)
+  }
+
+  // 写回前再次复核 mtime/size，最小化读取→写入之间的 TOCTOU 窗口；
+  // 复核失败（会话仍在写入）时未落盘，回收量必须归零避免虚报。
+  if (changed) {
+    if (isUnchanged()) {
+      writeTextFileAtomic(filePath, out.join('\n'))
+    } else {
+      result.skippedActive = true
+      result.reclaimableBytes = 0
+      result.linesChanged = 0
+    }
+  }
+  return result
+}
+
+/**
+ * 预览存量会话 JSONL 中可剥离的 base64 大图体积（dry-run，不写盘）。
+ * 只统计替换后字节数会减少的行；顺带返回受影响的会话数。
+ */
+/**
+ * 预览存量会话 JSONL 中可剥离的 base64 大图体积（dry-run，不写盘）。
+ * 只统计替换后字节数会减少的行；顺带返回受影响的会话数。
+ * 行长粗筛 + 异步 I/O，避免 252MB 级存量同步全量 parse 阻塞主进程。
+ */
+export async function previewStripOversizedImages(): Promise<PreviewCleanupResult> {
+  const dir = getAgentSessionsDir()
+  let reclaimableBytes = 0
+  let affectedCount = 0
+  if (!existsSync(dir)) return { reclaimableBytes, affectedCount }
+
+  let files: string[]
+  try {
+    files = await fsPromises.readdir(dir)
+  } catch {
+    return { reclaimableBytes, affectedCount }
+  }
+
+  for (const file of files) {
+    if (!file.endsWith('.jsonl')) continue
+    const fullPath = join(dir, file)
+    let sessionReclaim = 0
+    try {
+      const raw = await fsPromises.readFile(fullPath, 'utf-8')
+      for (const line of raw.split('\n')) {
+        if (line.length < STRIP_LINE_MIN_CHARS) continue
+        const stripped = stripImageBlocksFromStoredMessage(line)
+        if (stripped === null) continue
+        const delta = line.length - stripped.length
+        if (delta > 0) sessionReclaim += delta
+      }
+    } catch { /* skip */ }
+    if (sessionReclaim > 0) {
+      reclaimableBytes += sessionReclaim
+      affectedCount++
+    }
+  }
+
+  return { reclaimableBytes, affectedCount }
+}
+
+/**
+ * 对全部存量会话 JSONL 执行大图剥离。
+ *
+ * 只处理静态会话（mtime/size 在读取前后一致）；正在写入的会话自动跳过。
+ * 剥离语义与 sanitizeOversizedMessage 一致：图片块替换为截断标记，
+ * 渲染层不消费 image 块，视觉零损失。
+ */
+export async function stripOversizedImages(): Promise<StripImagesResult> {
+  const dir = getAgentSessionsDir()
+  const result: StripImagesResult = { freedBytes: 0, affectedSessions: 0, errors: [] }
+  if (!existsSync(dir)) return result
+
+  let files: string[]
+  try {
+    files = await fsPromises.readdir(dir)
+  } catch (e) {
+    result.errors.push(`读取会话目录失败: ${e}`)
+    return result
+  }
+
+  for (const file of files) {
+    if (!file.endsWith('.jsonl')) continue
+    const fullPath = join(dir, file)
+    try {
+      const beforeStat = await fsPromises.stat(fullPath)
+      // 单条图片小于阈值不可能贡献 STRIP_IMAGE_MIN_BYTES 以上的回收量，
+      // 但文件级快速通道用总大小粗筛：小于阈值的文件直接跳过。
+      if (beforeStat.size < STRIP_IMAGE_MIN_BYTES) continue
+      const sessionResult = await stripSessionImages(fullPath, beforeStat.mtimeMs, beforeStat.size)
+      if (sessionResult.reclaimableBytes > 0) {
+        result.freedBytes += sessionResult.reclaimableBytes
+        result.affectedSessions++
+      }
+    } catch (e) {
+      result.errors.push(`处理 ${file} 失败: ${e}`)
+    }
+  }
+
+  if (result.freedBytes > 0) {
+    console.log(`[存储清理] 大图剥离: 释放 ${(result.freedBytes / 1024 / 1024).toFixed(1)} MB, 涉及 ${result.affectedSessions} 个会话`)
+  }
+  return result
 }

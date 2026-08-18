@@ -16,12 +16,12 @@
 
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, dirname } from 'node:path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, join, dirname } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, XaiOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, AgentAssistantDeltaPayload, RewindSessionResult, SkillActivation } from '@myyoda/shared'
 import { MYYODA_DEFAULT_PERMISSION_MODE, PROVIDER_DEFAULT_URLS, THINKING_SIGNATURE_ERROR_CODE, THINKING_SIGNATURE_ERROR_MESSAGE, THINKING_SIGNATURE_ERROR_TITLE, isPersistableSDKSystemMessage, normalizeMcpTransportType, inferAgentSdkContextWindow, inferReasoningTransport, resolveReasoningProfile, collectSkillActivations, mergeSkillActivations } from '@myyoda/shared'
-import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@myyoda/shared'
+import type { MyYodaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage, RecoveryAction } from '@myyoda/shared'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getMainRepoRoot } from './git-diff-service'
 import { getWorkspaceAssetsDir, listWorkspaceAssetsForPrompt } from './workspace-assets'
@@ -37,12 +37,14 @@ import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
-import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
+import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir, getAgentDefaultWorkingDirectory } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
+import { loadProjectById } from '../../../../../packages/shared/src/projects/storage.ts'
+import { findRelocationCandidates } from './project-path-service'
 import { applyWorktreeProjectContextOverride, resolveSessionCwd, type SessionCwdSource } from './agent-cwd-resolver'
 import { appendVisionRelayAllowedRoot } from './vision-relay-roots'
 import { resolveAgentSessionFileRoots } from './agent-file-roots'
@@ -341,6 +343,25 @@ ${directoryLines}
 </attached_directories>`
 }
 
+/**
+ * 会话默认工作区目录：应用设置 + 存在性检查。
+ * 失效/不可访问时返回 undefined（会话降级到隔离沙箱，不阻断启动）。
+ */
+function resolveDefaultWorkingDirectoryForSession(): string | undefined {
+  const configured = getAgentDefaultWorkingDirectory()
+  if (!configured) return undefined
+  try {
+    if (!existsSync(configured) || !statSync(configured).isDirectory()) {
+      console.warn(`[Agent 编排] 默认工作区目录不可用，回退会话沙箱: ${configured}`)
+      return undefined
+    }
+    return configured
+  } catch (err) {
+    console.warn(`[Agent 编排] 默认工作区目录检查失败，回退会话沙箱: ${configured}`, err)
+    return undefined
+  }
+}
+
 // ===== AgentOrchestrator =====
 
 export class AgentOrchestrator {
@@ -408,7 +429,7 @@ export class AgentOrchestrator {
       if (!mainRepo) return
       const graphPath = graphJsonPath(mainRepo)
       if (!existsSync(graphPath)) return
-      if (!repoMapToolsService.isGraphifyMcpAvailable()) return
+      if (!(await repoMapToolsService.isGraphifyMcpAvailable())) return
       mcpServers.graphify = {
         type: 'stdio',
         command: 'python',
@@ -498,7 +519,11 @@ export class AgentOrchestrator {
 
   /** 通过独立 Pi Responses 链路调用 ChatGPT OAuth 标题模型。 */
   private async callCodexTitleModel(channelId: string, modelId: string, prompt: string, signal?: AbortSignal): Promise<string | null> {
-    const [credentials, proxyUrl] = await Promise.all([resolveCodexOAuthCredentials(channelId), getEffectiveProxyUrl()])
+    const channel = getChannelById(channelId)
+    const [credentials, proxyUrl] = await Promise.all([
+      resolveCodexOAuthCredentials(channelId),
+      resolveProxyUrlForModel(channel?.models, modelId),
+    ])
     if (signal?.aborted) return null
     const generatedTitle = await generateCodexTitle({
       modelId,
@@ -543,7 +568,7 @@ export class AgentOrchestrator {
       prompt
     })
 
-    const proxyUrl = await getEffectiveProxyUrl()
+    const proxyUrl = await resolveProxyUrlForModel(channel.models, titleModelId)
     const fetchFn = getFetchFn(proxyUrl)
     const title = await fetchTitle(request, providerAdapter, fetchFn)
     return title ? sanitizeGeneratedTitle(title) : null
@@ -1285,17 +1310,38 @@ export class AgentOrchestrator {
             workspaceProjectRootPath: ws.projectRootPath,
             agentCwdMode: sessionMeta?.agentCwdMode,
             projectId: sessionMeta?.projectId,
+            defaultWorkingDirectory: resolveDefaultWorkingDirectoryForSession(),
             resolveProjectCwd: (projectId) => projectRepository.resolveEffectiveCwdForProject(getAgentWorkspacePath(ws.slug), projectId),
             sandboxCwd
           })
 
           if ('unavailable' in cwdResolution) {
+            const workspaceRoot = getAgentWorkspacePath(ws.slug)
+            const projectId = sessionMeta?.projectId
+            const projectSlug = projectId ? loadProjectById(workspaceRoot, projectId)?.config.slug : undefined
+            const displayPath = cwdResolution.displayPath ?? ''
+            const actions: RecoveryAction[] = [
+              { key: 'r', label: '重新关联目录', action: 'open_project_settings', payload: workspaceId },
+              { key: 'd', label: '设置默认工作区目录', action: 'open_default_workspace_settings' },
+            ]
+            // 探测重命名/移动候选：只建议不自动改，用户点击才执行关联
+            if (projectSlug && displayPath) {
+              for (const candidate of findRelocationCandidates(displayPath, basename(displayPath))) {
+                actions.push({
+                  key: 'c',
+                  label: `关联到 ${basename(candidate)}`,
+                  action: 'relocate_project',
+                  payload: JSON.stringify({ workspaceRoot, projectSlug, targetPath: candidate }),
+                })
+              }
+            }
             reportPreflightError({
               code: 'project_directory_unavailable',
               title: '项目工作目录不可用',
-              message: `该会话绑定的项目工作目录「${cwdResolution.displayPath ?? '未知路径'}」已不可访问，可能已被移动或删除。请在项目设置里重新关联或恢复该目录后再继续。`,
+              message: `该会话绑定的项目工作目录「${displayPath}」已不可访问，可能已被移动或删除。可重新关联到新目录、关联到自动探测到的候选目录，或改用全局默认工作区目录继续。`,
+              details: [`原路径: ${displayPath}`],
               canRetry: false,
-              actions: []
+              actions,
             })
             return
           }
@@ -1831,7 +1877,7 @@ export class AgentOrchestrator {
       // 与 repo_map 注入保持一致（新会话也能享受图谱优先约束）。
       if (agentCwd && repoMapToolsEnabled) {
         const graphifyMainRepo = await resolveMainRepoRootCached(agentCwd)
-        if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && repoMapToolsService.isGraphifyMcpAvailable()) {
+        if (graphifyMainRepo && existsSync(graphJsonPath(graphifyMainRepo)) && (await repoMapToolsService.isGraphifyMcpAvailable())) {
           graphifyToolsReady = true
         }
       }
@@ -1874,7 +1920,7 @@ ${workContext}`
           if (mainRepo) {
             const graphPath = graphJsonPath(mainRepo)
             if (existsSync(graphPath)) {
-              const mcpReady = repoMapToolsService.isGraphifyMcpAvailable()
+              const mcpReady = await repoMapToolsService.isGraphifyMcpAvailable()
               const graphifyGuidance = `\n\n## 代码知识图谱（graphify）\n\n当前项目已构建代码知识图谱（主仓库 ${mainRepo}/graphify-out/graph.json，worktree 会话共享）。改代码前先查影响面，理解代码结构与依赖时优先查图谱而不是反复 grep：${mcpReady ? '\n- 优先直接调用图谱工具：mcp__graphify__query_graph（找相关代码）/ mcp__graphify__get_neighbors + mcp__graphify__get_node（影响面分析）/ mcp__graphify__shortest_path（依赖路径）' : ''}\n- 影响面：graphify explain "<符号或文件名>" --graph "${graphPath}"（边带行号+EXTRACTED/INFERRED 置信）\n- 找相关代码：graphify query "<自然语言问题>" --graph "${graphPath}"\n- 查依赖路径：graphify path "<A>" "<B>" --graph "${graphPath}"\n- 图谱过期时增量刷新：cd ${mainRepo} && graphify update .`
               systemPromptAppend += graphifyGuidance
               this.recordInjectedGraphify(sessionId, graphPath)
@@ -1939,7 +1985,8 @@ ${workContext}`
         })
       }
       const piCustomTools = [...piBuiltinTools, ...piMcpTools, ...(extensions.piCustomTools ?? [])]
-      const proxyUrl = await getEffectiveProxyUrl()
+      // 模型粒度代理：该模型配置直连时绕过全局代理
+      const proxyUrl = await resolveProxyUrlForModel(channel.models, selectedModelId)
       // 存量 anthropic-oauth 渠道（迁移前创建）的 baseUrl 可能是空串，Pi runtime
       // 需要真实 endpoint；缺失时兜底到官方 Anthropic API。
       const effectiveBaseUrl = channel.baseUrl || (channel.provider === 'anthropic-oauth' ? PROVIDER_DEFAULT_URLS['anthropic-oauth'] : channel.baseUrl)

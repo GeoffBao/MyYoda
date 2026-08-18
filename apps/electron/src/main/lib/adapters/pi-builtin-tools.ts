@@ -883,8 +883,8 @@ function buildBrowserTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDefiniti
     sdk.defineTool({
       name: 'BrowserNavigate',
       label: '在受管浏览器中打开网页',
-      description: 'Navigate the Agent working in-app browser tab to a URL. The managed browser accepts any URL Chromium can load; downloads and popups stay inside the managed browser, while browser permissions remain blocked.',
-      parameters: Type.Object({ url: Type.String({ description: 'A complete URL to navigate to. Protocol-relative and bare domain inputs are normalized to HTTPS.' }), tabId: Type.Optional(Type.String({ description: 'Optional tab id. Defaults to the Agent working tab, independent of the tab visible to the user.' })) }),
+      description: 'Navigate the Agent working in-app browser tab to a URL or search query. Explicit URLs, bare domains, localhost, and IP addresses are opened directly; other text is searched with Google. The managed browser accepts any URL Chromium can load; downloads and popups stay inside the managed browser, while browser permissions remain blocked.',
+      parameters: Type.Object({ url: Type.String({ description: 'A URL, bare domain, or search query. Explicit URLs and recognizable hostnames open directly; other text is searched with Google. about:blank is supported for an empty page.' }), tabId: Type.Optional(Type.String({ description: 'Optional tab id. Defaults to the Agent working tab, independent of the tab visible to the user.' })) }),
       async execute(_id, params, signal?: AbortSignal) {
         const args = params as Record<string, unknown>
         return jsonToolResult(await browserController.navigate(ctx.sessionId, typeof args.url === 'string' ? args.url : '', typeof args.tabId === 'string' ? args.tabId : undefined, signal))
@@ -1050,6 +1050,16 @@ function buildBrowserTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDefiniti
         const value = (params as Record<string, unknown>).tabId
         const tabId = typeof value === 'string' ? value : ''
         return jsonToolResult(await browserController.closeTab(ctx.sessionId, tabId))
+      },
+    }),
+    sdk.defineTool({
+      name: 'BrowserClose',
+      label: '关闭受管浏览器',
+      description: 'Close every tab in the current in-app browser session and hide its browser panel.',
+      parameters: Type.Object({}),
+      async execute() {
+        await browserController.close(ctx.sessionId)
+        return jsonToolResult({ closed: true })
       },
     }),
   ] as ToolDefinition[]

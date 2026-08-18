@@ -1565,6 +1565,12 @@ export interface ElectronAPI {
   /** 清理临时文件（快速） */
   cleanupTempStorage: () => Promise<unknown>
   cleanupDiscoverStorage: () => Promise<unknown>
+  /** 预览清理已归档会话数据将释放的空间（dry-run） */
+  previewArchivedCleanup: (beforeDays: number) => Promise<unknown>
+  /** 预览存量 JSONL 可剥离的 base64 大图体积（dry-run） */
+  previewStripImages: () => Promise<unknown>
+  /** 执行存量 JSONL 大图剥离 */
+  stripImages: () => Promise<unknown>
 
   // ===== 用量统计 =====
 
@@ -3686,6 +3692,18 @@ const electronAPI: ElectronAPI = {
 
   cleanupDiscoverStorage: () => {
     return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER)
+  },
+
+  previewArchivedCleanup: (beforeDays: number) => {
+    return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.PREVIEW_ARCHIVED_CLEANUP, beforeDays)
+  },
+
+  previewStripImages: () => {
+    return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.PREVIEW_STRIP_IMAGES)
+  },
+
+  stripImages: () => {
+    return ipcRenderer.invoke(STORAGE_IPC_CHANNELS.STRIP_IMAGES)
   },
 
   // ===== 用量统计 =====

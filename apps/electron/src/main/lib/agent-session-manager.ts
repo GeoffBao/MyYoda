@@ -255,33 +255,174 @@ function migrateRetiredClaudeRuntime(index: AgentSessionsIndex): boolean {
   return changed
 }
 
+// ===== 会话索引内存缓存（性能优化） =====
+// agent-sessions.json 会随会话数增长（数百会话时可达数 MB），而 appendSDKMessages /
+// updateAgentSessionMeta 等高频路径每次都会 readIndex + writeIndex。引入带外部修改检测
+// 的内存缓存 + 防抖落盘：读操作基本命中内存，写操作合并为至多每
+// INDEX_FLUSH_DEBOUNCE_MS 一次全量落盘（进程退出前会同步补写，避免丢写）。
+// 注意：防抖窗口内磁盘文件最多滞后 INDEX_FLUSH_DEBOUNCE_MS；不经过本模块（如 apps/cli 直接读
+// agent-sessions.json）的外部只读者可能读到略旧的数据，不再是强一致。
+const INDEX_FLUSH_DEBOUNCE_MS = 150
+
+let cachedIndex: AgentSessionsIndex | null = null
+/** 内存版本是否已与磁盘一致；false 表示有未落盘修改（内存为权威）。 */
+let cachedIndexFresh = true
+/** 上次与磁盘同步后的文件 mtime / size，用于检测外部改动。 */
+let cachedIndexMtime = 0
+let cachedIndexSize = -1
+let indexFlushTimer: ReturnType<typeof setTimeout> | null = null
+let indexFlushExitHookInstalled = false
+
+/** 从磁盘读入后建立缓存快照（记录磁盘元数据，供后续外部改动检测）。 */
+function cacheIndexFromDisk(index: AgentSessionsIndex, indexPath: string): void {
+  cachedIndex = index
+  cachedIndexFresh = true
+  try {
+    const st = statSync(indexPath)
+    cachedIndexMtime = st.mtimeMs
+    cachedIndexSize = st.size
+  } catch {
+    cachedIndexMtime = 0
+    cachedIndexSize = -1
+  }
+}
+
+/** 执行会话索引的幂等迁移；返回是否有字段被修改（需要写回）。 */
+function runIndexMigrations(index: AgentSessionsIndex): boolean {
+  const permissionModeMigrated = migrateLegacyPermissionMode(index)
+  const thinkingDefaultMigrated = migrateLegacyOpenAIThinkingDefault(index)
+  const thinkingFieldMigrated = migrateThinkingLevelField(index)
+  const messageCountMigrated = migrateMessageCountBackfill(index)
+  const claudeRuntimeMigrated = migrateRetiredClaudeRuntime(index)
+  if (permissionModeMigrated || thinkingDefaultMigrated || thinkingFieldMigrated || messageCountMigrated || claudeRuntimeMigrated) {
+    if (permissionModeMigrated) {
+      console.log('[Agent 会话] 已迁移历史权限模式 auto → bypassPermissions')
+    }
+    if (thinkingDefaultMigrated) {
+      console.log('[Agent 会话] 已将历史会话的思考深度默认值升级为高')
+    }
+    if (messageCountMigrated) {
+      console.log('[Agent 会话] 已为历史任务会话补齐消息计数')
+    }
+    if (claudeRuntimeMigrated) {
+      console.log('[Agent 会话] 已迁移退役 Claude runtime 会话为只读（Pi-only）')
+    }
+    return true
+  }
+  return false
+}
+
+/**
+ * 同步落盘当前内存版本。
+ *
+ * 失败时主动重新调度一个防抖定时器（而不是等待下一次无关的 writeIndex 调用才被动才重试）：
+ * setTimeout 回调触发时 indexFlushTimer 已被清空，若此处不重新调度，磁盘瞬时故障（权限/空间/IO 错误）
+ * 可能导致修改永远停留在内存 dirty 状态，应用后续若被强杀（不走 process exit）就会静默丢失。
+ */
+function flushIndexToDisk(): void {
+  if (!cachedIndex || cachedIndexFresh) return
+  const indexPath = getAgentSessionsIndexPath()
+  try {
+    writeJsonFileAtomic(indexPath, cachedIndex)
+  } catch (error) {
+    console.error('[Agent 会话] 写入索引文件失败，将在防抖窗口后重试:', error)
+    scheduleIndexFlushRetry()
+    return
+  }
+  cachedIndexFresh = true
+  try {
+    const st = statSync(indexPath)
+    cachedIndexMtime = st.mtimeMs
+    cachedIndexSize = st.size
+  } catch {
+    cachedIndexMtime = 0
+    cachedIndexSize = -1
+  }
+}
+
+/** 落盘失败后的主动重试调度；与 writeIndex 共用同一个防抖定时器，避免重复注册。 */
+function scheduleIndexFlushRetry(): void {
+  if (indexFlushTimer) return
+  indexFlushTimer = setTimeout(() => {
+    indexFlushTimer = null
+    flushIndexToDisk()
+  }, INDEX_FLUSH_DEBOUNCE_MS)
+}
+
+function installIndexFlushOnExit(): void {
+  if (indexFlushExitHookInstalled) return
+  indexFlushExitHookInstalled = true
+  // 防抖窗口内进程退出会丢最后一次写；writeJsonFileAtomic 是同步的，可在 exit 兜底补写。
+  process.on('exit', () => {
+    flushIndexToDisk()
+  })
+}
+
+/**
+ * 写入会话索引文件（防抖合并版）
+ *
+ * 立即更新内存缓存（后续读取直接命中最新状态），落盘合并到防抖窗口内的最后一次；
+ * 进程退出前由 installIndexFlushOnExit 同步补写。
+ */
+function writeIndex(index: AgentSessionsIndex): void {
+  cachedIndex = index
+  cachedIndexFresh = false
+  if (indexFlushTimer) return
+  indexFlushTimer = setTimeout(() => {
+    indexFlushTimer = null
+    flushIndexToDisk()
+  }, INDEX_FLUSH_DEBOUNCE_MS)
+  installIndexFlushOnExit()
+}
+
+/** 立即同步落盘待写的索引（测试与需要强一致的调用方使用）。 */
+export function flushAgentSessionIndex(): void {
+  if (indexFlushTimer) {
+    clearTimeout(indexFlushTimer)
+    indexFlushTimer = null
+  }
+  flushIndexToDisk()
+}
+
 /**
  * 读取会话索引文件
+ *
+ * 优先命中内存缓存；磁盘 mtime+size 被外部改动（测试构造、数据恢复逻辑或外部进程）
+ * 时丢弃缓存重新读盘。缓存命中时同样执行幂等迁移检查，保持与原实现一致的语义
+ * （如 messageCount 回填依赖最新 JSONL 行数）。
  */
 function readIndex(): AgentSessionsIndex {
+  if (cachedIndex) {
+    // 判定磁盘是否被外部改动（测试构造、数据恢复逻辑或外部进程）。
+    // 注意：文件不存在不算外部改动——本进程首次创建/防抖窗口内未落盘时
+    // 磁盘文件可能尚不存在，此时内存才是权威（含未落盘的修改）。
+    // 此处是有意的自愈设计：若索引文件在磁盘上被外部真实删除（非本模块主动行为，
+    // 极少见），内存会继续作为权威数据使用，直到下一次 writeIndex 才重新把文件写回磁
+    // 盘；与旧实现“文件不在 = 立即返回空索引”的语义不完全一致，但没有调用方依赖“删除
+    // 索引文件来清空会话列表”这种用法，实际影响可忽略。
+    let diskChanged = false
+    try {
+      const st = statSync(getAgentSessionsIndexPath())
+      diskChanged = st.mtimeMs !== cachedIndexMtime || st.size !== cachedIndexSize
+    } catch {
+      diskChanged = false
+    }
+    if (!diskChanged) {
+      if (runIndexMigrations(cachedIndex)) writeIndex(cachedIndex)
+      return cachedIndex
+    }
+    // 磁盘被外部改动：以磁盘为准，丢弃内存状态（本进程是唯一写者，dirty 数据仅在
+    // 测试/数据恢复等外部改写场景下被丢弃）。
+    cachedIndex = null
+    cachedIndexFresh = true
+  }
   const indexPath = getAgentSessionsIndexPath()
   const data = readJsonFileSafe<AgentSessionsIndex>(indexPath)
   if (data) {
-    const permissionModeMigrated = migrateLegacyPermissionMode(data)
-    const thinkingDefaultMigrated = migrateLegacyOpenAIThinkingDefault(data)
-    const thinkingFieldMigrated = migrateThinkingLevelField(data)
-    const messageCountMigrated = migrateMessageCountBackfill(data)
-    const claudeRuntimeMigrated = migrateRetiredClaudeRuntime(data)
-    if (permissionModeMigrated || thinkingDefaultMigrated || thinkingFieldMigrated || messageCountMigrated || claudeRuntimeMigrated) {
-      writeIndex(data)
-      if (permissionModeMigrated) {
-        console.log('[Agent 会话] 已迁移历史权限模式 auto → bypassPermissions')
-      }
-      if (thinkingDefaultMigrated) {
-        console.log('[Agent 会话] 已将历史会话的思考深度默认值升级为高')
-      }
-      if (messageCountMigrated) {
-        console.log('[Agent 会话] 已为历史任务会话补齐消息计数')
-      }
-      if (claudeRuntimeMigrated) {
-        console.log('[Agent 会话] 已迁移退役 Claude runtime 会话为只读（Pi-only）')
-      }
-    }
+    // 先建立磁盘快照，再执行迁移：迁移修改后 writeIndex 会把缓存标记为未落盘
+    // （fresh=false）并计划防抖写回，避免迁移结果被快照的 fresh 标记吞掉。
+    cacheIndexFromDisk(data, indexPath)
+    if (runIndexMigrations(data)) writeIndex(data)
     return data
   }
   return {
@@ -293,25 +434,12 @@ function readIndex(): AgentSessionsIndex {
 }
 
 /**
- * 写入会话索引文件
- */
-function writeIndex(index: AgentSessionsIndex): void {
-  const indexPath = getAgentSessionsIndexPath()
-
-  try {
-    writeJsonFileAtomic(indexPath, index)
-  } catch (error) {
-    console.error('[Agent 会话] 写入索引文件失败:', error)
-    throw new Error('写入 Agent 会话索引失败')
-  }
-}
-
-/**
  * 获取所有会话（按 updatedAt 降序）
  */
 export function listAgentSessions(): AgentSessionMeta[] {
   const index = readIndex()
-  return index.sessions.sort((a, b) => b.updatedAt - a.updatedAt)
+  // 拷贝后排序：readIndex 现在返回共享缓存对象，原地 sort 会污染内存索引。
+  return [...index.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 /**
@@ -524,9 +652,14 @@ export function appendSDKMessages(id: string, messages: SDKMessage[]): void {
   const filePath = getAgentSessionMessagesPath(id)
 
   try {
+    // 整批只做一次同步追写：逐条 appendFileSync 会为每条消息各做一次 open/write/close，
+    // 一轮输出常见几十条消息，在多 Agent 并发下会持续阶段性阻塞主进程，
+    // 进而延迟键盘事件的 IPC 转发（表现为 renderer 内无长任务但输入延迟高）。
+    let payload = ''
     for (const message of messages) {
-      appendFileSync(filePath, serializeSDKMessageForStorage(message) + '\n', 'utf-8')
+      payload += serializeSDKMessageForStorage(message) + '\n'
     }
+    appendFileSync(filePath, payload, 'utf-8')
   } catch (error) {
     console.error(`[Agent 会话] 追加 SDKMessage 失败 (${id}):`, error)
     throw new Error('追加 SDKMessage 失败')
@@ -573,14 +706,16 @@ function sanitizeOversizedMessage(msg: SDKMessage, originalLength: number): SDKM
         if (typeof block.content === 'string' && block.content.length > truncationThreshold) {
           block.content = block.content.slice(0, TRUNCATED_PREVIEW_LENGTH) + truncationNote
         }
-        // 剥离 base64 图片数据
+        // 剥离 base64 图片数据。兼容两种 SDK 落盘格式：
+        // - Claude SDK: { type: 'image', source: { type: 'base64', data, media_type } }
+        // - Pi runtime: { type: 'image', data, mimeType }（截图工具直接内嵌顶层 data）
         if (Array.isArray(block.content)) {
           block.content = block.content.map((item: Record<string, unknown>) => {
-            if (item?.type === 'image' && (item.source as Record<string, unknown>)?.data) {
-              const dataLen = String((item.source as Record<string, unknown>).data).length
-              return { type: 'image', _truncated: true, _originalLength: dataLen }
-            }
-            return item
+            if (item?.type !== 'image') return item
+            const source = item.source as Record<string, unknown> | undefined
+            const data = typeof item.data === 'string' ? item.data : typeof source?.data === 'string' ? source.data : undefined
+            if (!data) return item
+            return { type: 'image', _truncated: true, _originalLength: data.length }
           })
         }
       }
@@ -593,6 +728,53 @@ function sanitizeOversizedMessage(msg: SDKMessage, originalLength: number): SDKM
   }
 
   return clone as SDKMessage
+}
+
+/**
+ * 剥离单条已持久化 SDKMessage 行中的 base64 图片块（存量治理）。
+ *
+ * 历史版本 sanitizeOversizedMessage 不识别 Pi 的 {type:'image', data, mimeType} 格式，
+ * 导致超限大图被原样写入 JSONL。此函数对存量行做同语义的图片块替换：
+ * 兼容 Claude SDK {source.data} 与 Pi {data} 两种格式，剥离后保留截断标记。
+ *
+ * @returns 替换后的行（无空格 JSON）；若该行不含可剥离的图片块返回 null。
+ */
+export function stripImageBlocksFromStoredMessage(line: string): string | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(line)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+  const msg = parsed as Record<string, unknown>
+  const message = msg.message as Record<string, unknown> | undefined
+  const content = message?.content
+  if (!Array.isArray(content)) return null
+
+  let changed = false
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue
+    const record = block as Record<string, unknown>
+    if (record.type !== 'tool_result') continue
+    const inner = record.content
+    if (!Array.isArray(inner)) continue
+    for (let index = 0; index < inner.length; index++) {
+      const item = inner[index]
+      if (!item || typeof item !== 'object') continue
+      const itemRecord = item as Record<string, unknown>
+      if (itemRecord.type !== 'image') continue
+      const source = itemRecord.source as Record<string, unknown> | undefined
+      const data = typeof itemRecord.data === 'string'
+        ? itemRecord.data
+        : typeof source?.data === 'string' ? source.data : undefined
+      if (!data) continue
+      inner[index] = { type: 'image', _truncated: true, _originalLength: data.length }
+      changed = true
+    }
+  }
+
+  return changed ? JSON.stringify(msg) : null
 }
 
 /**

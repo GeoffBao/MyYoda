@@ -38,7 +38,7 @@ import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkP
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
 import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
-import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@myyoda/shared'
+import type { AgentEventUsage, RetryAttempt, SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKTextBlock, SDKThinkingBlock } from '@myyoda/shared'
 import { getSDKCompactStatus } from '@myyoda/shared'
 import { agentLiveMessagesAtomFamily, agentSessionStreamingStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
 import type { AgentSessionFileRoots } from '@myyoda/shared'
@@ -95,6 +95,24 @@ function getSDKMessageStableKey(message: SDKMessage): string {
 export function isCompactionControlHistoryGroup(group: MessageGroup): boolean {
   // 保留 system 压缩分隔/终态，避免丢失历史边界；只隐藏用户手动触发的控制命令气泡。
   return group.type === 'user' && (extractUserText(group.message) ?? '').trim() === '/compact'
+}
+
+function hasRenderableAssistantMessage(message: SDKAssistantMessage): boolean {
+  if (message.error != null) return true
+
+  return message.message.content.some((block) => {
+    if (block.type === 'text') return Boolean((block as SDKTextBlock).text)
+    if (block.type === 'thinking') return Boolean((block as SDKThinkingBlock).thinking)
+    return true
+  })
+}
+
+export function hasRenderableAssistantTurnContent(group: MessageGroup): boolean {
+  return group.type === 'assistant-turn' && group.assistantMessages.some(hasRenderableAssistantMessage)
+}
+
+export function shouldRenderLiveAssistantTurn(group: MessageGroup, isLive: boolean): boolean {
+  return !isLive || group.type !== 'assistant-turn' || hasRenderableAssistantTurnContent(group)
 }
 
 export function getContextCompactionProgress(
@@ -581,7 +599,7 @@ interface AgentTranscriptHistoryProps {
   taskNotificationSignature: string
   sessionPath?: string | null
   sessionModelId?: string
-  groupHistoryTurns: Map<MessageGroup, number>
+  groupHistoryTurns: Map<string, number>
   streaming: boolean
   stoppedByUser?: boolean
   onFork?: (upToMessageUuid: string) => void
@@ -597,6 +615,28 @@ interface AgentTranscriptHistoryProps {
 
 const EMPTY_LIVE_GROUP_SET: ReadonlySet<MessageGroup> = new Set()
 const EMPTY_MESSAGE_GROUPS: MessageGroup[] = []
+
+/** 历史消息组数超过此阈值时启用 content-visibility 懒渲染（短会话无收益，反而有单元素开销） */
+const AGENT_HISTORY_CV_THRESHOLD = 150
+
+/**
+ * 比较两批 group 的“结构身份”是否一致。
+ *
+ * 流式期间只有活跃 turn 的 group 是新引用，历史前缀由 stabilizeMessageGroups 保持原引用。
+ * 因此这里以引用比较为主路径，只对确实变化的位置回退到 type/id 比较，避免每帧构造签名字符串。
+ */
+function haveSameGroupIdentities(previous: MessageGroup[], next: MessageGroup[]): boolean {
+  if (previous.length !== next.length) return false
+  for (let index = 0; index < previous.length; index++) {
+    const previousGroup = previous[index]
+    const nextGroup = next[index]
+    if (previousGroup === nextGroup) continue
+    if (!previousGroup || !nextGroup) return false
+    if (previousGroup.type !== nextGroup.type) return false
+    if (getGroupId(previousGroup) !== getGroupId(nextGroup)) return false
+  }
+  return true
+}
 
 function areTranscriptRowsEqual(
   previous: AgentTranscriptHistoryProps,
@@ -660,9 +700,15 @@ const AgentTranscriptRows = React.memo(function AgentTranscriptRows({
         const isLastAssistantTurn = !streaming && stoppedByUser
           && group.type === 'assistant-turn'
           && index === lastAssistantTurnIndex
+        const groupId = getGroupId(group)
+        // 懒渲染仅作用于长会话的已完成历史组；live 组正在流式逐帧更新，必须保持完整渲染。
+        const lazyRender = groups.length > AGENT_HISTORY_CV_THRESHOLD && !isLive
 
         return (
-          <div key={getGroupId(group)} className="w-full pb-1">
+          <div
+            key={groupId}
+            className={cn('w-full pb-1', lazyRender && 'agent-transcript-group-cv')}
+          >
             <MessageGroupRenderer
               group={group}
               allMessages={group.type === 'assistant-turn' ? allMessages : EMPTY_SDK_MESSAGES}
@@ -677,7 +723,7 @@ const AgentTranscriptRows = React.memo(function AgentTranscriptRows({
               onRelinkProjectRoot={shouldDisableActions ? undefined : onRelinkProjectRoot}
               onRestoreProjectRoot={shouldDisableActions ? undefined : onRestoreProjectRoot}
               onCompact={shouldDisableActions ? undefined : onCompact}
-              historyTurn={groupHistoryTurns.get(group)}
+              historyTurn={groupHistoryTurns.get(groupId)}
               isStreaming={isLive || undefined}
               stoppedByUser={isLastAssistantTurn || undefined}
               sessionModelId={sessionModelId}
@@ -955,7 +1001,10 @@ export const AgentMessages = React.memo(function AgentMessages({
     const live = liveMessages ?? []
     const stampStableKey = (message: SDKMessage): SDKMessage => {
       const key = getSDKMessageStableKey(message)
-      ;(message as Record<string, unknown>)._myyodaStableKey = key
+      const record = message as Record<string, unknown>
+      // 已标记且未变化时不重写：对老世代消息对象的属性写入会触发 GC 写屏障，
+      // 在数百条历史 × 高频 partial 下形成持续开销。
+      if (record._myyodaStableKey !== key) record._myyodaStableKey = key
       return message
     }
     const hasUuid = (message: SDKMessage): boolean => {
@@ -1023,15 +1072,8 @@ export const AgentMessages = React.memo(function AgentMessages({
     messageGroupCacheRef.current = result.cache
     return result.groups
   }, [allSDKMessages, sessionModelId, streaming])
-
-  // 压缩过程由底部 Progress Overlay 独立承载，不占用对话历史、迷你地图或用户锚点。
-  const visibleGroups = React.useMemo(
-    () => allGroups.filter((group) => !isCompactionControlHistoryGroup(group)),
-    [allGroups],
-  )
-  visibleGroupsRef.current = visibleGroups
-
-  // 标记哪些 group 属于实时流式消息（用于 isStreaming / onFork 差异化渲染）
+  // 标记哪些 group 属于实时流式消息（用于 isStreaming / onFork 差异化渲染）。
+  // 该集合必须先于 visibleGroups 计算，让空 assistant snapshot 能在真正渲染前被过滤。
   const liveGroupSet = React.useMemo(() => {
     return buildLiveGroupSet({
       allGroups,
@@ -1041,9 +1083,38 @@ export const AgentMessages = React.memo(function AgentMessages({
     })
   }, [allGroups, liveMessages, streaming, streamState?.startedAt])
 
-  // 迷你地图数据 — 直接使用统一的 allGroups（无需去重）
+  // 压缩过程由底部 Progress Overlay 独立承载，不占用对话历史、迷你地图或用户锚点。
+  // Pi 的 text_start/thinking_start 会产生没有可见 DOM 的空内容块；过滤掉对应的 live turn，
+  // 直到有实际内容时再交给 transcript 渲染，避免与乐观计时器壳重复显示 assistant header。
+  const visibleGroups = React.useMemo(
+    () => allGroups.filter((group) => (
+      !isCompactionControlHistoryGroup(group)
+      && shouldRenderLiveAssistantTurn(group, liveGroupSet.has(group))
+    )),
+    [allGroups, liveGroupSet],
+  )
+  visibleGroupsRef.current = visibleGroups
+
+  // 结构派生（迷你地图、用户锚点、turn 编号、sticky 布局）只关心 group 身份，不关心流式 token。
+  // 流式期间活跃 group 每帧都是新引用；若直接依赖 visibleGroups，getGroupPreview 与
+  // parseAttachedFiles 的正则会按 partial 帧率重跑整段历史。此处在身份未变时保持旧数组引用，
+  // 让这些派生只在真正新增/删除消息时重算。
+  const structuralGroupsRef = React.useRef<MessageGroup[]>(visibleGroups)
+  const structuralStreamingRef = React.useRef(streaming)
+  // 流式开始/结束时必须刷新一次：活跃 group 的 id 不变但正文从空到完整，
+  // 否则本轮迷你地图 preview 会永久停留在空值。
+  if (
+    structuralStreamingRef.current !== streaming
+    || !haveSameGroupIdentities(structuralGroupsRef.current, visibleGroups)
+  ) {
+    structuralStreamingRef.current = streaming
+    structuralGroupsRef.current = visibleGroups
+  }
+  const structuralGroups = structuralGroupsRef.current
+
+  // 迷你地图数据 — 只依赖结构快照，流式 token 不触发 getGroupPreview 正则
   const minimapItems: MinimapItem[] = React.useMemo(
-    () => visibleGroups.map((group) => ({
+    () => structuralGroups.map((group) => ({
       id: getGroupId(group),
       role: group.type === 'user' ? 'user' as const
         : group.type === 'system' ? 'status' as const
@@ -1052,23 +1123,24 @@ export const AgentMessages = React.memo(function AgentMessages({
       avatar: group.type === 'user' ? userProfile.avatar : undefined,
       model: group.type === 'assistant-turn' ? group.model : undefined,
     })),
-    [visibleGroups, userProfile.avatar]
+    [structuralGroups, userProfile.avatar]
   )
 
-  // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）
+  // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）。
+  // 流式期间不写：本轮结束后统一同步一次，避免高频写入全局 atom 唤醒其他订阅者。
   React.useEffect(() => {
-    if (minimapItems.length > 0) {
-      setMinimapCache((prev) => {
-        const next = new Map(prev)
-        next.set(sessionId, minimapItems)
-        return next
-      })
-    }
-  }, [sessionId, minimapItems, setMinimapCache])
+    if (streaming || minimapItems.length === 0) return
+    setMinimapCache((prev) => {
+      const next = new Map(prev)
+      next.set(sessionId, minimapItems)
+      return next
+    })
+  }, [sessionId, minimapItems, streaming, setMinimapCache])
 
-  // 所有用户消息的数据 — 供 StickyUserMessage 使用
+  // 所有用户消息的数据 — 供 StickyUserMessage 使用；只依赖结构快照，
+  // 避免流式期间重复解析已存在用户消息的附件标记。
   const allUserMessagesData = React.useMemo(() => {
-    return visibleGroups
+    return structuralGroups
       .filter((g): g is MessageGroup & { type: 'user' } => g.type === 'user')
       .map((g) => {
         const rawText = extractUserText(g.message) ?? ''
@@ -1079,15 +1151,16 @@ export const AgentMessages = React.memo(function AgentMessages({
           attachments: files.map((f) => ({ filename: f.filename, isImage: sdkIsImageFile(f.filename) })),
         }
       })
-  }, [visibleGroups])
+  }, [structuralGroups])
 
-  // 实时消息中是否已有可渲染的助手内容
-  // 流式中：通过 liveGroupSet 精确判断（只有 streaming 时 liveGroupSet 才非空）
-  // 流式结束后：直接检查 liveMessages 中是否有助手消息，
-  // 防止 streaming→false 到 liveMessages 被清除之间的过渡帧中 fallback 气泡重复渲染
+  // 只有 assistant turn 产生实际内容后，才把计时器从乐观消息壳迁移到历史区。
+  // Pi 会先推送空 assistant snapshot；若立即迁移，空消息头会把计时器下推，
+  // 直到首个过程/文本块到达才填补空白。
   const hasLiveAssistantContent = streaming
-    ? allGroups.some((g) => g.type === 'assistant-turn' && liveGroupSet.has(g))
-    : (liveMessages != null && liveMessages.some((m) => (m as { type: string }).type === 'assistant'))
+    ? allGroups.some((group) => liveGroupSet.has(group) && hasRenderableAssistantTurnContent(group))
+    : (liveMessages != null && liveMessages.some((message) => (
+      message.type === 'assistant' && hasRenderableAssistantMessage(message as SDKAssistantMessage)
+    )))
 
   const messageBasePath = fileRoots?.executionCwd || sessionPath || undefined
   const messageBasePaths = React.useMemo(
@@ -1103,18 +1176,18 @@ export const AgentMessages = React.memo(function AgentMessages({
   // turn 在消息渲染时一次性标注到 DOM；历史划选只需读取锚点属性，绝不回扫全部消息。
   const groupHistoryTurns = React.useMemo(() => {
     let turn = 0
-    const turns = new Map<MessageGroup, number>()
-    for (const group of visibleGroups) {
+    const turns = new Map<string, number>()
+    for (const group of structuralGroups) {
       if (group.type === 'user') turn += 1
-      turns.set(group, Math.max(turn, 1))
+      turns.set(getGroupId(group), Math.max(turn, 1))
     }
     return turns
-  }, [visibleGroups])
+  }, [structuralGroups])
 
   const stickyLayoutSignature = React.useMemo(() => {
-    const firstGroup = visibleGroups[0]
-    return `${visibleGroups.length}:${firstGroup ? getGroupId(firstGroup) : ''}`
-  }, [visibleGroups])
+    const firstGroup = structuralGroups[0]
+    return `${structuralGroups.length}:${firstGroup ? getGroupId(firstGroup) : ''}`
+  }, [structuralGroups])
 
   return (
     <BasePathsProvider basePaths={messageBasePaths}>

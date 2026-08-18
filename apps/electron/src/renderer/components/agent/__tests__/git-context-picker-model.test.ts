@@ -7,6 +7,7 @@ import {
   getGitModeStorageKey,
   isSameBoundRepo,
   resolveInitialGitExecutionMode,
+  resolveLocalSendBranch,
   sortGitBranchesForPicker,
 } from '../git-context-picker-model'
 
@@ -80,5 +81,65 @@ describe('git-context-picker-model', () => {
     expect(canCheckoutBranchInLocal(branches[2]!)).toBe(false)
     expect(canCheckoutBranchInLocal(branches[1]!)).toBe(true)
     expect(canCheckoutBranchInLocal(branches[0]!)).toBe(true)
+  })
+
+  test('Given Local default selection diverged from repo current branch When resolving send branch Then follows current branch', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'main',
+      currentBranch: 'sync/upstream-20260817',
+    })).toBe('sync/upstream-20260817')
+  })
+
+  test('Given Local explicit branch pick When resolving send branch Then keeps user selection', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'main',
+      explicit: true,
+      currentBranch: 'sync/upstream-20260817',
+    })).toBe('main')
+  })
+
+  test('Given Local new-branch creation When resolving send branch Then keeps selection', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'feature/new',
+      newBranchName: 'feature/new',
+      currentBranch: 'main',
+    })).toBe('feature/new')
+  })
+
+  test('Given Worktree mode When resolving send branch Then keeps selection regardless of current branch', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'worktree',
+      branch: 'main',
+      currentBranch: 'feature/x',
+    })).toBe('main')
+  })
+
+  test('Given detached HEAD (no current branch) When resolving send branch Then keeps selection', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'main',
+      currentBranch: null,
+    })).toBe('main')
+  })
+
+  test('Given detached HEAD reported as literal "HEAD" string When resolving send branch Then keeps selection', () => {
+    // getGitRepoStatus 在 detached HEAD 时返回 'HEAD' 字符串（rev-parse --abbrev-ref HEAD），
+    // 把 'HEAD' 当目标分支会让 prepare 的 git switch 直接 fatal，必须视为无当前分支
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'main',
+      currentBranch: 'HEAD',
+    })).toBe('main')
+  })
+
+  test('Given matching branches When resolving send branch Then no-op', () => {
+    expect(resolveLocalSendBranch({
+      executionMode: 'local',
+      branch: 'main',
+      currentBranch: 'main',
+    })).toBe('main')
   })
 })

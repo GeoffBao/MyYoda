@@ -59,6 +59,8 @@ import {
   agentNonGitFileChangesAtom,
   agentFileChangesCurrentRunAtom,
   agentDiffDataAtom,
+  agentSidePanelOpenMapAtom,
+  agentSidePanelOpenAtomFamily,
   agentStreamingStatesAtom,
   liveMessagesMapAtom,
   agentSessionPendingFilesAtom,
@@ -175,7 +177,7 @@ import type { KanbanProject } from './kanban/types'
 import { SidebarModule } from './SidebarModule'
 import { SidebarProjectsTab, type ProjectSessionHandlers } from './SidebarProjectsTab'
 import { formatSidebarModuleCount } from './sidebar-module-model'
-import { anyFeatureActive, shouldShowFeatureItem } from './sidebar-features-model'
+import { anyFeatureActive } from './sidebar-features-model'
 
 import { CreateProjectDialog } from '@/components/work/CreateProjectDialog'
 import { AgentSessionItem, SessionItemActions, STATUS_DOT_CLASS } from './AgentSessionItem'
@@ -729,36 +731,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠。
-  // 双模式：菜单模式（用户手动展开，显示全部二级目录）/ 指示模式（激活功能视图时自动展开，只显示激活项，其余隐藏）。
+  // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠；任一功能视图激活时自动展开。
+  // 展开后保持展开（点击二级目录不自动收起），收起由用户手动点击「功能」头部。
   // 注意：「发现」是独立入口行（位于搜索与功能之间，Agent / Chat 模式均显示），不应触发功能组展开（否则双击发现会误展开功能组）。
   const featureCtx = { activeView, mode, codeMainView }
   const anyFeatureActiveValue = anyFeatureActive(featureCtx)
   const [featuresCollapsed, setFeaturesCollapsed] = React.useState(true)
-  const [featuresShowingAll, setFeaturesShowingAll] = React.useState(false)
-  const featuresModuleRef = React.useRef<HTMLDivElement | null>(null)
-  // 跟随激活功能视图：有激活项 → 自动展开 + 指示模式（只显示激活项，其余隐藏）；
-  // 无激活项（回到会话 / 发现等）→ 默认折叠。
   React.useEffect(() => {
-    if (anyFeatureActiveValue) {
-      setFeaturesCollapsed(false)
-      setFeaturesShowingAll(false)
-    } else {
-      setFeaturesCollapsed(true)
-    }
+    if (anyFeatureActiveValue) setFeaturesCollapsed(false)
   }, [anyFeatureActiveValue])
-  // 功能组展开期间，点击功能组外部任意位置（侧边栏其他模块 / 会话列表 / 内容区）自动收起。
-  React.useEffect(() => {
-    if (featuresCollapsed) return
-    const onPointerDown = (event: PointerEvent): void => {
-      const target = event.target as Node | null
-      if (target && featuresModuleRef.current && !featuresModuleRef.current.contains(target)) {
-        setFeaturesCollapsed(true)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown, true)
-    return () => document.removeEventListener('pointerdown', onPointerDown, true)
-  }, [featuresCollapsed])
   const openSession = useOpenSession()
   const { createAgent } = useCreateSession()
   const setNewTaskProjectFlowOpen = useSetAtom(newTaskProjectFlowOpenAtom)
@@ -827,6 +808,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const setNonGitFileChanges = useSetAtom(agentNonGitFileChangesAtom)
   const setFileChangesCurrentRun = useSetAtom(agentFileChangesCurrentRunAtom)
   const setDiffData = useSetAtom(agentDiffDataAtom)
+  const setAgentSidePanelOpenMap = useSetAtom(agentSidePanelOpenMapAtom)
   const setStreamingStates = useSetAtom(agentStreamingStatesAtom)
   const setLiveMessagesMap = useSetAtom(liveMessagesMapAtom)
   const setSessionPendingFiles = useSetAtom(agentSessionPendingFilesAtom)
@@ -866,6 +848,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setNonGitFileChanges(deleteKey)
     setFileChangesCurrentRun(deleteKey)
     setDiffData(deleteKey)
+    setAgentSidePanelOpenMap((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
     setSessionChannelMap(deleteKey)
     setSessionModelMap(deleteKey)
     // 会话工作目录路径：不清理会导致右侧文件面板继续用已删除目录请求 list-directory
@@ -898,11 +886,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     agentSessionDraftHtmlAtomFamily.remove(id)
     agentPendingFilesAtomFamily.remove(id)
     backgroundTasksAtomFamily.remove(id)
+    agentSidePanelOpenAtomFamily.remove(id)
     sessionPersistedPermissionModeAtom.remove(id)
     sessionExistsAtom.remove(id)
 
     clearPreviewCacheForSession(id)
-  }, [setConvModels, setConvContextLength, setConvThinking, setConvParallel, setConvPromptId, setPreviewPanelOpen, setPreviewFile, setDiffPanelTab, setDiffRefreshVersion, setDiffUnseen, setDiffUnseenFiles, setNonGitFileChanges, setFileChangesCurrentRun, setDiffData, setSessionChannelMap, setSessionModelMap, setSessionPathMap, setSessionViewStateMap, setStreamingStates, setLiveMessagesMap, setSessionPendingFiles, store])
+  }, [setConvModels, setConvContextLength, setConvThinking, setConvParallel, setConvPromptId, setPreviewPanelOpen, setPreviewFile, setDiffPanelTab, setDiffRefreshVersion, setDiffUnseen, setDiffUnseenFiles, setNonGitFileChanges, setFileChangesCurrentRun, setDiffData, setAgentSidePanelOpenMap, setSessionChannelMap, setSessionModelMap, setSessionPathMap, setSessionViewStateMap, setStreamingStates, setLiveMessagesMap, setSessionPendingFiles, store])
 
   const currentWorkspaceSlug = React.useMemo(() => {
     if (!currentWorkspaceId) return null
@@ -1108,12 +1097,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
     setActiveView('discover')
   }, [activeView, setActiveView])
-
-  /** 功能组内点击二级目录：打开对应视图后保持展开，只显示激活项（其余隐藏，对齐项目会话列表「折叠态 peek」交互） */
-  const navigateFromFeatureGroup = React.useCallback((action: () => void): void => {
-    action()
-    setFeaturesShowingAll(false)
-  }, [])
 
   /** 打开唯一正式任务看板；重复点击保持当前页面，不隐式退回会话。 */
   const handleOpenTaskBoard = React.useCallback((): void => {
@@ -3941,46 +3924,41 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       </div>
 
       {/* 功能模块区：Task 日历 / 看板 / 画布 / 插件 / 知识库 收敛为可折叠「功能」组（默认折叠，回归 Proma 简洁样式） */}
-      <div className="sidebar-module-zone px-3 pt-1 pb-0.5" ref={featuresModuleRef}>
+      <div className="sidebar-module-zone px-3 pt-1 pb-0.5">
         <SidebarModule
           icon={Layers}
           title="功能"
           collapsible
           collapsed={featuresCollapsed}
-          onCollapsedChange={(next) => {
-            setFeaturesCollapsed(next)
-            if (!next) setFeaturesShowingAll(true)
-          }}
+          onCollapsedChange={setFeaturesCollapsed}
           ariaLabel="功能模块"
         >
           <div className="flex flex-col gap-0.5 pt-1">
             {/* 计划：Todo / 日历 / 定时任务合一 */}
-            {shouldShowFeatureItem('planning', featureCtx, featuresShowingAll) && (
-              <button
-                type="button"
-                onClick={() => navigateFromFeatureGroup(handleOpenPlanning)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
-                  activeView === 'planning'
-                    ? 'bg-accent-foreground/[0.10] text-foreground'
-                    : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
-                )}
-              >
-                <CalendarDays size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">计划</span>
-                {automationCount > 0 && (
-                  <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
-                    {formatSidebarModuleCount(automationCount)}
-                  </span>
-                )}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleOpenPlanning}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
+                activeView === 'planning'
+                  ? 'bg-accent-foreground/[0.10] text-foreground'
+                  : 'text-foreground/60 hover:bg-accent-foreground/[0.08] hover:text-foreground'
+              )}
+            >
+              <CalendarDays size={13} className="shrink-0 text-foreground/45" />
+              <span className="min-w-0 flex-1 truncate text-left">计划</span>
+              {automationCount > 0 && (
+                <span className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums bg-foreground/[0.045] text-foreground/[0.42]">
+                  {formatSidebarModuleCount(automationCount)}
+                </span>
+              )}
+            </button>
 
             {/* 任务看板：工作区级正式工作项入口（回归 Proma：看板按工作区展示） */}
-            {shouldShowFeatureItem('board', featureCtx, featuresShowingAll) && (
+            {mode === 'agent' && (
               <button
                 type="button"
-                onClick={() => navigateFromFeatureGroup(handleOpenTaskBoard)}
+                onClick={handleOpenTaskBoard}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   codeMainView === 'tasks' && activeView === 'conversations'
@@ -3999,10 +3977,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 画布：手绘风格白板 */}
-            {shouldShowFeatureItem('canvas', featureCtx, featuresShowingAll) && (
+            {mode === 'agent' && (
               <button
                 type="button"
-                onClick={() => navigateFromFeatureGroup(handleOpenExcalidraw)}
+                onClick={handleOpenExcalidraw}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'excalidraw-gallery' || activeView === 'excalidraw-editor'
@@ -4021,10 +3999,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置 */}
-            {shouldShowFeatureItem('skills', featureCtx, featuresShowingAll) && (
+            {mode === 'agent' && (
               <button
                 type="button"
-                onClick={() => navigateFromFeatureGroup(() => handleOpenSkills())}
+                onClick={() => handleOpenSkills()}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'agent-skills'
@@ -4038,10 +4016,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* 消息：IM 集成（飞书 / 微信 / 即将上线渠道），仅 Project 模式 */}
-            {shouldShowFeatureItem('messaging', featureCtx, featuresShowingAll) && (
+            {mode === 'agent' && (
               <button
                 type="button"
-                onClick={() => navigateFromFeatureGroup(handleOpenMessaging)}
+                onClick={handleOpenMessaging}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'messaging'
@@ -4055,10 +4033,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             )}
 
             {/* Yoda 知识库：LLM 知识库入口（待开发） */}
-            {shouldShowFeatureItem('wiki', featureCtx, featuresShowingAll) && (
+            {mode === 'agent' && (
               <button
                 type="button"
-                onClick={() => navigateFromFeatureGroup(handleOpenRepoWiki)}
+                onClick={handleOpenRepoWiki}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[12.5px] transition-colors duration-fast titlebar-no-drag',
                   activeView === 'repo-wiki'

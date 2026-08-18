@@ -22,6 +22,8 @@ import {
   Zap,
   Download,
   Search,
+  Globe,
+  GlobeLock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSetAtom } from 'jotai'
@@ -29,6 +31,13 @@ import { channelFormDirtyAtom } from '@/atoms/settings-tab'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
 import {
   PROVIDER_DEFAULT_URLS,
   PROVIDER_LABELS,
@@ -76,17 +85,24 @@ interface ChannelFormProps {
   onCancel: () => void
 }
 
-/** 所有可选供应商 */
-const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'anthropic-oauth', 'openai', 'openai-responses', 'openai-codex', 'xai', 'google', 'deepseek', 'kimi-api', 'kimi-coding', 'opencode-go-openai', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'qwen', 'qwen-anthropic', 'qwen-token-plan', 'minimax', 'ark-coding-plan', 'doubao', 'xiaomi', 'xiaomi-token-plan', 'openrouter', 'nuwa', 'custom']
+/** 所有可选供应商（'qwen' 已并入 'qwen-anthropic'，仅为兼容存量渠道保留 ProviderType，不再出现在新建下拉） */
+const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'anthropic-oauth', 'openai', 'openai-responses', 'openai-codex', 'xai', 'google', 'deepseek', 'kimi-api', 'kimi-coding', 'opencode-go-openai', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'qwen-anthropic', 'qwen-token-plan', 'minimax', 'ark-coding-plan', 'doubao', 'doubao-api', 'xiaomi', 'xiaomi-token-plan', 'openrouter', 'nuwa', 'custom']
 
-/** 需要用 messages 端点测试的供应商预设模型 */
+/** 需要用 messages 端点测试的供应商预设模型（均为官方真实存在的模型，供无用户模型时测试连接用；custom 不预设——自定义服务模型名不可知，必须由用户添加） */
 const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
   deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   'kimi-api': ['kimi-k3', 'kimi-k2.6'],
-  'opencode-go-openai': ['grok-4.5', 'glm-5.2', 'kimi-k3'],
+  'opencode-go-openai': ['grok-4.5', 'kimi-k3'],
   xiaomi: ['mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2-omni', 'mimo-v2-flash'],
   'xiaomi-token-plan': ['mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2-omni', 'mimo-v2-flash'],
   'qwen-token-plan': ['qwen3.8-max-preview', 'qwen3.7-max', 'qwen3.7-flash', 'qwen3.6-flash'],
+  openai: ['gpt-4o-mini'],
+  'openai-responses': ['gpt-4o-mini'],
+  zhipu: ['glm-4-flash'],
+  qwen: ['qwen-turbo'],
+  openrouter: ['openai/gpt-4o-mini'],
+  // doubao / doubao-api 不预设：火山方舟的 model 是用户自建 endpoint ID，不存在通用真实模型名
+  // nuwa 不预设：聚合平台模型名不可确定，不瞎连
 }
 
 /** 供应商选项（用于 SettingsSelect） */
@@ -97,7 +113,8 @@ const PROVIDER_SELECT_OPTIONS = PROVIDER_OPTIONS.map((p) => ({
 }))
 
 function resolveDirectTestModelId(provider: ProviderType, models: ChannelModel[]): string | undefined {
-  if (!PROVIDER_TEST_MODEL_PRESETS[provider]) return undefined
+  // 用户已配置的模型优先（任何 provider 都适用：自定义/兼容服务必须用真实模型名，
+  // 不能拿占位名瞎连，否则服务端会 401 拒绝）；无用户模型时回退到供应商预设测试模型。
   const configuredModelId = models.find((model) => model.enabled)?.id ?? models[0]?.id
   if (configuredModelId) return configuredModelId
   return PROVIDER_TEST_MODEL_PRESETS[provider]?.[0]
@@ -214,10 +231,14 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [models, setModels] = React.useState<ChannelModel[]>(channel?.models ?? [])
   const [enabled, setEnabled] = React.useState(channel?.enabled ?? true)
+  /** 该服务不提供模型列表（/models）端点：跳过拉取，手动管理模型 */
+  const [skipModelListFetch, setSkipModelListFetch] = React.useState(channel?.skipModelListFetch ?? false)
 
   // 新模型输入
   const [newModelId, setNewModelId] = React.useState('')
   const [newModelName, setNewModelName] = React.useState('')
+  /** 新模型代理选择：跟随全局 / 直连不走代理 */
+  const [newModelProxy, setNewModelProxy] = React.useState<'default' | 'direct'>('default')
 
   // 模型搜索过滤
   const [modelFilter, setModelFilter] = React.useState('')
@@ -336,6 +357,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     currentBaseUrl: string,
     currentApiKey: string,
     currentEnabled: boolean,
+    currentSkipModelListFetch: boolean,
   ) => {
     if (!isEdit || !channel) return
     try {
@@ -346,6 +368,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         apiKey: currentApiKey || undefined,
         models: currentModels,
         enabled: currentEnabled,
+        skipModelListFetch: currentSkipModelListFetch,
       })
       toast.success('已保存', { id: 'auto-save-success' })
     } catch (error) {
@@ -362,12 +385,13 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     nextBaseUrl: string,
     nextApiKey: string,
     nextEnabled: boolean,
+    nextSkipModelListFetch: boolean,
     requiresRiskAcknowledgement: boolean,
   ) => {
     if (!isEdit || !initializedRef.current || requiresRiskAcknowledgement) return
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => {
-      doAutoSave(nextModels, nextName, nextProvider, nextBaseUrl, nextApiKey, nextEnabled)
+      doAutoSave(nextModels, nextName, nextProvider, nextBaseUrl, nextApiKey, nextEnabled, nextSkipModelListFetch)
     }, AUTO_SAVE_DELAY)
   }, [isEdit, doAutoSave])
 
@@ -392,12 +416,13 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       baseUrl,
       effectiveApiKey,
       enabled,
+      skipModelListFetch,
       requiresBaseUrlRiskAcknowledgement,
     )
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current) }
-  }, [models, name, provider, baseUrl, effectiveApiKey, enabled, requiresBaseUrlRiskAcknowledgement, scheduleAutoSave])
+  }, [models, name, provider, baseUrl, effectiveApiKey, enabled, skipModelListFetch, requiresBaseUrlRiskAcknowledgement, scheduleAutoSave])
 
-  // 切换供应商时自动更新 Base URL 与名称，Anthropic 兼容渠道自动添加预设模型
+  // 切换供应商时自动更新 Base URL 与名称，并为支持的渠道自动添加预设模型
   const handleProviderChange = (newProvider: string): void => {
     const p = newProvider as ProviderType
     // 若 name 为空或仍是上一个 provider 的默认名称，则用新 provider 的名称覆盖；用户手动改过的 name 不动
@@ -439,7 +464,6 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         setModels([
           { id: 'grok-4.5', name: 'Grok 4.5', enabled: true },
           { id: 'glm-5.3', name: 'GLM-5.3', enabled: true },
-          { id: 'glm-5.2', name: 'GLM-5.2', enabled: true },
           { id: 'glm-5.1', name: 'GLM-5.1', enabled: true },
           { id: 'kimi-k3', name: 'Kimi K3', enabled: true },
           { id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code', enabled: true },
@@ -452,10 +476,9 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       } else if (p === 'zhipu' || p === 'zhipu-coding' || p === 'zhipu-coding-team') {
         setModels([
           { id: 'glm-5.3', name: 'GLM-5.3', enabled: true },
-          { id: 'glm-5.2', name: 'GLM-5.2', enabled: true },
           { id: 'glm-5.1', name: 'GLM-5.1', enabled: false },
         ])
-      } else if (p === 'ark-coding-plan') {
+      } else if (p === 'ark-coding-plan' || p === 'doubao') {
         setModels([
           { id: 'doubao-seed-2.1-pro', name: 'Doubao Seed 2.1 Pro', enabled: true },
           { id: 'doubao-seed-2.1-turbo', name: 'Doubao Seed 2.1 Turbo', enabled: true },
@@ -463,7 +486,6 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           { id: 'doubao-seed-2.0-pro', name: 'Doubao Seed 2.0 Pro', enabled: true },
           { id: 'doubao-seed-2.0-lite', name: 'Doubao Seed 2.0 Lite', enabled: true },
           { id: 'glm-5.3', name: 'GLM-5.3', enabled: true },
-          { id: 'glm-5.2', name: 'GLM-5.2', enabled: true },
           { id: 'kimi-k3', name: 'Kimi K3', enabled: true },
           { id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code', enabled: true },
           { id: 'minimax-m3', name: 'MiniMax M3', enabled: true },
@@ -508,11 +530,24 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       name: newModelName.trim() || newModelId.trim(),
       enabled: true,
       source: 'manual',
+      ...(newModelProxy === 'direct' ? { useProxy: false } : {}),
     }
 
     setModels((prev) => [...prev, model])
     setNewModelId('')
     setNewModelName('')
+    setNewModelProxy('default')
+  }
+
+  /** 切换单个模型是否走全局代理（useProxy===false 时直连） */
+  const handleToggleModelProxy = (modelId: string): void => {
+    setModels((prev) => prev.map((m) => {
+      if (m.id !== modelId) return m
+      const direct = m.useProxy === false
+      const next = direct ? { ...m, useProxy: undefined } : { ...m, useProxy: false }
+      if ('useProxy' in next && next.useProxy === undefined) delete next.useProxy
+      return next
+    }))
   }
 
   /** 删除模型 */
@@ -787,7 +822,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           // 与登录自动拉取路径（handleCodexLogin）保持一致，避免新模型（如 gpt-5.6 系列）
           // 默认未启用而沉到「可用模型」折叠区，被误认为"拉不到"。
           if (isSubscriptionProvider) return { ...m, enabled: true }
-          return old ? { ...m, enabled: old.enabled } : { ...m, enabled: false }
+          // 保留用户对该模型设置的代理开关（useProxy）
+          return old
+            ? { ...m, enabled: old.enabled, ...(old.useProxy !== undefined ? { useProxy: old.useProxy } : {}) }
+            : { ...m, enabled: false }
         })
         return [...manualKept, ...merged]
       })
@@ -820,6 +858,8 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         baseUrl,
         apiKey: effectiveApiKey,
         ...(modelId ? { modelId } : {}),
+        // 模型列表一并传入：测试连接按模型粒度解析代理（直连模型测试时也直连）
+        models,
       })
       setTestResult(result)
     } catch (error) {
@@ -832,6 +872,12 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const handleTest = (): void => {
     if (requiresBaseUrlRiskAcknowledgement) {
       requestBaseUrlRiskAcknowledgement('test')
+      return
+    }
+    // 无模型时直接提示：自定义/兼容服务必须用真实模型名测试，没有模型名不要瞎连
+    const testModelId = resolveDirectTestModelId(provider, models)
+    if (!testModelId) {
+      setTestResult({ success: false, message: '尚未配置模型，请先添加模型后再测试连接' })
       return
     }
     void testChannelConnection()
@@ -850,6 +896,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         apiKey: effectiveApiKey,
         models,
         enabled,
+        ...(skipModelListFetch ? { skipModelListFetch: true } : {}),
       }
       const savedChannel = await window.electronAPI.createChannel(input)
       toast.success('渠道创建成功')
@@ -880,6 +927,20 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   /** 检测表单是否有未保存内容 */
   const isDirty = !isEdit && (name.trim() !== '' || effectiveApiKey.trim() !== '' || models.length > 0)
   const hasNoEnabledModels = !isEdit && !models.some((m) => m.enabled)
+
+  /**
+   * 编辑模式下若当前 provider 已从新建下拉移除（如旧版 'qwen'），
+   * 动态追加对应选项，避免 SettingsSelect 因找不到 value 而显示占位符。
+   */
+  const providerSelectOptions = React.useMemo(() => {
+    if (isEdit && !PROVIDER_OPTIONS.includes(provider)) {
+      return [
+        ...PROVIDER_SELECT_OPTIONS,
+        { value: provider, label: PROVIDER_LABELS[provider], icon: getProviderLogo(provider) },
+      ]
+    }
+    return PROVIDER_SELECT_OPTIONS
+  }, [isEdit, provider])
 
   /** 返回按钮：创建模式下有未保存内容时拦截 */
   const handleBack = (): void => {
@@ -1008,7 +1069,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
             label="供应商类型"
             value={provider}
             onValueChange={handleProviderChange}
-            options={PROVIDER_SELECT_OPTIONS}
+            options={providerSelectOptions}
             placeholder="选择供应商"
           />
           {provider === 'custom' && (
@@ -1341,6 +1402,22 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                       <span className="text-muted-foreground ml-1">({model.id})</span>
                     )}
                   </span>
+                  {/* 单模型代理开关：直连（不走全局代理）↔ 跟随全局代理 */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleModelProxy(model.id)}
+                    className={cn(
+                      'p-1 rounded transition-colors',
+                      model.useProxy === false
+                        ? 'text-amber-500 hover:text-amber-600 bg-amber-500/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 opacity-0 group-hover:opacity-100',
+                    )}
+                    title={model.useProxy === false
+                      ? '该模型直连，不走全局代理（点击恢复跟随全局代理）'
+                      : '该模型跟随全局代理（点击改为直连）'}
+                  >
+                    {model.useProxy === false ? <GlobeLock size={14} /> : <Globe size={14} />}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleToggleModel(model.id)}
@@ -1365,8 +1442,9 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
             size="sm"
             type="button"
             onClick={handleFetchModels}
-            disabled={fetchingModels || !hasRequiredSecret || (!isSubscriptionProvider && !baseUrl.trim())}
+            disabled={fetchingModels || skipModelListFetch || !hasRequiredSecret || (!isSubscriptionProvider && !baseUrl.trim())}
             className="h-7 text-xs"
+            title={skipModelListFetch ? '已声明该服务不提供模型列表端点' : undefined}
           >
             {fetchingModels ? (
               <Loader2 size={12} className="animate-spin" />
@@ -1377,14 +1455,50 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           </Button>
         }
       >
-        {/* 拉取结果提示 */}
+        {/* 无 /models 端点声明：跳过拉取，手动管理模型（兼容自建/中转服务） */}
+        <div className="px-1 pb-1 space-y-1">
+          <SettingsToggle
+            label="此服务不提供模型列表端点"
+            description="部分自建/中转服务没有 /models 接口，勾选后禁用「从供应商获取」，模型全部手动添加"
+            checked={skipModelListFetch}
+            onCheckedChange={(checked) => {
+              setSkipModelListFetch(checked)
+              // 勾选后清掉旧的拉取失败提示，避免红色错误与琥珀引导并存
+              if (checked) setFetchResult(null)
+            }}
+          />
+          {skipModelListFetch && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 px-1">
+              <GlobeLock size={12} />
+              <span>
+                已跳过模型列表拉取，请使用下方输入框手动添加模型 ID；添加后再点「测试连接」验证
+              </span>
+            </div>
+          )}
+        </div>
+        {/* 拉取结果提示：not_found 引导手动添加（兼容无 /models 端点的服务） */}
         {fetchResult && (
           <div className={cn(
             'flex items-center gap-1.5 text-xs px-1',
-            fetchResult.success ? 'text-emerald-600' : 'text-destructive'
+            fetchResult.success
+              ? 'text-emerald-600'
+              : fetchResult.errorType === 'not_found'
+                ? 'text-amber-600'
+                : 'text-destructive'
           )}>
-            {fetchResult.success ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-            <span>{fetchResult.message}</span>
+            {fetchResult.success
+              ? <CheckCircle2 size={12} />
+              : fetchResult.errorType === 'not_found'
+                ? <GlobeLock size={12} />
+                : <XCircle size={12} />}
+            <span>
+              {!fetchResult.success && fetchResult.errorType === 'not_found'
+                ? provider === 'google'
+                  // Google 官方有 /v1beta/models，404 更可能是 baseUrl 拼错，展示服务端原文而非「不提供端点」引导
+                  ? fetchResult.message
+                  : '该服务未提供模型列表端点（/models），请使用下方输入框手动添加模型 ID'
+                : fetchResult.message}
+            </span>
           </div>
         )}
 
@@ -1481,6 +1595,16 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                 }
               }}
             />
+            {/* 新模型代理选择：跟随全局 / 直连 */}
+            <Select value={newModelProxy} onValueChange={(v) => setNewModelProxy(v as 'default' | 'direct')}>
+              <SelectTrigger className="w-[118px] h-8 text-xs flex-shrink-0" title="该模型的代理方式">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">跟随全局代理</SelectItem>
+                <SelectItem value="direct">直连（不走代理）</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="ghost"
               size="icon"

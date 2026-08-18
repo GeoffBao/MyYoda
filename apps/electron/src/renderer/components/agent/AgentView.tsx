@@ -29,6 +29,7 @@ import { AskUserBanner } from './AskUserBanner'
 import { ExitPlanModeBanner } from './ExitPlanModeBanner'
 import { DraftProjectPicker } from './DraftProjectPicker'
 import { DraftGitContextPicker, type DraftGitContextSelection } from './DraftGitContextPicker'
+import { resolveLocalSendBranch } from './git-context-picker-model'
 import { ExpertCoworkPicker } from './ExpertCoworkPicker'
 import { useExpertOptions } from '@/components/agent-experts/useExpertOptions'
 import { PlanModeDashedBorder } from './PlanModeDashedBorder'
@@ -473,10 +474,21 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     window.electronAPI.getSettings().then((s) => {
       setRepoMapToolsEnabled(s.repoMapTools ?? false)
     }).catch(() => { /* ignore */ })
-    return window.electronAPI.onRepoMapToolsStatus((state) => {
-      setRepoMapToolsState(state)
+    let cancelled = false
+    const unsubscribe = window.electronAPI.onRepoMapToolsStatus(() => {
+      // STATUS 广播不区分主仓库（其他会话/窗口的构建完成也会推到这里）：
+      // 不直接采用推送内容，统一重查当前会话 cwd 的真实状态，避免跨仓库状态覆盖（2026-08-18）。
+      // 重查结果落地前校验 cancelled：防止 cwd 切换后，旧 cwd 的飞行中重查结果覆盖新会话状态。
+      if (!repoMapToolsCwd) return
+      void window.electronAPI.getRepoMapToolsState(repoMapToolsCwd)
+        .then((state) => { if (!cancelled) setRepoMapToolsState(state) })
+        .catch(() => { /* ignore */ })
     })
-  }, [setRepoMapToolsEnabled])
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [setRepoMapToolsEnabled, repoMapToolsCwd])
 
   // cwd 变化时查询状态（纯读）
   React.useEffect(() => {
@@ -2099,12 +2111,33 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   const prepareDraftGitContextForSend = React.useCallback(async (additionalDirectoriesForRun: Set<string>): Promise<boolean> => {
     if (!canPrepareDraftGitContext || !draftGitContextSelection) return true
+    // Local 模式且分支为用户未显式选择的默认快照时，发送前跟随仓库真实当前分支：
+    // 选择器只在挂载时加载一次分支列表，终端侧（或其他 Local 会话）切换分支后，
+    // 旧快照会触发一次意外切换，仓库有未提交改动时还会被主进程守卫拦下误报错。
+    let gitBranch = draftGitContextSelection.branch
+    if (
+      draftGitContextSelection.executionMode === 'local'
+      && !draftGitContextSelection.newBranchName
+      && !draftGitContextSelection.explicit
+    ) {
+      try {
+        const status = await window.electronAPI.getGitRepoStatus(draftGitContextSelection.repoPath)
+        gitBranch = resolveLocalSendBranch({
+          executionMode: draftGitContextSelection.executionMode,
+          branch: draftGitContextSelection.branch,
+          currentBranch: status?.branch ?? null,
+        })
+      } catch (error) {
+        // 仓库状态读取失败时保持原选择，由主进程守卫兜底
+        console.warn('[AgentView] 发送前读取仓库当前分支失败，保持原选择:', error)
+      }
+    }
     try {
       const result = await window.electronAPI.prepareSessionGitContext({
         sessionId,
         repoPath: draftGitContextSelection.repoPath,
         executionMode: draftGitContextSelection.executionMode,
-        branch: draftGitContextSelection.branch,
+        branch: gitBranch,
         newBranchName: draftGitContextSelection.newBranchName,
         slug: draftGitContextSelection.slug,
       })
@@ -2965,7 +2998,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         const tooltip = isRunning
           ? `创建中… ${state?.progress ?? ''}`
           : isDone
-            ? '图谱已就绪（点击增量更新）'
+            ? state?.graphStale
+              ? '图谱已过期（代码已更新，点击增量刷新）'
+              : '图谱已就绪（点击增量更新）'
             : isFailed
               ? `图谱创建失败（点击重试）${state?.error ? `：${state.error}` : ''}`
               : isUnavailable

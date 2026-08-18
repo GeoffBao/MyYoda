@@ -25,6 +25,7 @@ export type ProviderType =
   | 'ark-coding-plan'
   | 'minimax'
   | 'doubao'
+  | 'doubao-api'
   | 'qwen'
   | 'qwen-anthropic'
   | 'qwen-token-plan'
@@ -63,6 +64,7 @@ export const PROVIDER_DEFAULT_URLS: Record<ProviderType, string> = {
   'ark-coding-plan': 'https://ark.cn-beijing.volces.com/api/plan',
   minimax: 'https://api.minimaxi.com/anthropic',
   doubao: 'https://ark.cn-beijing.volces.com/api/v3',
+  'doubao-api': 'https://ark.cn-beijing.volces.com/api/v3',
   qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   'qwen-anthropic': 'https://dashscope.aliyuncs.com/apps/anthropic',
   // Token Plan Anthropic endpoint is provided as a complete messages URL.
@@ -88,17 +90,18 @@ export const PROVIDER_LABELS: Record<ProviderType, string> = {
   'openai-responses': 'OpenAI Responses 格式',
   deepseek: 'DeepSeek',
   google: 'Google',
-  'kimi-api': 'Kimi API (Anthropic 协议)',
+  'kimi-api': 'Kimi API',
   'kimi-coding': 'Kimi Coding Plan',
   'opencode-go-openai': 'OpenCode Go (OpenAI 协议)',
   zhipu: '智谱 AI',
   'zhipu-coding': '智谱 Coding Plan',
   'zhipu-coding-team': '智谱 Coding Plan 团队版',
-  'ark-coding-plan': '火山方舟 Coding Plan',
+  'ark-coding-plan': '火山方舟 Agent Plan',
   minimax: 'MiniMax (API&编程包)',
-  doubao: '豆包',
-  qwen: '通义千问',
-  'qwen-anthropic': '通义千问 (Anthropic 协议)',
+  doubao: '火山方舟 Coding Plan',
+  'doubao-api': '火山引擎 API',
+  qwen: '通义千问 (OpenAI 协议·旧版)',
+  'qwen-anthropic': '通义千问',
   'qwen-token-plan': '通义千问 Token Plan',
   xiaomi: '小米 MiMo (API)',
   'xiaomi-token-plan': '小米 MiMo Token Plan',
@@ -356,6 +359,11 @@ export interface ChannelModel {
   enabled: boolean
   /** 来源标记：手动添加的模型在拉取供应商列表时保留，不会被覆盖清除 */
   source?: 'manual' | 'fetched'
+  /**
+   * 该模型是否走全局代理。undefined/true = 跟随全局代理配置；false = 直连不走代理。
+   * 用于单模型粒度控制（如国内模型直连、海外中转站走代理）。
+   */
+  useProxy?: boolean
 }
 
 /**
@@ -376,6 +384,11 @@ export interface Channel {
   apiKey: string
   /** 可用模型列表 */
   models: ChannelModel[]
+  /**
+   * 该服务不提供模型列表（/models）端点：勾选后跳过「从供应商获取」，
+   * 模型完全手动管理（兼容自建/中转服务）。
+   */
+  skipModelListFetch?: boolean
   /** 是否启用 */
   enabled: boolean
   /** 创建时间戳 */
@@ -394,6 +407,8 @@ export interface ChannelCreateInput {
   /** 明文 API Key，主进程会加密后存储 */
   apiKey: string
   models: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点 */
+  skipModelListFetch?: boolean
   enabled: boolean
 }
 
@@ -407,6 +422,8 @@ export interface ChannelUpdateInput {
   /** 明文 API Key，为空字符串表示不更新 */
   apiKey?: string
   models?: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点；undefined 表示不更新 */
+  skipModelListFetch?: boolean
   enabled?: boolean
 }
 
@@ -416,6 +433,8 @@ export interface ChannelUpdateInput {
 export interface ChannelsConfig {
   /** 配置版本号 */
   version: number
+  /** 已应用的一次性预设模型更新 ID，避免重复补回用户已删除的候选模型 */
+  appliedPresetModelUpdates?: string[]
   /** 渠道列表 */
   channels: Channel[]
 }
@@ -474,6 +493,8 @@ export interface ChannelDirectTestInput {
   apiKey: string
   /** 用于 messages 端点测试的模型 ID；不需要模型的供应商可忽略 */
   modelId?: string
+  /** 当前表单的模型列表：测试连接按模型粒度解析代理（模型直连配置时测试也直连） */
+  models?: ChannelModel[]
 }
 
 /**
@@ -486,6 +507,8 @@ export interface FetchModelsResult {
   message: string
   /** 获取到的模型列表 */
   models: ChannelModel[]
+  /** 失败时的归一化错误分类（如 not_found = 服务未提供模型列表端点，UI 可据此引导手动添加） */
+  errorType?: ChannelTestErrorType
 }
 
 /**

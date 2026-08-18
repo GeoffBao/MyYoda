@@ -81,6 +81,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         keywords: ['Runtime', 'Pi', 'SDK', '执行引擎'],
       },
       {
+        question: '会话里可以用终端吗？',
+        answer: '可以。Code 会话支持内嵌终端（基于 node-pty + xterm.js），可以在会话内运行交互式 Shell，适合需要长驻进程或手动命令调试的场景；终端进程与应用生命周期绑定，应用退出后不再运行。',
+        keywords: ['终端', 'Shell', 'node-pty', 'xterm', '交互'],
+      },
+      {
+        question: 'Pull Requests 工作流在哪里？',
+        answer: '代码会话的 Git 工作区提供独立的 Pull Requests 列表页：支持状态/参与度筛选、搜索，并可创建、查看、合并和评论 PR（需配置 GitHub 凭据）。提交时默认附带 MyYoda 标识，可在设置 → 通用关闭。',
+        keywords: ['PR', 'Pull Request', 'GitHub', '合并', '评论'],
+      },
+      {
         question: '怎样让 Agent 更容易一次做对？',
         answer: '提供相关文件或目录，明确目标和边界，并要求它先检查再行动、完成后运行验证。不要把多个无关目标混在同一个会话里。',
         keywords: ['上下文', '验收', '提示词'],
@@ -101,6 +111,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: 'Project 和工作目录是什么关系？',
         answer: 'Project（工作区）是 MyYoda 内的组织和上下文容器，工作目录是它实际读写文件的本地目录。新建项目时可选择本地文件夹绑定为工程目录（会话 cwd 与项目记忆落在此目录）；留空则为托管目录的空白项目。',
         keywords: ['工作目录', 'cwd', '文件夹', '工程目录'],
+      },
+      {
+        question: '默认工作区目录是什么？什么时候设置？',
+        answer: '「设置 → 工作区 → 默认工作区目录」是应用级的工程代码目录：新会话未绑定项目时会回退使用该目录作为工程代码基准（Agent 直接在该目录下工作）。首次启动 Onboarding 会引导设置（可跳过），之后随时可在设置中修改或清空；清空后回到会话隔离沙箱。',
+        keywords: ['默认工作区目录', '默认目录', '未绑定项目', '工程目录', 'Onboarding'],
+      },
+      {
+        question: '项目工作目录被移动或删除后怎么办？',
+        answer: '报错卡片会提示「项目工作目录不可用」并提供一键恢复：①「重新关联目录」——选择新位置重新绑定；②「设置默认工作区目录」——改用全局默认目录继续；③ 系统会自动探测原路径父目录下可能的移动候选（如 LuxAgents → LuxAgent），点「关联到 xxx」即可完成重定向（仅建议不自动改）。重新关联后下一条消息自动生效；也可以选择手动移动回来或重建原目录。',
+        keywords: ['目录失效', '重新关联', '移动', '删除', '候选', '报错'],
       },
       {
         question: '会话文件和 Project 文件有什么区别？',
@@ -190,6 +210,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
         question: '自动任务适合安排什么？',
         answer: '适合定期检查、汇总、同步和生成固定格式报告等重复流程。第一次使用时先手动跑通流程，再设置频率和最大运行次数。',
         keywords: ['Automation', '定时任务', '报告'],
+      },
+      {
+        question: '磁盘占用太大，怎么清理？',
+        answer: '设置 → 存储管理（磁盘管理）提供可行动的清理面板：会话/归档/孤儿数据分类展示占用，可一键清理归档与孤儿残留，并支持预览清理效果后再确认；会话归档自动清理可选保留 7 天或 3 天。清理前会先 dry-run 预览可回收体积。',
+        keywords: ['磁盘', '存储', '清理', '归档', '孤儿数据'],
       },
     ],
   },
@@ -340,7 +365,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         question: 'Coding 加强是什么？开启后有哪些变化？',
-        answer: 'Coding 加强（设置 → 通用）是一键开启全部编码增强的总开关：模型专属编码规范（DeepSeek）、Chat 输出预算提升至 64K、新会话思考深度默认 max、编码预置技能（code-review / ultraqa / deep-interview / ai-slop-cleaner）、仓库代码地图（repo map）自动注入，以及 Graphify 代码图谱。开启后对话栏会出现图谱按钮。',
+        answer: 'Coding 加强（设置 → 编码优化）是一键开启全部编码增强的总开关：模型专属编码规范（DeepSeek）、Chat 输出预算提升至 64K、新会话思考深度默认 max、编码预置技能（code-review / ultraqa / deep-interview / ai-slop-cleaner）、仓库代码地图（repo map）自动注入，以及 Graphify 代码图谱。开启后对话栏会出现图谱按钮。',
         keywords: ['编码优化', 'Coding', '开关', '编码增强'],
       },
       {
@@ -377,8 +402,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         question: 'Agent 为什么找不到我的文件？',
-        answer: '检查会话是否绑定了正确的 Project，以及 Project 的工作目录是否指向真实目录。必要时在任务中明确写出文件路径或使用文件引用。',
-        keywords: ['文件', '工作目录', 'Project', '路径'],
+        answer: '检查会话是否绑定了正确的 Project，以及 Project 的工作目录是否指向真实目录；未绑定项目时，检查是否在「设置 → 工作区 → 默认工作区目录」配置了工程目录（未配置则会话运行在隔离沙箱）。必要时在任务中明确写出文件路径或使用文件引用。',
+        keywords: ['文件', '工作目录', 'Project', '路径', '默认工作区目录'],
       },
       {
         question: '权限提示太多，应该怎么设置？',

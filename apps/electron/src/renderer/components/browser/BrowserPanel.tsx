@@ -102,6 +102,9 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
             return next
           })
         }
+      } else {
+        // 重新进入 controller.open，让已确认风险的用户初始标签导航到默认 Google 页面。
+        await window.electronAPI.openAgentBrowser(sessionId)
       }
     } catch (error) {
       console.error('[受管浏览器] 保存风险告知确认失败:', error)
@@ -120,13 +123,9 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
   }, [sessionId, state?.executionSource])
 
   const activeTabId = state?.activeTabId ?? ''
-  const agentTabId = state?.agentTabId ?? ''
   const tabs = state?.tabs ?? []
   const riskBlocked = riskAcknowledged !== true
   const isBackgroundRun = state?.executionSource === 'automation' || state?.executionSource === 'delegation'
-  const activity = state?.activity ?? null
-  const activityStatus = activity?.status === 'unknown' ? '结果未知' : activity?.status === 'failed' ? '失败' : activity?.status === 'dispatched' ? '已派发' : '已完成'
-  const activityDomain = activity?.domain ? ` · ${activity.domain}` : ''
 
   const selectTab = React.useCallback(async (tabId: string) => {
     const select = (window.electronAPI as Partial<typeof window.electronAPI>).selectAgentBrowserTab
@@ -165,7 +164,7 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7" disabled={riskBlocked || !state?.canGoForward} onClick={() => void window.electronAPI.goForwardAgentBrowser?.(sessionId)}><ArrowRight className="size-3.5" /></Button></TooltipTrigger><TooltipContent>前进</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7" disabled={riskBlocked} onClick={() => void window.electronAPI.reloadAgentBrowser?.(sessionId)}><RefreshCw className="size-3.5" /></Button></TooltipTrigger><TooltipContent>刷新</TooltipContent></Tooltip>
         <form className="flex-1 min-w-0" onSubmit={(event) => { event.preventDefault(); if (!riskBlocked) void navigate() }}>
-          <Input disabled={riskBlocked} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="输入域名或 URL（默认 HTTPS，仅公共网站）" className="h-7 text-xs bg-background/70" aria-label="浏览器地址" />
+          <Input disabled={riskBlocked} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="输入网址或搜索内容" className="h-7 text-xs bg-background/70" aria-label="浏览器地址" />
         </form>
         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7" disabled={!url.startsWith('http://') && !url.startsWith('https://')} onClick={openInDefaultBrowser} aria-label="在系统默认浏览器中打开当前网页"><ExternalLink className="size-3.5" /></Button></TooltipTrigger><TooltipContent>在系统默认浏览器中打开</TooltipContent></Tooltip>
         {state?.loading && <LoaderCircle className="size-3.5 text-muted-foreground animate-spin" />}
@@ -202,14 +201,6 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
         ))}
         <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-6 shrink-0" disabled={riskBlocked} onClick={() => void createTab()} aria-label="新建浏览器标签"><Plus className="size-3.5" /></Button></TooltipTrigger><TooltipContent>新建标签</TooltipContent></Tooltip>
       </div>
-      {activity && (
-        <div className="flex min-h-7 items-center gap-2 border-b border-border/25 bg-primary/[0.04] px-3 py-1 text-[11px]" role="status" aria-live="polite">
-          <span className="shrink-0 font-medium text-primary">Agent 活动</span>
-          <span className="shrink-0 text-muted-foreground">{activityStatus}</span>
-          <span className="truncate text-foreground/80">{activity.summary}{activityDomain}</span>
-          <span className="ml-auto shrink-0 text-muted-foreground">{activity.tabId === agentTabId ? '工作标签' : `标签 ${activity.tabId}`}</span>
-        </div>
-      )}
       {riskAcknowledged === true ? (
         <BrowserSlot key={activeTabId} sessionId={sessionId} tabId={activeTabId} nativeViewEnabled={!isEntering && !isClosing} />
       ) : (

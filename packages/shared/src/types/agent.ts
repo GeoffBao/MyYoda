@@ -1814,7 +1814,7 @@ export interface AgentSessionFileRoots {
   /** Agent 本轮实际执行 cwd。 */
   executionCwd: string
   /** executionCwd 的来源。 */
-  executionSource: 'worktree' | 'workspace-root' | 'project' | 'sandbox'
+  executionSource: 'worktree' | 'workspace-root' | 'project' | 'default-workspace' | 'sandbox'
   /** 当前会话实际使用的 Project root；sandbox 会话为空。 */
   projectRoot?: string
   /** 绑定的 Project ID。 */
@@ -2550,10 +2550,12 @@ export interface RepoMapToolsState {
   status: RepoMapToolsStatus
   /** repo map 已就绪（主仓库 .git/repo-map/maps/ 有缓存或内存命中） */
   mapReady: boolean
-  /** Graphify 图谱已就绪（主仓库 graphify-out/graph.json 存在） */
+  /** Graphify 图谱已就绪（主仓库 graphify-out/graph.json 存在且校验通过） */
   graphReady: boolean
   /** graphify 命令可用 */
   graphifyInstalled: boolean
+  /** 图谱已过期：构建后仓库 HEAD 变化（图谱基于旧代码），点击按钮可增量更新 */
+  graphStale?: boolean
   /** 主仓库路径（worktree 会话解析到真实仓库根；非 git 为 undefined） */
   mainRepo?: string
   /** 失败信息（status=failed/unavailable 时） */

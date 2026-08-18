@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { ProjectConfig } from '@myyoda/shared/projects'
 import {
   createProject,
@@ -137,4 +137,62 @@ export function assertRunnableCwd(result: EffectiveCwdResult): string {
     throw new Error('工作区主目录不可用，请重新定位后再运行 Agent')
   }
   return result.cwd
+}
+
+/** 编辑距离（Levenshtein），用于目录名模糊匹配 */
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  if (m === 0) return n
+  if (n === 0) return m
+  const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]!
+    dp[0] = i
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j]!
+      dp[j] = Math.min(dp[j]! + 1, dp[j - 1]! + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+      prev = tmp
+    }
+  }
+  return dp[n]!
+}
+
+/**
+ * 目录名是否为项目名的重命名候选。
+ * 规则（大小写不敏感）：完全同名 / 去复数 s / 前缀包含 / 编辑距离 ≤ 2。
+ * 项目名过短（<3）时只允许完全同名，防误报。
+ */
+export function isRelocationCandidate(name: string, projectName: string): boolean {
+  const n = name.toLowerCase()
+  const p = projectName.toLowerCase()
+  if (n === p) return true
+  if (p.length < 3) return false
+  const singular = p.endsWith('s') ? p.slice(0, -1) : p
+  if (singular.length >= 3 && n === singular) return true
+  if (n.length > p.length && n.startsWith(p)) return true
+  return levenshteinDistance(n, p) <= 2
+}
+
+/**
+ * 扫描失效 workingDirectory 的父目录，找出可能被重命名/移动后的候选目录。
+ * 只返回目录项，最多 3 个；readdir 异常或输入无效返回空数组（绝不抛错）。
+ */
+export function findRelocationCandidates(displayPath: string, projectName: string): string[] {
+  if (!displayPath || !projectName) return []
+  // 配置路径可能为相对路径（历史遗留/手改），先归一为绝对路径再探测
+  const parent = dirname(resolve(displayPath))
+  let entries: string[]
+  try {
+    entries = readdirSync(parent, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+  } catch {
+    return []
+  }
+  const hits = entries
+    .filter((name) => name !== basename(displayPath) && isRelocationCandidate(name, projectName))
+    .sort()
+    .map((name) => join(parent, name))
+  return hits.slice(0, 3)
 }
