@@ -12,8 +12,9 @@
  */
 
 import * as React from 'react'
-import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, ListTodo, FolderInput, FolderPlus } from 'lucide-react'
+import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, ListTodo, FolderInput, FolderPlus, FolderOpen, ArrowRightLeft } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 import { ContentBlock } from './ContentBlock'
@@ -62,6 +63,8 @@ import { automationsAtom, automationFormAtom, automationToDraft } from '@/atoms/
 import { activeViewAtom } from '@/atoms/active-view'
 import { environmentCheckDialogOpenAtom } from '@/atoms/environment'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
+import { activeProjectPageIdAtom, projectPageTabAtom, codeMainViewAtom } from '@/atoms/project-atoms'
+import { buildProjectPageNavigation } from '@/components/app-shell/code-main-view-model'
 import { useOpenPreview } from '@/components/diff/preview-opener'
 import { getFileParentPath } from '@/lib/file-utils'
 import { parseQuotedSelectionRefs } from '@/lib/quoted-selection'
@@ -1168,6 +1171,10 @@ export function AssistantErrorTail({
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setSettingsTab = useSetAtom(settingsTabAtom)
   const setModelSelectorOpen = useSetAtom(modelSelectorOpenAtom)
+  const setActiveProjectPageId = useSetAtom(activeProjectPageIdAtom)
+  const setProjectPageTab = useSetAtom(projectPageTabAtom)
+  const setCodeMainView = useSetAtom(codeMainViewAtom)
+  const setActiveView = useSetAtom(activeViewAtom)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
 
   // 错误展示统一只用 error.message：assistant content 不是错误详情，
@@ -1184,8 +1191,46 @@ export function AssistantErrorTail({
     return true
   })
 
-  const handleRecoveryAction = (action: RecoveryAction) => {
+  const handleRecoveryAction = async (action: RecoveryAction) => {
     switch (action.action) {
+      case 'open_project_settings': {
+        // payload: workspaceId（与 SidePanel openProjectSettings 同构导航到项目设置 tab）
+        const workspaceId = action.payload
+        if (workspaceId) {
+          const navigation = buildProjectPageNavigation(workspaceId, 'settings')
+          setActiveProjectPageId(navigation.activeProjectPageId)
+          setProjectPageTab(navigation.projectPageTab)
+          setCodeMainView(navigation.codeMainView)
+          setActiveView(navigation.activeView)
+        }
+        break
+      }
+      case 'open_default_workspace_settings':
+        setSettingsTab('workspace')
+        setSettingsOpen(true)
+        break
+      case 'relocate_project': {
+        try {
+          const payload = JSON.parse(action.payload ?? '{}') as {
+            workspaceRoot?: string
+            projectSlug?: string
+            targetPath?: string
+          }
+          if (!payload.workspaceRoot || !payload.projectSlug || !payload.targetPath) {
+            throw new Error('relocate_project payload 不完整')
+          }
+          await window.electronAPI.projects.relocateWorkingDirectory(
+            payload.workspaceRoot,
+            payload.projectSlug,
+            payload.targetPath,
+          )
+          toast.success('已重新关联项目目录，请重新发送消息')
+        } catch (err) {
+          console.error('[ErrorMessage] 重新关联项目目录失败:', err)
+          toast.error(err instanceof Error ? err.message : '重新关联项目目录失败')
+        }
+        break
+      }
       case 'open_environment_check':
         setEnvDialogOpen(true)
         break
@@ -1227,6 +1272,12 @@ export function AssistantErrorTail({
         return <Settings className="size-3.5 mr-1.5" />
       case 'select_model':
         return <Cpu className="size-3.5 mr-1.5" />
+      case 'open_project_settings':
+        return <FolderOpen className="size-3.5 mr-1.5" />
+      case 'open_default_workspace_settings':
+        return <Settings className="size-3.5 mr-1.5" />
+      case 'relocate_project':
+        return <ArrowRightLeft className="size-3.5 mr-1.5" />
       case 'open_external':
         return <ExternalLink className="size-3.5 mr-1.5" />
       case 'retry':

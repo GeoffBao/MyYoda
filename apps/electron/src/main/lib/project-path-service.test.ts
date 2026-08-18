@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'fs'
+import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { createProject, getProjectWorkdirPath } from '../../../../../packages/shared/src/projects/storage.ts'
@@ -8,6 +8,8 @@ import {
   findProjectByWorkingDirectory,
   openOrCreateProjectForPath,
   restoreProjectWorkingDirectory,
+  findRelocationCandidates,
+  isRelocationCandidate,
   type ProjectPathFs,
 } from './project-path-service.ts'
 
@@ -113,5 +115,67 @@ describe('project-path-service', () => {
     const project = createProject(ws, { name: 'Managed' })
     expect(() => restoreProjectWorkingDirectory(ws, project.slug, accessibleFs()))
       .toThrow('未绑定本地目录')
+  })
+})
+
+function makeTempParent(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'reloc-candidates-'))
+  afterAll(() => { rmSync(dir, { recursive: true, force: true }) })
+  return dir
+}
+
+describe('isRelocationCandidate', () => {
+  test('完全同名（大小写不敏感）', () => {
+    expect(isRelocationCandidate('LuxAgents', 'LuxAgents')).toBe(true)
+    expect(isRelocationCandidate('luxagents', 'LuxAgents')).toBe(true)
+  })
+  test('去复数 s', () => {
+    expect(isRelocationCandidate('LuxAgent', 'LuxAgents')).toBe(true)
+  })
+  test('前缀包含', () => {
+    expect(isRelocationCandidate('LuxAgentsV2', 'LuxAgents')).toBe(true)
+  })
+  test('编辑距离 ≤ 2', () => {
+    expect(isRelocationCandidate('LuxAgentX', 'LuxAgents')).toBe(true)
+  })
+  test('明显无关不匹配', () => {
+    expect(isRelocationCandidate('MyYoda', 'LuxAgents')).toBe(false)
+    expect(isRelocationCandidate('CoderHub', 'LuxAgents')).toBe(false)
+  })
+  test('过短名称不参与复数/前缀规则（防误报）', () => {
+    expect(isRelocationCandidate('A', 'As')).toBe(false)
+  })
+})
+
+describe('findRelocationCandidates', () => {
+  test('命中父目录下的候选并返回绝对路径', () => {
+    const parent = makeTempParent()
+    mkdirSync(join(parent, 'LuxAgent'), { recursive: true })
+    mkdirSync(join(parent, 'MyYoda'), { recursive: true })
+    writeFileSync(join(parent, 'not-a-dir'), 'x')
+
+    const result = findRelocationCandidates(join(parent, 'LuxAgents'), 'LuxAgents')
+    expect(result).toEqual([join(parent, 'LuxAgent')])
+  })
+
+  test('最多返回 3 个候选', () => {
+    const parent = makeTempParent()
+    mkdirSync(join(parent, 'LuxAgent'), { recursive: true })
+    mkdirSync(join(parent, 'LuxAgents2'), { recursive: true })
+    mkdirSync(join(parent, 'LuxAgentsX'), { recursive: true })
+    mkdirSync(join(parent, 'LuxAgentsY'), { recursive: true })
+
+    const result = findRelocationCandidates(join(parent, 'LuxAgents'), 'LuxAgents')
+    expect(result.length).toBe(3)
+  })
+
+  test('父目录不存在 → 空数组（不抛异常）', () => {
+    const result = findRelocationCandidates(join(tmpdir(), 'no-such-parent-dir-xyz', 'LuxAgents'), 'LuxAgents')
+    expect(result).toEqual([])
+  })
+
+  test('无有效输入 → 空数组', () => {
+    expect(findRelocationCandidates('', 'LuxAgents')).toEqual([])
+    expect(findRelocationCandidates('/a/b/c', '')).toEqual([])
   })
 })

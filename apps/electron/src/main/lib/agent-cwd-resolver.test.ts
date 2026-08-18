@@ -73,6 +73,44 @@ describe('resolveSessionCwd', () => {
     })
     expect(result).toEqual({ cwd: '/myyoda/projects/foo', source: 'project' })
   })
+
+  test('默认工作区目录命中 → 使用 default-workspace cwd', () => {
+    const result = resolveSessionCwd({
+      defaultWorkingDirectory: '/Users/dev/default-workspace',
+      sandboxCwd: SANDBOX,
+    })
+    expect(result).toEqual({ cwd: '/Users/dev/default-workspace', source: 'default-workspace' })
+  })
+
+  test('未绑定 Project 且配置默认目录 → 使用默认目录而非沙箱', () => {
+    const result = resolveSessionCwd({
+      agentCwdMode: 'project',
+      resolveProjectCwd: projectResolver(null),
+      defaultWorkingDirectory: '/Users/dev/default-workspace',
+      sandboxCwd: SANDBOX,
+    })
+    expect(result).toEqual({ cwd: '/Users/dev/default-workspace', source: 'default-workspace' })
+  })
+
+  test('project 命中优先于默认工作区目录', () => {
+    const result = resolveSessionCwd({
+      agentCwdMode: 'project',
+      projectId: 'proj-1',
+      resolveProjectCwd: projectResolver({ status: 'external', cwd: PROJECT_DIR, displayPath: PROJECT_DIR }),
+      defaultWorkingDirectory: '/Users/dev/default-workspace',
+      sandboxCwd: SANDBOX,
+    })
+    expect(result).toEqual({ cwd: PROJECT_DIR, source: 'project' })
+  })
+
+  test('workspace 根目录优先于默认工作区目录', () => {
+    const result = resolveSessionCwd({
+      workspaceProjectRootPath: '/Users/dev/ws-root',
+      defaultWorkingDirectory: '/Users/dev/default-workspace',
+      sandboxCwd: SANDBOX,
+    })
+    expect(result).toEqual({ cwd: '/Users/dev/ws-root', source: 'workspace-root' })
+  })
 })
 
 describe('applyWorktreeProjectContextOverride', () => {

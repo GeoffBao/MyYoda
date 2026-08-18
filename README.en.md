@@ -98,6 +98,8 @@ Open **Settings > Model Configuration** and either:
 
 Choose or create a Workspace from the Code sidebar. Change session grouping to Projects, create a Project, and set its `workingDirectory` to the real repository path.
 
+If you have no bound Project, set a global engineering directory under **Settings → Workspace → Default working directory**; new sessions without a bound Project automatically work there.
+
 ### 5. Start a Task
 
 Good requests include the goal, scope, constraints, and acceptance criteria:
@@ -113,6 +115,7 @@ Workspace, Project, and session cwd are different concepts:
 | **Workspace** | MyYoda's top-level isolation and capability container |
 | **Project** | An engineering or business context inside a Workspace |
 | **Project workingDirectory** | The real repository or project directory |
+| **Default working directory** | App-level setting: fallback engineering directory for sessions without a bound Project (Settings → Workspace) |
 | **Session cwd** | An isolated temporary workbench for each Code session |
 | **workspace-files** | Material shared across sessions in a Workspace |
 | **Project assets / MEMORY.md** | Project references and long-lived context |

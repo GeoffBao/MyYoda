@@ -11,8 +11,10 @@
 import { useMemo, useState } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { BookOpen, ChevronRight, ChevronLeft, KeyRound } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheckPanel'
+import { WorkingDirectoryField } from '@/components/app-shell/kanban/WorkingDirectoryField'
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
 import { detectIsWindows } from '@/lib/platform'
 
@@ -26,7 +28,8 @@ interface OnboardingViewProps {
 const TUTORIAL_ASSETS_BASE = 'https://github.com/GeoffBao/MyYoda/releases/download/tutorial-assets'
 
 export function OnboardingView({ onComplete }: OnboardingViewProps) {
-  const [step, setStep] = useState<'welcome' | 'environment'>('welcome')
+  const [step, setStep] = useState<'welcome' | 'workspace' | 'environment'>('welcome')
+  const [defaultDirectory, setDefaultDirectory] = useState('')
   const isWindows = useMemo(() => detectIsWindows(), [])
   const shellOk = useAtomValue(isShellEnvironmentOkAtom)
 
@@ -36,11 +39,29 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   }
 
   const handleNextFromWelcome = () => {
+    setStep('workspace')
+  }
+
+  const handleContinueFromWorkspace = async () => {
+    if (defaultDirectory.trim()) {
+      try {
+        await window.electronAPI.setAgentDefaultWorkingDirectory(defaultDirectory.trim())
+      } catch (err) {
+        console.error('[Onboarding] 保存默认工作区目录失败:', err)
+        toast.error('保存默认工作区目录失败，可稍后在设置中配置')
+      }
+    }
     if (isWindows) {
       setStep('environment')
     } else {
-      handleFinish()
+      await handleFinish()
     }
+  }
+
+  // 跳过：先清空已输入路径，避免“选了又点跳过”被意外保存
+  const handleSkipFromWorkspace = async () => {
+    setDefaultDirectory('')
+    await handleContinueFromWorkspace()
   }
 
   return (
@@ -107,7 +128,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <Button className="w-full h-11 text-sm" onClick={handleNextFromWelcome}>
               {isWindows ? (
                 <>
-                  下一步：环境检测
+                  下一步
                   <ChevronRight className="ml-1 h-4 w-4" />
                 </>
               ) : (
@@ -119,6 +140,50 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             </p>
           </div>
         </>
+      )}
+
+      {step === 'workspace' && (
+        <div className="w-full max-w-2xl">
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl font-semibold mb-2">设置默认工程目录（可选）</h2>
+            <p className="text-sm text-muted-foreground">
+              未绑定项目的会话会把该目录作为工程代码目录；可跳过，稍后在 设置 → 工作区 中随时配置
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5 mb-6">
+            <WorkingDirectoryField
+              value={defaultDirectory}
+              onChange={setDefaultDirectory}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setStep('welcome')}
+              className="text-muted-foreground"
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              上一步
+            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => void handleSkipFromWorkspace()}
+              >
+                跳过
+              </Button>
+              <Button
+                onClick={() => void handleContinueFromWorkspace()}
+              >
+                继续
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {step === 'environment' && isWindows && (

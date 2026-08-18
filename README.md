@@ -34,8 +34,8 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 - 支持 Anthropic、OpenAI、Google、DeepSeek、Kimi、智谱、通义、豆包、OpenRouter 及自定义兼容端点等 API Key 渠道；
 - 支持 ChatGPT 订阅 Codex OAuth；
 - 支持 Claude Pro / Max 订阅 OAuth；
-- Code 默认使用 Pi Agent Runtime，可使用已启用的多种模型渠道；
-- Claude 订阅渠道由应用透明使用兼容 Runtime，普通用户无需手动管理。
+- Code 统一使用 Pi Agent Runtime，可使用已启用的多种模型渠道；
+- 订阅登录渠道（ChatGPT / Claude）由应用透明接入 Pi Runtime，普通用户无需手动管理。
 
 订阅登录渠道当前用于 Code 模式；Chat 可用范围取决于渠道协议和模型能力。
 
@@ -43,6 +43,8 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 
 - Workspace 隔离会话、Skills、MCP、Memory、Projects 和共享资料；
 - Project 绑定真实工程目录 `workingDirectory`，并保存参考资料和项目记忆；
+- **默认工作区目录**（设置 → 工作区）：未绑定项目的新会话回退使用的工程代码目录，配置后 Agent 直接在该目录下工作，目录失效时自动降级到会话隔离沙箱（不阻断）；
+- **项目目录失效一键恢复**：绑定目录被移动/删除后，报错卡片提供「重新关联目录」「设置默认工作区目录」，并自动探测父目录下可能的移动候选（如 `LuxAgents` → `LuxAgent`）供一键关联；
 - Projects & Kanban 默认提供待办、进行中、已完成三列；
 - TaskEditor 可生成或手动编辑子任务 DAG，配置编排模型、依赖、验收标准和修复次数；
 - collaboration 可创建真实可见、可等待、停止和继续的协作子 Agent 会话；
@@ -70,7 +72,10 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 
 - 文件树、Diff 和多标签工作区；
 - Markdown、PDF、DOCX、PPTX、Excel 和图片预览；
-- 浏览器导航、DOM、网络、截图与性能分析；
+- 浏览器导航、DOM、网络、截图与性能分析；内置受管浏览器可打开应用内链接与本地预览；
+- **会话内嵌终端**：Code 会话可运行交互式 Shell（node-pty + xterm.js）；
+- **Pull Requests 工作流**：Git 仓库 PR 列表、创建、查看、合并与评论（独立 Tab）；
+- **代码图谱 Graphify**：纯本地 AST 分析生成依赖图谱，支持影响面/调用链查询（设置 → 通用 → Coding 加强）；
 - Git、Shell、文件读写和代码搜索；
 - 会话引用、文件引用、Skill 引用和 MCP 引用；
 - Markdown、Mermaid、KaTeX 和代码高亮。
@@ -98,6 +103,8 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 
 在 Code 左侧栏选择或创建 Workspace。然后将会话分组方式切换为“项目”，创建 Project，并把 `workingDirectory` 设置为真实代码仓库目录。
 
+如果没有绑定项目，可以在 **设置 → 工作区 → 默认工作区目录** 配置一个全局工程目录，未绑定项目的新会话会自动在该目录下工作。
+
 ### 5. 发起任务
 
 推荐同时写清目标、范围、限制和验收标准：
@@ -113,6 +120,7 @@ Workspace、Project 和会话 cwd 不是同一个概念：
 | **Workspace** | MyYoda 的顶层隔离与能力容器 |
 | **Project** | Workspace 内的工程或业务上下文 |
 | **Project workingDirectory** | 真实代码仓库或工程目录 |
+| **默认工作区目录** | 应用级设置：未绑定项目的新会话回退使用的工程代码目录（设置 → 工作区） |
 | **Session cwd** | 每个 Code 会话独立的临时工作台 |
 | **workspace-files** | 当前 Workspace 跨会话共享资料 |
 | **Project assets / MEMORY.md** | Project 参考资料和长期上下文 |
