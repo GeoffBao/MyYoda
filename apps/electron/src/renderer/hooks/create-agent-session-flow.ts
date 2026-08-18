@@ -42,11 +42,14 @@ export interface DraftSessionCandidate {
 }
 
 /**
- * 从候选会话中找出「同一工作区、未绑定项目、已输入内容但未发送」的最近草稿。
+ * 从候选会话中找出「未绑定项目、已输入内容但未发送」的最近草稿。
  *
  * 用于空白「新会话」入口（侧边栏按钮 / Cmd+N / 空状态按钮）智能回到未发送草稿，
  * 而不是每次都新建一个空会话把上一个草稿"顶没"。只匹配未绑定 projectId 的草稿——
  * 「在项目下新建会话」语义明确（该项目下的新任务），不参与回收，避免误跳到别处。
+ *
+ * 匹配策略：当前工作区优先（在当前工作区内找最近草稿）；当前工作区没有时跨工作区
+ * 兜底（找所有工作区中最近的草稿）。与侧栏「未发送草稿」区块的跨项目找回语义一致。
  */
 export function findRecallableDraftSession(params: {
   candidates: DraftSessionCandidate[]
@@ -56,15 +59,19 @@ export function findRecallableDraftSession(params: {
 }): DraftSessionCandidate | null {
   const { candidates, draftSessionIds, draftTexts, workspaceId } = params
   let latest: DraftSessionCandidate | null = null
+  let latestOther: DraftSessionCandidate | null = null
   for (const session of candidates) {
     if (!draftSessionIds.has(session.id)) continue
     if (session.projectId) continue
-    if (session.workspaceId !== workspaceId) continue
     const text = draftTexts.get(session.id)
     if (!text || text.trim().length === 0) continue
-    if (!latest || session.createdAt > latest.createdAt) latest = session
+    if (session.workspaceId === workspaceId) {
+      if (!latest || session.createdAt > latest.createdAt) latest = session
+    } else if (!latestOther || session.createdAt > latestOther.createdAt) {
+      latestOther = session
+    }
   }
-  return latest
+  return latest ?? latestOther
 }
 
 /** 供 resolveDefaultProjectId 扫描「最近工作的项目」用的精简会话字段 */

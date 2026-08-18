@@ -3888,10 +3888,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         )}
       </div>
 
-      {/* 未发送草稿找回入口：点「新会话」但没发送时，内容还在，不会真的丢，但原来没有回去的路。 */}
+      {/* 未发送草稿找回入口：点「新会话」但没发送时，内容还在，不会真的丢，但原来没有回去的路。
+          跨项目展示（对齐置顶）；主区在看板等非会话视图时不过滤当前草稿，保证找回入口始终存在。 */}
       {mode === 'agent' && (
         <DraftSessionRecallSection
-          workspaceId={currentWorkspaceId}
+          currentWorkspaceId={currentWorkspaceId}
+          workspaceNameMap={workspaceNameMap}
+          excludeOnSessionView={codeMainView === 'session'}
           sessions={agentSessions}
           draftSessionIds={draftSessionIds}
           excludeSessionId={currentAgentSessionId}
@@ -4537,7 +4540,10 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
 // ===== 工作区分组历史 =====
 
 interface DraftSessionRecallSectionProps {
-  workspaceId: string | null
+  currentWorkspaceId: string | null
+  workspaceNameMap: Map<string, string>
+  /** 仅当主区处于会话视图时排除当前打开的草稿；看板 / 计划等视图传 false，保证找回入口始终存在 */
+  excludeOnSessionView: boolean
   sessions: AgentSessionMeta[]
   draftSessionIds: Set<string>
   excludeSessionId: string | null
@@ -4550,7 +4556,9 @@ interface DraftSessionRecallSectionProps {
  * （参考 AgentView.tsx 里同样的 atomFamily 切片注释）。
  */
 const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection({
-  workspaceId,
+  currentWorkspaceId,
+  workspaceNameMap,
+  excludeOnSessionView,
   sessions,
   draftSessionIds,
   excludeSessionId,
@@ -4562,10 +4570,9 @@ const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection(
       sessions,
       draftSessionIds,
       draftTexts,
-      workspaceId: workspaceId ?? undefined,
-      excludeSessionId,
+      excludeSessionId: excludeOnSessionView ? excludeSessionId : null,
     }),
-    [sessions, draftSessionIds, draftTexts, workspaceId, excludeSessionId],
+    [sessions, draftSessionIds, draftTexts, excludeOnSessionView, excludeSessionId],
   )
 
   if (items.length === 0) return null
@@ -4574,18 +4581,28 @@ const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection(
     <div className="px-3 pt-2">
       <div className="px-1 pb-1 text-[11px] font-medium text-foreground/40">未发送草稿</div>
       <div className="flex flex-col gap-0.5">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onOpen(item.id, item.title)}
-            title={item.text}
-            className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[12.5px] text-foreground/60 transition-colors duration-fast hover:bg-foreground/[0.06] hover:text-foreground/85"
-          >
-            <Pencil size={12} className="shrink-0 text-foreground/35" />
-            <span className="truncate">{item.text}</span>
-          </button>
-        ))}
+        {items.map((item) => {
+          const workspaceName = item.workspaceId && item.workspaceId !== currentWorkspaceId
+            ? workspaceNameMap.get(item.workspaceId)
+            : undefined
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onOpen(item.id, item.title)}
+              title={item.text}
+              className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[12.5px] text-foreground/60 transition-colors duration-fast hover:bg-foreground/[0.06] hover:text-foreground/85"
+            >
+              <Pencil size={12} className="shrink-0 text-foreground/35" />
+              <span className="truncate">{item.text}</span>
+              {workspaceName && (
+                <span className="shrink-0 min-w-0 px-1.5 py-0 rounded-full bg-primary/10 text-[10px] leading-4 workspace-badge font-medium truncate max-w-[120px]">
+                  {workspaceName}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
