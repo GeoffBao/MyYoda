@@ -6,7 +6,8 @@
  * 2. 工作区绑定的本地项目根目录（workspace.projectRootPath，对齐 Proma：工作区=项目）
  * 3. 新会话（agentCwdMode === 'project'）绑定的 Project 工作目录（动态解析，
  *    Project 重新关联目录后自动生效；存量 KanbanProject 兼容）
- * 4. 会话隔离沙箱目录（历史会话兼容 / 未绑定目录时的托管兜底）
+ * 4. 应用级默认工作区目录（未绑定项目且未命中更高优先级时，作为工程代码目录）
+ * 5. 会话隔离沙箱目录（历史会话兼容 / 未绑定目录时的托管兜底）
  *
  * 纯函数，不直接依赖 projectRepository / 文件系统，便于单测覆盖决策分支。
  */
@@ -24,11 +25,13 @@ export interface ResolveSessionCwdInput {
   projectId?: string
   /** 解析指定 Project 的有效 cwd；仅在 agentCwdMode === 'project' 且 projectId 存在时调用 */
   resolveProjectCwd: (projectId: string) => EffectiveCwdResult | null
+  /** 应用级默认工作区目录：未绑定项目且未命中更高优先级时的工程代码目录 */
+  defaultWorkingDirectory?: string
   /** 会话隔离沙箱目录（托管目录），作为最终兜底 */
   sandboxCwd: string
 }
 
-export type SessionCwdSource = 'worktree' | 'workspace-root' | 'project' | 'sandbox'
+export type SessionCwdSource = 'worktree' | 'workspace-root' | 'project' | 'default-workspace' | 'sandbox'
 
 export interface ResolveSessionCwdResult {
   cwd: string
@@ -60,6 +63,11 @@ export function resolveSessionCwd(
     if (result?.cwd) {
       return { cwd: result.cwd, source: 'project' }
     }
+  }
+
+  // 未命中更高优先级且配置了默认工作区目录时，使用默认目录而非直接降级沙箱
+  if (input.defaultWorkingDirectory) {
+    return { cwd: input.defaultWorkingDirectory, source: 'default-workspace' }
   }
 
   return { cwd: input.sandboxCwd, source: 'sandbox' }
