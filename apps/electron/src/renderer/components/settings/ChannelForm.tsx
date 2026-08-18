@@ -32,6 +32,13 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
+import {
   PROVIDER_DEFAULT_URLS,
   PROVIDER_LABELS,
   parseZhipuTeamCredentials,
@@ -216,10 +223,14 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [models, setModels] = React.useState<ChannelModel[]>(channel?.models ?? [])
   const [enabled, setEnabled] = React.useState(channel?.enabled ?? true)
+  /** 该服务不提供模型列表（/models）端点：跳过拉取，手动管理模型 */
+  const [skipModelListFetch, setSkipModelListFetch] = React.useState(channel?.skipModelListFetch ?? false)
 
   // 新模型输入
   const [newModelId, setNewModelId] = React.useState('')
   const [newModelName, setNewModelName] = React.useState('')
+  /** 新模型代理选择：跟随全局 / 直连不走代理 */
+  const [newModelProxy, setNewModelProxy] = React.useState<'default' | 'direct'>('default')
 
   // 模型搜索过滤
   const [modelFilter, setModelFilter] = React.useState('')
@@ -338,6 +349,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     currentBaseUrl: string,
     currentApiKey: string,
     currentEnabled: boolean,
+    currentSkipModelListFetch: boolean,
   ) => {
     if (!isEdit || !channel) return
     try {
@@ -348,6 +360,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         apiKey: currentApiKey || undefined,
         models: currentModels,
         enabled: currentEnabled,
+        skipModelListFetch: currentSkipModelListFetch,
       })
       toast.success('已保存', { id: 'auto-save-success' })
     } catch (error) {
@@ -364,12 +377,13 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     nextBaseUrl: string,
     nextApiKey: string,
     nextEnabled: boolean,
+    nextSkipModelListFetch: boolean,
     requiresRiskAcknowledgement: boolean,
   ) => {
     if (!isEdit || !initializedRef.current || requiresRiskAcknowledgement) return
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => {
-      doAutoSave(nextModels, nextName, nextProvider, nextBaseUrl, nextApiKey, nextEnabled)
+      doAutoSave(nextModels, nextName, nextProvider, nextBaseUrl, nextApiKey, nextEnabled, nextSkipModelListFetch)
     }, AUTO_SAVE_DELAY)
   }, [isEdit, doAutoSave])
 
@@ -394,10 +408,11 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       baseUrl,
       effectiveApiKey,
       enabled,
+      skipModelListFetch,
       requiresBaseUrlRiskAcknowledgement,
     )
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current) }
-  }, [models, name, provider, baseUrl, effectiveApiKey, enabled, requiresBaseUrlRiskAcknowledgement, scheduleAutoSave])
+  }, [models, name, provider, baseUrl, effectiveApiKey, enabled, skipModelListFetch, requiresBaseUrlRiskAcknowledgement, scheduleAutoSave])
 
   // 切换供应商时自动更新 Base URL 与名称，并为支持的渠道自动添加预设模型
   const handleProviderChange = (newProvider: string): void => {
@@ -507,11 +522,13 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       name: newModelName.trim() || newModelId.trim(),
       enabled: true,
       source: 'manual',
+      ...(newModelProxy === 'direct' ? { useProxy: false } : {}),
     }
 
     setModels((prev) => [...prev, model])
     setNewModelId('')
     setNewModelName('')
+    setNewModelProxy('default')
   }
 
   /** 切换单个模型是否走全局代理（useProxy===false 时直连） */
@@ -863,6 +880,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         apiKey: effectiveApiKey,
         models,
         enabled,
+        ...(skipModelListFetch ? { skipModelListFetch: true } : {}),
       }
       const savedChannel = await window.electronAPI.createChannel(input)
       toast.success('渠道创建成功')
@@ -1408,8 +1426,9 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
             size="sm"
             type="button"
             onClick={handleFetchModels}
-            disabled={fetchingModels || !hasRequiredSecret || (!isSubscriptionProvider && !baseUrl.trim())}
+            disabled={fetchingModels || skipModelListFetch || !hasRequiredSecret || (!isSubscriptionProvider && !baseUrl.trim())}
             className="h-7 text-xs"
+            title={skipModelListFetch ? '已声明该服务不提供模型列表端点' : undefined}
           >
             {fetchingModels ? (
               <Loader2 size={12} className="animate-spin" />
@@ -1420,6 +1439,15 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           </Button>
         }
       >
+        {/* 无 /models 端点声明：跳过拉取，手动管理模型（兼容自建/中转服务） */}
+        <div className="px-1 pb-1">
+          <SettingsToggle
+            label="此服务不提供模型列表端点"
+            description="部分自建/中转服务没有 /models 接口，勾选后隐藏「从供应商获取」，模型全部手动添加"
+            checked={skipModelListFetch}
+            onCheckedChange={setSkipModelListFetch}
+          />
+        </div>
         {/* 拉取结果提示：not_found 引导手动添加（兼容无 /models 端点的服务） */}
         {fetchResult && (
           <div className={cn(
@@ -1536,6 +1564,16 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                 }
               }}
             />
+            {/* 新模型代理选择：跟随全局 / 直连 */}
+            <Select value={newModelProxy} onValueChange={(v) => setNewModelProxy(v as 'default' | 'direct')}>
+              <SelectTrigger className="w-[118px] h-8 text-xs flex-shrink-0" title="该模型的代理方式">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">跟随全局代理</SelectItem>
+                <SelectItem value="direct">直连（不走代理）</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="ghost"
               size="icon"

@@ -440,6 +440,7 @@ export function createChannel(input: ChannelCreateInput): Channel {
     apiKey: encryptApiKey(input.apiKey),
     models: input.models,
     enabled: input.enabled,
+    ...(input.skipModelListFetch ? { skipModelListFetch: true } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -476,6 +477,7 @@ export function updateChannel(id: string, input: ChannelUpdateInput): Channel {
     apiKey: input.apiKey ? encryptApiKey(input.apiKey) : existing.apiKey,
     models: input.models ?? existing.models,
     enabled: input.enabled ?? existing.enabled,
+    skipModelListFetch: input.skipModelListFetch ?? existing.skipModelListFetch,
     updatedAt: Date.now(),
   }
 

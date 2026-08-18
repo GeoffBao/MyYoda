@@ -384,6 +384,11 @@ export interface Channel {
   apiKey: string
   /** 可用模型列表 */
   models: ChannelModel[]
+  /**
+   * 该服务不提供模型列表（/models）端点：勾选后跳过「从供应商获取」，
+   * 模型完全手动管理（兼容自建/中转服务）。
+   */
+  skipModelListFetch?: boolean
   /** 是否启用 */
   enabled: boolean
   /** 创建时间戳 */
@@ -402,6 +407,8 @@ export interface ChannelCreateInput {
   /** 明文 API Key，主进程会加密后存储 */
   apiKey: string
   models: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点 */
+  skipModelListFetch?: boolean
   enabled: boolean
 }
 
@@ -415,6 +422,8 @@ export interface ChannelUpdateInput {
   /** 明文 API Key，为空字符串表示不更新 */
   apiKey?: string
   models?: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点；undefined 表示不更新 */
+  skipModelListFetch?: boolean
   enabled?: boolean
 }
 
