@@ -106,7 +106,8 @@ const PROVIDER_SELECT_OPTIONS = PROVIDER_OPTIONS.map((p) => ({
 }))
 
 function resolveDirectTestModelId(provider: ProviderType, models: ChannelModel[]): string | undefined {
-  if (!PROVIDER_TEST_MODEL_PRESETS[provider]) return undefined
+  // 用户已配置的模型优先（任何 provider 都适用：自定义/兼容服务必须用真实模型名，
+  // 不能拿占位名瞎连，否则服务端会 401 拒绝）；无用户模型时回退到供应商预设测试模型。
   const configuredModelId = models.find((model) => model.enabled)?.id ?? models[0]?.id
   if (configuredModelId) return configuredModelId
   return PROVIDER_TEST_MODEL_PRESETS[provider]?.[0]
@@ -864,6 +865,12 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
       requestBaseUrlRiskAcknowledgement('test')
       return
     }
+    // 无模型时直接提示：自定义/兼容服务必须用真实模型名测试，没有模型名不要瞎连
+    const testModelId = resolveDirectTestModelId(provider, models)
+    if (!testModelId) {
+      setTestResult({ success: false, message: '尚未配置模型，请先添加模型后再测试连接' })
+      return
+    }
     void testChannelConnection()
   }
 
@@ -1440,13 +1447,21 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         }
       >
         {/* 无 /models 端点声明：跳过拉取，手动管理模型（兼容自建/中转服务） */}
-        <div className="px-1 pb-1">
+        <div className="px-1 pb-1 space-y-1">
           <SettingsToggle
             label="此服务不提供模型列表端点"
-            description="部分自建/中转服务没有 /models 接口，勾选后隐藏「从供应商获取」，模型全部手动添加"
+            description="部分自建/中转服务没有 /models 接口，勾选后禁用「从供应商获取」，模型全部手动添加"
             checked={skipModelListFetch}
             onCheckedChange={setSkipModelListFetch}
           />
+          {skipModelListFetch && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 px-1">
+              <GlobeLock size={12} />
+              <span>
+                已跳过模型列表拉取，请使用下方输入框手动添加模型 ID；添加后再点「测试连接」验证
+              </span>
+            </div>
+          )}
         </div>
         {/* 拉取结果提示：not_found 引导手动添加（兼容无 /models 端点的服务） */}
         {fetchResult && (
