@@ -34,7 +34,7 @@ const WEREAD_TOOL_ID = 'weread'
  * 凭据（Bot ID / Secret）保存到 chat-tools.json，注入时作为环境变量传给 CLI；
  * 也可在终端直接执行 wecom-cli auth init 扫码授权，两种方式互不冲突。
  */
-function WecomSettings(): React.ReactElement {
+export function WecomSettings(): React.ReactElement {
   const { workspaces, currentWorkspaceId } = useWorkspaceActions()
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
   const [botId, setBotId] = React.useState('')
@@ -227,7 +227,7 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
 }
 
 /** 联网搜索工具设置区域 */
-function WebSearchSettings(): React.ReactElement {
+export function WebSearchSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
@@ -395,7 +395,7 @@ function WebSearchSettings(): React.ReactElement {
 }
 
 /** Nano Banana 生图工具设置区域 */
-function NanoBananaSettings(): React.ReactElement {
+export function NanoBananaSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -596,7 +596,7 @@ function NanoBananaSettings(): React.ReactElement {
  * 桥接（readwise.io/access_token 获取），Token 保存到 chat-tools.json。
  * 全只读：Agent 可检索你的划线/文库，用于回答问题和整理读书笔记。
  */
-function ReadwiseSettings(): React.ReactElement {
+export function ReadwiseSettings(): React.ReactElement {
   const { workspaces, currentWorkspaceId } = useWorkspaceActions()
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
   const [token, setToken] = React.useState('')
@@ -768,7 +768,7 @@ function ReadwiseSettings(): React.ReactElement {
  * 官方页面登录获取）。Key 保存到 chat-tools.json，注入时作为 Bearer 认证。
  * 全只读：搜索书城、书架、划线/笔记、阅读统计。
  */
-function WereadSettings(): React.ReactElement {
+export function WereadSettings(): React.ReactElement {
   const { workspaces, currentWorkspaceId } = useWorkspaceActions()
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
   const [apiKey, setApiKey] = React.useState('')
@@ -934,7 +934,7 @@ function WereadSettings(): React.ReactElement {
 }
 
 /** 自定义工具列表区域 */
-function CustomToolsSection(): React.ReactElement | null {
+export function CustomToolsSection(): React.ReactElement | null {
   const tools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
 

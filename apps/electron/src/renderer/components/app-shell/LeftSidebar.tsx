@@ -1121,7 +1121,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   /** 打开 Yoda 插件视图并切到 MCP 管理 */
   const handleOpenMcpManagement = React.useCallback((): void => {
-    handleOpenSkills('mcp')
+    handleOpenSkills('connectors')
   }, [handleOpenSkills])
 
   // 切换模式时重置归档视图：Chat 用 viewMode，Agent 用状态筛选，统一回到活跃（对齐 Proma）。

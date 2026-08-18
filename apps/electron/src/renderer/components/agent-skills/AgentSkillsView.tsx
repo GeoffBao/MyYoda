@@ -1,13 +1,13 @@
 /**
- * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / Skills / MCP / API / Memory 统一配置）
+ * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / 技能 / 连接器 / 记忆 统一配置）
  *
  * 全屏模式（activeView='agent-skills'）：左侧栏「Yoda 插件」独立入口，Home / Code 共享；
  * `embedded` prop 保留供未来嵌入其他容器复用，当前无消费者。
  *
  * 结构：
  * - 标题栏（全屏模式）：Yoda 插件 + 当前工作区切换器（多工作区时显示，复用 useWorkspaceActions）
- * - 工具条：专家 / 专家团 / Skills / MCP / API / Memory 切换 + 搜索 + 新建/导入入口
- * - 内容：各能力 tab 卡片/列表，点击打开详情抽屉；Memory 复用 WorkspaceMemoryTab
+ * - 工具条：专家 / 专家团 / 技能 / 连接器 / 记忆 切换 + 搜索 + 新建/导入入口
+ * - 内容：各能力 tab 卡片/列表，点击打开详情；连接器 Tab 为 Mico 风格卡片网格 + 居中详情 Modal；记忆复用 WorkspaceMemoryTab
  *
  * 注意：此处“工作区”对应 Proma 上游 UI 中的“项目”概念（同一个 AgentWorkspace 实体，Proma 仅在展示层重命名）；
  * MyYoda 另有一层嵌套的真正“项目”（KanbanProject，自带目录绑定），与此处切换器无关，不要混淆。
@@ -24,7 +24,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
 import { agentSkillsTabAtom } from '@/atoms/active-view'
-import { toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
@@ -34,15 +33,22 @@ import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta } from '@myyoda
 import { useAgentSkillsData } from './useAgentSkillsData'
 import { LocalProjectBadge } from './LocalProjectBadge'
 import { SkillCard } from './SkillCard'
-import { McpCard } from './McpCard'
 import { SkillDetailSheet } from './SkillDetailSheet'
 import { McpDetailSheet } from './McpDetailSheet'
 import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
+import { ConnectorsTab } from './ConnectorsTab'
+import { ConnectorDetailDialog } from './ConnectorDetailDialog'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
-import { EnhancedToolsPanel } from '@/components/settings/ToolSettings'
+import {
+  WecomSettings,
+  WebSearchSettings,
+  NanoBananaSettings,
+  ReadwiseSettings,
+  WereadSettings,
+} from '@/components/settings/ToolSettings'
 import { AgentExpertsView } from '@/components/agent-experts/AgentExpertsView'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
@@ -102,7 +108,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const data = useAgentSkillsData(null)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
-  const setToolSettingsFocus = useSetAtom(toolSettingsFocusAtom)
   const chatTools = useAtomValue(chatToolsAtom)
   const { createAgent } = useCreateSession()
 
@@ -129,6 +134,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
+  /** 打开凭据配置 Modal 的连接器 id（wecom/readwise/weread/nano-banana/web-search） */
+  const [configureServerId, setConfigureServerId] = React.useState<string | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [showCommunityMarket, setShowCommunityMarket] = React.useState(false)
@@ -176,8 +183,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     () => Object.keys(data.mcpConfig.servers ?? {}).filter((n) => n !== 'memos-cloud').length + data.builtinMcpServers.length,
     [data.mcpConfig, data.builtinMcpServers],
   )
-  // API（增强工具）Tab 计数：已启用的增强工具数量（联网搜索 / Nano Banana / 自定义工具）
-  const apiToolCount = chatTools.filter((t) => t.enabled).length
+  // 连接器 Tab 计数：内置/用户 MCP + 增强工具（联网搜索 + 自定义工具）
+  const connectorToolCount = chatTools.filter((t) => t.meta.id === 'web-search' || t.meta.category === 'custom').length
+  const connectorCount = mcpCount + connectorToolCount
   // Memory Tab 计数：工作区记忆（AGENTS.md + 长期记忆文件数）；项目选择不影响记忆页（对齐 Proma，无独立 Project Knowledge）
   const workspaceMemoryCount = (data.capabilities?.memory.agentsMd.exists ? 1 : 0) + (data.capabilities?.memory.autoMemory.fileCount ?? 0)
   const memoryCount = workspaceMemoryCount
@@ -190,19 +198,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   }
 
   const configureBuiltinMcp = React.useCallback((serverId: string): void => {
-    const focusMap: Partial<Record<string, ToolSettingsFocus>> = {
-      'nano-banana': 'nano-banana',
-      'wecom': 'wecom',
-      'readwise': 'readwise',
-      'weread': 'weread',
-    }
-    const focus = focusMap[serverId]
-    if (!focus) return
-    // 增强工具已并入本视图 API Tab：切到 API Tab 并滚动到对应区块，不再跳设置弹窗
-    setToolSettingsFocus(focus)
-    setTab('api')
+    // 打开对应连接器的凭据配置 Modal（居中，Mico 风格），不再跳 API Tab
     setSelectedBuiltinMcp(null)
-  }, [setTab, setToolSettingsFocus])
+    setConfigureServerId(serverId)
+  }, [])
 
   const handleClassifySkills = React.useCallback(async (): Promise<void> => {
     if (classifyingSkills) return
@@ -307,26 +306,24 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
       {/* 工具条 */}
       <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-6xl px-8 pb-4')}>
-        {/* 专家 / 专家团 / Skills / MCP / API / Memory 切换（Memory 已由左栏独立视图并入） */}
+        {/* 专家 / 专家团 / 技能 / 连接器 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
             className={cn(
-              'absolute bottom-0.5 top-0.5 w-[calc(16.666%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
+              'absolute bottom-0.5 top-0.5 w-[calc(20%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
               tab === 'experts' && 'translate-x-0',
               tab === 'teams' && 'translate-x-full',
               tab === 'skills' && 'translate-x-[200%]',
-              tab === 'mcp' && 'translate-x-[300%]',
-              tab === 'api' && 'translate-x-[400%]',
-              tab === 'memory' && 'translate-x-[500%]',
+              tab === 'connectors' && 'translate-x-[300%]',
+              tab === 'memory' && 'translate-x-[400%]',
             )}
           />
           {([
             { value: 'experts' as const, label: '专家', count: expertsCount },
             { value: 'teams' as const, label: '专家团', count: teamsCount },
-            { value: 'skills' as const, label: 'Skills', count: data.skills.length },
-            { value: 'mcp' as const, label: 'MCP', count: mcpCount },
-            { value: 'api' as const, label: 'API', count: apiToolCount },
-            { value: 'memory' as const, label: 'Memory', count: memoryCount },
+            { value: 'skills' as const, label: '技能', count: data.skills.length },
+            { value: 'connectors' as const, label: '连接器', count: connectorCount },
+            { value: 'memory' as const, label: '记忆', count: memoryCount },
           ]).map(({ value, label, count }) => (
             <button
               key={value}
@@ -342,18 +339,16 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           ))}
         </div>
 
-        {/* 搜索框（API 占位 Tab 无搜索逻辑；记忆页统一为工作区记忆，始终可搜） */}
-        {tab !== 'api' && (
-          <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 transition-colors focus-within:border-primary/40">
-            <Search size={14} className="shrink-0 text-foreground/40" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索 Skills...' : tab === 'mcp' ? '搜索 MCP 服务器...' : '搜索记忆文件...'}
-              className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
-            />
-          </div>
-        )}
+        {/* 搜索框（连接器 Tab 同样支持按名称/描述搜索） */}
+        <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 transition-colors focus-within:border-primary/40">
+          <Search size={14} className="shrink-0 text-foreground/40" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索技能...' : tab === 'connectors' ? '搜索连接器...' : '搜索记忆文件...'}
+            className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
+          />
+        </div>
 
         {/* 新建专家：仅在专家 Tab 显示，通过 token 触发嵌入视图的弹窗 */}
         {tab === 'experts' && (
@@ -422,7 +417,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         )}
 
         {/* 新增 MCP */}
-        {tab === 'mcp' && (
+        {tab === 'connectors' && (
           <button
             type="button"
             onClick={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
@@ -452,13 +447,23 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               kind="team"
               externalSearch={search}
             />
-          ) : tab === 'api' ? (
-            <EnhancedToolsPanel />
+          ) : tab === 'connectors' ? (
+            <ConnectorsTab
+              builtinServers={builtinMcpServers}
+              userEntries={userMcpEntries}
+              onOpenBuiltin={setSelectedBuiltinMcp}
+              onOpenMcp={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
+              onToggleBuiltin={data.toggleBuiltinMcp}
+              onToggleMcp={data.toggleMcp}
+              onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
+              onConfigure={configureBuiltinMcp}
+              externalSearch={search}
+            />
           ) : !data.hasWorkspace ? (
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}
               title="未选择工作区"
-              hint="请先选择或创建一个工作区，再来管理它的 Skills、MCP 与 Memory。"
+              hint="请先选择或创建一个工作区，再来管理它的 Skills、连接器与 Memory。"
             />
           ) : tab === 'skills' ? (
             <SkillsTab
@@ -474,21 +479,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onUpdate={data.updateSkill}
               onImport={() => setShowImport(true)}
             />
-          ) : tab === 'mcp' ? (
-            <McpTab
-              userEntries={userMcpEntries}
-              builtinServers={builtinMcpServers}
-              total={mcpCount}
-              onOpen={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
-              onOpenBuiltin={setSelectedBuiltinMcp}
-              onToggle={data.toggleMcp}
-              onToggleBuiltin={data.toggleBuiltinMcp}
-              onRequestDelete={setPendingDeleteMcpName}
-              onAdd={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
-            />
           ) : tab === 'memory' ? (
             // 记忆页统一为工作区记忆（AGENTS.md + memory/ 文件列表 + 授权引导，Proma 形态）；
-            // 项目选择器只影响 Skills/MCP 的项目级覆盖，不再切出独立的 Project Knowledge 编辑器（已对齐移除）
+            // 项目选择器只影响 Skills/连接器 的项目级覆盖，不再切出独立的 Project Knowledge 编辑器（已对齐移除）
             <WorkspaceMemoryTab workspaceSlug={data.workspaceSlug} search={search} />
           ) : null}
         </div>
@@ -560,6 +553,28 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         onOpenChange={(open) => { if (!open) setSelectedBuiltinMcp(null) }}
         onConfigure={configureBuiltinMcp}
       />
+
+      {/* 凭据配置 Modal（居中，Mico 风格） */}
+      <ConnectorDetailDialog
+        open={configureServerId !== null}
+        onOpenChange={(open) => { if (!open) setConfigureServerId(null) }}
+        eyebrow="预置连接器"
+        title={configureServerId ? (CONFIGURE_META[configureServerId]?.title ?? '') : ''}
+        icon={
+          configureServerId === 'web-search'
+            ? <Search size={22} />
+            : configureServerId
+              ? getBuiltinMcpIcon(configureServerId)
+              : undefined
+        }
+        tags={configureServerId ? (CONFIGURE_META[configureServerId]?.tags ?? []) : []}
+      >
+        {configureServerId === 'wecom' && <WecomSettings />}
+        {configureServerId === 'readwise' && <ReadwiseSettings />}
+        {configureServerId === 'weread' && <WereadSettings />}
+        {configureServerId === 'nano-banana' && <NanoBananaSettings />}
+        {configureServerId === 'web-search' && <WebSearchSettings />}
+      </ConnectorDetailDialog>
 
       <ImportSkillDialog
         open={showImport}
@@ -725,107 +740,15 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
   )
 }
 
-// ===== MCP Tab =====
+// ===== 凭据配置 Modal 元信息 =====
 
-interface McpTabProps {
-  userEntries: Array<[string, McpServerEntry]>
-  builtinServers: BuiltinMcpServerSummary[]
-  total: number
-  onOpen: (name: string, entry: McpServerEntry) => void
-  onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
-  onToggle: (name: string, enabled: boolean) => void
-  onToggleBuiltin: (id: string, enabled: boolean) => void
-  onRequestDelete: (name: string) => void
-  onAdd: () => void
-}
-
-function McpTab({ userEntries, builtinServers, total, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd }: McpTabProps): React.ReactElement {
-  if (total === 0) {
-    return (
-      <EmptyState
-        icon={<Plus className="size-8 text-foreground/30" />}
-        title="还没有 MCP 服务器"
-        hint="点击右上角「添加服务器」开始，或在 Project 模式下让 MyYoda 帮你查找并配置。"
-        action={
-          <button
-            type="button"
-            onClick={onAdd}
-            className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <Plus size={14} />
-            <span>添加服务器</span>
-          </button>
-        }
-      />
-    )
-  }
-  if (userEntries.length === 0 && builtinServers.length === 0) {
-    return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
-  }
-
-  return (
-    <div className="flex flex-col gap-8">
-      {userEntries.length > 0 && (
-        <McpSection title="我的 MCP" count={userEntries.length}>
-          {userEntries.map(([name, entry]) => (
-            <McpCard
-              key={name}
-              name={name}
-              entry={entry}
-              onOpen={() => onOpen(name, entry)}
-              onToggle={(enabled) => onToggle(name, enabled)}
-              onRequestDelete={() => onRequestDelete(name)}
-            />
-          ))}
-        </McpSection>
-      )}
-
-      {builtinServers.length > 0 && (
-        <McpSection title="MyYoda 内置" count={builtinServers.length}>
-          {builtinServers.map((server) => (
-            <McpCard
-              key={server.id}
-              name={server.displayName}
-              entry={{
-                type: 'stdio',
-                command: 'MyYoda 运行时注入',
-                enabled: server.enabled,
-                isBuiltin: true,
-              }}
-              icon={getBuiltinMcpIcon(server.id)}
-              description={server.description}
-              targetLabel={server.availabilityReason ?? 'MyYoda 运行时注入'}
-              statusLabel={getBuiltinMcpStatus(server).label}
-              statusTone={getBuiltinMcpStatus(server).tone}
-              readOnly
-              onOpen={() => onOpenBuiltin(server)}
-              onToggle={(enabled) => onToggleBuiltin(server.id, enabled)}
-            />
-          ))}
-        </McpSection>
-      )}
-    </div>
-  )
-}
-
-function getBuiltinMcpStatus(server: BuiltinMcpServerSummary): { label: string; tone: 'success' | 'warning' | 'muted' } {
-  if (!server.enabled) return { label: '已关闭', tone: 'muted' }
-  if (server.available) return { label: '可用', tone: 'success' }
-  return { label: '需配置', tone: 'warning' }
-}
-
-function McpSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 px-1">
-        <span className="text-[13px] font-medium text-foreground/55">{title}</span>
-        <span className="text-[12px] tabular-nums text-foreground/35">{count}</span>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {children}
-      </div>
-    </div>
-  )
+/** 可配置凭据的连接器 → Modal 头部标题与标签（Mico 风格） */
+const CONFIGURE_META: Record<string, { title: string; tags: string[] }> = {
+  wecom: { title: '企业微信', tags: ['MCP 连接器', '协作办公', '官方 wecom-cli'] },
+  readwise: { title: 'Readwise', tags: ['MCP 连接器', '协作办公', 'REST API 直连'] },
+  weread: { title: '微信读书', tags: ['MCP 连接器', '协作办公', 'Agent Gateway'] },
+  'nano-banana': { title: 'Nano Banana 生图', tags: ['MCP 连接器', '设计协作', 'Gemini'] },
+  'web-search': { title: '联网搜索', tags: ['内置工具', '搜索与自动化'] },
 }
 
 // ===== Empty State =====

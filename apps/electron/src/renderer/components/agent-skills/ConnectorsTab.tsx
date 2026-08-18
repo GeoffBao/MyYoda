@@ -1,0 +1,429 @@
+/**
+ * ConnectorsTab — 连接器 Tab（MCP + API 合并，对标小米 Mico 连接器市场）
+ *
+ * 顶部：分类 chip 筛选（全部/协作办公/研发与交付/设计协作/搜索与自动化/数据与基础设施/系统能力/我的/自定义）
+ * 主体：4 列卡片网格（ConnectorCard），点击打开对应详情（居中 Modal / MCP 编辑 Sheet / 自定义工具详情）。
+ */
+
+import * as React from 'react'
+import { Plug, Search, Globe, Trash2 } from 'lucide-react'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { toast } from 'sonner'
+import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
+import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import type { BuiltinMcpServerSummary, McpServerEntry } from '@myyoda/shared'
+import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
+import { ConnectorCard } from './ConnectorCard'
+import { ConnectorDetailDialog } from './ConnectorDetailDialog'
+
+// ===== 品类 =====
+
+export type ConnectorCategory = 'all' | 'office' | 'code' | 'design' | 'search' | 'data' | 'system' | 'mine' | 'custom'
+
+const CHIPS: Array<{ key: ConnectorCategory; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'office', label: '协作办公' },
+  { key: 'code', label: '研发与交付' },
+  { key: 'design', label: '设计协作' },
+  { key: 'search', label: '搜索与自动化' },
+  { key: 'data', label: '数据与基础设施' },
+  { key: 'system', label: '系统能力' },
+  { key: 'mine', label: '我的' },
+  { key: 'custom', label: '自定义' },
+]
+
+const CATEGORY_LABEL: Record<Exclude<ConnectorCategory, 'all'>, string> = {
+  office: '协作办公',
+  code: '研发与交付',
+  design: '设计协作',
+  search: '搜索与自动化',
+  data: '数据与基础设施',
+  system: '系统能力',
+  mine: '我的 MCP',
+  custom: '自定义',
+}
+
+/** 内置 MCP 服务器 → 连接器品类映射 */
+function categoryOfBuiltin(server: BuiltinMcpServerSummary): Exclude<ConnectorCategory, 'all'> {
+  switch (server.category) {
+    case 'office':
+    case 'knowledge':
+      return 'office'
+    case 'browser':
+      return 'code'
+    case 'media':
+      return 'design'
+    default:
+      return 'system'
+  }
+}
+
+/** 需要凭据配置的内置/增强工具（打开凭据配置 Modal） */
+const CONFIGURABLE_IDS = new Set(['wecom', 'readwise', 'weread', 'nano-banana', 'web-search'])
+
+// ===== 卡片视图模型 =====
+
+interface ConnectorItem {
+  key: string
+  name: string
+  description: string
+  icon: React.ReactNode
+  category: Exclude<ConnectorCategory, 'all'>
+  categoryLabel: string
+  statusLabel?: string
+  statusTone?: 'success' | 'warning' | 'muted'
+  enabled: boolean
+  hasToggle: boolean
+}
+
+// ===== Props =====
+
+interface ConnectorsTabProps {
+  builtinServers: BuiltinMcpServerSummary[]
+  userEntries: Array<[string, McpServerEntry]>
+  onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
+  onOpenMcp: (name: string, entry: McpServerEntry) => void
+  onToggleBuiltin: (id: string, enabled: boolean) => void
+  onToggleMcp: (name: string, enabled: boolean) => void
+  onAddMcp: () => void
+  onConfigure: (serverId: string) => void
+  externalSearch: string
+}
+
+function builtinStatus(server: BuiltinMcpServerSummary): { label: string; tone: 'success' | 'warning' | 'muted' } {
+  if (!server.enabled) return { label: '已关闭', tone: 'muted' }
+  if (server.available) return { label: '已启用', tone: 'success' }
+  return { label: '需配置', tone: 'warning' }
+}
+
+/** 重新加载工具列表并同步到 atom（与 ToolSettings 中的 refreshChatTools 等价） */
+async function refreshTools(
+  setter: (tools: Awaited<ReturnType<typeof window.electronAPI.getChatTools>>) => void,
+): Promise<void> {
+  const tools = await window.electronAPI.getChatTools()
+  setter(tools)
+}
+
+export function ConnectorsTab({
+  builtinServers,
+  userEntries,
+  onOpenBuiltin,
+  onOpenMcp,
+  onToggleBuiltin,
+  onToggleMcp,
+  onAddMcp,
+  onConfigure,
+  externalSearch,
+}: ConnectorsTabProps): React.ReactElement {
+  const [category, setCategory] = React.useState<ConnectorCategory>('all')
+  const [selectedCustomToolId, setSelectedCustomToolId] = React.useState<string | null>(null)
+  const chatTools = useAtomValue(chatToolsAtom)
+  const setChatTools = useSetAtom(chatToolsAtom)
+
+  const q = externalSearch.trim().toLowerCase()
+
+  // 增强工具：联网搜索 + 自定义 HTTP 工具
+  const webSearchTool = React.useMemo(
+    () => chatTools.find((t) => t.meta.id === 'web-search'),
+    [chatTools],
+  )
+  const customTools = React.useMemo(
+    () => chatTools.filter((t) => t.meta.category === 'custom'),
+    [chatTools],
+  )
+
+  // 聚合卡片列表
+  const items = React.useMemo((): ConnectorItem[] => {
+    const list: ConnectorItem[] = []
+
+    for (const server of builtinServers) {
+      const cat = categoryOfBuiltin(server)
+      const status = builtinStatus(server)
+      list.push({
+        key: `builtin:${server.id}`,
+        name: server.displayName,
+        description: server.description,
+        icon: getBuiltinMcpIcon(server.id),
+        category: cat,
+        categoryLabel: CATEGORY_LABEL[cat],
+        statusLabel: status.label,
+        statusTone: status.tone,
+        enabled: server.enabled,
+        hasToggle: true,
+      })
+    }
+
+    if (webSearchTool) {
+      const enabled = webSearchTool.enabled
+      const status = enabled
+        ? webSearchTool.available
+          ? { label: '已启用', tone: 'success' as const }
+          : { label: '需配置', tone: 'warning' as const }
+        : { label: '已关闭', tone: 'muted' as const }
+      list.push({
+        key: 'web-search',
+        name: '联网搜索',
+        description: '为 Agent 提供实时联网搜索能力，可配置 Tavily / Brave 等搜索 API Key。',
+        icon: <Search size={20} />,
+        category: 'search',
+        categoryLabel: CATEGORY_LABEL.search,
+        statusLabel: status.label,
+        statusTone: status.tone,
+        enabled,
+        hasToggle: true,
+      })
+    }
+
+    for (const [name, entry] of userEntries) {
+      const enabled = entry.enabled !== false
+      list.push({
+        key: `mcp:${name}`,
+        name,
+        description: entry.type === 'stdio' ? (entry.command ?? '') : (entry.url ?? ''),
+        icon: <Plug size={20} />,
+        category: 'mine',
+        categoryLabel: CATEGORY_LABEL.mine,
+        statusLabel: enabled ? '已启用' : '已关闭',
+        statusTone: enabled ? 'success' : 'muted',
+        enabled,
+        hasToggle: true,
+      })
+    }
+
+    for (const tool of customTools) {
+      const enabled = tool.enabled
+      list.push({
+        key: `custom:${tool.meta.id}`,
+        name: tool.meta.name,
+        description: tool.meta.description,
+        icon: <Globe size={20} />,
+        category: 'custom',
+        categoryLabel: CATEGORY_LABEL.custom,
+        statusLabel: enabled ? '已启用' : '已关闭',
+        statusTone: enabled ? 'success' : 'muted',
+        enabled,
+        hasToggle: true,
+      })
+    }
+
+    return list
+  }, [builtinServers, userEntries, customTools, webSearchTool])
+
+  // 搜索 + 品类过滤
+  const filtered = React.useMemo(() => {
+    return items.filter((item) => {
+      if (category !== 'all' && item.category !== category) return false
+      if (!q) return true
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.categoryLabel.toLowerCase().includes(q)
+      )
+    })
+  }, [items, category, q])
+
+  const total = items.length
+
+  // 点击卡片 → 按类型打开对应详情
+  const handleOpen = (item: ConnectorItem): void => {
+    if (item.key.startsWith('builtin:')) {
+      const serverId = item.key.slice('builtin:'.length)
+      const server = builtinServers.find((s) => s.id === serverId)
+      if (!server) return
+      if (CONFIGURABLE_IDS.has(serverId)) {
+        onConfigure(serverId)
+      } else {
+        onOpenBuiltin(server)
+      }
+      return
+    }
+    if (item.key === 'web-search') {
+      onConfigure('web-search')
+      return
+    }
+    if (item.key.startsWith('mcp:')) {
+      const name = item.key.slice('mcp:'.length)
+      const entry = userEntries.find(([n]) => n === name)
+      if (entry) onOpenMcp(entry[0], entry[1])
+      return
+    }
+    if (item.key.startsWith('custom:')) {
+      setSelectedCustomToolId(item.key.slice('custom:'.length))
+    }
+  }
+
+  const handleToggle = (item: ConnectorItem, enabled: boolean): void => {
+    if (item.key.startsWith('builtin:')) {
+      onToggleBuiltin(item.key.slice('builtin:'.length), enabled)
+    } else if (item.key === 'web-search') {
+      void window.electronAPI.updateChatToolState('web-search', { enabled }).then(() => refreshTools(setChatTools))
+    } else if (item.key.startsWith('mcp:')) {
+      onToggleMcp(item.key.slice('mcp:'.length), enabled)
+    } else if (item.key.startsWith('custom:')) {
+      void window.electronAPI.updateChatToolState(item.key.slice('custom:'.length), { enabled }).then(() => refreshTools(setChatTools))
+    }
+  }
+
+  const selectedCustomTool = selectedCustomToolId
+    ? customTools.find((t) => t.meta.id === selectedCustomToolId)
+    : null
+
+  // 空状态
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-24 text-center">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-foreground/[0.04]">
+          <Plug size={28} className="text-foreground/30" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[15px] font-medium text-foreground/85">还没有连接器</div>
+          <div className="text-[13px] leading-relaxed text-foreground/50">
+            预置连接器开箱即用；也可以添加你自己的 MCP 服务器。
+          </div>
+        </div>
+        <Button onClick={onAddMcp}>
+          <Plug size={14} />
+          <span>添加 MCP 服务器</span>
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* 分类 chip 筛选（对标 Mico 顶部分类） */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin">
+        {CHIPS.map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => setCategory(chip.key)}
+            className={cn(
+              'shrink-0 rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-fast',
+              category === chip.key
+                ? 'bg-foreground text-background'
+                : 'bg-muted text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
+            )}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 卡片网格（Mico 4 列） */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="text-[14px] font-medium text-foreground/70">没有匹配的连接器</div>
+          <div className="text-[13px] text-foreground/45">试试更换分类或搜索关键词。</div>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {filtered.map((item) => (
+            <ConnectorCard
+              key={item.key}
+              id={item.key}
+              name={item.name}
+              description={item.description}
+              icon={item.icon}
+              categoryLabel={item.categoryLabel}
+              statusLabel={item.statusLabel}
+              statusTone={item.statusTone}
+              enabled={item.enabled}
+              onOpen={() => handleOpen(item)}
+              onToggle={(enabled) => handleToggle(item, enabled)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 自定义工具详情（居中 Modal） */}
+      <ConnectorDetailDialog
+        open={selectedCustomTool !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCustomToolId(null)
+        }}
+        eyebrow="自定义连接器"
+        title={selectedCustomTool?.meta.name ?? ''}
+        icon={<Globe size={22} />}
+        tags={
+          selectedCustomTool?.meta.httpConfig
+            ? ['HTTP', selectedCustomTool.meta.httpConfig.method, '自定义']
+            : ['自定义']
+        }
+        primaryLabel={selectedCustomTool?.enabled ? '禁用' : '启用'}
+        onPrimary={() => {
+          if (!selectedCustomTool) return
+          void window.electronAPI
+            .updateChatToolState(selectedCustomTool.meta.id, {
+              enabled: !selectedCustomTool.enabled,
+            })
+            .then(() => refreshTools(setChatTools))
+          setSelectedCustomToolId(null)
+        }}
+      >
+        {selectedCustomTool && (
+          <div className="flex flex-col gap-4">
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              {selectedCustomTool.meta.description}
+            </p>
+            {selectedCustomTool.meta.httpConfig && (
+              <div className="flex flex-col gap-2">
+                <InfoRow label="URL 模板" value={selectedCustomTool.meta.httpConfig.urlTemplate} mono />
+                <InfoRow label="方法" value={selectedCustomTool.meta.httpConfig.method} />
+                {selectedCustomTool.meta.params.length > 0 && (
+                  <InfoRow
+                    label="参数"
+                    value={selectedCustomTool.meta.params.map((p) => p.name).join('、')}
+                  />
+                )}
+              </div>
+            )}
+            <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
+              <span className="text-[13px] font-medium text-foreground">启用状态</span>
+              <Switch
+                checked={selectedCustomTool.enabled}
+                onCheckedChange={(checked) => {
+                  void window.electronAPI
+                    .updateChatToolState(selectedCustomTool.meta.id, { enabled: checked })
+                    .then(() => refreshTools(setChatTools))
+                }}
+              />
+            </div>
+            <div className="flex justify-end border-t border-border/60 pt-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  const tool = selectedCustomTool
+                  setSelectedCustomToolId(null)
+                  void window.electronAPI
+                    .deleteCustomChatTool(tool.meta.id)
+                    .then(() => refreshTools(setChatTools))
+                    .then(() => toast.success(`已删除工具：${tool.meta.name}`))
+                    .catch(() => toast.error('删除工具失败'))
+                }}
+              >
+                <Trash2 size={14} />
+                <span>删除该工具</span>
+              </Button>
+            </div>
+          </div>
+        )}
+      </ConnectorDetailDialog>
+    </div>
+  )
+}
+
+function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg bg-muted/45 px-3 py-2.5">
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className={cn('break-all text-[13px] text-foreground', mono && 'font-mono text-[12px]')}>
+        {value}
+      </span>
+    </div>
+  )
+}

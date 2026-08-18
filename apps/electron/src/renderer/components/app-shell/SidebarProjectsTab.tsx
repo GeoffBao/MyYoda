@@ -249,7 +249,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
   /** 打开该工作区的 MCP 与 Skills 配置（对齐 Proma 项目菜单：先切到该工作区，再进插件视图的 MCP tab） */
   const configureMcpAndSkills = React.useCallback((workspaceId: string) => {
     if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
-    setAgentSkillsTab('mcp')
+    setAgentSkillsTab('connectors')
     setActiveView('agent-skills')
   }, [currentWorkspaceId, selectWorkspace, setAgentSkillsTab, setActiveView])
 
