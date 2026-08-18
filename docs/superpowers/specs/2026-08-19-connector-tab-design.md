@@ -135,8 +135,8 @@
 |---|---|
 | `agentSkillsTabAtom` | `'mcp'`/`'api'` → `'connectors'`；兼容映射存量 |
 | `AgentSkillsView.tsx` | Tab 标签/指示条/搜索/视图切换 |
-| `ToolSettings.tsx` | `EnhancedToolsPanel` 重构为 `ConnectorCard` 网格 + `ConnectorDetailDialog`；`ToolSettings` 薄壳同步 |
-| `McpCard.tsx` | 参考其状态徽标逻辑，但不直接复用 |
+| `ToolSettings.tsx` | `EnhancedToolsPanel` 保留（设置面板「工具」页宽度窄，不套 4 列网格）；各 Settings 组件 export 供凭据 Modal 复用 |
+| `McpCard.tsx` | 已删除（无引用）；状态徽标逻辑已内联到 ConnectorsTab |
 | 新文件 | `ConnectorCard.tsx`、`ConnectorDetailDialog.tsx`、`ConnectorsTab.tsx`（或重构 AgentSkillsView 内视图） |
 | `default-mcp.json` / `catalog.ts` | 第一期不变；第二期注册新连接器 |
 | 文档/FAQ | "MCP/API" 表述同步改"连接器" |
