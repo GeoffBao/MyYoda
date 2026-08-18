@@ -123,6 +123,7 @@ import { useOpenPreview } from '@/components/diff/preview-opener'
 import type { AgentRuntime, AgentSendInput, AgentDeferredQueueMessageInput, AgentPendingFile, AgentThinkingLevel, FileDialogLargeFile, FileDialogResult, ModelOption, ReasoningCapability, SDKMessage, SDKUserMessage, ProviderType, AgentSessionFileRoots } from '@myyoda/shared'
 import { DEFAULT_AGENT_THINKING_LEVEL, getSessionThinkingLevel, inferAgentSdkContextWindow, inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, isOpenAIReasoningMaxSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@myyoda/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
+import { schedulePersistAgentDrafts } from '@/lib/agent-draft-persistence'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
 import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
@@ -680,7 +681,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       else next.set(sessionId, normalizedValue)
       return next
     })
-  }, [sessionId, setDraftSyncVersions, setDraftsMap])
+    // 防抖落盘：停止输入 1.5s 后写 localStorage（timer 独立于组件生命周期，切换会话不丢盘）
+    schedulePersistAgentDrafts(store)
+  }, [sessionId, setDraftSyncVersions, setDraftsMap, store])
   const setInputHtmlContent = React.useCallback((html: string) => {
     setDraftHtmlMap((previous) => {
       const normalizedHtml = !html || html === '<p></p>' ? '' : html

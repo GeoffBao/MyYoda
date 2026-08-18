@@ -12,6 +12,7 @@ import { conversationsAtom } from './atoms/chat-atoms'
 import { environmentCheckDialogOpenAtom } from './atoms/environment'
 import { settingsOpenAtom, settingsTabAtom } from './atoms/settings-tab'
 import { tabsAtom, activeTabIdAtom, openTab, TUTORIAL_TAB_ID } from './atoms/tab-atoms'
+import { flushAgentDrafts, loadAgentSessionDrafts } from './lib/agent-draft-persistence'
 import myyodaMarkWhite from './assets/brand/myyoda-mark-white.svg'
 import type { AppShellContextType } from './contexts/AppShellContext'
 
@@ -27,6 +28,14 @@ export default function App(): React.ReactElement {
   const [isLoading, setIsLoading] = React.useState(true)
   const [showOnboarding, setShowOnboarding] = React.useState(false)
   const isWindows = React.useMemo(() => detectIsWindows(), [])
+
+  // 草稿持久化：启动时从 localStorage 恢复未发送内容；退出前 flush 防抖未落盘的写入
+  React.useEffect(() => {
+    loadAgentSessionDrafts(store)
+    const handleBeforeUnload = (): void => { flushAgentDrafts(store) }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [store])
 
   // 初始化：检查是否需要显示 Onboarding
   // macOS/Linux 上 SDK 自带 claude native binary 不依赖宿主 Node/Git；

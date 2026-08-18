@@ -103,6 +103,7 @@ import { workspaceLabelsAtom, loadWorkspaceLabels } from '@/atoms/workspace-labe
 import type { WorkspaceLabel } from '@myyoda/shared/labels'
 import { buildRecentSessionList } from './sidebar-session-views'
 import { selectDraftSessionsWithContent } from './draft-recall-model'
+import { removeAgentDraft } from '@/lib/agent-draft-persistence'
 import {
   buildAgentSessionTrees,
   getSessionStatus,
@@ -1344,6 +1345,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         // IPC 成功即代表后端已删除父会话；先收敛 Tab/缓存，再刷新列表。
         // 列表刷新失败不能把已经成功删除的会话继续留在 UI 中。
         applyAgentDeletionUi()
+        // 清理持久化草稿（父会话 + 已删子会话；部分失败分支已提前 return，走到这里说明范围与快照一致）
+        removeAgentDraft(store, pendingDeleteId)
+        for (const childId of childIds) removeAgentDraft(store, childId)
         try {
           const sessions = await window.electronAPI.listAgentSessions()
           setAgentSessions(sessions)
@@ -1660,6 +1664,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       let sessions = agentSessions.filter((session) => !deletedSessionIds.has(session.id))
       setWorkspaces(remainingWorkspaces)
       setAgentSessions(sessions)
+      // 清理该工作区全部会话的持久化草稿
+      for (const sessionId of deletedSessionIds) removeAgentDraft(store, sessionId)
       try {
         const [refreshedWorkspaces, refreshedSessions] = await Promise.all([
           window.electronAPI.listAgentWorkspaces(),
@@ -1796,6 +1802,26 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     },
     [agentSessions, draftSessionIds],
   )
+
+  /**
+   * 当前侧栏视图可见的 Agent 会话 id 集合（active 视图语义，不随归档视图变化）：
+   * 置顶 + 自动任务组 + 当前工作区非归档。供「未发送内容」区块跳过可见会话
+   * （行标记已提示），避免与列表重复展示。
+   */
+  const visibleAgentSessionIds = React.useMemo(() => {
+    const visible = new Set<string>()
+    for (const session of pinnedAgentSessions) visible.add(session.id)
+    if (automationGroup) {
+      for (const session of automationGroup.sessions) visible.add(session.id)
+    }
+    for (const session of agentSessions) {
+      if (session.archived) continue
+      if (draftSessionIds.has(session.id)) continue
+      if (session.workspaceId && session.workspaceId !== currentWorkspaceId) continue
+      visible.add(session.id)
+    }
+    return visible
+  }, [pinnedAgentSessions, automationGroup, agentSessions, draftSessionIds, currentWorkspaceId])
 
   /** 完成工作区排序并持久化（合成「自动任务」组与真实工作区一起排序，二者分别持久化） */
   const handleProjectDrop = React.useCallback((e: React.DragEvent, targetWorkspaceId: string): void => {
@@ -3888,15 +3914,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         )}
       </div>
 
-      {/* 未发送草稿找回入口：点「新会话」但没发送时，内容还在，不会真的丢，但原来没有回去的路。
-          跨项目展示（对齐置顶）；主区在看板等非会话视图时不过滤当前草稿，保证找回入口始终存在。 */}
+      {/* 未发送内容找回入口：点「新会话」但没发送时，内容还在，不会真的丢，但原来没有回去的路。
+          跨项目展示（对齐置顶）；主区在看板等非会话视图时不过滤当前草稿，保证找回入口始终存在；
+          当前视图可见的会话（行标记已提示）不重复展示。 */}
       {mode === 'agent' && (
         <DraftSessionRecallSection
           currentWorkspaceId={currentWorkspaceId}
           workspaceNameMap={workspaceNameMap}
           excludeOnSessionView={codeMainView === 'session'}
           sessions={agentSessions}
-          draftSessionIds={draftSessionIds}
+          visibleSessionIds={visibleAgentSessionIds}
           excludeSessionId={currentAgentSessionId}
           onOpen={(id, title) => openSession('agent', id, title)}
         />
@@ -4545,7 +4572,8 @@ interface DraftSessionRecallSectionProps {
   /** 仅当主区处于会话视图时排除当前打开的草稿；看板 / 计划等视图传 false，保证找回入口始终存在 */
   excludeOnSessionView: boolean
   sessions: AgentSessionMeta[]
-  draftSessionIds: Set<string>
+  /** 当前侧栏视图可见的会话 id 集合（有行标记），区块跳过它们避免重复 */
+  visibleSessionIds: Set<string>
   excludeSessionId: string | null
   onOpen: (id: string, title: string) => void
 }
@@ -4560,7 +4588,7 @@ const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection(
   workspaceNameMap,
   excludeOnSessionView,
   sessions,
-  draftSessionIds,
+  visibleSessionIds,
   excludeSessionId,
   onOpen,
 }: DraftSessionRecallSectionProps): React.ReactElement | null {
@@ -4568,11 +4596,11 @@ const DraftSessionRecallSection = React.memo(function DraftSessionRecallSection(
   const items = React.useMemo(
     () => selectDraftSessionsWithContent({
       sessions,
-      draftSessionIds,
       draftTexts,
       excludeSessionId: excludeOnSessionView ? excludeSessionId : null,
+      visibleSessionIds,
     }),
-    [sessions, draftSessionIds, draftTexts, excludeOnSessionView, excludeSessionId],
+    [sessions, draftTexts, excludeOnSessionView, excludeSessionId, visibleSessionIds],
   )
 
   if (items.length === 0) return null

@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MarqueeText } from '@/components/ui/marquee-text'
+import { agentSessionDraftAtomFamily } from '@/atoms/agent-atoms'
 import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
 import {
   SessionMiniMapPopover,
@@ -397,6 +398,8 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
   const justStartedEditing = React.useRef(false)
   // 菜单打开时关闭迷你地图预览，避免预览面板盖住菜单项导致点不动
   const sessionHoverPreviewEnabled = useAtomValue(sessionHoverPreviewEnabledAtom)
+  // 未发送内容（切片订阅：只有本行随输入按键重渲染）；非当前会话时显示行标记
+  const draftText = useAtomValue(agentSessionDraftAtomFamily(session.id))
   const preview = useSessionMiniMapHover(600, !sessionHoverPreviewEnabled || disableMiniMap || menuOpen)
 
   const startEdit = (): void => {
@@ -636,6 +639,12 @@ export const AgentSessionItem = React.memo(function AgentSessionItem({
                 {workspaceName && (
                   <span className="shrink min-w-0 px-1.5 py-0 rounded-full bg-primary/10 text-[10px] leading-4 workspace-badge font-medium truncate max-w-[140px]">
                     {workspaceName}
+                  </span>
+                )}
+                {!active && draftText.trim().length > 0 && (
+                  <span className="shrink-0 flex items-center gap-0.5 px-1.5 py-0 rounded-full bg-amber-500/10 text-[10px] leading-4 font-medium text-amber-600/90">
+                    <Pencil size={10} aria-hidden="true" />
+                    未发送
                   </span>
                 )}
                 {childSummary && childSummary.total > 0 && (
