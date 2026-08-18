@@ -60,14 +60,24 @@ describe('findRecallableDraftSession', () => {
     expect(result?.id).toBe('b')
   })
 
-  test('跨工作区草稿不匹配', () => {
+  test('当前工作区无草稿时跨工作区兜底', () => {
     const result = findRecallableDraftSession({
       candidates: base,
       draftSessionIds: new Set(['c']),
       draftTexts: new Map([['c', '别的工作区的内容']]),
       workspaceId: 'ws-1',
     })
-    expect(result).toBeNull()
+    expect(result?.id).toBe('c')
+  })
+
+  test('当前工作区有草稿时优先，即使其他工作区草稿更新', () => {
+    const result = findRecallableDraftSession({
+      candidates: base,
+      draftSessionIds: new Set(['a', 'c']),
+      draftTexts: new Map([['a', '本工作区草稿'], ['c', '别的工作区更新内容']]),
+      workspaceId: 'ws-1',
+    })
+    expect(result?.id).toBe('a')
   })
 
   test('绑定 projectId 的草稿不参与回收', () => {
