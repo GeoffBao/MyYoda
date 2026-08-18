@@ -6,7 +6,7 @@
  * 退出 flush、删除清理。只持久化纯文本；HTML 富文本不持久化（重启后由纯文本重建）。
  */
 
-import type { Store } from 'jotai'
+import type { Store } from 'jotai/vanilla/store'
 import { agentSessionDraftsAtom } from '@/atoms/agent-atoms'
 
 const STORAGE_KEY = 'myyoda-agent-session-drafts'
