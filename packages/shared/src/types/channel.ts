@@ -359,6 +359,11 @@ export interface ChannelModel {
   enabled: boolean
   /** 来源标记：手动添加的模型在拉取供应商列表时保留，不会被覆盖清除 */
   source?: 'manual' | 'fetched'
+  /**
+   * 该模型是否走全局代理。undefined/true = 跟随全局代理配置；false = 直连不走代理。
+   * 用于单模型粒度控制（如国内模型直连、海外中转站走代理）。
+   */
+  useProxy?: boolean
 }
 
 /**
@@ -379,6 +384,11 @@ export interface Channel {
   apiKey: string
   /** 可用模型列表 */
   models: ChannelModel[]
+  /**
+   * 该服务不提供模型列表（/models）端点：勾选后跳过「从供应商获取」，
+   * 模型完全手动管理（兼容自建/中转服务）。
+   */
+  skipModelListFetch?: boolean
   /** 是否启用 */
   enabled: boolean
   /** 创建时间戳 */
@@ -397,6 +407,8 @@ export interface ChannelCreateInput {
   /** 明文 API Key，主进程会加密后存储 */
   apiKey: string
   models: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点 */
+  skipModelListFetch?: boolean
   enabled: boolean
 }
 
@@ -410,6 +422,8 @@ export interface ChannelUpdateInput {
   /** 明文 API Key，为空字符串表示不更新 */
   apiKey?: string
   models?: ChannelModel[]
+  /** 该服务不提供模型列表（/models）端点；undefined 表示不更新 */
+  skipModelListFetch?: boolean
   enabled?: boolean
 }
 
@@ -479,6 +493,8 @@ export interface ChannelDirectTestInput {
   apiKey: string
   /** 用于 messages 端点测试的模型 ID；不需要模型的供应商可忽略 */
   modelId?: string
+  /** 当前表单的模型列表：测试连接按模型粒度解析代理（模型直连配置时测试也直连） */
+  models?: ChannelModel[]
 }
 
 /**
@@ -491,6 +507,8 @@ export interface FetchModelsResult {
   message: string
   /** 获取到的模型列表 */
   models: ChannelModel[]
+  /** 失败时的归一化错误分类（如 not_found = 服务未提供模型列表端点，UI 可据此引导手动添加） */
+  errorType?: ChannelTestErrorType
 }
 
 /**

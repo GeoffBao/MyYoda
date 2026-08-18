@@ -105,6 +105,27 @@ export async function saveProxySettings(config: ProxyConfig): Promise<void> {
 }
 
 /**
+ * 按模型粒度解析生效代理 URL。
+ *
+ * 模型的 useProxy === false 时直连（返回 undefined）；否则跟随全局代理配置。
+ * 用于 Agent/Chat 请求、标题生成等按模型发起的流量；
+ * 渠道连接测试与模型列表拉取仍使用全局代理（getEffectiveProxyUrl）。
+ * resolveGlobal 仅测试注入用，默认取全局代理。
+ */
+export async function resolveProxyUrlForModel(
+  models: ReadonlyArray<{ id: string; useProxy?: boolean }> | undefined,
+  modelId: string | undefined,
+  resolveGlobal: () => Promise<string | undefined> = getEffectiveProxyUrl,
+): Promise<string | undefined> {
+  const model = models?.find((m) => m.id === modelId)
+  if (model?.useProxy === false) {
+    console.log('[代理配置] 模型直连（不走代理）:', modelId)
+    return undefined
+  }
+  return resolveGlobal()
+}
+
+/**
  * 获取当前生效的代理 URL
  *
  * 根据配置返回实际使用的代理地址：

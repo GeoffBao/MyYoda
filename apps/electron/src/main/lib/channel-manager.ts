@@ -50,13 +50,14 @@ import { getKimiApiBalanceUrl, parseKimiApiBalanceResponse } from './kimi-api-ba
 import { getOpenRouterKeyUrl, parseOpenRouterKeyResponse } from './openrouter-balance'
 import { listCodexModels, listXaiModels } from './adapters/pi-model-registry'
 import { getFetchFn } from './proxy-fetch'
-import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { getEffectiveProxyUrl, resolveProxyUrlForModel } from './proxy-settings-service'
 import {
   migrateCompatibleChannelBaseUrl,
   normalizeBaseUrl,
   resolveAnthropicMessagesUrl,
   resolveAnthropicModelsUrl,
   resolveOpenAIModelsUrl,
+  resolveOpenAIChatCompletionsUrl,
   getAppUserAgent,
 } from '@myyoda/core'
 import { normalizeHttpResponse, normalizeRequestError } from './channel-test-error'
@@ -440,6 +441,7 @@ export function createChannel(input: ChannelCreateInput): Channel {
     apiKey: encryptApiKey(input.apiKey),
     models: input.models,
     enabled: input.enabled,
+    ...(input.skipModelListFetch ? { skipModelListFetch: true } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -476,6 +478,7 @@ export function updateChannel(id: string, input: ChannelUpdateInput): Channel {
     apiKey: input.apiKey ? encryptApiKey(input.apiKey) : existing.apiKey,
     models: input.models ?? existing.models,
     enabled: input.enabled ?? existing.enabled,
+    skipModelListFetch: input.skipModelListFetch ?? existing.skipModelListFetch,
     updatedAt: Date.now(),
   }
 
@@ -724,7 +727,8 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
   }
 
   const apiKey = decryptKey(channel.apiKey)
-  const proxyUrl = await getEffectiveProxyUrl()
+  // 测试连接按模型粒度解析代理：与真实对话路径一致（模型直连配置时测试也直连，验证真实可达性）
+  const proxyUrl = await resolveProxyUrlForModel(channel.models, resolveFirstTestModelId(channel.models))
   const provider = inferProviderFromBaseUrl(channel.provider, channel.baseUrl)
 
   try {
@@ -801,7 +805,7 @@ export async function testChannel(channelId: string): Promise<ChannelTestResult>
       case 'openrouter':
       case 'nuwa':
       case 'custom':
-        return await testOpenAICompatible(channel.baseUrl, apiKey, proxyUrl, provider)
+        return await testOpenAICompatible(channel.baseUrl, apiKey, proxyUrl, provider, resolveFirstTestModelId(channel.models))
       case 'google':
         return await testGoogle(channel.baseUrl, apiKey, proxyUrl)
       default:
@@ -1011,22 +1015,40 @@ async function testArkCodingPlan(
 }
 
 /**
- * 测试 OpenAI 兼容 API 连接（OpenAI / Custom）
+ * 测试 OpenAI 兼容 API 连接（OpenAI / Custom / 火山方舟 API / 通义 / OpenRouter / NUWA）。
+ *
+ * 使用对话端点（/chat/completions）发最小请求，而不是 /models 列表端点：
+ * 无 /models 端点的自定义/兼容服务（如自建网关、中转站）对话正常但列表端点不存在，
+ * 测列表会误报「认证失败/端点不存在」（2026-08-18 修复）。
+ * 对齐 DeepSeek/Kimi 的 messages 测试思路：贴近真实使用路径。
  */
 async function testOpenAICompatible(
   baseUrl: string,
   apiKey: string,
-  proxyUrl?: string,
-  provider: ProviderType = 'openai',
+  proxyUrl: string | undefined,
+  provider: ProviderType,
+  modelId: string | undefined,
 ): Promise<ChannelTestResult> {
-  const url = resolveOpenAIModelsUrl(baseUrl)
+  // 没有模型名就不能测试：自定义/兼容服务会校验模型名，占位模型名会触发服务端 401。
+  // 用户需先在渠道中添加模型（或拉取成功）后再测试连接。
+  if (!modelId?.trim()) {
+    return { success: false, message: '尚未配置模型，请先添加模型后再测试连接', errorType: 'bad_request' }
+  }
+
+  const url = resolveOpenAIChatCompletionsUrl(baseUrl, provider)
   const fetchFn = getFetchFn(proxyUrl)
 
   const response = await fetchFn(url, withTimeout({
-    method: 'GET',
+    method: 'POST',
     headers: {
+      'content-type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
+    body: JSON.stringify({
+      model: modelId.trim(),
+      max_tokens: 8,
+      messages: [{ role: 'user', content: 'ping' }],
+    }),
   }))
 
   return normalizeHttpResponse(response)
@@ -1768,7 +1790,8 @@ export async function getChannelPlanQuota(channelId: string): Promise<ChannelPla
  * 适用于创建/编辑渠道时用户在保存前先验证连接。
  */
 export async function testChannelDirect(input: ChannelDirectTestInput): Promise<ChannelTestResult> {
-  const proxyUrl = await getEffectiveProxyUrl()
+  // 测试连接按模型粒度解析代理：模型配置直连时测试也直连，验证真实对话路径
+  const proxyUrl = await resolveProxyUrlForModel(input.models, input.modelId)
   const provider = inferProviderFromBaseUrl(input.provider, input.baseUrl)
 
   try {
@@ -1845,7 +1868,7 @@ export async function testChannelDirect(input: ChannelDirectTestInput): Promise<
       case 'openrouter':
       case 'nuwa':
       case 'custom':
-        return await testOpenAICompatible(input.baseUrl, input.apiKey, proxyUrl, provider)
+        return await testOpenAICompatible(input.baseUrl, input.apiKey, proxyUrl, provider, input.modelId?.trim() || undefined)
       case 'google':
         return await testGoogle(input.baseUrl, input.apiKey, proxyUrl)
       default:
@@ -1944,7 +1967,7 @@ export async function fetchModels(input: FetchModelsInput): Promise<FetchModelsR
   } catch (error) {
     console.error('[渠道管理] 拉取模型列表失败:', error)
     const result = normalizeRequestError(error)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 }
 
@@ -1971,7 +1994,7 @@ async function fetchDeepSeekModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2015,7 +2038,7 @@ async function fetchKimiModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2086,7 +2109,7 @@ async function fetchAnthropicCompatibleModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: AnthropicModelItem[] }
@@ -2137,7 +2160,7 @@ async function fetchOpenAICompatibleModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2185,7 +2208,7 @@ async function fetchGoogleModels(baseUrl: string, apiKey: string, proxyUrl?: str
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { models?: GoogleModelItem[] }
