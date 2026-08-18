@@ -331,7 +331,7 @@ import { resolveAgentSessionFileRoots } from './lib/agent-file-roots'
 import { listSessionOutputs } from './lib/agent-output-capture'
 import { getAgentWorkspacePath } from './lib/config-paths'
 import { getCachedDefaultAppInfo, saveCachedDefaultAppInfo } from './lib/default-app-cache'
-import { calculateStorageStats, cleanupStorage, cleanupTempFiles, cleanupDiscoverCache } from './lib/storage-service'
+import { calculateStorageStats, cleanupStorage, cleanupTempFiles, cleanupDiscoverCache, previewArchivedCleanup, previewStripOversizedImages, stripOversizedImages } from './lib/storage-service'
 import type { CleanupOptions } from './lib/storage-service'
 import { getAgentUsageStats } from './lib/agent-usage'
 import type { UsageRange } from './lib/agent-usage'
@@ -5818,6 +5818,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.CLEANUP_DISCOVER, async () => {
     return cleanupDiscoverCache()
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.PREVIEW_ARCHIVED_CLEANUP, async (_event, beforeDays: number) => {
+    return previewArchivedCleanup(beforeDays)
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.PREVIEW_STRIP_IMAGES, async () => {
+    return previewStripOversizedImages()
+  })
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.STRIP_IMAGES, async () => {
+    return stripOversizedImages()
   })
 
   // ===== 用量统计 =====

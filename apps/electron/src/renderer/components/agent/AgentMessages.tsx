@@ -616,6 +616,9 @@ interface AgentTranscriptHistoryProps {
 const EMPTY_LIVE_GROUP_SET: ReadonlySet<MessageGroup> = new Set()
 const EMPTY_MESSAGE_GROUPS: MessageGroup[] = []
 
+/** 历史消息组数超过此阈值时启用 content-visibility 懒渲染（短会话无收益，反而有单元素开销） */
+const AGENT_HISTORY_CV_THRESHOLD = 150
+
 /**
  * 比较两批 group 的“结构身份”是否一致。
  *
@@ -698,9 +701,14 @@ const AgentTranscriptRows = React.memo(function AgentTranscriptRows({
           && group.type === 'assistant-turn'
           && index === lastAssistantTurnIndex
         const groupId = getGroupId(group)
+        // 懒渲染仅作用于长会话的已完成历史组；live 组正在流式逐帧更新，必须保持完整渲染。
+        const lazyRender = groups.length > AGENT_HISTORY_CV_THRESHOLD && !isLive
 
         return (
-          <div key={groupId} className="w-full pb-1">
+          <div
+            key={groupId}
+            className={cn('w-full pb-1', lazyRender && 'agent-transcript-group-cv')}
+          >
             <MessageGroupRenderer
               group={group}
               allMessages={group.type === 'assistant-turn' ? allMessages : EMPTY_SDK_MESSAGES}
