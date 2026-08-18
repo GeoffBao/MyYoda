@@ -13,7 +13,6 @@ describe('selectDraftSessionsWithContent', () => {
       sessions,
       draftSessionIds: new Set(),
       draftTexts: new Map([['a', '写了一半']]),
-      workspaceId: 'ws-1',
     })
     expect(result).toEqual([])
   })
@@ -23,7 +22,6 @@ describe('selectDraftSessionsWithContent', () => {
       sessions,
       draftSessionIds: new Set(['a']),
       draftTexts: new Map([['a', '   ']]),
-      workspaceId: 'ws-1',
     })
     expect(result).toEqual([])
   })
@@ -33,20 +31,20 @@ describe('selectDraftSessionsWithContent', () => {
       sessions,
       draftSessionIds: new Set(['a', 'b']),
       draftTexts: new Map([['a', '第一个草稿'], ['b', '第二个草稿']]),
-      workspaceId: 'ws-1',
     })
     expect(result.map((s) => s.id)).toEqual(['b', 'a'])
     expect(result[0]?.text).toBe('第二个草稿')
   })
 
-  test('只保留当前工作区', () => {
+  test('跨项目返回全部工作区草稿，按 createdAt 倒序并透出 workspaceId', () => {
     const result = selectDraftSessionsWithContent({
       sessions,
       draftSessionIds: new Set(['a', 'c']),
       draftTexts: new Map([['a', '本工作区'], ['c', '别的工作区']]),
-      workspaceId: 'ws-1',
     })
-    expect(result.map((s) => s.id)).toEqual(['a'])
+    expect(result.map((s) => s.id)).toEqual(['c', 'a'])
+    expect(result[0]?.workspaceId).toBe('ws-2')
+    expect(result[1]?.workspaceId).toBe('ws-1')
   })
 
   test('排除当前正打开的会话', () => {
@@ -54,7 +52,6 @@ describe('selectDraftSessionsWithContent', () => {
       sessions,
       draftSessionIds: new Set(['a']),
       draftTexts: new Map([['a', '正在这个会话里']]),
-      workspaceId: 'ws-1',
       excludeSessionId: 'a',
     })
     expect(result).toEqual([])
@@ -64,14 +61,13 @@ describe('selectDraftSessionsWithContent', () => {
     const many: DraftSessionSourceItem[] = [
       { id: 'x1', title: 't', workspaceId: 'ws-1', createdAt: 1 },
       { id: 'x2', title: 't', workspaceId: 'ws-1', createdAt: 2 },
-      { id: 'x3', title: 't', workspaceId: 'ws-1', createdAt: 3 },
-      { id: 'x4', title: 't', workspaceId: 'ws-1', createdAt: 4 },
+      { id: 'x3', title: 't', workspaceId: 'ws-2', createdAt: 3 },
+      { id: 'x4', title: 't', workspaceId: 'ws-2', createdAt: 4 },
     ]
     const result = selectDraftSessionsWithContent({
       sessions: many,
       draftSessionIds: new Set(['x1', 'x2', 'x3', 'x4']),
       draftTexts: new Map([['x1', 'a'], ['x2', 'b'], ['x3', 'c'], ['x4', 'd']]),
-      workspaceId: 'ws-1',
       maxItems: 2,
     })
     expect(result.map((s) => s.id)).toEqual(['x4', 'x3'])
