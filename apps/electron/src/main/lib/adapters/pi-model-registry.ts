@@ -303,6 +303,7 @@ function normalizePiApi(provider: ProviderType): Api {
     case 'opencode-go-openai':
     case 'zhipu':
     case 'doubao':
+    case 'doubao-api':
     case 'qwen':
     case 'openrouter':
     case 'nuwa':
@@ -511,7 +512,7 @@ async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiMod
   const api = normalizePiApi(input.provider)
   const providerSpecificCapabilities = compilePiReasoningCapabilities(api, input.model)
   const glmModelId = input.model?.toLowerCase()
-  const isVolcengineGlm5x = (input.provider === 'doubao' || input.provider === 'ark-coding-plan')
+  const isVolcengineGlm5x = (input.provider === 'doubao' || input.provider === 'doubao-api' || input.provider === 'ark-coding-plan')
     && (glmModelId === 'glm-5.2' || glmModelId === 'glm-5.3')
   const isCatalogMissingGlm53 = !catalogModel && glmModelId === 'glm-5.3'
   const catalogContextWindow = catalogModel?.contextWindow ?? DEFAULT_CONTEXT_WINDOW

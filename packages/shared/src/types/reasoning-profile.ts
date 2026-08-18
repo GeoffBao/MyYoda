@@ -20,6 +20,7 @@ export function inferReasoningTransport(provider: ProviderType | undefined): Rea
     case 'opencode-go-openai':
     case 'zhipu':
     case 'doubao':
+    case 'doubao-api':
     case 'qwen':
     case 'custom':
       return 'openai-completions'

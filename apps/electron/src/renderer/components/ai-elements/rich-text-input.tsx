@@ -13,7 +13,7 @@
  * - 自动扩高
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react'
 import { useAtomValue } from 'jotai'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { TextSelection } from '@tiptap/pm/state'
@@ -445,6 +445,30 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
     ))
   }, [isMac])
 
+  // useEditor 只会在 richTextEnabled 变化时重建，键盘处理器由旧实例创建，必须在事件时读取当前 editor。
+  const editorRef = useRef<NonNullable<ReturnType<typeof useEditor>> | null>(null)
+  // TipTap 在 richTextEnabled 变化时会于被动 effect 中销毁旧 editor。
+  // 先在 layout cleanup 中 flush，避免延迟草稿 timer 继续引用已销毁实例。
+  useLayoutEffect(() => {
+    return () => {
+      if (lineCheckTimerRef.current !== null) {
+        clearTimeout(lineCheckTimerRef.current)
+        lineCheckTimerRef.current = null
+      }
+
+      const currentEditor = editorRef.current
+      const hasPendingDraft = draftSyncTimerRef.current !== null
+        || draftSyncFrameRef.current !== null
+        || pendingDraftEditorRef.current === currentEditor
+      if (!currentEditor || currentEditor.isDestroyed || !hasPendingDraft) return
+
+      flushPendingDraftSync(currentEditor)
+      if (lineCheckTimerRef.current !== null) {
+        clearTimeout(lineCheckTimerRef.current)
+        lineCheckTimerRef.current = null
+      }
+    }
+  }, [flushPendingDraftSync, richTextEnabled])
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -710,12 +734,12 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
             const key = event.key.toLowerCase()
             if (key === 'b') {
               event.preventDefault()
-              editor?.chain().focus().toggleBold().run()
+              editorRef.current?.chain().focus().toggleBold().run()
               return true
             }
             if (key === 's') {
               event.preventDefault()
-              editor?.chain().focus().toggleStrike().run()
+              editorRef.current?.chain().focus().toggleStrike().run()
               return true
             }
           }
@@ -757,7 +781,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
             event.preventDefault()
             // Enter 可能紧跟最后一次输入；先同步当前编辑器，再把最新 Markdown
             // 直接交给发送方，避免 rAF 批处理导致发送旧草稿。
-            onSubmitRef.current(editor ? flushPendingDraftSync(editor) : undefined, true)
+            onSubmitRef.current(editorRef.current ? flushPendingDraftSync(editorRef.current) : undefined, true)
             return true
           }
 
@@ -773,21 +797,21 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
               break
             }
           }
-          if (isInList && editor) {
+          if (isInList && editorRef.current) {
             // 空列表项再次按 Enter：退出列表，回到普通输入
             if (listItemNode && listItemNode.textContent === '') {
-              editor.chain().focus().liftListItem('listItem').run()
+              editorRef.current.chain().focus().liftListItem('listItem').run()
             } else {
               // 发送模式下 Enter 会提交消息，因此 Shift+Enter 也应作为列表续项键。
-              editor.chain().focus().splitListItem('listItem').run()
+              editorRef.current.chain().focus().splitListItem('listItem').run()
             }
-          } else if (editor) {
+          } else if (editorRef.current) {
             if (hasShift) {
               // Shift+Enter：同段落内硬换行
-              editor.chain().focus().setHardBreak().run()
+              editorRef.current.chain().focus().setHardBreak().run()
             } else {
               // 普通 Enter：拆分为新段落
-              editor.chain().focus().splitBlock().run()
+              editorRef.current.chain().focus().splitBlock().run()
             }
           }
           return true
@@ -806,9 +830,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
               break
             }
           }
-          if (isInList && listItemNode && listItemNode.textContent === '' && editor) {
+          if (isInList && listItemNode && listItemNode.textContent === '' && editorRef.current) {
             event.preventDefault()
-            editor.chain().focus().liftListItem('listItem').run()
+            editorRef.current.chain().focus().liftListItem('listItem').run()
             return true
           }
         }
@@ -821,6 +845,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
       scheduleDraftSync(ed)
     },
   }, [richTextEnabled])
+  editorRef.current = editor
 
   // 外部同步或可编辑状态切换偶尔会让 ProseMirror 原生节点失焦。只在变更前编辑器
   // 确实拥有焦点时恢复，避免用户主动点击工具栏/其他输入框后被抢回焦点。
