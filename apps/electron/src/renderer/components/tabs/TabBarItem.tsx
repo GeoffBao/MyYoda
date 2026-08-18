@@ -13,6 +13,7 @@ import { FileText, StickyNote, X, Clock, GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TabType, TabMinimapItem } from '@/atoms/tab-atoms'
 import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
+import { agentSessionDraftAtomFamily } from '@/atoms/agent-atoms'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { Spinner } from '@/components/ui/spinner'
@@ -74,6 +75,8 @@ export function TabBarItem({
   const [isNarrow, setIsNarrow] = React.useState(false)
   const minimapCache = useAtomValue(tabMinimapCacheAtom)
   const interfaceVariant = useAtomValue(interfaceVariantAtom)
+  // 未发送内容（切片订阅，仅本 Tab 随输入按键重渲染）；chat/scratch 查不到草稿为空，无副作用
+  const draftText = useAtomValue(agentSessionDraftAtomFamily(id))
   const isClassic = interfaceVariant === 'classic'
 
   React.useEffect(() => {
@@ -182,6 +185,9 @@ export function TabBarItem({
             {isAutomation && <Clock className="size-3 shrink-0 text-foreground/40" />}
             {isDelegation && !isAutomation && <GitBranch className="size-3 shrink-0 text-foreground/40" />}
             <span className="min-w-0 truncate">{title}</span>
+            {draftText.trim().length > 0 && (
+              <span className="size-1.5 shrink-0 rounded-full bg-amber-500" title="有未发送内容" />
+            )}
           </span>
         )}
 
