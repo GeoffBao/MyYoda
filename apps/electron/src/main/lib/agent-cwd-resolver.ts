@@ -24,7 +24,7 @@ export interface ResolveSessionCwdInput {
   /** 会话关联的 Project ID */
   projectId?: string
   /** 解析指定 Project 的有效 cwd；仅在 agentCwdMode === 'project' 且 projectId 存在时调用 */
-  resolveProjectCwd: (projectId: string) => EffectiveCwdResult | null
+  resolveProjectCwd?: (projectId: string) => EffectiveCwdResult | null
   /** 应用级默认工作区目录：未绑定项目且未命中更高优先级时的工程代码目录 */
   defaultWorkingDirectory?: string
   /** 会话隔离沙箱目录（托管目录），作为最终兜底 */
@@ -56,7 +56,7 @@ export function resolveSessionCwd(
   }
 
   if (input.agentCwdMode === 'project' && input.projectId) {
-    const result = input.resolveProjectCwd(input.projectId)
+    const result = input.resolveProjectCwd?.(input.projectId)
     if (result?.status === 'unavailable') {
       return { unavailable: true, displayPath: result.displayPath }
     }

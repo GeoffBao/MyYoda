@@ -1814,7 +1814,7 @@ export interface AgentSessionFileRoots {
   /** Agent 本轮实际执行 cwd。 */
   executionCwd: string
   /** executionCwd 的来源。 */
-  executionSource: 'worktree' | 'workspace-root' | 'project' | 'sandbox'
+  executionSource: 'worktree' | 'workspace-root' | 'project' | 'default-workspace' | 'sandbox'
   /** 当前会话实际使用的 Project root；sandbox 会话为空。 */
   projectRoot?: string
   /** 绑定的 Project ID。 */
