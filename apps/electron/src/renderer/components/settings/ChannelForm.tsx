@@ -22,6 +22,8 @@ import {
   Zap,
   Download,
   Search,
+  Globe,
+  GlobeLock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSetAtom } from 'jotai'
@@ -512,6 +514,17 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     setNewModelName('')
   }
 
+  /** 切换单个模型是否走全局代理（useProxy===false 时直连） */
+  const handleToggleModelProxy = (modelId: string): void => {
+    setModels((prev) => prev.map((m) => {
+      if (m.id !== modelId) return m
+      const direct = m.useProxy === false
+      const next = direct ? { ...m, useProxy: undefined } : { ...m, useProxy: false }
+      if ('useProxy' in next && next.useProxy === undefined) delete next.useProxy
+      return next
+    }))
+  }
+
   /** 删除模型 */
   const handleRemoveModel = (modelId: string): void => {
     setModels((prev) => prev.filter((m) => m.id !== modelId))
@@ -784,7 +797,10 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           // 与登录自动拉取路径（handleCodexLogin）保持一致，避免新模型（如 gpt-5.6 系列）
           // 默认未启用而沉到「可用模型」折叠区，被误认为"拉不到"。
           if (isSubscriptionProvider) return { ...m, enabled: true }
-          return old ? { ...m, enabled: old.enabled } : { ...m, enabled: false }
+          // 保留用户对该模型设置的代理开关（useProxy）
+          return old
+            ? { ...m, enabled: old.enabled, ...(old.useProxy !== undefined ? { useProxy: old.useProxy } : {}) }
+            : { ...m, enabled: false }
         })
         return [...manualKept, ...merged]
       })
@@ -1352,6 +1368,22 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
                       <span className="text-muted-foreground ml-1">({model.id})</span>
                     )}
                   </span>
+                  {/* 单模型代理开关：直连（不走全局代理）↔ 跟随全局代理 */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleModelProxy(model.id)}
+                    className={cn(
+                      'p-1 rounded transition-colors',
+                      model.useProxy === false
+                        ? 'text-amber-500 hover:text-amber-600 bg-amber-500/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 opacity-0 group-hover:opacity-100',
+                    )}
+                    title={model.useProxy === false
+                      ? '该模型直连，不走全局代理（点击恢复跟随全局代理）'
+                      : '该模型跟随全局代理（点击改为直连）'}
+                  >
+                    {model.useProxy === false ? <GlobeLock size={14} /> : <Globe size={14} />}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleToggleModel(model.id)}
@@ -1388,14 +1420,26 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           </Button>
         }
       >
-        {/* 拉取结果提示 */}
+        {/* 拉取结果提示：not_found 引导手动添加（兼容无 /models 端点的服务） */}
         {fetchResult && (
           <div className={cn(
             'flex items-center gap-1.5 text-xs px-1',
-            fetchResult.success ? 'text-emerald-600' : 'text-destructive'
+            fetchResult.success
+              ? 'text-emerald-600'
+              : fetchResult.errorType === 'not_found'
+                ? 'text-amber-600'
+                : 'text-destructive'
           )}>
-            {fetchResult.success ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-            <span>{fetchResult.message}</span>
+            {fetchResult.success
+              ? <CheckCircle2 size={12} />
+              : fetchResult.errorType === 'not_found'
+                ? <GlobeLock size={12} />
+                : <XCircle size={12} />}
+            <span>
+              {!fetchResult.success && fetchResult.errorType === 'not_found'
+                ? '该服务未提供模型列表端点（/models），请使用下方输入框手动添加模型 ID'
+                : fetchResult.message}
+            </span>
           </div>
         )}
 

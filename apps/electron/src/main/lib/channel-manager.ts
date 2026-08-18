@@ -1944,7 +1944,7 @@ export async function fetchModels(input: FetchModelsInput): Promise<FetchModelsR
   } catch (error) {
     console.error('[渠道管理] 拉取模型列表失败:', error)
     const result = normalizeRequestError(error)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 }
 
@@ -1971,7 +1971,7 @@ async function fetchDeepSeekModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2015,7 +2015,7 @@ async function fetchKimiModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2086,7 +2086,7 @@ async function fetchAnthropicCompatibleModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: AnthropicModelItem[] }
@@ -2137,7 +2137,7 @@ async function fetchOpenAICompatibleModels(
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { data?: OpenAIModelItem[] }
@@ -2185,7 +2185,7 @@ async function fetchGoogleModels(baseUrl: string, apiKey: string, proxyUrl?: str
 
   if (!response.ok) {
     const result = await normalizeHttpResponse(response)
-    return { success: false, message: result.message, models: [] }
+    return { success: false, message: result.message, models: [], errorType: result.errorType }
   }
 
   const data = await response.json() as { models?: GoogleModelItem[] }

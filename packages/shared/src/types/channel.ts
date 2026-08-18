@@ -359,6 +359,11 @@ export interface ChannelModel {
   enabled: boolean
   /** 来源标记：手动添加的模型在拉取供应商列表时保留，不会被覆盖清除 */
   source?: 'manual' | 'fetched'
+  /**
+   * 该模型是否走全局代理。undefined/true = 跟随全局代理配置；false = 直连不走代理。
+   * 用于单模型粒度控制（如国内模型直连、海外中转站走代理）。
+   */
+  useProxy?: boolean
 }
 
 /**
@@ -491,6 +496,8 @@ export interface FetchModelsResult {
   message: string
   /** 获取到的模型列表 */
   models: ChannelModel[]
+  /** 失败时的归一化错误分类（如 not_found = 服务未提供模型列表端点，UI 可据此引导手动添加） */
+  errorType?: ChannelTestErrorType
 }
 
 /**

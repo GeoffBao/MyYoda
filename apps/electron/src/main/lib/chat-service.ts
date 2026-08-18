@@ -30,7 +30,7 @@ import { appendMessage, updateConversationMeta, getConversationMessages } from '
 import { readAttachmentAsBase64, isImageAttachment } from './attachment-service'
 import { extractTextFromAttachment, isDocumentAttachment } from './document-parser'
 import { getFetchFn } from './proxy-fetch'
-import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { getEnabledTools } from './chat-tool-registry'
 import { executeToolCalls } from './chat-tool-executor'
 import { createFallbackTitle, sanitizeGeneratedTitle, SHORT_MESSAGE_THRESHOLD, stripContextWrappersForTitle, TITLE_PROMPT } from './title-generation'
@@ -284,7 +284,7 @@ export async function sendMessage(
         ? systemPromptAppend
         : systemMessage
 
-    const proxyUrl = await getEffectiveProxyUrl()
+    const proxyUrl = await resolveProxyUrlForModel(channel.models, modelId)
     const fetchFn = getFetchFn(proxyUrl)
 
     // 9. 工具续接循环
@@ -653,7 +653,7 @@ export async function generateTitle(input: GenerateTitleInput): Promise<string |
       prompt: TITLE_PROMPT + userMessage,
     })
 
-    const proxyUrl = await getEffectiveProxyUrl()
+    const proxyUrl = await resolveProxyUrlForModel(channel.models, titleModelId)
     const fetchFn = getFetchFn(proxyUrl)
     const title = await fetchTitle(request, adapter, fetchFn)
     const result = title ? sanitizeGeneratedTitle(title) : null

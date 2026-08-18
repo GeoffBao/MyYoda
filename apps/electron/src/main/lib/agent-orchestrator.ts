@@ -37,7 +37,7 @@ import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
-import { getEffectiveProxyUrl } from './proxy-settings-service'
+import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
 import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
@@ -498,7 +498,11 @@ export class AgentOrchestrator {
 
   /** 通过独立 Pi Responses 链路调用 ChatGPT OAuth 标题模型。 */
   private async callCodexTitleModel(channelId: string, modelId: string, prompt: string, signal?: AbortSignal): Promise<string | null> {
-    const [credentials, proxyUrl] = await Promise.all([resolveCodexOAuthCredentials(channelId), getEffectiveProxyUrl()])
+    const channel = getChannelById(channelId)
+    const [credentials, proxyUrl] = await Promise.all([
+      resolveCodexOAuthCredentials(channelId),
+      resolveProxyUrlForModel(channel?.models, modelId),
+    ])
     if (signal?.aborted) return null
     const generatedTitle = await generateCodexTitle({
       modelId,
@@ -543,7 +547,7 @@ export class AgentOrchestrator {
       prompt
     })
 
-    const proxyUrl = await getEffectiveProxyUrl()
+    const proxyUrl = await resolveProxyUrlForModel(channel.models, titleModelId)
     const fetchFn = getFetchFn(proxyUrl)
     const title = await fetchTitle(request, providerAdapter, fetchFn)
     return title ? sanitizeGeneratedTitle(title) : null
@@ -1939,7 +1943,8 @@ ${workContext}`
         })
       }
       const piCustomTools = [...piBuiltinTools, ...piMcpTools, ...(extensions.piCustomTools ?? [])]
-      const proxyUrl = await getEffectiveProxyUrl()
+      // 模型粒度代理：该模型配置直连时绕过全局代理
+      const proxyUrl = await resolveProxyUrlForModel(channel.models, selectedModelId)
       // 存量 anthropic-oauth 渠道（迁移前创建）的 baseUrl 可能是空串，Pi runtime
       // 需要真实 endpoint；缺失时兜底到官方 Anthropic API。
       const effectiveBaseUrl = channel.baseUrl || (channel.provider === 'anthropic-oauth' ? PROVIDER_DEFAULT_URLS['anthropic-oauth'] : channel.baseUrl)
