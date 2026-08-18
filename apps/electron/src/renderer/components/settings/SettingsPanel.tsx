@@ -28,6 +28,7 @@ import {
   BarChart3,
   CircleHelp,
   MessageSquareHeart,
+  Cpu,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { activeViewAtom } from "@/atoms/active-view";
@@ -59,6 +60,7 @@ import { ChannelSettings } from "./ChannelSettings";
 import { VisionRelaySettings } from "./VisionRelaySettings";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { CodingSettings } from "./CodingSettings";
 import { ProxySettings } from "./ProxySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { AboutSettings } from "./AboutSettings";
@@ -93,6 +95,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     tabs: [
       { id: "general", label: "通用设置", icon: <Settings size={16} /> },
+      { id: "coding", label: "编码优化", icon: <Cpu size={16} /> },
       { id: "appearance", label: "外观设置", icon: <Palette size={16} /> },
       { id: "shortcuts", label: "快捷键管理", icon: <Keyboard size={16} /> },
     ],
@@ -140,6 +143,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
   switch (tab) {
     case "general":
       return <GeneralSettings />;
+    case "coding":
+      return <CodingSettings />;
     case "channels":
       return <ChannelSettings />;
     case "organization":
