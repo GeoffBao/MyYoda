@@ -732,22 +732,21 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   // 折叠/展开的触发按钮固定在 TabBar（紧邻第一个标签），这里只读取状态用于决定渲染哪个分支。
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
   // 功能模块区（计划 / 看板 / 画布 / 插件 / 知识库）默认折叠。
-  // 双模式：菜单模式（用户手动展开，显示全部二级目录）/ 指示模式（激活功能视图时自动展开，只显示激活项，其余隐藏）。
+  // 双模式：菜单模式（用户手动展开，显示全部二级目录）/ 指示模式（外部入口激活视图时自动展开，只显示激活项）。
   // 注意：「发现」是独立入口行（位于搜索与功能之间，Agent / Chat 模式均显示），不应触发功能组展开（否则双击发现会误展开功能组）。
   const featureCtx = { activeView, mode, codeMainView }
   const anyFeatureActiveValue = anyFeatureActive(featureCtx)
   const [featuresCollapsed, setFeaturesCollapsed] = React.useState(true)
   const [featuresShowingAll, setFeaturesShowingAll] = React.useState(false)
   const featuresModuleRef = React.useRef<HTMLDivElement | null>(null)
-  // 跟随激活功能视图：有激活项 → 自动展开 + 指示模式（只显示激活项，其余隐藏）；
-  // 无激活项（回到会话 / 发现等）→ 默认折叠。
+  // 功能组内点击二级目录时置位，抑制 anyFeatureActive 变化触发的自动展开（点击后要收起）。
+  const suppressAutoExpandRef = React.useRef(false)
   React.useEffect(() => {
-    if (anyFeatureActiveValue) {
+    if (anyFeatureActiveValue && !suppressAutoExpandRef.current) {
       setFeaturesCollapsed(false)
       setFeaturesShowingAll(false)
-    } else {
-      setFeaturesCollapsed(true)
     }
+    suppressAutoExpandRef.current = false
   }, [anyFeatureActiveValue])
   // 功能组展开期间，点击功能组外部任意位置（侧边栏其他模块 / 会话列表 / 内容区）自动收起。
   React.useEffect(() => {
@@ -1119,10 +1118,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('discover')
   }, [activeView, setActiveView])
 
-  /** 功能组内点击二级目录：打开对应视图后保持展开，只显示激活项（其余隐藏，对齐项目会话列表「折叠态 peek」交互） */
+  /** 功能组内点击二级目录：打开对应视图后自动收起功能组 */
   const navigateFromFeatureGroup = React.useCallback((action: () => void): void => {
+    suppressAutoExpandRef.current = true
     action()
-    setFeaturesShowingAll(false)
+    setFeaturesCollapsed(true)
   }, [])
 
   /** 打开唯一正式任务看板；重复点击保持当前页面，不隐式退回会话。 */
