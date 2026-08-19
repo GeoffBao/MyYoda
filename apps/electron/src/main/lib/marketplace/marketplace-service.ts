@@ -288,13 +288,13 @@ async function buildMarketplaceList(
   }
 }
 
-/** 从远程 manifest 查找条目（失败/未找到返回 undefined） */
+/** 从远程 manifest 查找条目；失败时抛出可区分的错误（网络失败 vs 条目不存在） */
 async function fetchRemoteItem(itemId: string): Promise<MarketplaceItem | undefined> {
   try {
     const skills = await fetchCommunityManifest()
     return skills.map(communitySkillToMarketplaceItem).find((i) => i.id === itemId)
-  } catch {
-    return undefined
+  } catch (error) {
+    throw new Error(`远程社区清单拉取失败（${itemId}）：${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -306,7 +306,12 @@ async function fetchRemoteItem(itemId: string): Promise<MarketplaceItem | undefi
  */
 export async function installMarketplaceItem(itemId: string, workspaceSlug: string): Promise<void> {
   const local = listMarketplaceCatalog().find((i) => i.id === itemId)
-  const remote = await fetchRemoteItem(itemId)
+  let remote: MarketplaceItem | undefined
+  try {
+    remote = await fetchRemoteItem(itemId)
+  } catch (error) {
+    if (!local) throw error  // 本地没有 → 直接抛远程拉取失败
+  }
   const item = local ?? remote
   if (!item) throw new Error(`市场条目不存在：${itemId}`)
 

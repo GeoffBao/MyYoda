@@ -105,7 +105,9 @@ version: "1.0.0"
 export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): React.ReactElement {
   const { workspaces, currentWorkspaceId, selectWorkspace } = useWorkspaceActions()
   // 对齐「项目=工作区」：Skills/MCP 全部工作区级（无嵌套项目覆盖），顶部选择器只做工作区切换
-  const data = useAgentSkillsData(null)
+  // reloadKey：市场安装/卸载技能后递增，显式重载技能列表（见 onChanged）
+  const [marketReloadKey, setMarketReloadKey] = React.useState(0)
+  const data = useAgentSkillsData(null, marketReloadKey)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const chatTools = useAtomValue(chatToolsAtom)
@@ -505,7 +507,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               externalSearch={search}
             />
           ) : tab === 'marketplace' ? (
-            <MarketplaceTab onChanged={() => { loadMarketplace(); bumpCapabilities((v) => v + 1) }} />
+            <MarketplaceTab onChanged={() => { loadMarketplace(); setMarketReloadKey((v) => v + 1); bumpCapabilities((v) => v + 1) }} />
           ) : !data.hasWorkspace ? (
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}

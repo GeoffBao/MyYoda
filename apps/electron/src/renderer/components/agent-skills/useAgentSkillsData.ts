@@ -50,7 +50,7 @@ export interface AgentSkillsData {
   refreshBuiltinMcp: () => Promise<void>
 }
 
-export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
+export function useAgentSkillsData(projectId?: string | null, reloadKey = 0): AgentSkillsData {
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const bumpCapabilitiesVersion = useSetAtom(workspaceCapabilitiesVersionAtom)
@@ -112,10 +112,11 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
 
   // 只在进入页面、切换工作区或切换范围（Project/工作区默认）时读取；不订阅 capabilitiesVersion——
   // 文件监听会在切换开关后异步推送能力变化，这里刻意不订阅它，防止扫描 active/inactive 目录后重排当前列表。
+  // reloadKey 是显式刷新信号（市场安装/卸载技能时由父组件递增），不参与全局 capabilitiesVersion。
   React.useEffect(() => {
     setLoading(true)
     void loadData()
-  }, [loadData])
+  }, [loadData, reloadKey])
 
   const toggleSkill = React.useCallback(async (slug: string, enabled: boolean) => {
     try {
