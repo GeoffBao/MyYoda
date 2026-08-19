@@ -162,7 +162,7 @@ export async function listMarketplaceItems(
       const inList = item.type === 'skill'
         ? installedSlugs.has(item.id)
         : installedConnectors.has(item.id)
-      // CLI 连接器：系统已安装则视为 installed（即使未在 marketplaceInstalled 列表）
+      // CLI 连接器：系统是否已安装
       const sysInstalled = item.installKind === 'cli' && item.cliCommand
         ? systemHasCli(item.cliCommand)
         : false
@@ -175,6 +175,7 @@ export async function listMarketplaceItems(
         installed: inList || sysInstalled,
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
+        marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
       }
     }),
   }
@@ -212,6 +213,20 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
     if (!skillItem.skillRef) throw new Error('Skill 条目缺少引用')
     await installCommunitySkill(getWorkspaceSkillsDir(workspaceSlug), skillItem.skillRef)
     return
+  }
+
+  // CLI 连接器：实际执行 npm install -g <cliPackage>（仅当系统未安装时）
+  if (item.installKind === 'cli' && item.cliPackage && item.cliCommand) {
+    if (!systemHasCli(item.cliCommand)) {
+      try {
+        execSync(`npm install -g ${item.cliPackage}`, {
+          timeout: 120000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        throw new Error(`CLI 安装失败，请手动执行：npm install -g ${item.cliPackage}`)
+      }
+    }
   }
 
   if (item.source === 'remote') saveMarketplaceRemoteItem(item)

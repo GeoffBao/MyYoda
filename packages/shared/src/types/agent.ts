@@ -1453,6 +1453,8 @@ export interface MarketplaceItemWithStatus extends MarketplaceItem {
   hasCredentials?: boolean
   /** CLI 连接器系统是否已安装（command -v 检测） */
   systemInstalled?: boolean
+  /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
+  marketplaceInstalled?: boolean
 }
 
 // ===== Skill 批量导入 =====
