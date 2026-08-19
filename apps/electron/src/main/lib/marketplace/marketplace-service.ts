@@ -118,6 +118,7 @@ function getInstalledSkillSlugs(workspaceSlug: string): Set<string> {
 
 /** 检测系统是否已安装某 CLI 命令（command -v / where） */
 function systemHasCli(command: string): boolean {
+  // 先用当前 PATH 快速检测（覆盖系统级安装）
   try {
     execSync(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, {
       timeout: 3000,
@@ -125,7 +126,16 @@ function systemHasCli(command: string): boolean {
     })
     return true
   } catch {
-    return false
+    // Electron 主进程 PATH 可能不含 nvm 路径 → 用 login shell 检测
+    try {
+      execSync(`zsh -ilc "command -v ${command}" 2>/dev/null`, {
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      return true
+    } catch {
+      return false
+    }
   }
 }
 
