@@ -71,13 +71,15 @@ export function ConnectorCard({
       data-connector-card={id}
     >
       {/* 顶部：图标 + 名称 + 查看详情 */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-content-area shadow-sm">
             {icon}
           </div>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h3 className="line-clamp-2 min-h-[2.625rem] text-[15px] font-semibold leading-snug text-foreground">{name}</h3>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <h3 className="truncate text-[15px] font-semibold text-foreground" title={name}>
+              {name}
+            </h3>
             {vendorLabel && (
               <span
                 className={cn(
@@ -94,7 +96,7 @@ export function ConnectorCard({
         </div>
         <span
           className={cn(
-            'shrink-0 rounded-lg border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground',
+            'pointer-events-none absolute right-0 top-0 shrink-0 rounded-lg border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground',
             'opacity-0 transition-opacity duration-fast group-hover:opacity-100',
           )}
         >
