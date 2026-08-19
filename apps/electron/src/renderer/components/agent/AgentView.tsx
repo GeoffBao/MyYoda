@@ -314,6 +314,9 @@ function AgentThinkingPopover({ config }: AgentThinkingPopoverProps): React.Reac
   const normalizedIndex = normalizeToUiIndex(config.thinkingLevel, config.levels)
   const currentLabel = config.levels[normalizedIndex]?.cn ?? '关闭'
   const isEnabled = config.thinkingLevel !== 'off'
+  // GLM-5.3 等强制思考模型的可选档位不含 off（levels 里没有 off 项）；
+  // 此时单击开关不应把会话思考深度改成模型不支持的 off，否则下次解析会被 normalize 悄悄拉回 low。
+  const supportsThinkingToggleOff = config.levels.some((item) => item.value === 'off')
 
   const handleMouseEnter = React.useCallback(() => {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
@@ -330,8 +333,9 @@ function AgentThinkingPopover({ config }: AgentThinkingPopoverProps): React.Reac
     }
   }, [])
 
-  /** 单击切换开关：开 → off，关 → high；细调靠 hover 滑条 */
+  /** 单击切换开关：开 → off，关 → high；细调靠 hover 滑条。若模型不支持 off档位，单击不做任何操作 */
   const handleButtonClick = (): void => {
+    if (!supportsThinkingToggleOff) return
     config.onThinkingLevelChange(isEnabled ? 'off' : 'high')
   }
 
@@ -2408,15 +2412,16 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     })
   }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, buildDeferredQueueInput, isLegacyTranscript, isStopping])
 
-  /** 停止生成 */
+  /** 停止生成。异常流未发出终态时，允许再次下发幂等的 abort 请求。 */
   const handleStop = React.useCallback((): void => {
-    if (isStopping) return
-    setIsStopping(true)
-    store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
-      const next = new Set(prev)
-      next.add(sessionId)
-      return next
-    })
+    if (!isStopping) {
+      setIsStopping(true)
+      store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
+        const next = new Set(prev)
+        next.add(sessionId)
+        return next
+      })
+    }
 
     // 保持 running 到 STREAM_COMPLETE 到达。提前把它切成 false 会让输入框误以为
     // 已经可以开启新 run，而底层 query 尚未退出，形成重复保存的竞态。
@@ -3136,13 +3141,13 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           size="icon"
           className={inputToolbarDangerButtonClass}
           onClick={handleStop}
-          disabled={isStopping}
+          aria-label={isStopping ? '再次停止 Agent' : '停止 Agent'}
         >
           <Square className="size-[16px]" fill="currentColor" strokeWidth={0} />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">
-        <p>停止 Agent ({getAcceleratorDisplay(getActiveAccelerator('stop-generation'))})</p>
+        <p>{isStopping ? '停止未确认，再次发送中断请求' : `停止 Agent (${getAcceleratorDisplay(getActiveAccelerator('stop-generation'))})`}</p>
       </TooltipContent>
     </Tooltip>
   )

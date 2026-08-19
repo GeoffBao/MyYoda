@@ -45,7 +45,7 @@ import {
 import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
 // 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
-import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
+import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelMinimizedMapAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 // 终端入口：所有 Agent 会话开放（warmup 预启动 + 多实例）。
 import { terminalPanelOpenMapAtom } from '@/atoms/terminal-atoms'
 // 右侧文件面板打开时 MainArea 会被挤窄，不再到达窗口真实右边缘，Windows WindowControls
@@ -278,10 +278,14 @@ function TabBarInner({
   // 终端对所有 Agent 会话开放；cwd 由主进程 resolveSessionCwd 解析（project/worktree/沙箱回退）
   const showTerminalButton = Boolean(activeAgentSession)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
+  const browserMinimizedMap = useAtomValue(browserPanelMinimizedMapAtom)
+  const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
+  const browserStateMap = useAtomValue(browserStateMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
   const [terminalOpenMap, setTerminalOpenMap] = useAtom(terminalPanelOpenMapAtom)
   const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
+  const hasMinimizedBrowser = Boolean(activeAgentSession && browserStateMap.has(activeAgentSession.id) && browserMinimizedMap.get(activeAgentSession.id) === true)
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
   // 右侧文件面板当前是否实际挤窄了 MainArea（面板挂载且展开）。挤窄时 TabBar 自身右边缘
   // 已不是窗口真实右边缘，真正的 WindowControls 浮在面板上方而不是 TabBar 上方，此时不应再预留 126px。
@@ -305,8 +309,9 @@ function TabBarInner({
     if (typeof open !== 'function') return
     const state = await open(activeAgentSession.id)
     setBrowserStateMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, state); return next })
+    setBrowserMinimizedMap((previous) => { const next = new Map(previous); next.delete(activeAgentSession.id); return next })
     setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(activeAgentSession.id, true); return next })
-  }, [activeAgentSession, setBrowserOpenMap, setBrowserStateMap])
+  }, [activeAgentSession, setBrowserMinimizedMap, setBrowserOpenMap, setBrowserStateMap])
 
   // 终端按钮：点击打开面板；再点一次收起（VS Code 式折叠：pty 保留，重开零延迟）。
   // 彻底销毁请用面板右上角 X（或关闭会话 tab）。
@@ -537,6 +542,7 @@ function TabBarInner({
       <ShortcutGuideButton
         positionClassName={actionLayout.shortcutPositionClassName}
         showBrowserButton={showBrowserButton}
+        hasMinimizedBrowser={hasMinimizedBrowser}
         showTerminalButton={showTerminalButton}
         isTerminalOpen={activeAgentSession ? terminalOpenMap.get(activeAgentSession.id) === true : false}
         onOpenBrowser={openBrowser}
@@ -555,6 +561,7 @@ function TabBarInner({
 function ShortcutGuideButton({
   positionClassName,
   showBrowserButton,
+  hasMinimizedBrowser,
   showTerminalButton,
   isTerminalOpen,
   onOpenBrowser,
@@ -562,6 +569,7 @@ function ShortcutGuideButton({
 }: {
   positionClassName: string
   showBrowserButton: boolean
+  hasMinimizedBrowser: boolean
   showTerminalButton: boolean
   isTerminalOpen: boolean
   onOpenBrowser: () => void
@@ -600,7 +608,10 @@ function ShortcutGuideButton({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className={cn(
+              'h-7 w-7',
+              hasMinimizedBrowser && 'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary',
+            )}
             onClick={() => void onOpenBrowser()}
           >
             <Globe2 className="size-3.5" />
@@ -608,7 +619,7 @@ function ShortcutGuideButton({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          <p>打开受管浏览器</p>
+          <p>{hasMinimizedBrowser ? '恢复受管浏览器' : '打开受管浏览器'}</p>
         </TooltipContent>
       </Tooltip>
     </div>

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import type { BrowserViewState } from '@myyoda/shared'
-import { ArrowLeft, ArrowRight, ExternalLink, Globe2, LoaderCircle, Plus, RefreshCw, ShieldAlert, Square, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Globe2, LoaderCircle, Minus, Plus, RefreshCw, ShieldAlert, Square, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,11 +24,12 @@ import { shouldReuseInitialBrowserTab } from './agent-browser-link-utils'
 interface BrowserPanelProps {
   sessionId: string
   state: BrowserViewState | null
+  onMinimize: () => void
   onClose: () => void
   isClosing?: boolean
 }
 
-export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: BrowserPanelProps): React.ReactElement {
+export function BrowserPanel({ sessionId, state, onMinimize, onClose, isClosing = false }: BrowserPanelProps): React.ReactElement {
   const [url, setUrl] = React.useState(state?.url ?? '')
   const [isEntering, setIsEntering] = React.useState(!isClosing)
   const previousClosingRef = React.useRef(isClosing)
@@ -78,6 +79,17 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
       console.error('[受管浏览器] 关闭失败:', error)
     }
   }, [onClose, sessionId])
+
+  const minimize = React.useCallback(async () => {
+    const minimizeBrowser = (window.electronAPI as Partial<typeof window.electronAPI>).minimizeAgentBrowser
+    try {
+      if (typeof minimizeBrowser === 'function') await minimizeBrowser(sessionId)
+    } catch (error) {
+      console.error('[受管浏览器] 最小化失败:', error)
+    } finally {
+      onMinimize()
+    }
+  }, [onMinimize, sessionId])
 
   const acceptRiskDisclaimer = React.useCallback(async () => {
     setSavingRiskAcknowledgement(true)
@@ -171,6 +183,7 @@ export function BrowserPanel({ sessionId, state, onClose, isClosing = false }: B
         {isBackgroundRun && (
           <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7 text-amber-600 hover:text-amber-700" onClick={() => void stopBackgroundRun()} aria-label="停止当前后台 Agent"><Square className="size-3.5 fill-current" /></Button></TooltipTrigger><TooltipContent>停止当前{state?.executionSource === 'automation' ? '自动任务' : '委派'}运行</TooltipContent></Tooltip>
         )}
+        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7" onClick={() => void minimize()} aria-label="最小化受管浏览器"><Minus className="size-3.5" /></Button></TooltipTrigger><TooltipContent>最小化浏览器</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-7" onClick={() => void close()}><X className="size-3.5" /></Button></TooltipTrigger><TooltipContent>关闭并销毁受管浏览器</TooltipContent></Tooltip>
       </div>
       <div className="flex items-center h-8 gap-1 px-2 border-b border-border/30 bg-muted/10 overflow-x-auto scrollbar-none">

@@ -3,6 +3,7 @@ import { useSetAtom } from 'jotai'
 import type { BrowserViewState } from '@myyoda/shared'
 import { BROWSER_RISK_DISCLAIMER_VERSION } from '@/types/settings'
 import {
+  browserPanelMinimizedMapAtom,
   browserPanelOpenMapAtom,
   browserPendingNavigationMapAtom,
   browserStateMapAtom,
@@ -31,6 +32,7 @@ export function AgentBrowserLinkProvider({
   children: React.ReactNode
 }): React.ReactElement {
   const setBrowserOpenMap = useSetAtom(browserPanelOpenMapAtom)
+  const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
   const setPendingNavigationMap = useSetAtom(browserPendingNavigationMapAtom)
 
@@ -58,6 +60,11 @@ export function AgentBrowserLinkProvider({
       .catch(() => undefined)
       .then(async () => {
         try {
+          setBrowserMinimizedMap((previous) => {
+            const next = new Map(previous)
+            next.delete(sessionId)
+            return next
+          })
           const [settings, state] = await Promise.all([
             window.electronAPI.getSettings(),
             openBrowser(sessionId),
@@ -86,7 +93,7 @@ export function AgentBrowserLinkProvider({
     void nextNavigation.finally(() => {
       if (navigationQueues.get(sessionId) === nextNavigation) navigationQueues.delete(sessionId)
     })
-  }, [publishBrowserState, sessionId, setPendingNavigationMap])
+  }, [publishBrowserState, sessionId, setBrowserMinimizedMap, setPendingNavigationMap])
 
   const value = React.useMemo(() => ({ openLink }), [openLink])
   return <AgentBrowserLinkContext.Provider value={value}>{children}</AgentBrowserLinkContext.Provider>

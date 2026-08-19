@@ -97,18 +97,6 @@ function compilePiReasoningCapabilities(
         compat: { supportsDeveloperRole: false, supportsReasoningEffort: true, thinkingFormat: 'zai', zaiToolStream: true },
         thinkingLevelMap,
       }
-    case 'zai-toggle':
-      return {
-        compat: {
-          supportsDeveloperRole: false,
-          supportsReasoningEffort: false,
-          thinkingFormat: 'zai',
-          zaiToolStream: true,
-        },
-        thinkingLevelMap,
-      }
-    case 'anthropic-manual':
-      return { thinkingLevelMap }
   }
 }
 

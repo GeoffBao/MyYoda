@@ -41,7 +41,7 @@ import { cn } from '@/lib/utils'
 import { resolveCodeMainRoute } from '@/components/app-shell/code-main-view-model'
 import { WorkBoardView } from '@/components/work/WorkBoardView'
 import { ProjectPageRoute } from '@/components/project/ProjectPageRoute'
-import { browserPanelOpenMapAtom, browserPendingNavigationMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
+import { browserPanelMinimizedMapAtom, browserPanelOpenMapAtom, browserPendingNavigationMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 import { BrowserPanel } from '@/components/browser/BrowserPanel'
 import { nextBrowserLayoutRevision } from '@/components/browser/browser-layout-revision'
 import { terminalPanelOpenMapAtom, terminalStateMapAtom } from '@/atoms/terminal-atoms'
@@ -81,6 +81,7 @@ export function MainArea(): React.ReactElement {
 
   const previewOpenMap = useAtomValue(previewPanelOpenMapAtom)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
+  const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
   const [browserStateMap, setBrowserStateMap] = useAtom(browserStateMapAtom)
   const setPendingNavigationMap = useSetAtom(browserPendingNavigationMapAtom)
   const [terminalOpenMap, setTerminalOpenMap] = useAtom(terminalPanelOpenMapAtom)
@@ -101,8 +102,9 @@ export function MainArea(): React.ReactElement {
 
   const publishBrowserState = React.useCallback((state: BrowserViewState) => {
     setBrowserStateMap((previous) => { const next = new Map(previous); next.set(state.sessionId, state); return next })
-    setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(state.sessionId, true); return next })
-  }, [setBrowserOpenMap, setBrowserStateMap])
+    const isMinimized = store.get(browserPanelMinimizedMapAtom).get(state.sessionId) === true
+    setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(state.sessionId, !isMinimized); return next })
+  }, [setBrowserOpenMap, setBrowserStateMap, store])
 
   React.useEffect(() => {
     // Vite renderer 可在 preload 热重载前先更新；旧 bridge 时浏览器功能不可用，
@@ -196,8 +198,26 @@ export function MainArea(): React.ReactElement {
     })
   }, [browserStateMap, setBrowserOpenMap])
 
+  const minimizeBrowser = React.useCallback((sessionId: string) => {
+    setBrowserMinimizedMap((previous) => {
+      const next = new Map(previous)
+      next.set(sessionId, true)
+      return next
+    })
+    setBrowserOpenMap((previous) => {
+      const next = new Map(previous)
+      next.set(sessionId, false)
+      return next
+    })
+  }, [setBrowserMinimizedMap, setBrowserOpenMap])
+
   const clearClosedBrowser = React.useCallback((sessionId: string) => {
     setBrowserClosingState((previous) => previous?.sessionId === sessionId ? null : previous)
+    setBrowserMinimizedMap((previous) => {
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
     setBrowserStateMap((previous) => {
       const next = new Map(previous)
       next.delete(sessionId)
@@ -208,7 +228,7 @@ export function MainArea(): React.ReactElement {
       next.delete(sessionId)
       return next
     })
-  }, [setBrowserStateMap, setPendingNavigationMap])
+  }, [setBrowserMinimizedMap, setBrowserStateMap, setPendingNavigationMap])
 
   React.useEffect(() => {
     if (!browserClosingState) return
@@ -462,6 +482,7 @@ export function MainArea(): React.ReactElement {
                       sessionId={browserPanelSessionId}
                       state={browserPanelState}
                       isClosing={showBrowserClosing}
+                      onMinimize={() => minimizeBrowser(browserPanelSessionId)}
                       onClose={() => requestCloseBrowser(browserPanelSessionId)}
                     />
                   </div>

@@ -53,24 +53,28 @@ describe('Agent 过程块折叠分组', () => {
     }
   })
 
-  test('given streaming turn with trailing text when grouping then keeps the whole turn inside process group', () => {
+  test('given streaming turn with trailing text when grouping then externalizes trailing text outside process group', () => {
     const items = buildAssistantTurnRenderItems([
       tool('tool-1'),
       text('可能还是中间说明'),
     ], { isStreaming: true })
 
-    expect(items).toHaveLength(1)
-    expect(items[0]?.type).toBe('process-group')
+    // 新行为：流式末尾出现 text 即按常规消息布局展示；若后续继续调用工具，
+    // text 不再位于末尾会自动回归过程组。
+    expect(items.map((item) => item.type)).toEqual(['process-group', 'block'])
     if (items[0]?.type === 'process-group') {
-      expect(items[0].items.map((item) => item.index)).toEqual([0, 1])
+      expect(items[0].items.map((item) => item.index)).toEqual([0])
+    }
+    if (items[1]?.type === 'block') {
+      expect(items[1].item.index).toBe(1)
     }
   })
 
-  test('given streaming turn with completed tools before trailing text when grouping then keeps final output outside process group', () => {
+  test('given streaming turn with trailing text when grouping then externalizes final output without waiting for tool results', () => {
     const items = buildAssistantTurnRenderItems([
       tool('tool-1'),
       text('最终输出'),
-    ], { isStreaming: true, completedToolResultIds: new Set(['tool-1']) })
+    ], { isStreaming: true })
 
     expect(items.map((item) => item.type)).toEqual(['process-group', 'block'])
     if (items[0]?.type === 'process-group') {
@@ -116,18 +120,20 @@ describe('Agent 过程块折叠分组', () => {
     }
   })
 
-  test('given streaming turn with only thinking before trailing text when grouping then keeps the whole turn inside process group', () => {
-    // 仅有 thinking + 尾部 text 时，工具调用可能稍后才出现，
-    // 不应把这段尾部 text 提前外置——避免后续完成瞬间从外部又跳回过程组。
+  test('given streaming turn with only thinking before trailing text when grouping then externalizes the trailing text immediately', () => {
+    // 流式末尾出现 text 就按常规消息布局直接展示；若 Agent 随后继续调用工具，
+    // text 不再位于末尾，会自动回归过程组，避免中间状态被误认为最终答案。
     const items = buildAssistantTurnRenderItems([
       thinking(),
       text('暂时的回答片段'),
-    ], { isStreaming: true, completedToolResultIds: new Set() })
+    ], { isStreaming: true })
 
-    expect(items).toHaveLength(1)
-    expect(items[0]?.type).toBe('process-group')
+    expect(items.map((item) => item.type)).toEqual(['process-group', 'block'])
     if (items[0]?.type === 'process-group') {
-      expect(items[0].items.map((item) => item.index)).toEqual([0, 1])
+      expect(items[0].items.map((item) => item.index)).toEqual([0])
+    }
+    if (items[1]?.type === 'block') {
+      expect(items[1].item.index).toBe(1)
     }
   })
 
