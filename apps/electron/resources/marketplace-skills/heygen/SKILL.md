@@ -1,5 +1,5 @@
 ---
-name: heygen-hyperframes
+name: heygen
 description: HyperFrames by HeyGen 视频渲染。当用户想用 HTML/CSS/动画代码生成确定性 MP4 视频、做数据可视化动画、生成产品演示或宣传片时使用。需要本机有 Node.js（npx）与网络。
 ---
 

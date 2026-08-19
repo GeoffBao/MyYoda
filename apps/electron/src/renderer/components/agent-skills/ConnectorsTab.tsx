@@ -281,7 +281,8 @@ export function ConnectorsTab({
     }
 
     for (const item of marketplaceItems) {
-      if (!item.installed) continue
+      // 连接器 Tab 只展示市场安装的连接器/CLI；技能类条目（chatcut/heygen 等）归技能 Tab
+      if (!item.installed || item.type !== 'connector') continue
       const cat = categoryOfMarketplace(item.category)
       const isCli = item.installKind === 'cli'
       list.push({

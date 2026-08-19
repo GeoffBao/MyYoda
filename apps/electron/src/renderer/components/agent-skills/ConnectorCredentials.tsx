@@ -120,6 +120,8 @@ export function ConnectorCredentials({ connectorId, specOverride, onChanged }: C
   if (!spec) {
     return <div className="text-sm text-muted-foreground">该连接器无需凭据配置。</div>
   }
+  /** 市场 CLI 连接器：无凭据字段（specOverride 且 fields 为空）→ 隐藏开关/测试连接 */
+  const isCliLike = Boolean(specOverride && spec.fields.length === 0)
 
   const { workspaces, currentWorkspaceId } = useWorkspaceActions()
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
@@ -300,27 +302,32 @@ export function ConnectorCredentials({ connectorId, specOverride, onChanged }: C
         ))}
       </div>
 
-      <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-foreground">启用连接器</span>
-          <span className="text-[11px] text-muted-foreground">
-            {available ? '凭据有效，启用后即可注入 Agent 会话' : (availabilityReason ?? '凭据未配置')}
-          </span>
-        </div>
-        <Switch checked={enabled} onCheckedChange={(checked) => void handleToggle(checked)} />
-      </div>
+      {/* 市场 CLI 连接器：无凭据字段，隐藏开关/测试连接，仅展示说明 */}
+      {!isCliLike && (
+        <>
+          <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-medium text-foreground">启用连接器</span>
+              <span className="text-[11px] text-muted-foreground">
+                {available ? '凭据有效，启用后即可注入 Agent 会话' : (availabilityReason ?? '凭据未配置')}
+              </span>
+            </div>
+            <Switch checked={enabled} onCheckedChange={(checked) => void handleToggle(checked)} />
+          </div>
 
-      {/* 测试连接 */}
-      <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-foreground">测试连接</span>
-          <span className="text-[11px] text-muted-foreground">用当前凭据调用官方 API 验证有效性</span>
-        </div>
-        <Button variant="outline" size="sm" disabled={testing} onClick={() => void handleTest()}>
-          {testing ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
-          <span>{testing ? '测试中...' : '测试连接'}</span>
-        </Button>
-      </div>
+          {/* 测试连接 */}
+          <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-medium text-foreground">测试连接</span>
+              <span className="text-[11px] text-muted-foreground">用当前凭据调用官方 API 验证有效性</span>
+            </div>
+            <Button variant="outline" size="sm" disabled={testing} onClick={() => void handleTest()}>
+              {testing ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
+              <span>{testing ? '测试中...' : '测试连接'}</span>
+            </Button>
+          </div>
+        </>
+      )}
       {testResult && (
         <div
           className={cn(

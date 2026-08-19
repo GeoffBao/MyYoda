@@ -161,7 +161,16 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const marketplaceSpecFor = React.useCallback((serverId: string): ConnectorCredentialSpec | undefined => {
     if (!serverId.startsWith('marketplace:')) return undefined
     const item = marketplaceItems.find((i) => `${i.id}` === serverId.slice('marketplace:'.length))
-    if (!item || !item.credentialFields || item.credentialFields.length === 0) return undefined
+    if (!item) return undefined
+    // CLI 连接器：无凭据字段，展示说明 + 安装后的 CLI 用法提示（cliHint）
+    if (!item.credentialFields || item.credentialFields.length === 0) {
+      if (item.installKind !== 'cli') return undefined
+      return {
+        description: `${item.description}${item.cliHint ? `\n\n${item.cliHint}` : ''}`,
+        authType: 'CLI 工具（Bash 调用）',
+        fields: [],
+      }
+    }
     return {
       description: item.description,
       authType: 'API Key / Token',
