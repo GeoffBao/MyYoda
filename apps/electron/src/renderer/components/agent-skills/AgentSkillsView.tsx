@@ -17,7 +17,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2 } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -42,7 +42,6 @@ import { ConnectorDetailDialog } from './ConnectorDetailDialog'
 import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS } from './ConnectorCredentials'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
-import { CommunityMarketDialog } from './CommunityMarketDialog'
 import { MarketplaceTab } from './MarketplaceTab'
 import {
   WecomSettings,
@@ -140,7 +139,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [configureServerId, setConfigureServerId] = React.useState<string | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
-  const [showCommunityMarket, setShowCommunityMarket] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
   const [pendingDeleteMcpName, setPendingDeleteMcpName] = React.useState<string | null>(null)
   const [isDeletingSkill, setIsDeletingSkill] = React.useState(false)
@@ -365,18 +363,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           >
             <Plus size={14} />
             <span>新建专家</span>
-          </button>
-        )}
-
-        {/* 社区市场：工作区级 Skills（项目=工作区，无项目级覆盖） */}
-        {tab === 'skills' && (
-          <button
-            type="button"
-            onClick={() => setShowCommunityMarket(true)}
-            className="flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-[13px] font-medium text-emerald-600 shadow-sm transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
-          >
-            <Store size={14} />
-            <span>社区市场</span>
           </button>
         )}
 
@@ -613,13 +599,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
 
-      <CommunityMarketDialog
-        open={showCommunityMarket}
-        onOpenChange={setShowCommunityMarket}
-        workspaceSlug={data.workspaceSlug}
-        installedSkills={data.skills}
-        onImported={() => bumpCapabilities((v) => v + 1)}
-      />
     </div>
   )
 }
