@@ -521,6 +521,7 @@ export function ConnectorsTab({
               enabled={item.enabled}
               onOpen={() => handleOpen(item)}
               onToggle={(enabled) => handleToggle(item, enabled)}
+              onRemove={item.key.startsWith('marketplace:') ? () => handleRemoveMarketplace(item) : undefined}
             />
           ))}
         </div>

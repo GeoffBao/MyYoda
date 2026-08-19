@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { Trash2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +28,8 @@ interface ConnectorCardProps {
   vendorLabel?: string
   /** 开关状态（不传 onToggle 则不渲染开关） */
   enabled?: boolean
+  /** 移除操作（市场安装的连接器：卸载；渲染为垃圾桶按钮替代开关） */
+  onRemove?: () => void
   onOpen: () => void
   onToggle?: (enabled: boolean) => void
 }
@@ -47,6 +50,7 @@ export function ConnectorCard({
   statusTone = 'muted',
   vendorLabel,
   enabled,
+  onRemove,
   onOpen,
   onToggle,
 }: ConnectorCardProps): React.ReactElement {
@@ -120,13 +124,23 @@ export function ConnectorCard({
               {statusLabel}
             </span>
           )}
-          {onToggle && (
+          {onRemove ? (
+            <button
+              type="button"
+              title="移除"
+              aria-label={`移除 ${name}`}
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 size={14} />
+            </button>
+          ) : onToggle ? (
             <Switch
               checked={enabled ?? false}
               onCheckedChange={onToggle}
               onClick={(e) => e.stopPropagation()}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

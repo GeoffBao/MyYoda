@@ -501,6 +501,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
               onConfigure={configureBuiltinMcp}
               onConfigureMarketplace={(serverId) => setConfigureServerId(serverId)}
+              onMarketplaceChanged={loadMarketplace}
               externalSearch={search}
             />
           ) : tab === 'marketplace' ? (
