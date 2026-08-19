@@ -157,6 +157,8 @@ interface ConnectorsTabProps {
   onConfigure: (serverId: string) => void
   /** 打开市场条目的凭据/详情（serverId 形如 marketplace:<id>） */
   onConfigureMarketplace: (serverId: string) => void
+  /** 市场条目卸载后刷新（重新拉取市场列表） */
+  onMarketplaceChanged?: () => void
   externalSearch: string
 }
 
@@ -185,6 +187,7 @@ export function ConnectorsTab({
   onAddMcp,
   onConfigure,
   onConfigureMarketplace,
+  onMarketplaceChanged,
   externalSearch,
 }: ConnectorsTabProps): React.ReactElement {
   const [category, setCategory] = React.useState<ConnectorCategory>('all')
@@ -369,6 +372,21 @@ export function ConnectorsTab({
     } else if (item.key.startsWith('custom:')) {
       void window.electronAPI.updateChatToolState(item.key.slice('custom:'.length), { enabled }).then(() => refreshTools(setChatTools))
     }
+  }
+
+  /** 卸载市场安装的连接器（移除注入；CLI 保留系统，凭据保留） */
+  const handleRemoveMarketplace = (item: ConnectorItem): void => {
+    const id = item.key.slice('marketplace:'.length)
+    void window.electronAPI
+      .marketplaceUninstall(id)
+      .then(() => {
+        toast.success(`已从会话移除 ${item.name}`)
+        onMarketplaceChanged?.()
+      })
+      .catch((error) => {
+        console.error(`[连接器] 卸载失败（${id}）:`, error)
+        toast.error('移除失败')
+      })
   }
 
   // 集合引导面板：点击某项 → 关闭面板 → 打开对应凭据配置 / 只读详情
