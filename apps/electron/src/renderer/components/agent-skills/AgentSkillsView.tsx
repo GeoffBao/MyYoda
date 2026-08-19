@@ -17,7 +17,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2 } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -182,6 +182,11 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       })),
     }
   }, [marketplaceItems])
+
+  /** 当前打开的凭据/详情 Modal 对应的市场条目（configureServerId 以 marketplace: 开头时） */
+  const configureMarketplaceItem = configureServerId?.startsWith('marketplace:')
+    ? marketplaceItems.find((i) => i.id === configureServerId.slice('marketplace:'.length))
+    : undefined
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -606,26 +611,82 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             void data.refreshBuiltinMcp()
           }
         }}
-        eyebrow="预置连接器"
-        title={configureServerId ? (CONFIGURE_META[configureServerId]?.title ?? '') : ''}
+        eyebrow={configureMarketplaceItem ? '市场安装' : '预置连接器'}
+        title={configureMarketplaceItem?.name ?? (configureServerId ? (CONFIGURE_META[configureServerId]?.title ?? '') : '')}
         icon={
           configureServerId === 'web-search'
             ? <Search size={22} />
-            : configureServerId
-              ? getBuiltinMcpIcon(configureServerId)
-              : undefined
+            : configureMarketplaceItem
+              ? getBuiltinMcpIcon(configureMarketplaceItem.iconKey ?? '')
+              : configureServerId
+                ? getBuiltinMcpIcon(configureServerId)
+                : undefined
         }
-        tags={configureServerId ? (CONFIGURE_META[configureServerId]?.tags ?? []) : []}
+        tags={configureMarketplaceItem
+          ? [configureMarketplaceItem.vendor === 'official' ? '官方' : '社区', configureMarketplaceItem.category ?? '']
+          : (configureServerId ? (CONFIGURE_META[configureServerId]?.tags ?? []) : [])
+        }
       >
-        {configureServerId === 'weread' && <WereadSettings />}
-        {configureServerId === 'nano-banana' && <NanoBananaSettings />}
-        {configureServerId === 'web-search' && <WebSearchSettings />}
-        {configureServerId && (CONNECTOR_CREDENTIAL_SPECS[configureServerId] || marketplaceSpecFor(configureServerId)) && (
-          <ConnectorCredentials
-            connectorId={configureServerId}
-            specOverride={marketplaceSpecFor(configureServerId)}
-            onChanged={() => { void data.refreshBuiltinMcp(); loadMarketplace() }}
-          />
+        {configureMarketplaceItem?.installKind === 'cli' ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">来源</div>
+                <div className="mt-1 text-sm font-medium text-foreground">{configureMarketplaceItem.vendor === 'official' ? '官方' : '社区'}</div>
+              </div>
+              <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">维护方</div>
+                <div className="mt-1 text-sm font-medium text-foreground">{configureMarketplaceItem.author ?? '-'}</div>
+              </div>
+              {configureMarketplaceItem.homepage && (
+                <div className="rounded-lg bg-muted/45 p-3">
+                  <div className="text-[11px] font-medium text-muted-foreground">主页</div>
+                  <a href={configureMarketplaceItem.homepage} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                    {configureMarketplaceItem.homepage.replace(/^https?:\/\//, '').split('/')[0]}
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+              <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">认证方式</div>
+                <div className="mt-1 text-sm font-medium text-foreground">CLI 命令行授权</div>
+              </div>
+              <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">安装状态</div>
+                <div className={cn('mt-1 text-sm font-medium', configureMarketplaceItem.systemInstalled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>
+                  {configureMarketplaceItem.systemInstalled ? '系统已安装' : '未安装（安装后可用）'}
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">命令名</div>
+                <div className="mt-1 font-mono text-sm text-foreground">{configureMarketplaceItem.cliCommand ?? configureMarketplaceItem.cliPackage ?? '-'}</div>
+              </div>
+            </div>
+            {configureMarketplaceItem.cliHint && (
+              <div className="rounded-lg border border-border/60 bg-content-area/40 p-4">
+                <div className="text-[12px] font-medium text-foreground">CLI 用法说明</div>
+                <pre className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{configureMarketplaceItem.cliHint}</pre>
+              </div>
+            )}
+            {!configureMarketplaceItem.systemInstalled && configureMarketplaceItem.cliPackage && (
+              <div className="rounded-lg bg-amber-500/10 p-3 text-[12px] text-amber-600 dark:text-amber-400">
+                系统未检测到 <span className="font-mono">{configureMarketplaceItem.cliCommand}</span> 命令。请在终端执行 <span className="font-mono">npm install -g {configureMarketplaceItem.cliPackage}</span> 安装，或在市场点击「安装」。
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {configureServerId === 'weread' && <WereadSettings />}
+            {configureServerId === 'nano-banana' && <NanoBananaSettings />}
+            {configureServerId === 'web-search' && <WebSearchSettings />}
+            {configureServerId && (CONNECTOR_CREDENTIAL_SPECS[configureServerId] || marketplaceSpecFor(configureServerId)) && (
+              <ConnectorCredentials
+                connectorId={configureServerId}
+                specOverride={marketplaceSpecFor(configureServerId)}
+                onChanged={() => { void data.refreshBuiltinMcp(); loadMarketplace() }}
+              />
+            )}
+          </>
         )}
       </ConnectorDetailDialog>
 

@@ -1434,6 +1434,8 @@ export interface MarketplaceItem {
   npxArgs?: string[]
   /** cli：npm 包名（npx -y <cliPackage> 或全局安装后使用），如 @readwise/cli */
   cliPackage?: string
+  /** cli：系统命令名（用于检测系统是否已安装，如 readwise / wecom-cli / vercel） */
+  cliCommand?: string
   /** cli：安装/使用提示（注入 Agent 系统提示的 CLI 用法说明，含认证步骤） */
   cliHint?: string
   /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
@@ -1447,6 +1449,10 @@ export interface MarketplaceItem {
 /** 市场条目 + 当前工作区安装状态 */
 export interface MarketplaceItemWithStatus extends MarketplaceItem {
   installed: boolean
+  /** npx 连接器凭据是否已配置（UI 状态区分用） */
+  hasCredentials?: boolean
+  /** CLI 连接器系统是否已安装（command -v 检测） */
+  systemInstalled?: boolean
 }
 
 // ===== Skill 批量导入 =====

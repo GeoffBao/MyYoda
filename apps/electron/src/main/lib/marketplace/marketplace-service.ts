@@ -11,6 +11,7 @@
 
 import { readdirSync, existsSync, mkdirSync, cpSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { execSync } from 'node:child_process'
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import {
   listMarketplaceCatalog,
@@ -21,7 +22,7 @@ import {
   MARKETPLACE_ID_PREFIX,
 } from './marketplace-manager'
 import { fetchCommunityManifest, installCommunitySkill, type CommunitySkill } from '../community-skill-service'
-import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
+import { getChatToolsConfig, saveChatToolsConfig, getToolCredentials } from '../chat-tool-config'
 import { getWorkspaceSkillsDir } from '../config-paths'
 import type { NpxConnectorSpec } from '../builtin-mcp/npx-connector-mcp'
 
@@ -115,6 +116,26 @@ function getInstalledSkillSlugs(workspaceSlug: string): Set<string> {
   return slugs
 }
 
+/** 检测系统是否已安装某 CLI 命令（command -v / where） */
+function systemHasCli(command: string): boolean {
+  try {
+    execSync(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, {
+      timeout: 3000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 检测 npx 连接器凭据是否已配置（所有必填字段非空） */
+function hasNpxCredentials(itemId: string, envMap?: Record<string, string>): boolean {
+  if (!envMap || Object.keys(envMap).length === 0) return true
+  const credentials = getToolCredentials(`${MARKETPLACE_ID_PREFIX}${itemId}`) as Record<string, string | undefined>
+  return Object.keys(envMap).every((key) => Boolean(credentials[key]?.trim()))
+}
+
 /**
  * 统一市场列表：本地 + 远程合并，带安装状态。
  * 远程 manifest 拉取失败不抛错（remoteAvailable=false，本地条目照常）。
@@ -137,11 +158,25 @@ export async function listMarketplaceItems(
   const installedSlugs = getInstalledSkillSlugs(workspaceSlug)
   return {
     remoteAvailable,
-    items: merged.map((item) => ({
-      ...item,
-      installed:
-        item.type === 'skill' ? installedSlugs.has(item.id) : installedConnectors.has(item.id),
-    })),
+    items: merged.map((item) => {
+      const inList = item.type === 'skill'
+        ? installedSlugs.has(item.id)
+        : installedConnectors.has(item.id)
+      // CLI 连接器：系统已安装则视为 installed（即使未在 marketplaceInstalled 列表）
+      const sysInstalled = item.installKind === 'cli' && item.cliCommand
+        ? systemHasCli(item.cliCommand)
+        : false
+      // npx 连接器：凭据是否已配置
+      const hasCreds = item.installKind === 'npx-mcp'
+        ? hasNpxCredentials(item.id, item.envMap)
+        : false
+      return {
+        ...item,
+        installed: inList || sysInstalled,
+        hasCredentials: hasCreds,
+        systemInstalled: sysInstalled,
+      }
+    }),
   }
 }
 

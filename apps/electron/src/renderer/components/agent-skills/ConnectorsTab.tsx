@@ -285,6 +285,13 @@ export function ConnectorsTab({
       if (!item.installed || item.type !== 'connector') continue
       const cat = categoryOfMarketplace(item.category)
       const isCli = item.installKind === 'cli'
+      // npx 连接器：凭据状态区分；CLI：系统安装状态
+      const statusLabel = isCli
+        ? (item.systemInstalled ? '系统已安装' : '已安装')
+        : (item.hasCredentials ? '已启用' : '需配置')
+      const statusTone = isCli
+        ? 'success'
+        : (item.hasCredentials ? 'success' : 'warning')
       list.push({
         key: `marketplace:${item.id}`,
         name: item.name,
@@ -292,8 +299,8 @@ export function ConnectorsTab({
         icon: item.iconKey ? getBuiltinMcpIcon(item.iconKey) : <Plug size={20} />,
         category: cat,
         categoryLabel: CATEGORY_LABEL[cat],
-        statusLabel: isCli ? '已安装' : '已安装',
-        statusTone: 'success',
+        statusLabel,
+        statusTone,
         vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
         enabled: true,
         hasToggle: false,
