@@ -8,9 +8,10 @@
  */
 
 import * as React from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, PlugZap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 
@@ -106,6 +107,8 @@ export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCreden
   const [available, setAvailable] = React.useState(false)
   const [availabilityReason, setAvailabilityReason] = React.useState<string | undefined>(undefined)
   const [loading, setLoading] = React.useState(true)
+  const [testing, setTesting] = React.useState(false)
+  const [testResult, setTestResult] = React.useState<{ success: boolean; message: string } | null>(null)
 
   const savedRef = React.useRef<Record<string, string>>({})
 
@@ -196,6 +199,23 @@ export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCreden
     return <div className="py-8 text-center text-sm text-muted-foreground">加载中...</div>
   }
 
+  const handleTest = async (): Promise<void> => {
+    // 先保存可能的未落盘修改
+    await handleBlurSave()
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await window.electronAPI.testBuiltinConnector(connectorId)
+      setTestResult(result)
+      if (result.success && workspaceSlug) await refreshServerState(workspaceSlug)
+    } catch (error) {
+      console.error(`[连接器凭据] 测试失败（${connectorId}）:`, error)
+      setTestResult({ success: false, message: '测试请求失败，请重试' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] leading-relaxed text-muted-foreground">{spec.description}</p>
@@ -243,6 +263,31 @@ export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCreden
         </div>
         <Switch checked={enabled} onCheckedChange={(checked) => void handleToggle(checked)} />
       </div>
+
+      {/* 测试连接 */}
+      <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-foreground">测试连接</span>
+          <span className="text-[11px] text-muted-foreground">用当前凭据调用官方 API 验证有效性</span>
+        </div>
+        <Button variant="outline" size="sm" disabled={testing} onClick={() => void handleTest()}>
+          {testing ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />}
+          <span>{testing ? '测试中...' : '测试连接'}</span>
+        </Button>
+      </div>
+      {testResult && (
+        <div
+          className={cn(
+            'flex items-start gap-2 rounded-lg px-3 py-2.5 text-[12px] leading-relaxed',
+            testResult.success
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : 'bg-red-500/10 text-red-600 dark:text-red-400',
+          )}
+        >
+          {testResult.success ? <CheckCircle2 size={14} className="mt-0.5 shrink-0" /> : <XCircle size={14} className="mt-0.5 shrink-0" />}
+          <span>{testResult.message}</span>
+        </div>
+      )}
     </div>
   )
 }

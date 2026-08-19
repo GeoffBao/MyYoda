@@ -101,6 +101,8 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   UPDATE_TOOL_CREDENTIALS: 'chat-tool:update-credentials',
   /** 测试工具连接 */
   TEST_TOOL: 'chat-tool:test',
+  /** 测试内置连接器连接（凭据验证） */
+  TEST_BUILTIN_CONNECTOR: 'builtin-mcp:test-connector',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */

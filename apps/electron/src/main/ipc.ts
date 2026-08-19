@@ -3812,6 +3812,15 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 测试内置连接器连接（凭据验证）
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR,
+    async (_, connectorId: string): Promise<{ success: boolean; message: string }> => {
+      const { testBuiltinConnectorConnection } = await import('./lib/builtin-mcp/connector-test')
+      return testBuiltinConnectorConnection(connectorId)
+    }
+  )
+
   // 测试工具连接
   ipcMain.handle(
     CHAT_TOOL_IPC_CHANNELS.TEST_TOOL,

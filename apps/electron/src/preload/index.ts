@@ -1089,6 +1089,9 @@ export interface ElectronAPI {
   /** 测试工具连接 */
   testChatTool: (toolId: string) => Promise<{ success: boolean; message: string }>
 
+  /** 测试内置连接器连接（凭据验证） */
+  testBuiltinConnector: (connectorId: string) => Promise<{ success: boolean; message: string }>
+
   // ===== AskUserQuestion 交互式问答 =====
 
   /** 响应 AskUser 请求 */
@@ -2840,6 +2843,10 @@ const electronAPI: ElectronAPI = {
 
   testChatTool: (toolId: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.TEST_TOOL, toolId)
+  },
+
+  testBuiltinConnector: (connectorId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR, connectorId)
   },
 
   // AskUserQuestion 交互式问答
