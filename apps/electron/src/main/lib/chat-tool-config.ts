@@ -21,6 +21,7 @@ const DEFAULT_CONFIG: ChatToolsFileConfig = {
   toolCredentials: {},
   customTools: [],
   marketplaceInstalled: [],
+  marketplaceRemoteItems: {},
 }
 
 /**
@@ -41,6 +42,7 @@ export function getChatToolsConfig(): ChatToolsFileConfig {
       toolCredentials: data.toolCredentials ?? {},
       customTools: data.customTools ?? [],
       marketplaceInstalled: data.marketplaceInstalled ?? [],
+      marketplaceRemoteItems: data.marketplaceRemoteItems ?? {},
     }
   } catch (error) {
     console.error('[Chat 工具配置] 读取失败:', error)

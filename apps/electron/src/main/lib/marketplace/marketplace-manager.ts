@@ -84,11 +84,3 @@ export function hasMarketplaceCredentials(item: MarketplaceItem): boolean {
   const spec = marketplaceItemToNpxSpec(item)
   return hasNpxConnectorCredentials(spec)
 }
-
-/** 已安装的市场连接器规格列表（agent-orchestrator 注入用） */
-export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
-  const installed = new Set(getMarketplaceInstalledIds())
-  return listMarketplaceCatalog()
-    .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id))
-    .map(marketplaceItemToNpxSpec)
-}
