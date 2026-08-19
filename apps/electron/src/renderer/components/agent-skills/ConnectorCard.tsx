@@ -77,7 +77,7 @@ export function ConnectorCard({
             {icon}
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <h3 className="truncate text-[15px] font-semibold text-foreground">{name}</h3>
+            <h3 className="line-clamp-2 min-h-[2.625rem] text-[15px] font-semibold leading-snug text-foreground">{name}</h3>
             {vendorLabel && (
               <span
                 className={cn(
