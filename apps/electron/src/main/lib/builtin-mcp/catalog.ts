@@ -121,6 +121,7 @@ export function listBuiltinMcpServers(ctx: BuiltinMcpListContext = {}): BuiltinM
     category: item.category,
     tools: item.tools,
     toggleable: item.toggleable,
+    source: item.source,
     ...resolveAvailability(item, ctx),
   }))
 }

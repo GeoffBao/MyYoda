@@ -39,7 +39,13 @@
           "name": "run_automation_now",
           "description": "立即运行一次定时任务。"
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      }
     },
     {
       "id": "collaboration",
@@ -88,7 +94,13 @@
           "name": "stop_delegations",
           "description": "批量停止协作子会话。"
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      }
     },
     {
       "id": "nano-banana",
@@ -105,7 +117,13 @@
           "name": "generate_image",
           "description": "生成或编辑图片。"
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Google Gemini",
+        "homepage": "https://aistudio.google.com/",
+        "authType": "API Key"
+      }
     },
     {
       "id": "chrome-devtools",
@@ -163,7 +181,13 @@
           "description": "停止性能追踪并返回结果。",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Chrome DevTools MCP",
+        "homepage": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+        "authType": "无需凭据（需本机 Chrome）"
+      }
     },
     {
       "id": "create-task",
@@ -180,7 +204,13 @@
           "name": "create_task",
           "description": "创建一个 todo 状态的看板任务，不自动运行。"
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      }
     },
     {
       "id": "wecom",
@@ -228,7 +258,13 @@
           "name": "todo.add_todo",
           "description": "创建待办任务。"
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "企业微信（WecomTeam）",
+        "homepage": "https://github.com/WecomTeam/wecom-cli",
+        "authType": "Bot ID / Secret"
+      }
     },
     {
       "id": "readwise",
@@ -271,7 +307,13 @@
           "description": "获取某本书的全部划线。",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Readwise",
+        "homepage": "https://readwise.io/access_token",
+        "authType": "API Token"
+      }
     },
     {
       "id": "weread",
@@ -319,7 +361,13 @@
           "description": "基于阅读偏好的个性化推荐。",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "微信读书",
+        "homepage": "https://weread.qq.com/",
+        "authType": "API Key（wrk-）"
+      }
     },
     {
       "id": "github",
@@ -432,7 +480,13 @@
           "description": "获取当前用户信息",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "GitHub",
+        "homepage": "https://github.com/settings/tokens",
+        "authType": "Personal Access Token"
+      }
     },
     {
       "id": "gitlab",
@@ -530,7 +584,13 @@
           "description": "读取提交详情",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "GitLab",
+        "homepage": "https://gitlab.com/-/user_settings/personal_access_tokens",
+        "authType": "Personal Access Token"
+      }
     },
     {
       "id": "git",
@@ -568,7 +628,13 @@
           "description": "列出本地与远程分支",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      }
     },
     {
       "id": "notion",
@@ -631,7 +697,13 @@
           "description": "更新块子元素",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Notion",
+        "homepage": "https://www.notion.so/my-integrations",
+        "authType": "API Token（ntn_）"
+      }
     },
     {
       "id": "figma",
@@ -714,7 +786,13 @@
           "description": "获取团队组件集",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Figma",
+        "homepage": "https://www.figma.com/developers/api",
+        "authType": "Personal Access Token"
+      }
     },
     {
       "id": "brave-search",
@@ -737,7 +815,13 @@
           "description": "Brave 本地搜索（商家/地点）",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Brave",
+        "homepage": "https://brave.com/search/api/",
+        "authType": "API Key"
+      }
     },
     {
       "id": "exa",
@@ -785,7 +869,13 @@
           "description": "公司研究",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Exa",
+        "homepage": "https://dashboard.exa.ai/api-keys",
+        "authType": "API Key"
+      }
     },
     {
       "id": "fetch",
@@ -803,7 +893,13 @@
           "description": "抓取网页并转换为 Markdown",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      }
     },
     {
       "id": "sqlite",
@@ -831,7 +927,13 @@
           "description": "执行 SQL 查询",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "本地文件路径"
+      }
     },
     {
       "id": "browserbase",
@@ -879,7 +981,13 @@
           "description": "列出标签页",
           "readOnly": true
         }
-      ]
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Browserbase",
+        "homepage": "https://browserbase.com/dashboard",
+        "authType": "API Key + Project ID"
+      }
     }
   ]
 }

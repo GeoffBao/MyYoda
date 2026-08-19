@@ -3,7 +3,7 @@
  */
 
 import * as React from 'react'
-import { CheckCircle2, Settings2, XCircle } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Settings2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -150,6 +150,31 @@ export function BuiltinMcpDetailSheet({ open, server, onOpenChange, onConfigure 
               <div className="grid gap-3 sm:grid-cols-2">
                 <InfoItem label="MCP 名称" value={server.name} />
                 <InfoItem label="分类" value={CATEGORY_LABELS[server.category]} />
+                {server.source && (
+                  <InfoItem
+                    label="来源"
+                    value={server.source.vendor === 'official' ? '官方' : 'MyYoda 自研'}
+                    tone={server.source.vendor === 'official' ? 'success' : 'default'}
+                  />
+                )}
+                {server.source?.authType && <InfoItem label="认证方式" value={server.source.authType} />}
+                {server.source?.author && <InfoItem label="维护方" value={server.source.author} />}
+                {server.source?.homepage && (
+                  <InfoItem
+                    label="主页"
+                    value={
+                      <a
+                        href={server.source.homepage}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                      >
+                        {server.source.homepage.replace(/^https?:\/\//, '').split('/')[0]}
+                        <ExternalLink size={12} />
+                      </a>
+                    }
+                  />
+                )}
                 <InfoItem label="注入开关" value={server.enabled ? '允许注入' : '已手动关闭'} tone={server.enabled ? 'success' : 'muted'} />
                 <InfoItem label="可用状态" value={server.available ? '当前可用' : (server.availabilityReason ?? '不可用')} tone={server.available ? 'success' : 'muted'} />
                 <InfoItem label="配置来源" value={configInfo.source} />
@@ -215,7 +240,7 @@ export function BuiltinMcpDetailSheet({ open, server, onOpenChange, onConfigure 
   )
 }
 
-function InfoItem({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'success' | 'muted' }): React.ReactElement {
+function InfoItem({ label, value, tone = 'default' }: { label: string; value: React.ReactNode; tone?: 'default' | 'success' | 'muted' }): React.ReactElement {
   return (
     <div className="rounded-lg bg-muted/45 p-3">
       <div className="text-[11px] font-medium text-muted-foreground">{label}</div>

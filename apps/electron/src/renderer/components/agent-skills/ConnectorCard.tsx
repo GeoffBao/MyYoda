@@ -23,6 +23,8 @@ interface ConnectorCardProps {
   /** 状态徽标文案，如「已启用」「需配置」「可用」 */
   statusLabel?: string
   statusTone?: ConnectorStatusTone
+  /** 来源标注（官方/自研），显示在名称旁 */
+  vendorLabel?: string
   /** 开关状态（不传 onToggle 则不渲染开关） */
   enabled?: boolean
   onOpen: () => void
@@ -43,6 +45,7 @@ export function ConnectorCard({
   categoryLabel,
   statusLabel,
   statusTone = 'muted',
+  vendorLabel,
   enabled,
   onOpen,
   onToggle,
@@ -73,7 +76,21 @@ export function ConnectorCard({
           <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-content-area shadow-sm">
             {icon}
           </div>
-          <h3 className="min-w-0 truncate text-[15px] font-semibold text-foreground">{name}</h3>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h3 className="truncate text-[15px] font-semibold text-foreground">{name}</h3>
+            {vendorLabel && (
+              <span
+                className={cn(
+                  'w-fit rounded px-1 py-px text-[10px] font-medium',
+                  vendorLabel === '官方'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                    : 'bg-foreground/5 text-muted-foreground',
+                )}
+              >
+                {vendorLabel}
+              </span>
+            )}
+          </div>
         </div>
         <span
           className={cn(

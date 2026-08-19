@@ -30,6 +30,8 @@ export interface ConnectorCredentialField {
 export interface ConnectorCredentialSpec {
   /** 说明文案（显示在表单顶部） */
   description: string
+  /** 认证方式展示文案（如「Personal Access Token」） */
+  authType: string
   fields: ConnectorCredentialField[]
 }
 
@@ -37,12 +39,14 @@ export interface ConnectorCredentialSpec {
 export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec> = {
   github: {
     description: '在 GitHub Settings → Developer settings → Personal access tokens 创建 Token（建议只勾 repo 权限）。',
+    authType: 'Personal Access Token',
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...', secret: true },
     ],
   },
   gitlab: {
     description: '在 GitLab User Settings → Access Tokens 创建 Token（勾选 api 权限）。自建实例可填 API 地址。',
+    authType: 'Personal Access Token',
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', secret: true },
       { key: 'apiUrl', label: 'API 地址（可选，自建实例填）', placeholder: 'https://gitlab.com/api/v4', optional: true },
@@ -50,30 +54,35 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   },
   notion: {
     description: '在 notion.so/my-integrations 创建集成并复制 Token（ntn_ 开头），然后把要访问的页面 Share 给该集成。',
+    authType: 'API Token（ntn_）',
     fields: [
       { key: 'token', label: 'Notion Token', placeholder: 'ntn_...', secret: true },
     ],
   },
   figma: {
     description: '在 Figma Settings → Security → Personal access tokens 生成 Token（需 File content 读取权限）。',
+    authType: 'Personal Access Token',
     fields: [
       { key: 'apiKey', label: 'Figma API Key', placeholder: 'figd_...', secret: true },
     ],
   },
   'brave-search': {
     description: '在 brave.com/search/api 免费申请 API Key（每月有免费额度）。',
+    authType: 'API Key',
     fields: [
       { key: 'apiKey', label: 'Brave Search API Key', placeholder: 'BSA...', secret: true },
     ],
   },
   exa: {
     description: '在 dashboard.exa.ai/api-keys 获取 API Key。',
+    authType: 'API Key',
     fields: [
       { key: 'apiKey', label: 'Exa API Key', placeholder: '...', secret: true },
     ],
   },
   browserbase: {
     description: '在 browserbase.com 控制台获取 API Key 与 Project ID（browserbase.com/dashboard）。',
+    authType: 'API Key + Project ID',
     fields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'bb_live_...', secret: true },
       { key: 'projectId', label: 'Project ID', placeholder: '...' },
@@ -81,6 +90,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   },
   sqlite: {
     description: '填写本地 SQLite 数据库文件路径，Agent 将获得只读查询能力（SELECT/PRAGMA）。',
+    authType: '本地文件路径',
     fields: [
       { key: 'dbPath', label: '数据库文件路径', placeholder: '/Users/you/data/app.db' },
     ],
@@ -218,6 +228,11 @@ export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCreden
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">
+          认证方式：{spec.authType}
+        </span>
+      </div>
       <p className="text-[13px] leading-relaxed text-muted-foreground">{spec.description}</p>
 
       <div className="flex flex-col gap-3">

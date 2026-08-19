@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { Plug, Search, Globe, Trash2 } from 'lucide-react'
+import { Plug, Search, Globe, Trash2, GitBranch, Compass, BookOpen } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
@@ -75,6 +75,37 @@ const CONFIGURABLE_IDS = new Set([
   'github', 'gitlab', 'notion', 'figma', 'brave-search', 'exa', 'browserbase', 'sqlite',
 ])
 
+/** 精选集合（对标 OpenAI Plugins Collections：推荐组合一键启用） */
+const COLLECTIONS: Array<{
+  id: string
+  title: string
+  description: string
+  icon: React.ReactNode
+  connectorIds: string[]
+}> = [
+  {
+    id: 'dev-essentials',
+    title: '开发必备',
+    description: '代码托管与版本管理',
+    icon: <GitBranch size={16} />,
+    connectorIds: ['github', 'gitlab', 'git'],
+  },
+  {
+    id: 'deep-research',
+    title: '深度研究',
+    description: '搜索与内容抓取',
+    icon: <Compass size={16} />,
+    connectorIds: ['brave-search', 'exa', 'fetch'],
+  },
+  {
+    id: 'personal-knowledge',
+    title: '个人知识库',
+    description: '阅读笔记与文档',
+    icon: <BookOpen size={16} />,
+    connectorIds: ['readwise', 'weread', 'notion'],
+  },
+]
+
 // ===== 卡片视图模型 =====
 
 interface ConnectorItem {
@@ -86,6 +117,7 @@ interface ConnectorItem {
   categoryLabel: string
   statusLabel?: string
   statusTone?: 'success' | 'warning' | 'muted'
+  vendorLabel?: string
   enabled: boolean
   hasToggle: boolean
 }
@@ -162,6 +194,7 @@ export function ConnectorsTab({
         categoryLabel: CATEGORY_LABEL[cat],
         statusLabel: status.label,
         statusTone: status.tone,
+        vendorLabel: server.source?.vendor === 'official' ? '官方' : server.source?.vendor === 'myyoda' ? '自研' : undefined,
         enabled: server.enabled,
         hasToggle: true,
       })
@@ -305,6 +338,55 @@ export function ConnectorsTab({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* 精选集合（对标 OpenAI Plugins Collections）：推荐组合一键启用，仅在「全部」分类显示 */}
+      {category === 'all' && builtinServers.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {COLLECTIONS.map((collection) => {
+            const servers = collection.connectorIds
+              .map((id) => builtinServers.find((s) => s.id === id))
+              .filter((s): s is BuiltinMcpServerSummary => Boolean(s))
+            const enabledCount = servers.filter((s) => s.enabled).length
+            const allEnabled = enabledCount === servers.length
+            return (
+              <div
+                key={collection.id}
+                className="flex flex-col gap-2.5 rounded-xl border border-dashed border-border/70 bg-content-area/50 p-3.5"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {collection.icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold text-foreground">{collection.title}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{collection.description}</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    {enabledCount}/{servers.length} 已启用
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={allEnabled}
+                    onClick={() => {
+                      void (async () => {
+                        for (const server of servers) {
+                          if (!server.enabled) await onToggleBuiltin(server.id, true)
+                        }
+                        toast.success(`「${collection.title}」已全部启用`)
+                      })()
+                    }}
+                  >
+                    {allEnabled ? '已全部启用' : '一键启用'}
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* 分类 chip 筛选（对标 Mico 顶部分类） */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin">
         {CHIPS.map((chip) => (
@@ -342,6 +424,7 @@ export function ConnectorsTab({
               categoryLabel={item.categoryLabel}
               statusLabel={item.statusLabel}
               statusTone={item.statusTone}
+              vendorLabel={item.vendorLabel}
               enabled={item.enabled}
               onOpen={() => handleOpen(item)}
               onToggle={(enabled) => handleToggle(item, enabled)}

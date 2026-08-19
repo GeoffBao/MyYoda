@@ -1194,6 +1194,18 @@ export interface McpToolSummary {
 export type BuiltinMcpCategory = 'system' | 'automation' | 'collaboration' | 'memory' | 'media' | 'browser' | 'task' | 'office' | 'knowledge' | 'code' | 'design' | 'search' | 'data'
 
 /** MyYoda 内置 MCP 摘要，不写入工作区 mcp.json */
+/** 内置连接器来源与信任元数据（对标 OpenAI Plugins 的 author/homepage/repository） */
+export interface BuiltinMcpSourceInfo {
+  /** official=官方/社区发布，myyoda=MyYoda 自研桥接 */
+  vendor: 'official' | 'myyoda'
+  /** 发布者/维护方（如 GitHub / Figma / MyYoda） */
+  author?: string
+  /** 官网/文档主页 */
+  homepage?: string
+  /** 认证方式展示文案（如「Personal Access Token」「API Key」「无需凭据」「本地文件路径」） */
+  authType?: string
+}
+
 export interface BuiltinMcpServerSummary {
   id: string
   name: string
@@ -1204,6 +1216,8 @@ export interface BuiltinMcpServerSummary {
   available: boolean
   availabilityReason?: string
   tools: McpToolSummary[]
+  /** 来源与认证元数据（2026-08-19 起提供，旧数据可能缺失） */
+  source?: BuiltinMcpSourceInfo
 }
 
 /** 工作区 MCP 配置文件 */
