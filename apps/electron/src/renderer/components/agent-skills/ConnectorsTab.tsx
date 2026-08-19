@@ -52,16 +52,25 @@ function categoryOfBuiltin(server: BuiltinMcpServerSummary): Exclude<ConnectorCa
     case 'knowledge':
       return 'office'
     case 'browser':
+    case 'code':
       return 'code'
     case 'media':
+    case 'design':
       return 'design'
+    case 'search':
+      return 'search'
+    case 'data':
+      return 'data'
     default:
       return 'system'
   }
 }
 
-/** 需要凭据配置的内置/增强工具（打开凭据配置 Modal） */
-const CONFIGURABLE_IDS = new Set(['wecom', 'readwise', 'weread', 'nano-banana', 'web-search'])
+/** 需要凭据配置的连接器（打开凭据配置 Modal）；其余内置连接器打开只读详情 Modal */
+const CONFIGURABLE_IDS = new Set([
+  'wecom', 'readwise', 'weread', 'nano-banana', 'web-search',
+  'github', 'gitlab', 'notion', 'figma', 'brave-search', 'exa', 'browserbase', 'sqlite',
+])
 
 // ===== 卡片视图模型 =====
 

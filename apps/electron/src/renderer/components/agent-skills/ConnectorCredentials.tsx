@@ -1,0 +1,244 @@
+/**
+ * ConnectorCredentials — 外部 npx 连接器通用凭据配置表单
+ *
+ * Phase 2 接入的 8 个连接器（github/gitlab/notion/figma/brave-search/exa/
+ * browserbase/sqlite）凭据字段各不相同，但交互一致：字段输入 blur 静默保存
+ * 到 chat-tools.json toolCredentials[<id>] + 内置 MCP 开关 + 可用状态展示。
+ * 用一个字段驱动组件覆盖全部，避免复制 8 份 WecomSettings。
+ */
+
+import * as React from 'react'
+import { Eye, EyeOff } from 'lucide-react'
+import { toast } from 'sonner'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
+
+/** 单个凭据字段定义 */
+export interface ConnectorCredentialField {
+  /** toolCredentials[connectorId] 的键 */
+  key: string
+  label: string
+  placeholder?: string
+  /** 是否密文（眼睛切换） */
+  secret?: boolean
+  /** 可选字段（留空视为未配置，不阻断可用性） */
+  optional?: boolean
+}
+
+export interface ConnectorCredentialSpec {
+  /** 说明文案（显示在表单顶部） */
+  description: string
+  fields: ConnectorCredentialField[]
+}
+
+/** 各连接器的凭据字段与说明（与 npx-connector-mcp.ts 的 envMap 对应） */
+export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec> = {
+  github: {
+    description: '在 GitHub Settings → Developer settings → Personal access tokens 创建 Token（建议只勾 repo 权限）。',
+    fields: [
+      { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...', secret: true },
+    ],
+  },
+  gitlab: {
+    description: '在 GitLab User Settings → Access Tokens 创建 Token（勾选 api 权限）。自建实例可填 API 地址。',
+    fields: [
+      { key: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', secret: true },
+      { key: 'apiUrl', label: 'API 地址（可选，自建实例填）', placeholder: 'https://gitlab.com/api/v4', optional: true },
+    ],
+  },
+  notion: {
+    description: '在 notion.so/my-integrations 创建集成并复制 Token（ntn_ 开头），然后把要访问的页面 Share 给该集成。',
+    fields: [
+      { key: 'token', label: 'Notion Token', placeholder: 'ntn_...', secret: true },
+    ],
+  },
+  figma: {
+    description: '在 Figma Settings → Security → Personal access tokens 生成 Token（需 File content 读取权限）。',
+    fields: [
+      { key: 'apiKey', label: 'Figma API Key', placeholder: 'figd_...', secret: true },
+    ],
+  },
+  'brave-search': {
+    description: '在 brave.com/search/api 免费申请 API Key（每月有免费额度）。',
+    fields: [
+      { key: 'apiKey', label: 'Brave Search API Key', placeholder: 'BSA...', secret: true },
+    ],
+  },
+  exa: {
+    description: '在 dashboard.exa.ai/api-keys 获取 API Key。',
+    fields: [
+      { key: 'apiKey', label: 'Exa API Key', placeholder: '...', secret: true },
+    ],
+  },
+  browserbase: {
+    description: '在 browserbase.com 控制台获取 API Key 与 Project ID（browserbase.com/dashboard）。',
+    fields: [
+      { key: 'apiKey', label: 'API Key', placeholder: 'bb_live_...', secret: true },
+      { key: 'projectId', label: 'Project ID', placeholder: '...' },
+    ],
+  },
+  sqlite: {
+    description: '填写本地 SQLite 数据库文件路径，Agent 将获得只读查询能力（SELECT/PRAGMA）。',
+    fields: [
+      { key: 'dbPath', label: '数据库文件路径', placeholder: '/Users/you/data/app.db' },
+    ],
+  },
+}
+
+interface ConnectorCredentialsProps {
+  connectorId: string
+}
+
+export function ConnectorCredentials({ connectorId }: ConnectorCredentialsProps): React.ReactElement {
+  const spec = CONNECTOR_CREDENTIAL_SPECS[connectorId]
+  if (!spec) {
+    return <div className="text-sm text-muted-foreground">该连接器无需凭据配置。</div>
+  }
+
+  const { workspaces, currentWorkspaceId } = useWorkspaceActions()
+  const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
+  const [values, setValues] = React.useState<Record<string, string>>({})
+  const [visible, setVisible] = React.useState<Record<string, boolean>>({})
+  const [enabled, setEnabled] = React.useState(false)
+  const [available, setAvailable] = React.useState(false)
+  const [availabilityReason, setAvailabilityReason] = React.useState<string | undefined>(undefined)
+  const [loading, setLoading] = React.useState(true)
+
+  const savedRef = React.useRef<Record<string, string>>({})
+
+  const refreshServerState = React.useCallback(async (slug: string): Promise<void> => {
+    try {
+      const caps = await window.electronAPI.getWorkspaceCapabilities(slug)
+      const server = caps.builtinMcpServers.find((s) => s.id === connectorId)
+      if (server) {
+        setEnabled(server.enabled)
+        setAvailable(server.available)
+        setAvailabilityReason(server.availabilityReason)
+      }
+    } catch (err) {
+      console.error(`[连接器凭据] 刷新状态失败（${connectorId}）:`, err)
+    }
+  }, [connectorId])
+
+  React.useEffect(() => {
+    let cancelled = false
+    const init: Record<string, string> = {}
+    for (const field of spec.fields) init[field.key] = ''
+    if (!workspaceSlug) {
+      setValues(init)
+      savedRef.current = init
+      setLoading(false)
+      return
+    }
+    Promise.all([
+      window.electronAPI.getChatToolCredentials(connectorId),
+      window.electronAPI.getWorkspaceCapabilities(workspaceSlug),
+    ])
+      .then(([credentials, caps]) => {
+        if (cancelled) return
+        const next: Record<string, string> = {}
+        for (const field of spec.fields) {
+          next[field.key] = (credentials as Record<string, string | undefined>)[field.key] ?? ''
+        }
+        setValues(next)
+        savedRef.current = next
+        const server = caps.builtinMcpServers.find((s) => s.id === connectorId)
+        if (server) {
+          setEnabled(server.enabled)
+          setAvailable(server.available)
+          setAvailabilityReason(server.availabilityReason)
+        }
+      })
+      .catch((err: unknown) => console.error(`[连接器凭据] 加载失败（${connectorId}）:`, err))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [connectorId, workspaceSlug, spec])
+
+  const handleBlurSave = React.useCallback(async (): Promise<void> => {
+    const current: Record<string, string> = {}
+    for (const field of spec.fields) current[field.key] = (values[field.key] ?? '').trim()
+    const saved = savedRef.current
+    const changed = spec.fields.some((f) => current[f.key] !== saved[f.key])
+    if (!changed) return
+    try {
+      await window.electronAPI.updateChatToolCredentials(connectorId, current)
+      savedRef.current = current
+      toast.success('凭据已保存')
+      if (workspaceSlug) await refreshServerState(workspaceSlug)
+    } catch (error) {
+      console.error(`[连接器凭据] 保存失败（${connectorId}）:`, error)
+      toast.error('保存失败')
+    }
+  }, [connectorId, values, workspaceSlug, spec, refreshServerState])
+
+  const handleToggle = async (checked: boolean): Promise<void> => {
+    if (!workspaceSlug) {
+      toast.error('请先选择工作区')
+      return
+    }
+    try {
+      await window.electronAPI.setBuiltinMcpEnabled(workspaceSlug, connectorId, checked)
+      setEnabled(checked)
+      await refreshServerState(workspaceSlug)
+    } catch (error) {
+      console.error(`[连接器凭据] 切换失败（${connectorId}）:`, error)
+    }
+  }
+
+  if (loading) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">加载中...</div>
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-[13px] leading-relaxed text-muted-foreground">{spec.description}</p>
+
+      <div className="flex flex-col gap-3">
+        {spec.fields.map((field) => (
+          <div key={field.key} className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-medium text-foreground">
+              {field.label}
+              {field.optional && <span className="ml-1 text-[11px] font-normal text-muted-foreground">可选</span>}
+            </label>
+            <div className="relative">
+              <input
+                type={field.secret && !visible[field.key] ? 'password' : 'text'}
+                value={values[field.key] ?? ''}
+                placeholder={field.placeholder}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                onBlur={() => void handleBlurSave()}
+                className={cn(
+                  'h-9 w-full rounded-lg border border-border/60 bg-content-area px-3 text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none focus:border-primary/40',
+                  field.secret && 'pr-9',
+                )}
+              />
+              {field.secret && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setVisible((prev) => ({ ...prev, [field.key]: !prev[field.key] }))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/70"
+                >
+                  {visible[field.key] ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg bg-muted/45 px-3 py-2.5">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-foreground">启用连接器</span>
+          <span className="text-[11px] text-muted-foreground">
+            {available ? '凭据有效，启用后即可注入 Agent 会话' : (availabilityReason ?? '凭据未配置')}
+          </span>
+        </div>
+        <Switch checked={enabled} onCheckedChange={(checked) => void handleToggle(checked)} />
+      </div>
+    </div>
+  )
+}

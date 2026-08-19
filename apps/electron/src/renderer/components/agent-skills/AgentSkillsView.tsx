@@ -39,6 +39,7 @@ import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { ConnectorsTab } from './ConnectorsTab'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
+import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS } from './ConnectorCredentials'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
@@ -574,6 +575,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         {configureServerId === 'weread' && <WereadSettings />}
         {configureServerId === 'nano-banana' && <NanoBananaSettings />}
         {configureServerId === 'web-search' && <WebSearchSettings />}
+        {configureServerId && CONNECTOR_CREDENTIAL_SPECS[configureServerId] && (
+          <ConnectorCredentials connectorId={configureServerId} />
+        )}
       </ConnectorDetailDialog>
 
       <ImportSkillDialog
@@ -749,6 +753,14 @@ const CONFIGURE_META: Record<string, { title: string; tags: string[] }> = {
   weread: { title: '微信读书', tags: ['MCP 连接器', '协作办公', 'Agent Gateway'] },
   'nano-banana': { title: 'Nano Banana 生图', tags: ['MCP 连接器', '设计协作', 'Gemini'] },
   'web-search': { title: '联网搜索', tags: ['内置工具', '搜索与自动化'] },
+  github: { title: 'GitHub', tags: ['MCP 连接器', '研发与交付', '官方 server'] },
+  gitlab: { title: 'GitLab', tags: ['MCP 连接器', '研发与交付', '官方 server'] },
+  notion: { title: 'Notion', tags: ['MCP 连接器', '协作办公', '官方 server'] },
+  figma: { title: 'Figma', tags: ['MCP 连接器', '设计协作', '官方 developer MCP'] },
+  'brave-search': { title: 'Brave Search', tags: ['MCP 连接器', '搜索与自动化', '官方 server'] },
+  exa: { title: 'Exa', tags: ['MCP 连接器', '搜索与自动化', '官方 server'] },
+  browserbase: { title: 'Browserbase', tags: ['MCP 连接器', '搜索与自动化', '官方 server'] },
+  sqlite: { title: 'SQLite 数据库', tags: ['自研桥接', '数据与基础设施', '只读查询'] },
 }
 
 // ===== Empty State =====

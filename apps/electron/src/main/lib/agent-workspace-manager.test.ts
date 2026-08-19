@@ -92,11 +92,17 @@ describe('Agent 工作区 MCP 配置', () => {
           command: 'github-mcp',
           enabled: true,
         },
+        'my-tool': {
+          type: 'stdio',
+          command: 'my-tool-command',
+          enabled: true,
+        },
       },
     })
 
-    expect(Object.keys(normalized.servers).sort()).toEqual(['github'])
-    expect(normalized.servers.github?.command).toBe('github-mcp')
+    // github 已成为内置保留名（2026-08-19 Phase 2），会被剔除；普通服务器保留
+    expect(Object.keys(normalized.servers).sort()).toEqual(['my-tool'])
+    expect(normalized.servers['my-tool']?.command).toBe('my-tool-command')
   })
 })
 

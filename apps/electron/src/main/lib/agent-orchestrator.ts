@@ -66,6 +66,7 @@ import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
 import { injectWecomMcpServer } from './builtin-mcp/wecom-mcp'
+import { injectNpxConnectorMcpServer, NPX_CONNECTOR_SPECS } from './builtin-mcp/npx-connector-mcp'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
 import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
@@ -1419,6 +1420,15 @@ export class AgentOrchestrator {
       // 凭据来自 API Tab 配置（Bot ID/Secret）或本机 wecom-cli auth init。
       if (!toolsDisabled && isBuiltinMcpUserEnabled('wecom')) {
         injectWecomMcpServer(mcpServers)
+      }
+      // Phase 2 外部 npx 连接器（GitHub/GitLab/Notion/Figma/Brave Search/Exa/Browserbase）：
+      // 官方 stdio MCP server，npx 拉包 + 环境变量凭据，optional 注入不阻塞会话。
+      if (!toolsDisabled) {
+        for (const spec of NPX_CONNECTOR_SPECS) {
+          if (isBuiltinMcpUserEnabled(spec.id)) {
+            injectNpxConnectorMcpServer(spec, mcpServers)
+          }
+        }
       }
       // Graphify 知识图谱 MCP serve（2026-08-14，P3）：repoMapTools 开启 + 主仓库图存在 +
       // graphifyy[mcp] 已装时，注入 stdio server（python -m graphify.serve <主仓库 graph.json>），

@@ -27,6 +27,10 @@ const CATEGORY_LABELS: Record<BuiltinMcpServerSummary['category'], string> = {
   task: '任务',
   office: '办公',
   knowledge: '知识',
+  code: '代码',
+  design: '设计',
+  search: '搜索',
+  data: '数据',
 }
 
 interface BuiltinMcpConfigInfo {
@@ -80,6 +84,25 @@ function getConfigInfo(server: BuiltinMcpServerSummary): BuiltinMcpConfigInfo {
       source: 'Agent 工具 / 微信读书',
       description: '在「连接器 Tab → 微信读书」填入 API Key（wrk- 开头，官方 Skill 页面登录获取）并开启开关。Agent 即可搜索书城、查看书架/划线/阅读统计（只读）。Key 是 OAuth Token 会过期，失效时重新生成。',
       actionLabel: '配置微信读书',
+    }
+  }
+  if (server.id === 'git') {
+    return {
+      source: 'MyYoda 自研桥接 / git 命令',
+      description: '对当前 Agent 工作目录的 Git 仓库提供只读检查（状态/差异/日志/分支），无需凭据。写操作（add/commit/push）请让 Agent 用终端命令完成并由你确认。',
+    }
+  }
+  if (server.id === 'fetch') {
+    return {
+      source: 'MyYoda 自研桥接 / 内置抓取',
+      description: '抓取任意 http/https 页面并转为可读文本（HTML 自动剥离脚本样式），无需凭据。不支持需要登录的页面，单次响应上限 512KB。',
+    }
+  }
+  if (server.id === 'sqlite') {
+    return {
+      source: 'MyYoda 自研桥接 / node:sqlite',
+      description: '对指定本地 SQLite 数据库提供只读查询（SELECT/PRAGMA，最多 500 行）。在连接器详情中配置数据库文件路径后开启即可。',
+      actionLabel: '配置数据库路径',
     }
   }
   return {
