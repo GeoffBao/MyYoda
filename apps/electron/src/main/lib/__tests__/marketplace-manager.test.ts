@@ -37,7 +37,9 @@ describe('市场目录（plugin_creator）', () => {
   })
 
   test('安装 → 状态变化 → 卸载 → 恢复', () => {
-    const item = listMarketplaceCatalog()[0]
+    const first = listMarketplaceCatalog()[0]
+    expect(first).toBeTruthy()
+    const item = first!
     try {
       installMarketplaceItem(item.id)
       expect(getMarketplaceInstalledIds()).toContain(item.id)
@@ -59,6 +61,7 @@ describe('市场目录（plugin_creator）', () => {
     const spec = marketplaceItemToNpxSpec(item!)
     expect(spec.id.startsWith(MARKETPLACE_ID_PREFIX)).toBe(true)
     expect(spec.envMap).toEqual(item!.envMap)
-    expect(spec.npmPackage).toBe(item!.npxPackage)
+    expect(item!.npxPackage).toBeTruthy()
+    expect(spec.npmPackage).toBe(item!.npxPackage!)
   })
 })
