@@ -1099,6 +1099,8 @@ export interface ElectronAPI {
   marketplaceInstall: (itemId: string, workspaceSlug: string) => Promise<void>
   /** 市场目录：卸载条目 */
   marketplaceUninstall: (itemId: string) => Promise<void>
+  /** 市场目录：开关（启用/停用注入） */
+  marketplaceToggle: (itemId: string, enabled: boolean) => Promise<void>
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -2866,6 +2868,9 @@ const electronAPI: ElectronAPI = {
   },
   marketplaceUninstall: (itemId: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId)
+  },
+  marketplaceToggle: (itemId: string, enabled: boolean) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, itemId, enabled)
   },
 
   // AskUserQuestion 交互式问答

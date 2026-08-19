@@ -3840,6 +3840,10 @@ export function registerIpcHandlers(): void {
     const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
     return uninstallMarketplaceItem(itemId)
   })
+  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, async (_, itemId: string, enabled: boolean): Promise<void> => {
+    const { toggleMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+    toggleMarketplaceItem(itemId, enabled)
+  })
 
   // 测试工具连接
   ipcMain.handle(

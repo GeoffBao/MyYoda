@@ -124,7 +124,14 @@ export function ConnectorCard({
               {statusLabel}
             </span>
           )}
-          {onRemove ? (
+          {onToggle && (
+            <Switch
+              checked={enabled ?? false}
+              onCheckedChange={onToggle}
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+          {onRemove && (
             <button
               type="button"
               title="移除"
@@ -134,13 +141,7 @@ export function ConnectorCard({
             >
               <Trash2 size={14} />
             </button>
-          ) : onToggle ? (
-            <Switch
-              checked={enabled ?? false}
-              onCheckedChange={onToggle}
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : null}
+          )}
         </div>
       </div>
     </div>

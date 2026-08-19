@@ -315,6 +315,22 @@ export async function uninstallMarketplaceItem(itemId: string): Promise<void> {
   invalidateMarketListCache()
 }
 
+/** 开关：启用/停用注入（不删除、不 ignored；与内置连接器开关语义一致）
+ *  enabled=true → 加入 marketplaceInstalled；false → 仅移除注入 */
+export function toggleMarketplaceItem(itemId: string, enabled: boolean): void {
+  const config = getChatToolsConfig()
+  const installed = new Set(config.marketplaceInstalled ?? [])
+  if (enabled) {
+    installed.add(itemId)
+    setMarketplaceIgnored(itemId, false)
+  } else {
+    installed.delete(itemId)
+  }
+  config.marketplaceInstalled = [...installed]
+  saveChatToolsConfig(config)
+  invalidateMarketListCache()
+}
+
 /** 已安装市场连接器 → NpxConnectorSpec（本地目录 + 远程快照统一注入） */
 export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
   const installed = new Set(getMarketplaceInstalledIds())

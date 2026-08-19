@@ -307,8 +307,9 @@ export function ConnectorsTab({
         statusLabel,
         statusTone,
         vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
-        enabled: true,
-        hasToggle: false,
+        // 开关 = 注入启用状态（marketplaceInstalled）；垃圾桶 = 彻底移除
+        enabled: item.marketplaceInstalled ?? false,
+        hasToggle: true,
       })
     }
 
@@ -365,6 +366,15 @@ export function ConnectorsTab({
   const handleToggle = (item: ConnectorItem, enabled: boolean): void => {
     if (item.key.startsWith('builtin:')) {
       onToggleBuiltin(item.key.slice('builtin:'.length), enabled)
+    } else if (item.key.startsWith('marketplace:')) {
+      const id = item.key.slice('marketplace:'.length)
+      void window.electronAPI
+        .marketplaceToggle(id, enabled)
+        .then(() => onMarketplaceChanged?.())
+        .catch((error) => {
+          console.error(`[连接器] 切换失败（${id}）:`, error)
+          toast.error('切换失败')
+        })
     } else if (item.key === 'web-search') {
       void window.electronAPI.updateChatToolState('web-search', { enabled }).then(() => refreshTools(setChatTools))
     } else if (item.key.startsWith('mcp:')) {

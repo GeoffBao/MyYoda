@@ -117,6 +117,8 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   MARKETPLACE_INSTALL: 'marketplace:install',
   /** 市场目录：卸载条目 */
   MARKETPLACE_UNINSTALL: 'marketplace:uninstall',
+  /** 市场目录：开关（启用/停用注入） */
+  MARKETPLACE_TOGGLE: 'marketplace:toggle',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */
