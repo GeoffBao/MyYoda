@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { Plug, CalendarClock, Users, ClipboardList, Globe } from 'lucide-react'
+import { Plug, CalendarClock, Users, ClipboardList, Globe, Flame, Radar, Bug, Clapperboard, Film } from 'lucide-react'
 import WecomLogo from '@/assets/brand/wecom-logo.png'
 import ChromeLogo from '@/assets/brand/chrome-logo.svg'
 import GeminiLogo from '@/assets/brand/gemini-logo.png'
@@ -22,6 +22,16 @@ import BraveLogo from '@/assets/brand/brave-logo.svg'
 import ExaLogo from '@/assets/brand/exa-logo.png'
 import SqliteLogo from '@/assets/brand/sqlite-logo.svg'
 import BrowserbaseLogo from '@/assets/brand/browserbase-logo.png'
+import SlackLogo from '@/assets/brand/slack-logo.svg'
+import LinearLogo from '@/assets/brand/linear-logo.svg'
+import JiraLogo from '@/assets/brand/jira-logo.svg'
+import CloudflareLogo from '@/assets/brand/cloudflare-logo.svg'
+import RedisLogo from '@/assets/brand/redis-logo.svg'
+import PostgresLogo from '@/assets/brand/postgres-logo.svg'
+import HuggingfaceLogo from '@/assets/brand/huggingface-logo.svg'
+import StripeLogo from '@/assets/brand/stripe-logo.svg'
+import ElevenlabsLogo from '@/assets/brand/elevenlabs-logo.svg'
+import DeepgramLogo from '@/assets/brand/deepgram-logo.svg'
 
 /** 内置 MCP 图标尺寸（与默认 Plug size=18 一致） */
 const ICON_CLASS = 'size-[18px]'
@@ -56,6 +66,38 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
       return <img src={SqliteLogo} alt="SQLite" className={ICON_CLASS} />
     case 'browserbase':
       return <img src={BrowserbaseLogo} alt="Browserbase" className={ICON_CLASS} />
+    // 市场目录官方连接器（2026-08-19）
+    case 'slack':
+      return <img src={SlackLogo} alt="Slack" className={ICON_CLASS} />
+    case 'linear':
+      return <img src={LinearLogo} alt="Linear" className={ICON_CLASS} />
+    case 'jira':
+      return <img src={JiraLogo} alt="Jira" className={ICON_CLASS} />
+    case 'cloudflare':
+      return <img src={CloudflareLogo} alt="Cloudflare" className={ICON_CLASS} />
+    case 'redis':
+      return <img src={RedisLogo} alt="Redis" className={ICON_CLASS} />
+    case 'postgres':
+      return <img src={PostgresLogo} alt="PostgreSQL" className={ICON_CLASS} />
+    case 'huggingface':
+      return <img src={HuggingfaceLogo} alt="Hugging Face" className={ICON_CLASS} />
+    case 'stripe':
+      return <img src={StripeLogo} alt="Stripe" className={ICON_CLASS} />
+    case 'elevenlabs':
+      return <img src={ElevenlabsLogo} alt="ElevenLabs" className={ICON_CLASS} />
+    case 'deepgram':
+      return <img src={DeepgramLogo} alt="Deepgram" className={ICON_CLASS} />
+    // 无官方图标的第三方（语义化 lucide 兜底）
+    case 'firecrawl':
+      return <Flame size={18} />
+    case 'tavily':
+      return <Radar size={18} />
+    case 'playwright':
+      return <Bug size={18} />
+    case 'chatcut':
+      return <Clapperboard size={18} />
+    case 'heygen':
+      return <Film size={18} />
     case 'fetch':
       return <Globe size={18} />
     case 'automation':
