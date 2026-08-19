@@ -3,7 +3,7 @@
  */
 
 import * as React from 'react'
-import { CheckCircle2, ExternalLink, Settings2, XCircle } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Puzzle, Settings2, ShieldCheck, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -201,19 +201,67 @@ export function BuiltinMcpDetailSheet({ open, server, onOpenChange, onConfigure 
               </section>
 
               <section className="flex flex-col gap-3">
-                <div className="text-sm font-medium text-foreground">工具</div>
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <ShieldCheck size={16} className="text-muted-foreground" />
+                  <span>可访问范围</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(server.permissions ?? []).map((permission) => (
+                    <span
+                      key={permission}
+                      className="rounded-md border border-border/60 bg-background px-2.5 py-1 text-[11px] text-muted-foreground"
+                    >
+                      {permission}
+                    </span>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-lg bg-muted/45 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">如何配置</div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{configInfo.description}</p>
+                  </div>
+                  {configInfo.actionLabel && onConfigure && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => onConfigure(server.id)}
+                    >
+                      <Settings2 size={14} />
+                      <span>{configInfo.actionLabel}</span>
+                    </Button>
+                  )}
+                </div>
+              </section>
+
+              <section className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Puzzle size={16} className="text-muted-foreground" />
+                  <span>工具能力</span>
+                </div>
                 <div className="flex flex-col gap-2">
                   {server.tools.map((tool) => (
-                    <div key={tool.name} className="rounded-lg bg-muted/45 p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">{tool.name}</span>
-                        {tool.readOnly && (
-                          <span className="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                            只读
-                          </span>
-                        )}
+                    <div
+                      key={tool.name}
+                      className="flex items-start gap-3 rounded-lg border border-border/40 bg-background p-3 transition-colors hover:border-border"
+                    >
+                      <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+                        <Puzzle size={14} className="text-muted-foreground" />
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{tool.name}</span>
+                          {tool.readOnly && (
+                            <span className="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                              只读
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{tool.description}</p>
+                      </div>
                     </div>
                   ))}
                 </div>

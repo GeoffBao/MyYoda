@@ -45,7 +45,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "无需凭据"
-      }
+      },
+      "permissions": [
+        "创建、更新、暂停、恢复或删除 MyYoda 定时任务"
+      ]
     },
     {
       "id": "collaboration",
@@ -100,7 +103,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "无需凭据"
-      }
+      },
+      "permissions": [
+        "创建协作子 Agent 会话并并行分发任务"
+      ]
     },
     {
       "id": "nano-banana",
@@ -123,7 +129,10 @@
         "author": "Google Gemini",
         "homepage": "https://aistudio.google.com/",
         "authType": "API Key"
-      }
+      },
+      "permissions": [
+        "调用 Google Gemini API 进行文本/代码生成"
+      ]
     },
     {
       "id": "chrome-devtools",
@@ -187,7 +196,10 @@
         "author": "Chrome DevTools MCP",
         "homepage": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
         "authType": "无需凭据（需本机 Chrome）"
-      }
+      },
+      "permissions": [
+        "通过 Chrome DevTools Protocol 操作本机 Chrome 标签页"
+      ]
     },
     {
       "id": "create-task",
@@ -210,7 +222,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "无需凭据"
-      }
+      },
+      "permissions": [
+        "读取和写入 MyYoda Todo / 日程数据"
+      ]
     },
     {
       "id": "wecom",
@@ -264,7 +279,10 @@
         "author": "企业微信（WecomTeam）",
         "homepage": "https://github.com/WecomTeam/wecom-cli",
         "authType": "Bot ID / Secret"
-      }
+      },
+      "permissions": [
+        "读取通讯录、发送消息、管理日程/会议/文档/微盘等"
+      ]
     },
     {
       "id": "readwise",
@@ -313,7 +331,10 @@
         "author": "Readwise",
         "homepage": "https://readwise.io/access_token",
         "authType": "API Token"
-      }
+      },
+      "permissions": [
+        "读取高亮、文档、标签和书单"
+      ]
     },
     {
       "id": "weread",
@@ -367,7 +388,10 @@
         "author": "微信读书",
         "homepage": "https://weread.qq.com/",
         "authType": "API Key（wrk-）"
-      }
+      },
+      "permissions": [
+        "读取书架、笔记、划线与书评"
+      ]
     },
     {
       "id": "github",
@@ -486,7 +510,10 @@
         "author": "GitHub",
         "homepage": "https://github.com/settings/tokens",
         "authType": "Personal Access Token"
-      }
+      },
+      "permissions": [
+        "读取仓库、Issues、Pull Requests、Commits、Branches"
+      ]
     },
     {
       "id": "gitlab",
@@ -590,7 +617,10 @@
         "author": "GitLab",
         "homepage": "https://gitlab.com/-/user_settings/personal_access_tokens",
         "authType": "Personal Access Token"
-      }
+      },
+      "permissions": [
+        "读取项目、Issues、Merge Requests、Commits"
+      ]
     },
     {
       "id": "git",
@@ -634,7 +664,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "无需凭据"
-      }
+      },
+      "permissions": [
+        "读取本地仓库分支、提交、文件差异"
+      ]
     },
     {
       "id": "notion",
@@ -703,7 +736,10 @@
         "author": "Notion",
         "homepage": "https://www.notion.so/my-integrations",
         "authType": "API Token（ntn_）"
-      }
+      },
+      "permissions": [
+        "读取已授权的页面与数据库内容"
+      ]
     },
     {
       "id": "figma",
@@ -792,7 +828,10 @@
         "author": "Figma",
         "homepage": "https://www.figma.com/developers/api",
         "authType": "Personal Access Token"
-      }
+      },
+      "permissions": [
+        "读取文件、图层、样式与组件库"
+      ]
     },
     {
       "id": "brave-search",
@@ -821,7 +860,10 @@
         "author": "Brave",
         "homepage": "https://brave.com/search/api/",
         "authType": "API Key"
-      }
+      },
+      "permissions": [
+        "发起公开网络搜索请求"
+      ]
     },
     {
       "id": "exa",
@@ -875,7 +917,10 @@
         "author": "Exa",
         "homepage": "https://dashboard.exa.ai/api-keys",
         "authType": "API Key"
-      }
+      },
+      "permissions": [
+        "发起语义/关键词网络搜索"
+      ]
     },
     {
       "id": "fetch",
@@ -899,7 +944,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "无需凭据"
-      }
+      },
+      "permissions": [
+        "抓取公开 HTTP 网页内容"
+      ]
     },
     {
       "id": "sqlite",
@@ -933,7 +981,10 @@
         "author": "MyYoda",
         "homepage": "https://github.com/GeoffBao/MyYoda",
         "authType": "本地文件路径"
-      }
+      },
+      "permissions": [
+        "只读查询本地 SQLite 数据库"
+      ]
     },
     {
       "id": "browserbase",
@@ -987,7 +1038,10 @@
         "author": "Browserbase",
         "homepage": "https://browserbase.com/dashboard",
         "authType": "API Key + Project ID"
-      }
+      },
+      "permissions": [
+        "创建和管理云端浏览器会话"
+      ]
     }
   ]
 }

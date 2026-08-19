@@ -36,6 +36,8 @@ export interface BuiltinMcpDefinition {
     homepage?: string
     authType?: string
   }
+  /** 连接器将访问的数据/能力范围（对标 Trae 权限列表） */
+  permissions?: string[]
 }
 
 const DEFINITIONS: BuiltinMcpDefinition[] = (manifest.servers as unknown as BuiltinMcpDefinition[]).map((s) => ({

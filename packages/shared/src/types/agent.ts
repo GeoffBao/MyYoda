@@ -1218,6 +1218,8 @@ export interface BuiltinMcpServerSummary {
   tools: McpToolSummary[]
   /** 来源与认证元数据（2026-08-19 起提供，旧数据可能缺失） */
   source?: BuiltinMcpSourceInfo
+  /** 连接器将访问的数据/能力范围（对标 Trae 权限列表） */
+  permissions?: string[]
 }
 
 /** 工作区 MCP 配置文件 */

@@ -47,6 +47,18 @@ const CATEGORY_LABEL: Record<Exclude<ConnectorCategory, 'all'>, string> = {
   custom: '自定义',
 }
 
+const CATEGORY_ORDER: Array<Exclude<ConnectorCategory, 'all'>> = [
+  'office',
+  'knowledge',
+  'code',
+  'design',
+  'search',
+  'data',
+  'system',
+  'mine',
+  'custom',
+]
+
 /** 内置 MCP 服务器 → 连接器品类映射 */
 function categoryOfBuiltin(server: BuiltinMcpServerSummary): Exclude<ConnectorCategory, 'all'> {
   switch (server.category) {
@@ -406,11 +418,41 @@ export function ConnectorsTab({
         ))}
       </div>
 
-      {/* 卡片网格（Mico 4 列） */}
+      {/* 全部页：按分类分块展示；具体分类：4 列网格 */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <div className="text-[14px] font-medium text-foreground/70">没有匹配的连接器</div>
           <div className="text-[13px] text-foreground/45">试试更换分类或搜索关键词。</div>
+        </div>
+      ) : category === 'all' ? (
+        <div className="flex flex-col gap-8">
+          {CATEGORY_ORDER.map((cat) => {
+            const catItems = filtered.filter((item) => item.category === cat)
+            if (catItems.length === 0) return null
+            return (
+              <section key={cat} className="flex flex-col gap-3">
+                <div className="text-sm font-semibold text-foreground">{CATEGORY_LABEL[cat]}</div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {catItems.map((item) => (
+                    <ConnectorCard
+                      key={item.key}
+                      id={item.key}
+                      name={item.name}
+                      description={item.description}
+                      icon={item.icon}
+                      categoryLabel={item.categoryLabel}
+                      statusLabel={item.statusLabel}
+                      statusTone={item.statusTone}
+                      vendorLabel={item.vendorLabel}
+                      enabled={item.enabled}
+                      onOpen={() => handleOpen(item)}
+                      onToggle={(enabled) => handleToggle(item, enabled)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

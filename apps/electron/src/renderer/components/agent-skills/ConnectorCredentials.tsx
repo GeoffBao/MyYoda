@@ -8,7 +8,7 @@
  */
 
 import * as React from 'react'
-import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, PlugZap } from 'lucide-react'
+import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, PlugZap, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,8 @@ export interface ConnectorCredentialSpec {
   description: string
   /** 认证方式展示文案（如「Personal Access Token」） */
   authType: string
+  /** 本连接器将访问的数据/能力范围 */
+  permissions?: string[]
   fields: ConnectorCredentialField[]
 }
 
@@ -40,6 +42,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   github: {
     description: '在 GitHub Settings → Developer settings → Personal access tokens 创建 Token（建议只勾 repo 权限）。',
     authType: 'Personal Access Token',
+    permissions: ['读取仓库、Issues、Pull Requests、Commits、Branches'],
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...', secret: true },
     ],
@@ -47,6 +50,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   gitlab: {
     description: '在 GitLab User Settings → Access Tokens 创建 Token（勾选 api 权限）。自建实例可填 API 地址。',
     authType: 'Personal Access Token',
+    permissions: ['读取项目、Issues、Merge Requests、Commits'],
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', secret: true },
       { key: 'apiUrl', label: 'API 地址（可选，自建实例填）', placeholder: 'https://gitlab.com/api/v4', optional: true },
@@ -55,6 +59,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   notion: {
     description: '在 notion.so/my-integrations 创建集成并复制 Token（ntn_ 开头），然后把要访问的页面 Share 给该集成。',
     authType: 'API Token（ntn_）',
+    permissions: ['读取已授权的页面与数据库内容'],
     fields: [
       { key: 'token', label: 'Notion Token', placeholder: 'ntn_...', secret: true },
     ],
@@ -62,6 +67,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   figma: {
     description: '在 Figma Settings → Security → Personal access tokens 生成 Token（需 File content 读取权限）。',
     authType: 'Personal Access Token',
+    permissions: ['读取文件、图层、样式与组件库'],
     fields: [
       { key: 'apiKey', label: 'Figma API Key', placeholder: 'figd_...', secret: true },
     ],
@@ -69,6 +75,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   'brave-search': {
     description: '在 brave.com/search/api 免费申请 API Key（每月有免费额度）。',
     authType: 'API Key',
+    permissions: ['发起公开网络搜索请求'],
     fields: [
       { key: 'apiKey', label: 'Brave Search API Key', placeholder: 'BSA...', secret: true },
     ],
@@ -76,6 +83,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   exa: {
     description: '在 dashboard.exa.ai/api-keys 获取 API Key。',
     authType: 'API Key',
+    permissions: ['发起语义/关键词网络搜索'],
     fields: [
       { key: 'apiKey', label: 'Exa API Key', placeholder: '...', secret: true },
     ],
@@ -83,6 +91,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   browserbase: {
     description: '在 browserbase.com 控制台获取 API Key 与 Project ID（browserbase.com/dashboard）。',
     authType: 'API Key + Project ID',
+    permissions: ['创建和管理云端浏览器会话'],
     fields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'bb_live_...', secret: true },
       { key: 'projectId', label: 'Project ID', placeholder: '...' },
@@ -91,6 +100,7 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
   sqlite: {
     description: '填写本地 SQLite 数据库文件路径，Agent 将获得只读查询能力（SELECT/PRAGMA）。',
     authType: '本地文件路径',
+    permissions: ['只读查询本地 SQLite 数据库'],
     fields: [
       { key: 'dbPath', label: '数据库文件路径', placeholder: '/Users/you/data/app.db' },
     ],
@@ -234,6 +244,25 @@ export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCreden
         </span>
       </div>
       <p className="text-[13px] leading-relaxed text-muted-foreground">{spec.description}</p>
+
+      {spec.permissions && spec.permissions.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-content-area/40 p-3">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
+            <ShieldCheck size={14} className="text-muted-foreground" />
+            <span>本连接器可访问的范围</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {spec.permissions.map((permission) => (
+              <span
+                key={permission}
+                className="rounded-md border border-border/60 bg-background px-2 py-0.5 text-[11px] text-muted-foreground"
+              >
+                {permission}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
         {spec.fields.map((field) => (
