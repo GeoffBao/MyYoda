@@ -163,7 +163,10 @@
       "installKind": "cli",
       "cliPackage": "@readwise/cli",
       "cliHint": "Readwise（@readwise/cli）已可用。\n- 认证：readwise login-with-token <token>（readwise.io/access_token 获取）\n- 搜索文库：readwise reader-search-documents --query <关键词>\n- 列出文档：readwise reader-list-documents --location new --limit 10\n- 读全文：readwise reader-get-document-details --document-id <id>\n- 看划线：readwise readwise-list-highlights --book-id <id> 或 reader-get-document-highlights --document-id <id>\n- 每日复习：readwise readwise-get-daily-review\n全部命令支持 --json。回答阅读类问题时优先用 CLI，不要猜测用户阅读数据。",
-      "cliCommand": "readwise"
+      "cliCommand": "readwise",
+      "authCheckCommand": "readwise whoami",
+      "authFailPattern": "not logged",
+      "authGuide": "readwise login-with-token <token>（readwise.io/access_token 获取）"
     },
     {
       "id": "wecom-cli",
@@ -179,7 +182,10 @@
       "installKind": "cli",
       "cliPackage": "@wecom/cli",
       "cliHint": "企业微信（@wecom/cli）已可用。\n- 认证：wecom-cli auth init（扫码授权，仅需一次）；状态：wecom-cli auth show\n- 发消息：wecom-cli message send ...（先用 wecom-cli message --help 查看参数）\n- 日程/待办/会议/文档/表格：wecom-cli calendar/todo/meeting/doc/sheet --help\n服务能力由服务端动态下发，调用前先看对应子命令的 --help / --schema。",
-      "cliCommand": "wecom-cli"
+      "cliCommand": "wecom-cli",
+      "authCheckCommand": "wecom-cli auth show",
+      "authFailPattern": "unauthorized",
+      "authGuide": "wecom-cli auth init（扫码授权，仅需一次）"
     },
     {
       "id": "chatcut",
@@ -223,7 +229,10 @@
       "installKind": "cli",
       "cliPackage": "vercel",
       "cliHint": "Vercel CLI（vercel 包）已可用。\n- 认证：vercel login（浏览器 OAuth）\n- 本地开发：vercel dev\n- 预览部署：vercel --env PREVIEW；生产部署：vercel --prod\n- 环境变量：vercel env ls / vercel env add <NAME>\n部署类请求先确认目标项目，非必要不自动部署。",
-      "cliCommand": "vercel"
+      "cliCommand": "vercel",
+      "authCheckCommand": "vercel whoami",
+      "authFailPattern": "not logged",
+      "authGuide": "vercel login（浏览器 OAuth）"
     },
     {
       "id": "supabase",
@@ -239,7 +248,10 @@
       "installKind": "cli",
       "cliPackage": "supabase",
       "cliHint": "Supabase CLI（supabase 包）已可用。\n- 认证：supabase login（Access Token）\n- 链接项目：supabase link --project-ref <ref>\n- 查询数据库：supabase db ...（或 psql 直接查询）\n- 迁移：supabase migration list / db push\n- 函数：supabase functions list / deploy <name>\n数据库操作为高风险操作，执行前先向用户确认。",
-      "cliCommand": "supabase"
+      "cliCommand": "supabase",
+      "authCheckCommand": "",
+      "authFailPattern": "",
+      "authGuide": "supabase login"
     },
     {
       "id": "netlify",
@@ -255,7 +267,10 @@
       "installKind": "cli",
       "cliPackage": "netlify-cli",
       "cliHint": "Netlify CLI（netlify-cli 包）已可用。\n- 认证：netlify login\n- 链接站点：netlify link；部署：netlify deploy（--prod 为生产）\n- 本地开发：netlify dev\n- 环境变量：netlify env:list / env:set <KEY> <VALUE>\n生产部署前先向用户确认。",
-      "cliCommand": "netlify"
+      "cliCommand": "netlify",
+      "authCheckCommand": "netlify status",
+      "authFailPattern": "not logged",
+      "authGuide": "netlify login"
     },
     {
       "id": "wrangler",
@@ -271,7 +286,10 @@
       "installKind": "cli",
       "cliPackage": "wrangler",
       "cliHint": "Cloudflare Wrangler（wrangler 包）已可用。\n- 认证：wrangler login（浏览器 OAuth）\n- 本地开发：wrangler dev\n- 部署：wrangler deploy\n- 配置：wrangler secret put <NAME> / kv key put ...\n- 列表：wrangler whoami\n生产部署前先向用户确认。",
-      "cliCommand": "wrangler"
+      "cliCommand": "wrangler",
+      "authCheckCommand": "wrangler whoami",
+      "authFailPattern": "not logged",
+      "authGuide": "wrangler login"
     },
     {
       "id": "railway",
@@ -287,7 +305,10 @@
       "installKind": "cli",
       "cliPackage": "@railway/cli",
       "cliHint": "Railway CLI（@railway/cli 包）已可用。\n- 认证：railway login\n- 链接项目：railway link\n- 部署：railway up（或 git 推送触发自动部署）\n- 日志：railway logs；环境变量：railway variables\n生产部署前先向用户确认。",
-      "cliCommand": "railway"
+      "cliCommand": "railway",
+      "authCheckCommand": "railway whoami",
+      "authFailPattern": "not logged",
+      "authGuide": "railway login"
     }
   ]
 }

@@ -146,8 +146,38 @@ function hasNpxCredentials(itemId: string, envMap?: Record<string, string>): boo
   return Object.keys(envMap).every((key) => Boolean(credentials[key]?.trim()))
 }
 
+/** 检测 CLI 认证状态（执行 authCheckCommand，输出含 authFailPattern 则未认证） */
+function checkCliAuth(item: MarketplaceItem): boolean {
+  if (!item.authCheckCommand) return true  // 无检测命令 → 视为已认证
+  try {
+    const output = execSync(item.authCheckCommand, {
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+    })
+    if (item.authFailPattern && output.toLowerCase().includes(item.authFailPattern.toLowerCase())) {
+      return false
+    }
+    return true
+  } catch {
+    // fallback: login shell
+    try {
+      const output = execSync(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, {
+        timeout: 8000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf-8',
+      })
+      if (item.authFailPattern && output.toLowerCase().includes(item.authFailPattern.toLowerCase())) {
+        return false
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
 /**
- * 统一市场列表：本地 + 远程合并，带安装状态。
  * 远程 manifest 拉取失败不抛错（remoteAvailable=false，本地条目照常）。
  */
 export async function listMarketplaceItems(
@@ -176,6 +206,10 @@ export async function listMarketplaceItems(
       const sysInstalled = item.installKind === 'cli' && item.cliCommand
         ? systemHasCli(item.cliCommand)
         : false
+      // CLI 认证状态（系统已装才检查）
+      const authed = sysInstalled && item.installKind === 'cli'
+        ? checkCliAuth(item)
+        : false
       // npx 连接器：凭据是否已配置
       const hasCreds = item.installKind === 'npx-mcp'
         ? hasNpxCredentials(item.id, item.envMap)
@@ -186,6 +220,7 @@ export async function listMarketplaceItems(
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
         marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
+        authenticated: authed,
       }
     }),
   }

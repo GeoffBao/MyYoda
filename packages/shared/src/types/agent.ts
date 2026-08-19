@@ -1436,6 +1436,12 @@ export interface MarketplaceItem {
   cliPackage?: string
   /** cli：系统命令名（用于检测系统是否已安装，如 readwise / wecom-cli / vercel） */
   cliCommand?: string
+  /** cli：认证检测命令（如 'wecom-cli auth show' / 'vercel whoami'） */
+  authCheckCommand?: string
+  /** cli：未认证关键词（如 'unauthorized' / 'not logged in'） */
+  authFailPattern?: string
+  /** cli：认证引导命令（如 'wecom-cli auth init' / 'vercel login'） */
+  authGuide?: string
   /** cli：安装/使用提示（注入 Agent 系统提示的 CLI 用法说明，含认证步骤） */
   cliHint?: string
   /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
@@ -1453,6 +1459,8 @@ export interface MarketplaceItemWithStatus extends MarketplaceItem {
   hasCredentials?: boolean
   /** CLI 连接器系统是否已安装（command -v 检测） */
   systemInstalled?: boolean
+  /** CLI 连接器是否已认证（auth check） */
+  authenticated?: boolean
   /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
   marketplaceInstalled?: boolean
 }

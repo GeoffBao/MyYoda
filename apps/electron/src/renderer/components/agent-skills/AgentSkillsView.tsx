@@ -658,6 +658,12 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                 </div>
               </div>
               <div className="rounded-lg bg-muted/45 p-3">
+                <div className="text-[11px] font-medium text-muted-foreground">认证状态</div>
+                <div className={cn('mt-1 text-sm font-medium', configureMarketplaceItem.authenticated ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>
+                  {configureMarketplaceItem.authenticated ? '已认证' : '未认证'}
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/45 p-3">
                 <div className="text-[11px] font-medium text-muted-foreground">命令名</div>
                 <div className="mt-1 font-mono text-sm text-foreground">{configureMarketplaceItem.cliCommand ?? configureMarketplaceItem.cliPackage ?? '-'}</div>
               </div>
@@ -666,6 +672,11 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               <div className="rounded-lg border border-border/60 bg-content-area/40 p-4">
                 <div className="text-[12px] font-medium text-foreground">CLI 用法说明</div>
                 <pre className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground">{configureMarketplaceItem.cliHint}</pre>
+              </div>
+            )}
+            {!configureMarketplaceItem.authenticated && configureMarketplaceItem.authGuide && (
+              <div className="rounded-lg bg-amber-500/10 p-3 text-[12px] text-amber-600 dark:text-amber-400">
+                未认证。请在终端执行 <span className="font-mono">{configureMarketplaceItem.authGuide}</span> 完成授权。
               </div>
             )}
             {!configureMarketplaceItem.systemInstalled && configureMarketplaceItem.cliPackage && (
