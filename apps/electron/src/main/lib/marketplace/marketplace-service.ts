@@ -32,6 +32,27 @@ export type MarketplaceSkillItem = MarketplaceItem & {
   downloads?: number
 }
 
+/** 远程社区 Skill 分类 → 中文标签（本地条目 category 已是中文） */
+const REMOTE_CATEGORY_LABELS: Record<string, string> = {
+  video: '视频',
+  devtools: '开发工具',
+  reading: '阅读',
+  presentation: '演示',
+  visualization: '可视化',
+  documents: '文档',
+  camera: '相机诊断',
+  web: '网页',
+  search: '搜索',
+  productivity: '效率工具',
+  frontend: '前端',
+}
+
+/** 远程分类 → 中文（未知分类保持原文） */
+export function translateRemoteCategory(category: string | undefined): string | undefined {
+  if (!category) return undefined
+  return REMOTE_CATEGORY_LABELS[category] ?? category
+}
+
 /** 远程社区 Skill 条目 → 统一市场条目（id = skill.name，slug 即 name） */
 export function communitySkillToMarketplaceItem(skill: CommunitySkill): MarketplaceSkillItem {
   return {
@@ -43,7 +64,7 @@ export function communitySkillToMarketplaceItem(skill: CommunitySkill): Marketpl
     vendor: skill.verified ? 'official' : 'community',
     author: skill.authorName,
     homepage: skill.homepage,
-    category: skill.category,
+    category: translateRemoteCategory(skill.category),
     version: skill.version,
     downloads: skill.downloads,
     installKind: 'skill',

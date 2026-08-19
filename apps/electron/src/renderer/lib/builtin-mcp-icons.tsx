@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { Plug, CalendarClock, Users, ClipboardList, Globe, Flame, Radar, Bug, Clapperboard, Film } from 'lucide-react'
+import { Plug, CalendarClock, Users, ClipboardList, Globe, Flame, Radar, Bug } from 'lucide-react'
 import WecomLogo from '@/assets/brand/wecom-logo.png'
 import ChromeLogo from '@/assets/brand/chrome-logo.svg'
 import GeminiLogo from '@/assets/brand/gemini-logo.png'
@@ -32,6 +32,8 @@ import HuggingfaceLogo from '@/assets/brand/huggingface-logo.svg'
 import StripeLogo from '@/assets/brand/stripe-logo.svg'
 import ElevenlabsLogo from '@/assets/brand/elevenlabs-logo.svg'
 import DeepgramLogo from '@/assets/brand/deepgram-logo.svg'
+import ChatcutLogo from '@/assets/brand/chatcut-logo.svg'
+import HeygenLogo from '@/assets/brand/heygen-logo.svg'
 
 /** 内置 MCP 图标尺寸（与默认 Plug size=18 一致） */
 const ICON_CLASS = 'size-[18px]'
@@ -95,9 +97,9 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
     case 'playwright':
       return <Bug size={18} />
     case 'chatcut':
-      return <Clapperboard size={18} />
+      return <img src={ChatcutLogo} alt="ChatCut" className={ICON_CLASS} />
     case 'heygen':
-      return <Film size={18} />
+      return <img src={HeygenLogo} alt="HyperFrames by HeyGen" className={ICON_CLASS} />
     case 'fetch':
       return <Globe size={18} />
     case 'automation':

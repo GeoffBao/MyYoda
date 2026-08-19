@@ -15,6 +15,7 @@ import {
   removeMarketplaceRemoteItem,
   getInstalledMarketplaceSpecs,
   copySkillFolder,
+  translateRemoteCategory,
   MARKETPLACE_ID_PREFIX,
 } from '../marketplace/marketplace-service'
 import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
@@ -161,5 +162,13 @@ describe('marketplace-service 统一层', () => {
     expect(heygen).toBeDefined()
     expect(heygen!.type).toBe('skill')
     expect(heygen!.skillFolder).toBe('heygen')
+  })
+
+  test('translateRemoteCategory：英文分类转中文，未知保持原文', () => {
+    expect(translateRemoteCategory('video')).toBe('视频')
+    expect(translateRemoteCategory('devtools')).toBe('开发工具')
+    expect(translateRemoteCategory('camera')).toBe('相机诊断')
+    expect(translateRemoteCategory('unknown-cat')).toBe('unknown-cat')
+    expect(translateRemoteCategory(undefined)).toBeUndefined()
   })
 })
