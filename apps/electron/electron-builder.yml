@@ -93,6 +93,11 @@ extraResources:
     to: logos
     filter:
       - "**/*"
+  # 内置市场技能包（ChatCut / HyperFrames 等本地技能条目，安装时复制到工作区 skills）
+  - from: resources/marketplace-skills
+    to: marketplace-skills
+    filter:
+      - "**/*"
   # Repo Map 资源（tree-sitter 语言查询 + 核心 WASM，Agent 代码库地图注入使用）
   - from: resources/repo-map
     to: repo-map

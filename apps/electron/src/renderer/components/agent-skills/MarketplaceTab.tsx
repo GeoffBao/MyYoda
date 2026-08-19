@@ -1,10 +1,10 @@
 /**
- * MarketplaceTab — 市场目录（统一发现中心：官方连接器 + 社区 Skill）
+ * MarketplaceTab — 市场目录（统一发现中心：官方连接器 + 社区技能）
  *
  * 对标 OpenAI Plugins / Trae Marketplace 的「预置目录 + 用户决策安装」：
  * - 本地官方连接器（marketplace.json）与远程社区 Skill/连接器（myyoda-skills manifest）同构浏览；
- * - 类型筛选（全部/连接器/Skill）+ 分类下钻；skill 条目展示版本与下载量；
- * - 「安装」= connector 写入 chat-tools.json marketplaceInstalled（远程先快照），skill 走 communityInstallSkill；
+ * - 类型筛选（全部/连接器/技能）+ 分类下钻；技能条目展示版本与下载量；
+ * - 「安装」= connector 写入 chat-tools.json marketplaceInstalled（远程先快照），技能走 communityInstallSkill/本地复制；
  * - 需要凭据的条目安装后可在卡片上直接配置（存 toolCredentials['marketplace:<id>']）；
  * - 「卸载」移除注入，凭据保留以便重装复用；skill 已安装引导去技能 Tab 管理；
  * - 远程市场不可用时本地条目照常渲染，skill 分类给出重试。
@@ -24,7 +24,7 @@ type MarketFilter = 'all' | 'connector' | 'skill'
 const FILTERS: Array<{ key: MarketFilter; label: string }> = [
   { key: 'all', label: '全部' },
   { key: 'connector', label: '连接器' },
-  { key: 'skill', label: 'Skill' },
+  { key: 'skill', label: '技能' },
 ]
 
 const VENDOR_LABEL: Record<string, string> = {
@@ -155,7 +155,7 @@ export function MarketplaceTab(): React.ReactElement {
       <div className="flex flex-col gap-1.5">
         <div className="text-[15px] font-semibold text-foreground">市场目录</div>
         <div className="text-[12px] leading-relaxed text-muted-foreground">
-          官方稳定连接器与社区贡献的 Skill 统一发现中心：按需安装、零占用。连接器安装后自动注入 Agent 会话，凭据在连接器页配置；Skill 安装后进入技能页管理。
+          官方稳定连接器与社区贡献的技能统一发现中心：按需安装、零占用。连接器安装后自动注入 Agent 会话，凭据在连接器页配置；技能安装后进入技能页管理。
         </div>
       </div>
 
@@ -206,7 +206,7 @@ export function MarketplaceTab(): React.ReactElement {
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <div className="text-sm font-medium text-foreground/80">远程市场不可用</div>
             <div className="text-[12px] leading-relaxed text-muted-foreground">
-              无法连接远程 Skill 市场，请检查网络后重试；本地连接器条目不受影响。
+              无法连接远程技能市场，请检查网络后重试；本地连接器条目不受影响。
             </div>
             <Button
               size="sm"

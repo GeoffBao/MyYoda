@@ -9,30 +9,19 @@
  * - 卸载 = 从列表移除（保留凭据，重新安装可复用）。
  */
 
-import { readFileSync } from 'fs'
-import path from 'path'
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
 import { hasNpxConnectorCredentials, type NpxConnectorSpec } from '../builtin-mcp/npx-connector-mcp'
+import marketplaceData from './marketplace.json'
 
 /** 市场条目唯一前缀（避免与内置 MCP id / 用户自定义冲突） */
 export const MARKETPLACE_ID_PREFIX = 'marketplace:'
 
-let cachedItems: MarketplaceItem[] | null = null
-
-/** 读取内置市场目录（首次读盘后缓存） */
+/** 内置市场目录数据（JSON import 由 esbuild/bun 内联进 bundle，避免打包后读盘失败导致市场为空） */
 export function listMarketplaceCatalog(): MarketplaceItem[] {
-  if (cachedItems) return cachedItems
-  try {
-    const raw = readFileSync(path.join(__dirname, 'marketplace.json'), 'utf-8')
-    const parsed = JSON.parse(raw) as { items: MarketplaceItem[] }
-    // 兼容旧数据：目录条目缺省视为本地内置来源
-    cachedItems = (parsed.items ?? []).map((item) => ({ ...item, source: item.source ?? 'local' }))
-  } catch (error) {
-    console.error('[市场目录] 读取失败:', error)
-    cachedItems = []
-  }
-  return cachedItems
+  const items = (marketplaceData as { items: MarketplaceItem[] }).items ?? []
+  // 兼容旧数据：目录条目缺省视为本地内置来源
+  return items.map((item) => ({ ...item, source: item.source ?? 'local' }))
 }
 
 /** 已安装的市场条目 id（持久化在 chat-tools.json） */

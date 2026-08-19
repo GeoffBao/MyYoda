@@ -18,8 +18,17 @@
         "teamId": "SLACK_TEAM_ID"
       },
       "credentialFields": [
-        { "key": "token", "label": "Bot Token", "secret": true, "placeholder": "xoxb-..." },
-        { "key": "teamId", "label": "Team ID（可选）", "placeholder": "T..." }
+        {
+          "key": "token",
+          "label": "Bot Token",
+          "secret": true,
+          "placeholder": "xoxb-..."
+        },
+        {
+          "key": "teamId",
+          "label": "Team ID（可选）",
+          "placeholder": "T..."
+        }
       ]
     },
     {
@@ -39,7 +48,12 @@
         "apiKey": "LINEAR_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "Personal API Key", "secret": true, "placeholder": "lin_api_..." }
+        {
+          "key": "apiKey",
+          "label": "Personal API Key",
+          "secret": true,
+          "placeholder": "lin_api_..."
+        }
       ]
     },
     {
@@ -61,9 +75,22 @@
         "apiToken": "ATLASSIAN_API_TOKEN"
       },
       "credentialFields": [
-        { "key": "siteUrl", "label": "站点地址（如 https://xxx.atlassian.net）", "placeholder": "https://..." },
-        { "key": "email", "label": "账号邮箱", "placeholder": "you@company.com" },
-        { "key": "apiToken", "label": "API Token", "secret": true, "placeholder": "ATATT..." }
+        {
+          "key": "siteUrl",
+          "label": "站点地址（如 https://xxx.atlassian.net）",
+          "placeholder": "https://..."
+        },
+        {
+          "key": "email",
+          "label": "账号邮箱",
+          "placeholder": "you@company.com"
+        },
+        {
+          "key": "apiToken",
+          "label": "API Token",
+          "secret": true,
+          "placeholder": "ATATT..."
+        }
       ]
     },
     {
@@ -84,8 +111,17 @@
         "organization": "SENTRY_ORG"
       },
       "credentialFields": [
-        { "key": "authToken", "label": "Auth Token", "secret": true, "placeholder": "sntrys_..." },
-        { "key": "organization", "label": "组织 slug", "placeholder": "my-org" }
+        {
+          "key": "authToken",
+          "label": "Auth Token",
+          "secret": true,
+          "placeholder": "sntrys_..."
+        },
+        {
+          "key": "organization",
+          "label": "组织 slug",
+          "placeholder": "my-org"
+        }
       ]
     },
     {
@@ -106,8 +142,17 @@
         "accountId": "CLOUDFLARE_ACCOUNT_ID"
       },
       "credentialFields": [
-        { "key": "apiToken", "label": "API Token", "secret": true, "placeholder": "..." },
-        { "key": "accountId", "label": "Account ID（可选）", "placeholder": "..." }
+        {
+          "key": "apiToken",
+          "label": "API Token",
+          "secret": true,
+          "placeholder": "..."
+        },
+        {
+          "key": "accountId",
+          "label": "Account ID（可选）",
+          "placeholder": "..."
+        }
       ]
     },
     {
@@ -127,7 +172,12 @@
         "url": "REDIS_URL"
       },
       "credentialFields": [
-        { "key": "url", "label": "连接串（redis:// 或 rediss://）", "secret": true, "placeholder": "rediss://..." }
+        {
+          "key": "url",
+          "label": "连接串（redis:// 或 rediss://）",
+          "secret": true,
+          "placeholder": "rediss://..."
+        }
       ]
     },
     {
@@ -147,7 +197,12 @@
         "connectionString": "DATABASE_URI"
       },
       "credentialFields": [
-        { "key": "connectionString", "label": "连接串（postgres://...）", "secret": true, "placeholder": "postgres://user:pass@host:5432/db" }
+        {
+          "key": "connectionString",
+          "label": "连接串（postgres://...）",
+          "secret": true,
+          "placeholder": "postgres://user:pass@host:5432/db"
+        }
       ]
     },
     {
@@ -167,7 +222,12 @@
         "apiKey": "FIRECRAWL_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "fc-..." }
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "secret": true,
+          "placeholder": "fc-..."
+        }
       ]
     },
     {
@@ -187,7 +247,12 @@
         "apiKey": "TAVILY_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "tvly-..." }
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "secret": true,
+          "placeholder": "tvly-..."
+        }
       ]
     },
     {
@@ -203,7 +268,10 @@
       "category": "搜索与自动化",
       "installKind": "npx-mcp",
       "npxPackage": "@playwright/mcp",
-      "npxArgs": ["--browser", "chromium"]
+      "npxArgs": [
+        "--browser",
+        "chromium"
+      ]
     },
     {
       "id": "huggingface",
@@ -236,7 +304,12 @@
         "apiKey": "STRIPE_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "Secret Key", "secret": true, "placeholder": "sk_live_..." }
+        {
+          "key": "apiKey",
+          "label": "Secret Key",
+          "secret": true,
+          "placeholder": "sk_live_..."
+        }
       ]
     },
     {
@@ -256,7 +329,12 @@
         "apiKey": "ELEVENLABS_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "sk_..." }
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "secret": true,
+          "placeholder": "sk_..."
+        }
       ]
     },
     {
@@ -276,8 +354,41 @@
         "apiKey": "DEEPGRAM_API_KEY"
       },
       "credentialFields": [
-        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "..." }
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "secret": true,
+          "placeholder": "..."
+        }
       ]
+    },
+    {
+      "id": "chatcut",
+      "type": "skill",
+      "source": "local",
+      "name": "ChatCut",
+      "description": "AI 视频剪辑助手：用自然语言描述剪辑目标，自动完成粗剪、节奏与字幕。",
+      "iconKey": "chatcut",
+      "vendor": "official",
+      "author": "ChatCut",
+      "homepage": "https://chatcut.io",
+      "category": "设计协作",
+      "installKind": "skill",
+      "skillFolder": "chatcut"
+    },
+    {
+      "id": "heygen",
+      "type": "skill",
+      "source": "local",
+      "name": "HyperFrames by HeyGen",
+      "description": "HeyGen 开源视频框架：写 HTML/CSS，渲染为确定性 MP4 视频，支持 AI Agent 驱动。",
+      "iconKey": "heygen",
+      "vendor": "official",
+      "author": "HeyGen",
+      "homepage": "https://hyperframes.heygen.com",
+      "category": "设计协作",
+      "installKind": "skill",
+      "skillFolder": "heygen"
     }
   ]
 }

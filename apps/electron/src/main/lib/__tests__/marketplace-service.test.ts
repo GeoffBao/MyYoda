@@ -3,6 +3,9 @@
  */
 
 import { describe, test, expect, afterEach } from 'bun:test'
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { CommunitySkill } from '@myyoda/shared'
 import {
   communitySkillToMarketplaceItem,
@@ -11,10 +14,11 @@ import {
   saveMarketplaceRemoteItem,
   removeMarketplaceRemoteItem,
   getInstalledMarketplaceSpecs,
+  copySkillFolder,
   MARKETPLACE_ID_PREFIX,
 } from '../marketplace/marketplace-service'
 import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
-import { getMarketplaceInstalledIds } from '../marketplace/marketplace-manager'
+import { getMarketplaceInstalledIds, listMarketplaceCatalog } from '../marketplace/marketplace-manager'
 
 /** 测试用远程连接器条目（与本地 marketplace.json 同 schema） */
 const remoteConnector = {
@@ -122,5 +126,40 @@ describe('marketplace-service 统一层', () => {
     // installed 仍在（卸载未执行前）但快照已删 → spec 不应包含
     const specs = getInstalledMarketplaceSpecs()
     expect(specs.find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeUndefined()
+  })
+
+  test('copySkillFolder：复制本地技能目录到目标 skills 目录（重复安装覆盖）', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'marketplace-skill-'))
+    try {
+      const src = join(tmp, 'src')
+      const target = join(tmp, 'target')
+      mkdirSync(src, { recursive: true })
+      writeFileSync(join(src, 'SKILL.md'), '---\nname: demo\n---\nhello')
+      copySkillFolder(src, target, 'demo')
+      expect(existsSync(join(target, 'demo', 'SKILL.md'))).toBe(true)
+      // 重复安装：覆盖旧目录而不是抛错
+      writeFileSync(join(src, 'SKILL.md'), '---\nname: demo\n---\nupdated')
+      copySkillFolder(src, target, 'demo')
+      expect(existsSync(join(target, 'demo', 'SKILL.md'))).toBe(true)
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  test('copySkillFolder：源目录缺失时抛错', () => {
+    expect(() => copySkillFolder('/nonexistent/src', '/tmp/target-x', 'x')).toThrow('技能资源不存在')
+  })
+
+  test('本地技能条目在目录中：ChatCut 与 HyperFrames', () => {
+    const catalog = listMarketplaceCatalog()
+    const chatcut = catalog.find((i) => i.id === 'chatcut')
+    const heygen = catalog.find((i) => i.id === 'heygen')
+    expect(chatcut).toBeDefined()
+    expect(chatcut!.type).toBe('skill')
+    expect(chatcut!.source).toBe('local')
+    expect(chatcut!.skillFolder).toBe('chatcut')
+    expect(heygen).toBeDefined()
+    expect(heygen!.type).toBe('skill')
+    expect(heygen!.skillFolder).toBe('heygen')
   })
 })

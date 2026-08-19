@@ -9,7 +9,7 @@
  * - 注入：本地条目 + 远程快照统一转 NpxConnectorSpec（agent-orchestrator 用）。
  */
 
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, existsSync, mkdirSync, cpSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import {
@@ -147,6 +147,11 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
   if (!item) throw new Error(`市场条目不存在：${itemId}`)
 
   if (item.type === 'skill') {
+    // 本地内嵌技能（如 ChatCut / HyperFrames）：复制 resources/marketplace-skills/<folder> 到工作区
+    if (item.source === 'local' && item.skillFolder) {
+      copySkillFolder(getMarketplaceSkillsSourceDir(item.skillFolder), getWorkspaceSkillsDir(workspaceSlug), item.skillFolder)
+      return
+    }
     const skillItem = item as MarketplaceSkillItem
     if (!skillItem.skillRef) throw new Error('Skill 条目缺少引用')
     await installCommunitySkill(getWorkspaceSkillsDir(workspaceSlug), skillItem.skillRef)
@@ -171,6 +176,29 @@ export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
   return [...local, ...remote]
     .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id))
     .map(marketplaceItemToNpxSpec)
+}
+
+/** 内置技能资源根目录（dev/build 在 dist/resources；打包在 process.resourcesPath） */
+export function getMarketplaceSkillsSourceDir(folder: string): string {
+  // electron 在 bun 单测环境不可用，惰性 require（该函数仅运行时安装路径调用）
+  let base = join(__dirname, 'resources')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron') as typeof import('electron')
+    if (app?.isPackaged) base = process.resourcesPath
+  } catch {
+    // 非 electron 环境（bun test）→ dev 路径
+  }
+  return join(base, 'marketplace-skills', folder)
+}
+
+/** 复制技能目录到目标 skills 目录（纯函数，便于单测） */
+export function copySkillFolder(srcDir: string, targetSkillsDir: string, folderName: string): void {
+  if (!existsSync(srcDir)) throw new Error(`技能资源不存在：${folderName}`)
+  mkdirSync(targetSkillsDir, { recursive: true })
+  const target = join(targetSkillsDir, folderName)
+  if (existsSync(target)) rmSync(target, { recursive: true, force: true })
+  cpSync(srcDir, target, { recursive: true })
 }
 
 export { MARKETPLACE_ID_PREFIX }
