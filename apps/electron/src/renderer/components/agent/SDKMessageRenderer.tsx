@@ -20,7 +20,7 @@ import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbo
 import { ContentBlock } from './ContentBlock'
 import { TurnFileChangesSummary, buildTurnFileNameMap } from './TurnFileChangesSummary'
 import { TurnSkillUsageSummary } from './TurnSkillUsageSummary'
-import { ProcessBlockGroup, buildAssistantTurnRenderItems, buildCompletedToolResultIds } from './ProcessBlockGroup'
+import { ProcessBlockGroup, buildAssistantTurnRenderItems } from './ProcessBlockGroup'
 import { extractToolResultText, TASK_TOOL_NAMES } from './task-progress'
 import { normalizeThinkTagsInContentBlocks } from './thinking-tag-parser'
 // 会话转录的纯逻辑(Turn 分组 / 快照去重 / 预览)已下沉到 @myyoda/session-core 作为唯一真源。
@@ -498,15 +498,11 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
     (b) => b.type === 'text' && 'text' in b && !!(b as { text: string }).text
   )
 
-  const completedToolResultIds = React.useMemo(() => {
-    return buildCompletedToolResultIds(turn.turnMessages)
-  }, [turn.turnMessages])
   const renderItems = React.useMemo(() => {
     return buildAssistantTurnRenderItems(contentBlocks, {
       isStreaming,
-      completedToolResultIds,
     })
-  }, [contentBlocks, isStreaming, completedToolResultIds])
+  }, [contentBlocks, isStreaming])
 
   // 本轮「文件名 → 绝对路径」映射：与 footer chips 同源，供正文内联文件引用补全裸文件名
   const turnFileMap = React.useMemo(

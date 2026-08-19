@@ -582,15 +582,20 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
   const [isExpanded, setIsExpanded] = React.useState(thinkingExpanded)
   const [shouldCollapse, setShouldCollapse] = React.useState(false)
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const { displayedContent } = useSmoothStream({
+    content: block.thinking,
+    isStreaming,
+  })
 
-  // 检测内容是否超过阈值行数（useLayoutEffect：在 paint 前同步执行，避免「展开→收起」闪屏）
+  // 流式期间避免对每批思考文本同步读取 scrollHeight；这会强制布局且与 Markdown 重渲染叠加。
+  // 输出完成后再测量，保留历史态的默认折叠行为。
   React.useLayoutEffect(() => {
-    if (!contentRef.current) return
+    if (isStreaming || !contentRef.current) return
     const el = contentRef.current
     const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 22
     const maxHeight = lineHeight * THINKING_COLLAPSE_LINE_THRESHOLD
     setShouldCollapse(el.scrollHeight > maxHeight + 10)
-  }, [block.thinking])
+  }, [displayedContent, isStreaming])
 
   // 当全局偏好变更时同步（仅在"应折叠"时生效）
   React.useEffect(() => {
@@ -629,7 +634,7 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
           )}
         >
           <MessageResponse className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal">
-            {block.thinking}
+            {displayedContent}
           </MessageResponse>
         </div>
         {shouldCollapse && (
@@ -722,7 +727,7 @@ export function ContentBlock({ block, allMessages, basePath, basePaths, animate 
   if (block.type === 'thinking') {
     const thinkingBlock = block as SDKThinkingBlock
     if (!thinkingBlock.thinking) return null
-    return <ThinkingBlock block={thinkingBlock} dimmed={dimmed} />
+    return <ThinkingBlock block={thinkingBlock} dimmed={dimmed} isStreaming={isStreaming} />
   }
 
   return null

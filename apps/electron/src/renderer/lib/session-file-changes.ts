@@ -13,6 +13,53 @@ export function isPathWithinRoot(rootPath: string, targetPath: string, caseInsen
   return target === root || target.startsWith(`${root}/`)
 }
 
+export interface SessionWatcherOwnershipScope {
+  sessionExists: boolean
+  sessionPath?: string
+  sessionAttachedDirectories: readonly string[]
+  sessionAttachedFiles: readonly string[]
+  workspaceAttachmentsComplete: boolean
+  workspaceFilesPath?: string | null
+  workspaceAttachedDirectories: readonly string[]
+  workspaceAttachedFiles: readonly string[]
+}
+
+/**
+ * 根据可用会话范围，归还可以归属给该会话的 watcher 变更路径。
+ * 注意：当前 MyYoda 的会话文件变更走 tool 事件（tool_start/tool_result）路径，
+ * 不使用 watcher 归属；本函数与 upstream 保持一致，为未来 watcher 接入保留。
+ */
+export function getOwnedSessionWatcherPaths(
+  changedPaths: readonly string[],
+  scope: SessionWatcherOwnershipScope,
+  caseInsensitive = false,
+): string[] {
+  if (!scope.sessionExists) return []
+
+  const directoryRoots = [
+    scope.sessionPath,
+    ...scope.sessionAttachedDirectories,
+  ]
+  const attachedFiles = [...scope.sessionAttachedFiles]
+
+  if (scope.workspaceAttachmentsComplete) {
+    directoryRoots.push(
+      scope.workspaceFilesPath ?? undefined,
+      ...scope.workspaceAttachedDirectories,
+    )
+    attachedFiles.push(...scope.workspaceAttachedFiles)
+  }
+
+  return changedPaths.filter((changedPath) => (
+    directoryRoots.some((rootPath) => (
+      typeof rootPath === 'string'
+      && rootPath.length > 0
+      && isPathWithinRoot(rootPath, changedPath, caseInsensitive)
+    ))
+    || attachedFiles.some((filePath) => arePathsEqual(filePath, changedPath, caseInsensitive))
+  ))
+}
+
 export type SessionFileChangeKind = "created" | "edited";
 
 export interface SessionFileChange {

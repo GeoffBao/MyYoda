@@ -257,11 +257,12 @@ async function handleQueryAbort(request: RuntimeRequest): Promise<void> {
     return
   }
   piAdapter.abort(sessionId)
-  await Promise.race([
-    activeQuery.done,
-    new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+  const query = activeQuery
+  const completed = await Promise.race([
+    query.done.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5_000)),
   ])
-  respond(request, { accepted: true, queryId })
+  respond(request, { accepted: true, queryId, completed })
 }
 
 async function handleQueuedMessage(request: RuntimeRequest): Promise<void> {

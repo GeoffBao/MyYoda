@@ -78,7 +78,7 @@ import { buildTodoAgentPrompt } from '@/lib/todo-agent-prompt'
 import { getAgentCompletionMarkers, notifyAgentCompletion } from '@/lib/agent-completion-presence'
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
-import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
+import { getSessionFileChangeKind, upsertSessionFileChange } from '@/lib/session-file-changes'
 import { removeQueuedMessage, restoreQueuedMessageToFront, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
@@ -467,9 +467,13 @@ function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
           ...(typeof estimatedTokensAfter === 'number' && estimatedTokensAfter > 0 && { estimatedTokensAfter }),
         }]
       }
-      if (sMsg.subtype === 'compacting') return [{ type: 'compacting' }]
+      if (sMsg.subtype === 'compacting') {
+        return [{ type: 'compacting', afterCompletedTurn: sMsg.afterCompletedTurn === true }]
+      }
       if (sMsg.subtype === 'status') {
-        if (sMsg.status === 'compacting') return [{ type: 'compacting' }]
+        if (sMsg.status === 'compacting') {
+          return [{ type: 'compacting', afterCompletedTurn: sMsg.afterCompletedTurn === true }]
+        }
         if (sMsg.compact_result === 'success' || sMsg.compact_result === 'failed' || sMsg.compact_result === 'noop') {
           return [{
             type: 'compact_complete',
