@@ -134,7 +134,7 @@ export function buildReadwiseTools(
     sdk.defineTool({
       name: 'mcp__readwise__get_document',
       label: '读取 Readwise 文档',
-      description: '按文档 ID 读取 Reader 文档详情与全文（HTML 格式）。文档 ID 来自 search_documents / list_documents 返回的 id 字段。',,
+      description: '按文档 ID 读取 Reader 文档详情与全文（HTML 格式）。文档 ID 来自 search_documents / list_documents 返回的 id 字段。',
       parameters: Type.Object({
         document_id: Type.String({ description: 'Reader 文档 ID' }),
       }),
