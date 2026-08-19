@@ -53,7 +53,12 @@ function formatDownloads(count: number | undefined): string {
   return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}k`
 }
 
-export function MarketplaceTab(): React.ReactElement {
+interface MarketplaceTabProps {
+  /** 安装/卸载/状态变更后通知父级刷新（连接器 Tab 数据同步） */
+  onChanged?: () => void
+}
+
+export function MarketplaceTab({ onChanged }: MarketplaceTabProps): React.ReactElement {
   const { workspaces, currentWorkspaceId } = useWorkspaceActions()
   const workspaceSlug = React.useMemo(
     () => workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? '',
@@ -124,6 +129,7 @@ export function MarketplaceTab(): React.ReactElement {
       await window.electronAPI.marketplaceInstall(item.id, workspaceSlug)
       toast.success(`已安装 ${item.name}`)
       await refresh()
+      onChanged?.()
     } catch (error) {
       console.error(`[市场] 安装失败（${item.id}）:`, error)
       toast.error(`安装失败：${error instanceof Error ? error.message : String(error)}`)
@@ -138,6 +144,7 @@ export function MarketplaceTab(): React.ReactElement {
       await window.electronAPI.marketplaceUninstall(item.id)
       toast.success(`已卸载 ${item.name}`)
       await refresh()
+      onChanged?.()
     } catch (error) {
       console.error(`[市场] 卸载失败（${item.id}）:`, error)
       toast.error('卸载失败')
