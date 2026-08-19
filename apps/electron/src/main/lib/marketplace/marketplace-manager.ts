@@ -26,7 +26,8 @@ export function listMarketplaceCatalog(): MarketplaceItem[] {
   try {
     const raw = readFileSync(path.join(__dirname, 'marketplace.json'), 'utf-8')
     const parsed = JSON.parse(raw) as { items: MarketplaceItem[] }
-    cachedItems = parsed.items ?? []
+    // 兼容旧数据：目录条目缺省视为本地内置来源
+    cachedItems = (parsed.items ?? []).map((item) => ({ ...item, source: item.source ?? 'local' }))
   } catch (error) {
     console.error('[市场目录] 读取失败:', error)
     cachedItems = []

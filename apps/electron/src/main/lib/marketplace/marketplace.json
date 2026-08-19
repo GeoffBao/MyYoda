@@ -2,6 +2,7 @@
   "items": [
     {
       "id": "slack",
+      "source": "local",
       "type": "connector",
       "name": "Slack",
       "description": "查询频道、读取消息、搜索与发消息，让 Agent 接入团队协作空间。",
@@ -23,6 +24,7 @@
     },
     {
       "id": "linear",
+      "source": "local",
       "type": "connector",
       "name": "Linear",
       "description": "读写 Issue、项目与团队，把 Agent 接入产品研发流程。",
@@ -42,6 +44,7 @@
     },
     {
       "id": "jira-confluence",
+      "source": "local",
       "type": "connector",
       "name": "Jira + Confluence",
       "description": "官方 Atlassian 套件：Jira 工单与 Confluence 文档一体化。",
@@ -65,6 +68,7 @@
     },
     {
       "id": "sentry",
+      "source": "local",
       "type": "connector",
       "name": "Sentry",
       "description": "查询 Issue、Crash 与项目健康度，让 Agent 直接定位线上异常。",
@@ -86,6 +90,7 @@
     },
     {
       "id": "cloudflare",
+      "source": "local",
       "type": "connector",
       "name": "Cloudflare",
       "description": "管理 Workers、KV、D1 与 DNS，直接运维 Cloudflare 资产。",
@@ -107,6 +112,7 @@
     },
     {
       "id": "redis",
+      "source": "local",
       "type": "connector",
       "name": "Redis",
       "description": "官方 Redis MCP：查询键值、诊断性能与集群状态。",
@@ -126,6 +132,7 @@
     },
     {
       "id": "postgres",
+      "source": "local",
       "type": "connector",
       "name": "PostgreSQL",
       "description": "官方 Postgres MCP：只读 Schema 与 SQL 查询能力。",
@@ -145,6 +152,7 @@
     },
     {
       "id": "firecrawl",
+      "source": "local",
       "type": "connector",
       "name": "Firecrawl",
       "description": "网页抓取与转 Markdown，支持爬虫、搜索与结构化抽取。",
@@ -164,6 +172,7 @@
     },
     {
       "id": "tavily",
+      "source": "local",
       "type": "connector",
       "name": "Tavily",
       "description": "官方 Tavily MCP：Agent 专用实时搜索与内容抽取。",
@@ -183,6 +192,7 @@
     },
     {
       "id": "playwright",
+      "source": "local",
       "type": "connector",
       "name": "Playwright",
       "description": "微软官方浏览器自动化 MCP：打开页面、截图、操作 DOM，无需凭据。",
@@ -197,6 +207,7 @@
     },
     {
       "id": "huggingface",
+      "source": "local",
       "type": "connector",
       "name": "Hugging Face",
       "description": "查询模型、数据集与推理，接入 Hugging Face 生态。",
@@ -210,6 +221,7 @@
     },
     {
       "id": "stripe",
+      "source": "local",
       "type": "connector",
       "name": "Stripe",
       "description": "官方 Stripe MCP：查询余额、交易与客户，管理支付数据。",
@@ -229,6 +241,7 @@
     },
     {
       "id": "elevenlabs",
+      "source": "local",
       "type": "connector",
       "name": "ElevenLabs",
       "description": "语音合成与克隆，让 Agent 具备文字转语音能力。",
@@ -248,6 +261,7 @@
     },
     {
       "id": "deepgram",
+      "source": "local",
       "type": "connector",
       "name": "Deepgram",
       "description": "语音识别与转录，音频转文字的官方 MCP。",

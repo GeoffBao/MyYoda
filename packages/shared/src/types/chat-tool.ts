@@ -6,6 +6,8 @@
  * chat-tools.json 管理工具开关和非记忆工具凭据。
  */
 
+import type { MarketplaceItem } from './agent'
+
 // ===== 工具元数据 =====
 
 /** 工具参数定义（简化格式，供用户/Agent 创建） */
@@ -76,6 +78,8 @@ export interface ChatToolsFileConfig {
   customTools: ChatToolMeta[]
   /** 已从市场目录安装的条目 id（plugin_creator，2026-08-19） */
   marketplaceInstalled?: string[]
+  /** 远程市场连接器安装快照（卸载/注入用，避免依赖网络） */
+  marketplaceRemoteItems?: Record<string, MarketplaceItem>
 }
 
 // ===== 渲染进程交互 =====

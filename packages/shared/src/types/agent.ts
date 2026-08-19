@@ -1415,6 +1415,8 @@ export type MarketplaceVendor = 'official' | 'community' | 'myyoda'
 export interface MarketplaceItem {
   /** 唯一 id（用于安装/卸载） */
   id: string
+  /** 条目来源：local=内置官方目录，remote=远程社区 manifest */
+  source: 'local' | 'remote'
   type: MarketplaceItemType
   name: string
   description: string
