@@ -152,14 +152,31 @@ function setMarketplaceIgnored(itemId: string, ignored: boolean): void {
   saveChatToolsConfig(cfg)
 }
 
-/** 检测系统是否已安装某 CLI 命令（command -v / where，异步） */
+/**
+ * CLI 检测结果缓存（60s TTL）：开关切换/列表刷新时不重复执行慢命令（command -v / whoami 网络请求）。
+ * 与 marketListCache 独立：toggle/install/uninstall 只清列表缓存，检测缓存保持到 TTL。
+ */
+const CLI_CHECK_CACHE_TTL_MS = 60_000
+const cliCheckCache = new Map<string, { ts: number; value: boolean }>()
+
+async function cachedCliCheck(key: string, check: () => Promise<boolean>): Promise<boolean> {
+  const hit = cliCheckCache.get(key)
+  if (hit && Date.now() - hit.ts < CLI_CHECK_CACHE_TTL_MS) return hit.value
+  const value = await check()
+  cliCheckCache.set(key, { ts: Date.now(), value })
+  return value
+}
+
+/** 检测系统是否已安装某 CLI 命令（command -v / where，异步，60s 缓存） */
 async function systemHasCli(command: string): Promise<boolean> {
-  // 先用当前 PATH 快速检测（覆盖系统级安装）
-  const fast = await runCommand(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, 1500)
-  if (fast.trim()) return true
-  // Electron 主进程 PATH 可能不含 nvm 路径 → 用 login shell 检测
-  const slow = await runCommand(`zsh -ilc "command -v ${command}" 2>/dev/null`, 5000)
-  return Boolean(slow.trim())
+  return cachedCliCheck(`has:${command}`, async () => {
+    // 先用当前 PATH 快速检测（覆盖系统级安装）
+    const fast = await runCommand(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, 1500)
+    if (fast.trim()) return true
+    // Electron 主进程 PATH 可能不含 nvm 路径 → 用 login shell 检测
+    const slow = await runCommand(`zsh -ilc "command -v ${command}" 2>/dev/null`, 5000)
+    return Boolean(slow.trim())
+  })
 }
 
 /** 检测 npx 连接器凭据是否已配置（所有必填字段非空） */
@@ -169,18 +186,20 @@ function hasNpxCredentials(itemId: string, envMap?: Record<string, string>): boo
   return Object.keys(envMap).every((key) => Boolean(credentials[key]?.trim()))
 }
 
-/** 检测 CLI 认证状态（执行 authCheckCommand，输出含 authFailPattern 则未认证，异步） */
+/** 检测 CLI 认证状态（执行 authCheckCommand，输出含 authFailPattern 则未认证，异步，60s 缓存） */
 async function checkCliAuth(item: MarketplaceItem): Promise<boolean> {
   if (!item.authCheckCommand) return true  // 无检测命令 → 视为已认证
-  const fast = await runCommand(item.authCheckCommand, 4000)
-  if (fast) {
-    if (item.authFailPattern && fast.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
-    return true
-  }
-  // fallback: login shell
-  const slow = await runCommand(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, 8000)
-  if (item.authFailPattern && slow.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
-  return Boolean(slow.trim())
+  return cachedCliCheck(`auth:${item.id}`, async () => {
+    const fast = await runCommand(item.authCheckCommand as string, 4000)
+    if (fast) {
+      if (item.authFailPattern && fast.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
+      return true
+    }
+    // fallback: login shell
+    const slow = await runCommand(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, 8000)
+    if (item.authFailPattern && slow.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
+    return Boolean(slow.trim())
+  })
 }
 
 /**
