@@ -5,29 +5,23 @@
       "source": "local",
       "type": "connector",
       "name": "Slack",
-      "description": "查询频道、读取消息、搜索与发消息，让 Agent 接入团队协作空间。",
+      "description": "Slack 工作区接入：查频道、读消息、发消息（社区实现，需 Bot Token，发消息默认关闭可配置开启）。",
       "iconKey": "slack",
-      "vendor": "official",
-      "author": "Slack",
-      "homepage": "https://github.com/slackhq/slack-mcp-server",
+      "vendor": "community",
+      "author": "korotovsky",
+      "homepage": "https://github.com/korotovsky/slack-mcp-server",
       "category": "协作办公",
       "installKind": "npx-mcp",
-      "npxPackage": "@slackhq/slack-mcp-server",
+      "npxPackage": "slack-mcp-server",
       "envMap": {
-        "token": "SLACK_BOT_TOKEN",
-        "teamId": "SLACK_TEAM_ID"
+        "token": "SLACK_MCP_XOXB_TOKEN"
       },
       "credentialFields": [
         {
           "key": "token",
-          "label": "Bot Token",
+          "label": "Bot Token（xoxb-）",
           "secret": true,
           "placeholder": "xoxb-..."
-        },
-        {
-          "key": "teamId",
-          "label": "Team ID（可选）",
-          "placeholder": "T..."
         }
       ]
     },
@@ -36,11 +30,11 @@
       "source": "local",
       "type": "connector",
       "name": "Linear",
-      "description": "读写 Issue、项目与团队，把 Agent 接入产品研发流程。",
+      "description": "Linear Issue 管理：创建/搜索/更新工单（社区实现，需 Personal API Key）。",
       "iconKey": "linear",
-      "vendor": "official",
-      "author": "Linear",
-      "homepage": "https://github.com/linearapp/linear-mcp-server",
+      "vendor": "community",
+      "author": "linear-mcp-server",
+      "homepage": "https://github.com/jerhadf/linear-mcp-server",
       "category": "研发与交付",
       "installKind": "npx-mcp",
       "npxPackage": "linear-mcp-server",
@@ -57,43 +51,6 @@
       ]
     },
     {
-      "id": "jira-confluence",
-      "source": "local",
-      "type": "connector",
-      "name": "Jira + Confluence",
-      "description": "官方 Atlassian 套件：Jira 工单与 Confluence 文档一体化。",
-      "iconKey": "jira",
-      "vendor": "official",
-      "author": "Atlassian",
-      "homepage": "https://github.com/atlassian/mcp-atlassian",
-      "category": "协作办公",
-      "installKind": "npx-mcp",
-      "npxPackage": "@atlassian/mcp",
-      "envMap": {
-        "siteUrl": "ATLASSIAN_SITE_URL",
-        "email": "ATLASSIAN_USER_EMAIL",
-        "apiToken": "ATLASSIAN_API_TOKEN"
-      },
-      "credentialFields": [
-        {
-          "key": "siteUrl",
-          "label": "站点地址（如 https://xxx.atlassian.net）",
-          "placeholder": "https://..."
-        },
-        {
-          "key": "email",
-          "label": "账号邮箱",
-          "placeholder": "you@company.com"
-        },
-        {
-          "key": "apiToken",
-          "label": "API Token",
-          "secret": true,
-          "placeholder": "ATATT..."
-        }
-      ]
-    },
-    {
       "id": "sentry",
       "source": "local",
       "type": "connector",
@@ -102,7 +59,7 @@
       "iconKey": "sentry",
       "vendor": "official",
       "author": "Sentry",
-      "homepage": "https://github.com/sentry-ai/sentry-mcp",
+      "homepage": "https://github.com/getsentry/sentry-mcp",
       "category": "研发与交付",
       "installKind": "npx-mcp",
       "npxPackage": "sentry-mcp",
@@ -152,31 +109,6 @@
           "key": "accountId",
           "label": "Account ID（可选）",
           "placeholder": "..."
-        }
-      ]
-    },
-    {
-      "id": "redis",
-      "source": "local",
-      "type": "connector",
-      "name": "Redis",
-      "description": "官方 Redis MCP：查询键值、诊断性能与集群状态。",
-      "iconKey": "redis",
-      "vendor": "official",
-      "author": "Redis",
-      "homepage": "https://github.com/redis/mcp",
-      "category": "数据与基础设施",
-      "installKind": "npx-mcp",
-      "npxPackage": "@redis/mcp",
-      "envMap": {
-        "url": "REDIS_URL"
-      },
-      "credentialFields": [
-        {
-          "key": "url",
-          "label": "连接串（redis:// 或 rediss://）",
-          "secret": true,
-          "placeholder": "rediss://..."
         }
       ]
     },
@@ -274,70 +206,6 @@
       ]
     },
     {
-      "id": "huggingface",
-      "source": "local",
-      "type": "connector",
-      "name": "Hugging Face",
-      "description": "查询模型、数据集与推理，接入 Hugging Face 生态。",
-      "iconKey": "huggingface",
-      "vendor": "official",
-      "author": "Hugging Face",
-      "homepage": "https://github.com/huggingface/mcp-server-hf",
-      "category": "知识",
-      "installKind": "npx-mcp",
-      "npxPackage": "@huggingface/mcp-server-hf"
-    },
-    {
-      "id": "stripe",
-      "source": "local",
-      "type": "connector",
-      "name": "Stripe",
-      "description": "官方 Stripe MCP：查询余额、交易与客户，管理支付数据。",
-      "iconKey": "stripe",
-      "vendor": "official",
-      "author": "Stripe",
-      "homepage": "https://github.com/stripe/agent-toolkit",
-      "category": "数据与基础设施",
-      "installKind": "npx-mcp",
-      "npxPackage": "@stripe/agent-toolkit-mcp",
-      "envMap": {
-        "apiKey": "STRIPE_API_KEY"
-      },
-      "credentialFields": [
-        {
-          "key": "apiKey",
-          "label": "Secret Key",
-          "secret": true,
-          "placeholder": "sk_live_..."
-        }
-      ]
-    },
-    {
-      "id": "elevenlabs",
-      "source": "local",
-      "type": "connector",
-      "name": "ElevenLabs",
-      "description": "语音合成与克隆，让 Agent 具备文字转语音能力。",
-      "iconKey": "elevenlabs",
-      "vendor": "official",
-      "author": "ElevenLabs",
-      "homepage": "https://github.com/elevenlabs/elevenlabs-mcp",
-      "category": "设计协作",
-      "installKind": "npx-mcp",
-      "npxPackage": "@elevenlabs/elevenlabs-mcp",
-      "envMap": {
-        "apiKey": "ELEVENLABS_API_KEY"
-      },
-      "credentialFields": [
-        {
-          "key": "apiKey",
-          "label": "API Key",
-          "secret": true,
-          "placeholder": "sk_..."
-        }
-      ]
-    },
-    {
       "id": "deepgram",
       "source": "local",
       "type": "connector",
@@ -346,7 +214,7 @@
       "iconKey": "deepgram",
       "vendor": "official",
       "author": "Deepgram",
-      "homepage": "https://github.com/deepgram/mcp-server",
+      "homepage": "https://github.com/deepgram/mcp",
       "category": "设计协作",
       "installKind": "npx-mcp",
       "npxPackage": "deepgram-mcp",
@@ -385,7 +253,7 @@
       "iconKey": "heygen",
       "vendor": "official",
       "author": "HeyGen",
-      "homepage": "https://hyperframes.heygen.com",
+      "homepage": "https://github.com/heygen-com/hyperframes",
       "category": "设计协作",
       "installKind": "skill",
       "skillFolder": "heygen"
