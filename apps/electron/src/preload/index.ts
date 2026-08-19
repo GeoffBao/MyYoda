@@ -1097,8 +1097,8 @@ export interface ElectronAPI {
   marketplaceList: (workspaceSlug: string) => Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }>
   /** 市场目录：安装条目 */
   marketplaceInstall: (itemId: string, workspaceSlug: string) => Promise<void>
-  /** 市场目录：卸载条目 */
-  marketplaceUninstall: (itemId: string) => Promise<void>
+  /** 市场目录：卸载条目（purgeSystem=true 时 CLI 同时 npm uninstall -g） */
+  marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => Promise<void>
   /** 市场目录：开关（启用/停用注入） */
   marketplaceToggle: (itemId: string, enabled: boolean) => Promise<void>
   /** 市场目录：CLI 扫码授权启动（返回二维码 data URL + 扫码链接） */
@@ -2874,8 +2874,8 @@ const electronAPI: ElectronAPI = {
   marketplaceInstall: (itemId: string, workspaceSlug: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId, workspaceSlug)
   },
-  marketplaceUninstall: (itemId: string) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId)
+  marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId, purgeSystem)
   },
   marketplaceToggle: (itemId: string, enabled: boolean) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, itemId, enabled)

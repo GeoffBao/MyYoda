@@ -351,14 +351,29 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
   invalidateMarketListCache()
 }
 
-/** 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用）
- *  CLI 条目同时加入 ignored：系统检测不再自动显示，需用户重新「添加到会话」 */
-export async function uninstallMarketplaceItem(itemId: string): Promise<void> {
+/**
+ * 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用）
+ * - purgeSystem=false（默认）：CLI 条目加入 ignored——系统 CLI 保留（用户可能在其他地方用），
+ *   市场显示「已忽略 + 添加到会话」，需用户主动重新添加；
+ * - purgeSystem=true：执行 npm uninstall -g 真正删除系统 CLI（失败不阻断，仅记录），
+ *   不写 ignored（系统已删，检测不到自然隐藏），市场显示「未安装 + 安装」。
+ */
+export async function uninstallMarketplaceItem(itemId: string, purgeSystem?: boolean): Promise<void> {
   removeMarketplaceRemoteItem(itemId)
   uninstallLocalConnector(itemId)
   setMarketplaceDisabled(itemId, false)
   const item = listMarketplaceCatalog().find((i) => i.id === itemId)
-  if (item?.installKind === 'cli') setMarketplaceIgnored(itemId, true)
+  if (item?.installKind === 'cli') {
+    if (purgeSystem && item.cliPackage) {
+      try {
+        await runCommand(`npm uninstall -g ${item.cliPackage}`, 60_000)
+      } catch {
+        console.error(`[市场] 卸载系统 CLI 失败（${item.cliPackage}）`)
+      }
+    } else {
+      setMarketplaceIgnored(itemId, true)
+    }
+  }
   invalidateMarketListCache()
 }
 

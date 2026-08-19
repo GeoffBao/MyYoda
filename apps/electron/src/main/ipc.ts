@@ -3836,10 +3836,13 @@ export function registerIpcHandlers(): void {
       return installMarketplaceItem(itemId, workspaceSlug)
     }
   )
-  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, async (_, itemId: string): Promise<void> => {
-    const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
-    return uninstallMarketplaceItem(itemId)
-  })
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL,
+    async (_, itemId: string, purgeSystem?: boolean): Promise<void> => {
+      const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+      return uninstallMarketplaceItem(itemId, purgeSystem)
+    }
+  )
   ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, async (_, itemId: string, enabled: boolean): Promise<void> => {
     const { toggleMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
     toggleMarketplaceItem(itemId, enabled)

@@ -17,6 +17,7 @@ import type { BuiltinMcpServerSummary, McpServerEntry, MarketplaceItemWithStatus
 import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 import { ConnectorCard } from './ConnectorCard'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
+import { CliUninstallConfirm } from './CliUninstallConfirm'
 import { ConnectorCollectionDialog, type ConnectorCollection } from './ConnectorCollectionDialog'
 
 // ===== 品类 =====
@@ -387,18 +388,36 @@ export function ConnectorsTab({
     }
   }
 
-  /** 卸载市场安装的连接器（移除注入；CLI 保留系统，凭据保留） */
+  /** 卸载市场安装的连接器：CLI 先弹双选项确认，npx 直接卸载 */
+  const [pendingRemoveItem, setPendingRemoveItem] = React.useState<ConnectorItem | null>(null)
+  const [removing, setRemoving] = React.useState(false)
+
   const handleRemoveMarketplace = (item: ConnectorItem): void => {
     const id = item.key.slice('marketplace:'.length)
-    void window.electronAPI
-      .marketplaceUninstall(id)
+    const mItem = marketplaceItems.find((i) => i.id === id)
+    // CLI 连接器：弹出双选项（仅移除会话 / 同时卸载系统 CLI）；npx：直接卸载
+    if (mItem?.installKind === 'cli') {
+      setPendingRemoveItem(item)
+      return
+    }
+    void doRemoveMarketplace(item, false)
+  }
+
+  const doRemoveMarketplace = (item: ConnectorItem, purgeSystem: boolean): Promise<void> => {
+    const id = item.key.slice('marketplace:'.length)
+    return window.electronAPI
+      .marketplaceUninstall(id, purgeSystem)
       .then(() => {
-        toast.success(`已从会话移除 ${item.name}`)
+        toast.success(purgeSystem ? `已卸载 ${item.name}（含系统 CLI）` : `已从会话移除 ${item.name}`)
         onMarketplaceChanged?.()
       })
       .catch((error) => {
         console.error(`[连接器] 卸载失败（${id}）:`, error)
         toast.error('移除失败')
+      })
+      .finally(() => {
+        setRemoving(false)
+        setPendingRemoveItem(null)
       })
   }
 
@@ -645,6 +664,17 @@ export function ConnectorsTab({
           </div>
         )}
       </ConnectorDetailDialog>
+
+      {/* CLI 连接器卸载双选项确认 */}
+      <CliUninstallConfirm
+        open={pendingRemoveItem !== null}
+        onOpenChange={(open) => { if (!open) setPendingRemoveItem(null) }}
+        itemName={pendingRemoveItem?.name ?? ''}
+        cliCommand={pendingRemoveItem ? marketplaceItems.find((i) => i.id === pendingRemoveItem.key.slice('marketplace:'.length))?.cliCommand : undefined}
+        removing={removing}
+        onRemoveFromSession={() => { setRemoving(true); if (pendingRemoveItem) void doRemoveMarketplace(pendingRemoveItem, false) }}
+        onPurgeSystem={() => { setRemoving(true); if (pendingRemoveItem) void doRemoveMarketplace(pendingRemoveItem, true) }}
+      />
     </div>
   )
 }

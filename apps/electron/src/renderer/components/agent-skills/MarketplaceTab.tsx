@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
+import { CliUninstallConfirm } from './CliUninstallConfirm'
 
 type MarketFilter = 'all' | 'connector' | 'skill'
 
@@ -138,11 +139,11 @@ export function MarketplaceTab({ onChanged }: MarketplaceTabProps): React.ReactE
     }
   }
 
-  const handleUninstall = async (item: MarketplaceItem): Promise<void> => {
+  const handleUninstall = async (item: MarketplaceItem, purgeSystem?: boolean): Promise<void> => {
     setUninstalling(item.id)
     try {
-      await window.electronAPI.marketplaceUninstall(item.id)
-      toast.success(`已卸载 ${item.name}`)
+      await window.electronAPI.marketplaceUninstall(item.id, purgeSystem)
+      toast.success(purgeSystem ? `已卸载 ${item.name}（含系统 CLI）` : `已卸载 ${item.name}`)
       await refresh()
       onChanged?.()
     } catch (error) {
@@ -152,6 +153,9 @@ export function MarketplaceTab({ onChanged }: MarketplaceTabProps): React.ReactE
       setUninstalling(null)
     }
   }
+
+  // CLI 卸载双选项确认
+  const [pendingUninstallItem, setPendingUninstallItem] = React.useState<MarketplaceItem | null>(null)
 
   if (loading) {
     return <div className="py-16 text-center text-sm text-muted-foreground">市场加载中...</div>
@@ -354,7 +358,7 @@ export function MarketplaceTab({ onChanged }: MarketplaceTabProps): React.ReactE
                       variant="ghost"
                       className="text-destructive hover:text-destructive"
                       disabled={uninstalling === item.id}
-                      onClick={() => void handleUninstall(item)}
+                      onClick={() => item.installKind === 'cli' ? setPendingUninstallItem(item) : void handleUninstall(item)}
                     >
                       {uninstalling === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       <span>卸载</span>
@@ -382,6 +386,17 @@ export function MarketplaceTab({ onChanged }: MarketplaceTabProps): React.ReactE
           })}
         </div>
       )}
+
+      {/* CLI 卸载双选项确认 */}
+      <CliUninstallConfirm
+        open={pendingUninstallItem !== null}
+        onOpenChange={(open) => { if (!open) setPendingUninstallItem(null) }}
+        itemName={pendingUninstallItem?.name ?? ''}
+        cliCommand={pendingUninstallItem?.cliCommand}
+        removing={uninstalling === pendingUninstallItem?.id}
+        onRemoveFromSession={() => { if (pendingUninstallItem) void handleUninstall(pendingUninstallItem, false) }}
+        onPurgeSystem={() => { if (pendingUninstallItem) void handleUninstall(pendingUninstallItem, true) }}
+      />
     </div>
   )
 }
