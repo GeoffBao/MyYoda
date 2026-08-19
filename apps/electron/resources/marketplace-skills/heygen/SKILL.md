@@ -24,17 +24,21 @@ npx hyperframes init <project-name>
 
 ### 3. 渲染为视频
 
+在项目目录内执行（`render` 的第一个位置参数是项目目录，`-o` 指定输出）：
+
 ```bash
-npx hyperframes render --project <project-name> --output out.mp4
+npx hyperframes render -o out.mp4
+# 或指定项目目录：
+npx hyperframes render <project-name> -o out.mp4
 ```
 
-- `--format mp4`（默认）/ `--format gif` 等
+- 默认输出 MP4；支持按需设置其它参数（详见 `npx hyperframes render --help`）
 - 渲染是确定性的：相同输入产出相同帧序列，适合版本化与回放。
 
 ### 4. 校验 HTML 合约
 
 ```bash
-npx hyperframes lint
+npx hyperframes lint <project-name>
 ```
 
 渲染前先 lint，避免布局/媒体错误。

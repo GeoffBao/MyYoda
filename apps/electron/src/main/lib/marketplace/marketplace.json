@@ -33,7 +33,7 @@
       "description": "Linear Issue 管理：创建/搜索/更新工单（社区实现，需 Personal API Key）。",
       "iconKey": "linear",
       "vendor": "community",
-      "author": "linear-mcp-server",
+      "author": "jerhadf",
       "homepage": "https://github.com/jerhadf/linear-mcp-server",
       "category": "研发与交付",
       "installKind": "npx-mcp",
@@ -82,31 +82,6 @@
       ]
     },
     {
-      "id": "postgres",
-      "source": "local",
-      "type": "connector",
-      "name": "PostgreSQL",
-      "description": "官方 Postgres MCP：只读 Schema 与 SQL 查询能力。",
-      "iconKey": "postgres",
-      "vendor": "official",
-      "author": "PostgreSQL",
-      "homepage": "https://github.com/crystaldba/postgres-mcp",
-      "category": "数据与基础设施",
-      "installKind": "npx-mcp",
-      "npxPackage": "postgres-mcp",
-      "envMap": {
-        "connectionString": "DATABASE_URI"
-      },
-      "credentialFields": [
-        {
-          "key": "connectionString",
-          "label": "连接串（postgres://...）",
-          "secret": true,
-          "placeholder": "postgres://user:pass@host:5432/db"
-        }
-      ]
-    },
-    {
       "id": "firecrawl",
       "source": "local",
       "type": "connector",
@@ -115,7 +90,7 @@
       "iconKey": "firecrawl",
       "vendor": "official",
       "author": "Firecrawl",
-      "homepage": "https://github.com/mendableai/firecrawl-mcp-server",
+      "homepage": "https://github.com/firecrawl/firecrawl-mcp-server",
       "category": "搜索与自动化",
       "installKind": "npx-mcp",
       "npxPackage": "firecrawl-mcp",

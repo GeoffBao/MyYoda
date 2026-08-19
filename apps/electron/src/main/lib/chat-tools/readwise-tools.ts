@@ -18,7 +18,8 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 
 /** Readwise API v2 基地址 */
-const READWISE_API_BASE = 'https://readwise.io/api/v2'
+const READWISE_API_V2 = 'https://readwise.io/api/v2'
+const READWISE_API_V3 = 'https://readwise.io/api/v3'
 
 /** 请求超时（毫秒） */
 const REQUEST_TIMEOUT_MS = 15_000
@@ -49,9 +50,14 @@ async function parseResponse(resp: Response, action: string): Promise<unknown> {
   return resp.json().catch(() => ({}))
 }
 
-/** 执行 Readwise API GET 请求 */
-async function readwiseGet(token: string, path: string, searchParams?: Record<string, string | number | undefined>): Promise<unknown> {
-  const url = new URL(`${READWISE_API_BASE}${path}`)
+/** 执行 Readwise API GET 请求（base 可选：v3 list 用，默认 v2） */
+async function readwiseGet(
+  token: string,
+  path: string,
+  searchParams?: Record<string, string | number | boolean | undefined>,
+  base: string = READWISE_API_V2,
+): Promise<unknown> {
+  const url = new URL(`${base}${path}`)
   if (searchParams) {
     for (const [key, value] of Object.entries(searchParams)) {
       if (value !== undefined && value !== '') url.searchParams.set(key, String(value))
@@ -86,11 +92,15 @@ export function buildReadwiseTools(
   },
   getToken: () => string,
 ): ToolDefinition[] {
-  const rw = (path: string, searchParams?: Record<string, string | number | undefined>): Promise<unknown> => {
+  const rw = (path: string, searchParams?: Record<string, string | number | boolean | undefined>, base?: string): Promise<unknown> => {
     const token = getToken().trim()
     if (!token) throw new Error('Readwise Token 未配置，请在「API Tab → Readwise」填写')
-    return readwiseGet(token, path, searchParams)
+    return readwiseGet(token, path, searchParams, base)
   }
+
+  /** v3 list：官方 Reader API（v2 /documents/ 已废弃 404），返回 { count, nextPageCursor, results } */
+  const rwList = (searchParams?: Record<string, string | number | boolean | undefined>): Promise<unknown> =>
+    rw('/list/', searchParams, READWISE_API_V3)
 
   return [
     sdk.defineTool({
@@ -105,15 +115,26 @@ export function buildReadwiseTools(
         const args = params as { query?: string; limit?: number }
         const query = (args.query ?? '').trim()
         if (!query) throw new Error('query 必填')
-        const data = await rw('/documents/search/', { query, page_size: Math.min(args.limit ?? 10, 50) })
-        return jsonResult(data)
+        // v3 list 无全文搜索端点：拉第一页（最多 100 条）后本地过滤标题/作者/摘要
+        const data = (await rwList({ limit: 100 })) as { results?: Array<Record<string, unknown>> }
+        const q = query.toLowerCase()
+        const results = (data.results ?? [])
+          .filter((doc) => {
+            const title = String(doc.title ?? '').toLowerCase()
+            const author = String(doc.author ?? '').toLowerCase()
+            const summary = String(doc.summary ?? '').toLowerCase()
+            const site = String(doc.site_name ?? '').toLowerCase()
+            return title.includes(q) || author.includes(q) || summary.includes(q) || site.includes(q)
+          })
+          .slice(0, Math.min(args.limit ?? 10, 50))
+        return jsonResult({ count: results.length, results })
       },
     }),
 
     sdk.defineTool({
       name: 'mcp__readwise__get_document',
       label: '读取 Readwise 文档',
-      description: '按文档 ID 读取 Reader 文档详情与全文（Markdown 格式）。文档 ID 来自 search_documents / list_documents 返回的 id 字段。',
+      description: '按文档 ID 读取 Reader 文档详情与全文（HTML 格式）。文档 ID 来自 search_documents / list_documents 返回的 id 字段。',,
       parameters: Type.Object({
         document_id: Type.String({ description: 'Reader 文档 ID' }),
       }),
@@ -121,8 +142,10 @@ export function buildReadwiseTools(
         const args = params as { document_id?: string }
         const id = (args.document_id ?? '').trim()
         if (!id) throw new Error('document_id 必填')
-        const data = await rw(`/documents/${id}/full/`)
-        return jsonResult(data)
+        // v3 list?id= 单文档查询 + withHtmlContent 拿全文（HTML）
+        const data = (await rwList({ id, withHtmlContent: true, limit: 1 })) as { results?: unknown[] }
+        const doc = (data.results ?? [])[0] ?? {}
+        return jsonResult(doc)
       },
     }),
 
@@ -136,10 +159,7 @@ export function buildReadwiseTools(
       }),
       async execute(_toolCallId: string, params: unknown) {
         const args = params as { category?: string; limit?: number }
-        const data = await rw('/documents/', {
-          category: args.category,
-          page_size: Math.min(args.limit ?? 10, MAX_PAGE_SIZE),
-        })
+        const data = await rwList({ category: args.category, limit: Math.min(args.limit ?? 10, 100) })
         return jsonResult(data)
       },
     }),
@@ -190,7 +210,8 @@ export function buildReadwiseTools(
       async execute(_toolCallId: string, params: unknown) {
         const args = params as { book_id?: number; limit?: number }
         if (args.book_id === undefined) throw new Error('book_id 必填')
-        const data = await rw(`/books/${args.book_id}/highlights/`, { page_size: Math.min(args.limit ?? 100, MAX_PAGE_SIZE) })
+        // 官方 v2 划线端点按 book_id 查询：/highlights/?book_id=（/books/{id}/highlights/ 不存在）
+        const data = await rw('/highlights/', { book_id: args.book_id, page_size: Math.min(args.limit ?? 100, MAX_PAGE_SIZE) })
         return jsonResult(data)
       },
     }),

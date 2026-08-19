@@ -100,7 +100,12 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
     case 'playwright':
       return <img src={PlaywrightLogo} alt="Playwright" className={ICON_CLASS} />
     case 'chatcut':
-      return <img src={ChatcutLogo} alt="ChatCut" className={ICON_CLASS} />
+      // 官方 favicon 为纯黑图形，深色模式下不可见 → 固定白底容器
+      return (
+        <span className="inline-flex size-[18px] items-center justify-center rounded-[4px] bg-white">
+          <img src={ChatcutLogo} alt="ChatCut" className="size-[16px]" />
+        </span>
+      )
     case 'heygen':
       return <img src={HeygenLogo} alt="HyperFrames by HeyGen" className={ICON_CLASS} />
     case 'fetch':
