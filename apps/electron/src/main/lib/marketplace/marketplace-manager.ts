@@ -25,6 +25,7 @@ export function listMarketplaceCatalog(): MarketplaceItem[] {
 }
 
 /** 已安装的市场条目 id（持久化在 chat-tools.json） */
+/** 已安装的市场条目 id（持久化在 chat-tools.json） */
 export function getMarketplaceInstalledIds(): string[] {
   return getChatToolsConfig().marketplaceInstalled ?? []
 }

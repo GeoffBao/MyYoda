@@ -137,6 +137,21 @@ function getInstalledSkillSlugs(workspaceSlug: string): Set<string> {
   return slugs
 }
 
+/** 用户主动卸载/忽略的条目 id */
+function getMarketplaceIgnoredIds(): string[] {
+  return getChatToolsConfig().marketplaceIgnored ?? []
+}
+
+/** 设置条目忽略状态（true=卸载后不自动显示；false=重新添加时解除） */
+function setMarketplaceIgnored(itemId: string, ignored: boolean): void {
+  const cfg = getChatToolsConfig()
+  const set = new Set(cfg.marketplaceIgnored ?? [])
+  if (ignored) set.add(itemId)
+  else set.delete(itemId)
+  cfg.marketplaceIgnored = [...set]
+  saveChatToolsConfig(cfg)
+}
+
 /** 检测系统是否已安装某 CLI 命令（command -v / where，异步） */
 async function systemHasCli(command: string): Promise<boolean> {
   // 先用当前 PATH 快速检测（覆盖系统级安装）
@@ -200,6 +215,7 @@ async function buildMarketplaceList(
   }
   const merged = mergeMarketplaceItems(local, remote)
   const installedConnectors = new Set(getMarketplaceInstalledIds())
+  const ignoredIds = new Set(getMarketplaceIgnoredIds())
   const installedSlugs = getInstalledSkillSlugs(workspaceSlug)
   return {
     remoteAvailable,
@@ -221,11 +237,13 @@ async function buildMarketplaceList(
         : false
       return {
         ...item,
-        installed: inList || sysInstalled,
+        // ignored 的条目视为未安装（系统检测到的 CLI 卸载后不再自动显示）
+        installed: !ignoredIds.has(item.id) && (inList || sysInstalled),
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
         marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
         authenticated: authed,
+        ignored: ignoredIds.has(item.id),
       }
     })),
   }
@@ -282,13 +300,18 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
 
   if (item.source === 'remote') saveMarketplaceRemoteItem(item)
   installLocalConnector(itemId)
+  // 重新添加时解除忽略状态（系统已装的 CLI 重新加入会话）
+  setMarketplaceIgnored(itemId, false)
   invalidateMarketListCache()
 }
 
-/** 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用） */
+/** 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用）
+ *  CLI 条目同时加入 ignored：系统检测不再自动显示，需用户重新「添加到会话」 */
 export async function uninstallMarketplaceItem(itemId: string): Promise<void> {
   removeMarketplaceRemoteItem(itemId)
   uninstallLocalConnector(itemId)
+  const item = listMarketplaceCatalog().find((i) => i.id === itemId)
+  if (item?.installKind === 'cli') setMarketplaceIgnored(itemId, true)
   invalidateMarketListCache()
 }
 

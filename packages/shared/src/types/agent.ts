@@ -1463,6 +1463,8 @@ export interface MarketplaceItemWithStatus extends MarketplaceItem {
   authenticated?: boolean
   /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
   marketplaceInstalled?: boolean
+  /** 用户是否已卸载/忽略（系统已装的 CLI 卸载后不再自动显示） */
+  ignored?: boolean
 }
 
 // ===== Skill 批量导入 =====

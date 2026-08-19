@@ -78,6 +78,8 @@ export interface ChatToolsFileConfig {
   customTools: ChatToolMeta[]
   /** 已从市场目录安装的条目 id（plugin_creator，2026-08-19） */
   marketplaceInstalled?: string[]
+  /** 用户主动卸载/忽略的条目 id（系统已装的 CLI 卸载后不再自动显示，2026-08-19） */
+  marketplaceIgnored?: string[]
   /** 远程市场连接器安装快照（卸载/注入用，避免依赖网络） */
   marketplaceRemoteItems?: Record<string, MarketplaceItem>
 }

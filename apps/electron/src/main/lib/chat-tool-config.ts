@@ -21,6 +21,7 @@ const DEFAULT_CONFIG: ChatToolsFileConfig = {
   toolCredentials: {},
   customTools: [],
   marketplaceInstalled: [],
+  marketplaceIgnored: [],
   marketplaceRemoteItems: {},
 }
 
@@ -42,6 +43,7 @@ export function getChatToolsConfig(): ChatToolsFileConfig {
       toolCredentials: data.toolCredentials ?? {},
       customTools: data.customTools ?? [],
       marketplaceInstalled: data.marketplaceInstalled ?? [],
+      marketplaceIgnored: data.marketplaceIgnored ?? [],
       marketplaceRemoteItems: data.marketplaceRemoteItems ?? {},
     }
   } catch (error) {

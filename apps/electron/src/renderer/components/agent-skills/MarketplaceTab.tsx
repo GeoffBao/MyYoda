@@ -265,9 +265,14 @@ export function MarketplaceTab(): React.ReactElement {
                         : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                     )}>
                       <CheckCircle2 size={12} />
-                      {item.systemInstalled && !item.marketplaceInstalled
-                        ? (item.authenticated === false ? '需认证' : '系统已安装')
-                        : '已安装'}
+                      {item.ignored ? '已忽略'
+                        : item.systemInstalled && !item.marketplaceInstalled
+                          ? (item.authenticated === false ? '需认证' : '系统已安装')
+                          : '已安装'}
+                    </span>
+                  ) : item.ignored ? (
+                    <span className="flex shrink-0 items-center gap-1 rounded-md bg-foreground/5 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      已忽略
                     </span>
                   ) : (
                     <span className="shrink-0 rounded-md bg-foreground/5 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
