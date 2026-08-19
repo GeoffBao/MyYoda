@@ -192,6 +192,8 @@ import type {
   CodeClawMiniRequest,
   CodeClawPeekRequest,
   CodeClawSize,
+  MarketplaceItem,
+  MarketplaceItemWithStatus,
 } from '@myyoda/shared'
 import type { ProjectConfig } from '@myyoda/shared/projects'
 import type { ExpertManifest, ExpertPackage, ExpertTemplate, TeamSquad } from '@myyoda/shared/experts'
@@ -1091,6 +1093,13 @@ export interface ElectronAPI {
 
   /** 测试内置连接器连接（凭据验证） */
   testBuiltinConnector: (connectorId: string) => Promise<{ success: boolean; message: string }>
+
+  /** 市场目录（plugin_creator）：列表（含安装状态） */
+  marketplaceList: () => Promise<MarketplaceItemWithStatus[]>
+  /** 市场目录：安装条目 */
+  marketplaceInstall: (itemId: string) => Promise<MarketplaceItem>
+  /** 市场目录：卸载条目 */
+  marketplaceUninstall: (itemId: string) => Promise<void>
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -2847,6 +2856,17 @@ const electronAPI: ElectronAPI = {
 
   testBuiltinConnector: (connectorId: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR, connectorId)
+  },
+
+  // 市场目录（plugin_creator）：列表 / 安装 / 卸载
+  marketplaceList: () => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST)
+  },
+  marketplaceInstall: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId)
+  },
+  marketplaceUninstall: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId)
   },
 
   // AskUserQuestion 交互式问答

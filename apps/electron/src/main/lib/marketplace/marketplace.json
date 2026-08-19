@@ -1,0 +1,269 @@
+{
+  "items": [
+    {
+      "id": "slack",
+      "type": "connector",
+      "name": "Slack",
+      "description": "查询频道、读取消息、搜索与发消息，让 Agent 接入团队协作空间。",
+      "iconKey": "slack",
+      "vendor": "official",
+      "author": "Slack",
+      "homepage": "https://github.com/slackhq/slack-mcp-server",
+      "category": "协作办公",
+      "installKind": "npx-mcp",
+      "npxPackage": "@slackhq/slack-mcp-server",
+      "envMap": {
+        "token": "SLACK_BOT_TOKEN",
+        "teamId": "SLACK_TEAM_ID"
+      },
+      "credentialFields": [
+        { "key": "token", "label": "Bot Token", "secret": true, "placeholder": "xoxb-..." },
+        { "key": "teamId", "label": "Team ID（可选）", "placeholder": "T..." }
+      ]
+    },
+    {
+      "id": "linear",
+      "type": "connector",
+      "name": "Linear",
+      "description": "读写 Issue、项目与团队，把 Agent 接入产品研发流程。",
+      "iconKey": "linear",
+      "vendor": "official",
+      "author": "Linear",
+      "homepage": "https://github.com/linearapp/linear-mcp-server",
+      "category": "研发与交付",
+      "installKind": "npx-mcp",
+      "npxPackage": "linear-mcp-server",
+      "envMap": {
+        "apiKey": "LINEAR_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "Personal API Key", "secret": true, "placeholder": "lin_api_..." }
+      ]
+    },
+    {
+      "id": "jira-confluence",
+      "type": "connector",
+      "name": "Jira + Confluence",
+      "description": "官方 Atlassian 套件：Jira 工单与 Confluence 文档一体化。",
+      "iconKey": "jira",
+      "vendor": "official",
+      "author": "Atlassian",
+      "homepage": "https://github.com/atlassian/mcp-atlassian",
+      "category": "协作办公",
+      "installKind": "npx-mcp",
+      "npxPackage": "@atlassian/mcp",
+      "envMap": {
+        "siteUrl": "ATLASSIAN_SITE_URL",
+        "email": "ATLASSIAN_USER_EMAIL",
+        "apiToken": "ATLASSIAN_API_TOKEN"
+      },
+      "credentialFields": [
+        { "key": "siteUrl", "label": "站点地址（如 https://xxx.atlassian.net）", "placeholder": "https://..." },
+        { "key": "email", "label": "账号邮箱", "placeholder": "you@company.com" },
+        { "key": "apiToken", "label": "API Token", "secret": true, "placeholder": "ATATT..." }
+      ]
+    },
+    {
+      "id": "sentry",
+      "type": "connector",
+      "name": "Sentry",
+      "description": "查询 Issue、Crash 与项目健康度，让 Agent 直接定位线上异常。",
+      "iconKey": "sentry",
+      "vendor": "official",
+      "author": "Sentry",
+      "homepage": "https://github.com/sentry-ai/sentry-mcp",
+      "category": "研发与交付",
+      "installKind": "npx-mcp",
+      "npxPackage": "sentry-mcp",
+      "envMap": {
+        "authToken": "SENTRY_AUTH_TOKEN",
+        "organization": "SENTRY_ORG"
+      },
+      "credentialFields": [
+        { "key": "authToken", "label": "Auth Token", "secret": true, "placeholder": "sntrys_..." },
+        { "key": "organization", "label": "组织 slug", "placeholder": "my-org" }
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "type": "connector",
+      "name": "Cloudflare",
+      "description": "管理 Workers、KV、D1 与 DNS，直接运维 Cloudflare 资产。",
+      "iconKey": "cloudflare",
+      "vendor": "official",
+      "author": "Cloudflare",
+      "homepage": "https://github.com/cloudflare/mcp-server-cloudflare",
+      "category": "数据与基础设施",
+      "installKind": "npx-mcp",
+      "npxPackage": "@cloudflare/mcp-server-cloudflare",
+      "envMap": {
+        "apiToken": "CLOUDFLARE_API_TOKEN",
+        "accountId": "CLOUDFLARE_ACCOUNT_ID"
+      },
+      "credentialFields": [
+        { "key": "apiToken", "label": "API Token", "secret": true, "placeholder": "..." },
+        { "key": "accountId", "label": "Account ID（可选）", "placeholder": "..." }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "connector",
+      "name": "Redis",
+      "description": "官方 Redis MCP：查询键值、诊断性能与集群状态。",
+      "iconKey": "redis",
+      "vendor": "official",
+      "author": "Redis",
+      "homepage": "https://github.com/redis/mcp",
+      "category": "数据与基础设施",
+      "installKind": "npx-mcp",
+      "npxPackage": "@redis/mcp",
+      "envMap": {
+        "url": "REDIS_URL"
+      },
+      "credentialFields": [
+        { "key": "url", "label": "连接串（redis:// 或 rediss://）", "secret": true, "placeholder": "rediss://..." }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "connector",
+      "name": "PostgreSQL",
+      "description": "官方 Postgres MCP：只读 Schema 与 SQL 查询能力。",
+      "iconKey": "postgres",
+      "vendor": "official",
+      "author": "PostgreSQL",
+      "homepage": "https://github.com/crystaldba/postgres-mcp",
+      "category": "数据与基础设施",
+      "installKind": "npx-mcp",
+      "npxPackage": "postgres-mcp",
+      "envMap": {
+        "connectionString": "DATABASE_URI"
+      },
+      "credentialFields": [
+        { "key": "connectionString", "label": "连接串（postgres://...）", "secret": true, "placeholder": "postgres://user:pass@host:5432/db" }
+      ]
+    },
+    {
+      "id": "firecrawl",
+      "type": "connector",
+      "name": "Firecrawl",
+      "description": "网页抓取与转 Markdown，支持爬虫、搜索与结构化抽取。",
+      "iconKey": "firecrawl",
+      "vendor": "official",
+      "author": "Firecrawl",
+      "homepage": "https://github.com/mendableai/firecrawl-mcp-server",
+      "category": "搜索与自动化",
+      "installKind": "npx-mcp",
+      "npxPackage": "firecrawl-mcp",
+      "envMap": {
+        "apiKey": "FIRECRAWL_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "fc-..." }
+      ]
+    },
+    {
+      "id": "tavily",
+      "type": "connector",
+      "name": "Tavily",
+      "description": "官方 Tavily MCP：Agent 专用实时搜索与内容抽取。",
+      "iconKey": "tavily",
+      "vendor": "official",
+      "author": "Tavily",
+      "homepage": "https://github.com/tavily-ai/tavily-mcp",
+      "category": "搜索与自动化",
+      "installKind": "npx-mcp",
+      "npxPackage": "tavily-mcp",
+      "envMap": {
+        "apiKey": "TAVILY_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "tvly-..." }
+      ]
+    },
+    {
+      "id": "playwright",
+      "type": "connector",
+      "name": "Playwright",
+      "description": "微软官方浏览器自动化 MCP：打开页面、截图、操作 DOM，无需凭据。",
+      "iconKey": "playwright",
+      "vendor": "official",
+      "author": "Microsoft",
+      "homepage": "https://github.com/microsoft/playwright-mcp",
+      "category": "搜索与自动化",
+      "installKind": "npx-mcp",
+      "npxPackage": "@playwright/mcp",
+      "npxArgs": ["--browser", "chromium"]
+    },
+    {
+      "id": "huggingface",
+      "type": "connector",
+      "name": "Hugging Face",
+      "description": "查询模型、数据集与推理，接入 Hugging Face 生态。",
+      "iconKey": "huggingface",
+      "vendor": "official",
+      "author": "Hugging Face",
+      "homepage": "https://github.com/huggingface/mcp-server-hf",
+      "category": "知识",
+      "installKind": "npx-mcp",
+      "npxPackage": "@huggingface/mcp-server-hf"
+    },
+    {
+      "id": "stripe",
+      "type": "connector",
+      "name": "Stripe",
+      "description": "官方 Stripe MCP：查询余额、交易与客户，管理支付数据。",
+      "iconKey": "stripe",
+      "vendor": "official",
+      "author": "Stripe",
+      "homepage": "https://github.com/stripe/agent-toolkit",
+      "category": "数据与基础设施",
+      "installKind": "npx-mcp",
+      "npxPackage": "@stripe/agent-toolkit-mcp",
+      "envMap": {
+        "apiKey": "STRIPE_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "Secret Key", "secret": true, "placeholder": "sk_live_..." }
+      ]
+    },
+    {
+      "id": "elevenlabs",
+      "type": "connector",
+      "name": "ElevenLabs",
+      "description": "语音合成与克隆，让 Agent 具备文字转语音能力。",
+      "iconKey": "elevenlabs",
+      "vendor": "official",
+      "author": "ElevenLabs",
+      "homepage": "https://github.com/elevenlabs/elevenlabs-mcp",
+      "category": "设计协作",
+      "installKind": "npx-mcp",
+      "npxPackage": "@elevenlabs/elevenlabs-mcp",
+      "envMap": {
+        "apiKey": "ELEVENLABS_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "sk_..." }
+      ]
+    },
+    {
+      "id": "deepgram",
+      "type": "connector",
+      "name": "Deepgram",
+      "description": "语音识别与转录，音频转文字的官方 MCP。",
+      "iconKey": "deepgram",
+      "vendor": "official",
+      "author": "Deepgram",
+      "homepage": "https://github.com/deepgram/mcp-server",
+      "category": "设计协作",
+      "installKind": "npx-mcp",
+      "npxPackage": "deepgram-mcp",
+      "envMap": {
+        "apiKey": "DEEPGRAM_API_KEY"
+      },
+      "credentialFields": [
+        { "key": "apiKey", "label": "API Key", "secret": true, "placeholder": "..." }
+      ]
+    }
+  ]
+}

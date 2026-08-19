@@ -1270,6 +1270,8 @@ export interface SkillMeta {
   icon?: string
   version?: string
   enabled: boolean
+  /** 来源分层：system=系统预内置，connector=连接器携带，user=用户自安装（自己创建/市场下载/工作区导入） */
+  origin?: 'system' | 'connector' | 'user'
   /** 如果此 Skill 是从其他工作区导入的，则携带来源信息 */
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
@@ -1399,6 +1401,46 @@ export interface CommunitySkillInstallResult {
   slug: string
   name: string
   version: string
+}
+
+// ===== 市场目录（plugin_creator：可安装的第三方连接器/应用） =====
+
+/** 市场条目类型：连接器（MCP/API 注入）或 Skill（技能包） */
+export type MarketplaceItemType = 'connector' | 'skill'
+
+/** 市场条目来源：官方 / 社区 / MyYoda 自研 */
+export type MarketplaceVendor = 'official' | 'community' | 'myyoda'
+
+/** 市场条目（预置目录，对标 OpenAI Plugins / Trae Marketplace） */
+export interface MarketplaceItem {
+  /** 唯一 id（用于安装/卸载） */
+  id: string
+  type: MarketplaceItemType
+  name: string
+  description: string
+  /** 品牌图标 key（渲染器用 getBuiltinMcpIcon / 内置 SVG） */
+  iconKey?: string
+  vendor: MarketplaceVendor
+  author?: string
+  homepage?: string
+  category?: string
+  /** 安装方式：npx MCP / 自研桥接 / skill 文件 */
+  installKind: 'npx-mcp' | 'bridge' | 'skill'
+  /** npx-mcp：注入命令（如 @modelcontextprotocol/server-github） */
+  npxPackage?: string
+  /** npx-mcp：启动参数 */
+  npxArgs?: string[]
+  /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
+  envMap?: Record<string, string>
+  /** 需要用户在 UI 中填写的凭据字段定义（key=配置键，label=显示名，secret=是否密文） */
+  credentialFields?: Array<{ key: string; label: string; secret?: boolean; placeholder?: string }>
+  /** skill 安装：内嵌 skill 目录名（相对 marketplace/skills/<id>） */
+  skillFolder?: string
+}
+
+/** 市场条目 + 当前工作区安装状态 */
+export interface MarketplaceItemWithStatus extends MarketplaceItem {
+  installed: boolean
 }
 
 // ===== Skill 批量导入 =====

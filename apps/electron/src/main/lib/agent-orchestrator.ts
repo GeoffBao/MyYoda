@@ -67,6 +67,7 @@ import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
 import { injectWecomMcpServer } from './builtin-mcp/wecom-mcp'
 import { injectNpxConnectorMcpServer, NPX_CONNECTOR_SPECS } from './builtin-mcp/npx-connector-mcp'
+import { getInstalledMarketplaceSpecs } from './marketplace/marketplace-manager'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
 import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
@@ -1428,6 +1429,10 @@ export class AgentOrchestrator {
           if (isBuiltinMcpUserEnabled(spec.id)) {
             injectNpxConnectorMcpServer(spec, mcpServers)
           }
+        }
+        // 市场目录安装的连接器（plugin_creator）：已安装即注入（无开关层，卸载才移除）
+        for (const spec of getInstalledMarketplaceSpecs()) {
+          injectNpxConnectorMcpServer(spec, mcpServers)
         }
       }
       // Graphify 知识图谱 MCP serve（2026-08-14，P3）：repoMapTools 开启 + 主仓库图存在 +

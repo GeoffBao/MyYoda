@@ -74,6 +74,8 @@ export interface ChatToolsFileConfig {
   toolCredentials: Record<string, Record<string, string>>
   /** 自定义工具定义列表 */
   customTools: ChatToolMeta[]
+  /** 已从市场目录安装的条目 id（plugin_creator，2026-08-19） */
+  marketplaceInstalled?: string[]
 }
 
 // ===== 渲染进程交互 =====
@@ -103,6 +105,12 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   TEST_TOOL: 'chat-tool:test',
   /** 测试内置连接器连接（凭据验证） */
   TEST_BUILTIN_CONNECTOR: 'builtin-mcp:test-connector',
+  /** 市场目录：列表（含安装状态） */
+  MARKETPLACE_LIST: 'marketplace:list',
+  /** 市场目录：安装条目 */
+  MARKETPLACE_INSTALL: 'marketplace:install',
+  /** 市场目录：卸载条目 */
+  MARKETPLACE_UNINSTALL: 'marketplace:uninstall',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */

@@ -22,7 +22,7 @@ export type ActiveView = 'conversations' | 'planning' | 'agent-skills'
   | 'discover'
   | 'excalidraw-gallery' | 'excalidraw-editor'
 /** Yoda 插件视图的子页：专家/专家团平级置顶，随后是 Skills / 连接器（原 MCP + API 合并，2026-08-19），Memory（工作区记忆）已并入为子模块。 */
-export type AgentSkillsCapabilityTab = 'experts' | 'teams' | 'skills' | 'connectors' | 'memory'
+export type AgentSkillsCapabilityTab = 'experts' | 'teams' | 'skills' | 'connectors' | 'memory' | 'marketplace'
 
 /** 当前活跃视图（不持久化，每次启动默认显示对话） */
 export const activeViewAtom = atom<ActiveView>('conversations')

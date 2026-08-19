@@ -1,11 +1,11 @@
 /**
- * AgentSkillsView — Yoda 插件中心（专家 / 专家团 / 技能 / 连接器 / 记忆 统一配置）
+ * AgentSkillsView — 应用市场（专家 / 专家团 / 技能 / 连接器 / 记忆 统一配置）
  *
- * 全屏模式（activeView='agent-skills'）：左侧栏「Yoda 插件」独立入口，Home / Code 共享；
+ * 全屏模式（activeView='agent-skills'）：左侧栏「应用市场」独立入口，Home / Code 共享；
  * `embedded` prop 保留供未来嵌入其他容器复用，当前无消费者。
  *
  * 结构：
- * - 标题栏（全屏模式）：Yoda 插件 + 当前工作区切换器（多工作区时显示，复用 useWorkspaceActions）
+ * - 标题栏（全屏模式）：应用市场 + 当前工作区切换器（多工作区时显示，复用 useWorkspaceActions）
  * - 工具条：专家 / 专家团 / 技能 / 连接器 / 记忆 切换 + 搜索 + 新建/导入入口
  * - 内容：各能力 tab 卡片/列表，点击打开详情；连接器 Tab 为 Mico 风格卡片网格 + 居中详情 Modal；记忆复用 WorkspaceMemoryTab
  *
@@ -43,6 +43,7 @@ import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS } from './ConnectorCre
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { CommunityMarketDialog } from './CommunityMarketDialog'
+import { MarketplaceTab } from './MarketplaceTab'
 import {
   WecomSettings,
   WebSearchSettings,
@@ -159,7 +160,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     })
   }, [data.skills, q])
 
-  const customSkills = filteredSkills.filter((s) => !data.defaultSkillSlugs.has(s.slug))
+  const customSkills = filteredSkills.filter((s) => s.origin !== 'connector' && !data.defaultSkillSlugs.has(s.slug))
+  /** 连接器携带的 Skill（跟随连接器安装/启用，2026-08-19 起模型支持，连接器安装时写入 origin=connector） */
+  const connectorSkills = filteredSkills.filter((s) => s.origin === 'connector')
   const builtinSkills = filteredSkills.filter((s) => data.defaultSkillSlugs.has(s.slug))
   const updateCount = data.skills.filter((s) => s.hasUpdate).length
 
@@ -244,7 +247,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         <div className="titlebar-no-drag mx-auto flex w-full max-w-7xl xl:max-w-8xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
           <div className="flex items-center gap-2.5">
             <Blocks className="size-6 text-foreground/70" />
-            <h1 className="text-2xl font-semibold text-foreground">插件</h1>
+            <h1 className="text-2xl font-semibold text-foreground">应用市场</h1>
           </div>
 
           {/* 范围切换：当前工作区默认（跨 Project 共享，今天的行为）+ 该工作区下嵌套的 Project（Skills/MCP 项目级覆盖），
@@ -307,16 +310,17 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
       {/* 工具条 */}
       <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-7xl xl:max-w-8xl px-8 pb-4')}>
-        {/* 专家 / 专家团 / 技能 / 连接器 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19） */}
+        {/* 专家 / 专家团 / 技能 / 连接器 / 记忆 / 市场 切换（MCP + API 已合并为连接器，2026-08-19；市场 = 预置目录 plugin_creator） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
             className={cn(
-              'absolute bottom-0.5 top-0.5 w-[calc(20%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
+              'absolute bottom-0.5 top-0.5 w-[calc(16.666%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
               tab === 'experts' && 'translate-x-0',
               tab === 'teams' && 'translate-x-full',
               tab === 'skills' && 'translate-x-[200%]',
               tab === 'connectors' && 'translate-x-[300%]',
               tab === 'memory' && 'translate-x-[400%]',
+              tab === 'marketplace' && 'translate-x-[500%]',
             )}
           />
           {([
@@ -325,6 +329,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             { value: 'skills' as const, label: '技能', count: data.skills.length },
             { value: 'connectors' as const, label: '连接器', count: connectorCount },
             { value: 'memory' as const, label: '记忆', count: memoryCount },
+            { value: 'marketplace' as const, label: '市场' },
           ]).map(({ value, label, count }) => (
             <button
               key={value}
@@ -346,7 +351,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索技能...' : tab === 'connectors' ? '搜索连接器...' : '搜索记忆文件...'}
+            placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索技能...' : tab === 'connectors' ? '搜索连接器...' : tab === 'marketplace' ? '搜索市场条目...' : '搜索记忆文件...'}
             className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
           />
         </div>
@@ -460,6 +465,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onConfigure={configureBuiltinMcp}
               externalSearch={search}
             />
+          ) : tab === 'marketplace' ? (
+            <MarketplaceTab />
           ) : !data.hasWorkspace ? (
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}
@@ -469,6 +476,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           ) : tab === 'skills' ? (
             <SkillsTab
               customSkills={customSkills}
+              connectorSkills={connectorSkills}
               builtinSkills={builtinSkills}
               total={data.skills.length}
               updateCount={updateCount}
@@ -620,6 +628,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
 interface SkillsTabProps {
   customSkills: SkillMeta[]
+  /** 连接器携带的 Skill（来源分层：用户自装 / 连接器携带 / 系统内置） */
+  connectorSkills?: SkillMeta[]
   builtinSkills: SkillMeta[]
   total: number
   updateCount: number
@@ -636,6 +646,7 @@ interface SkillsTabProps {
 
 function SkillsTab({
   customSkills,
+  connectorSkills = [],
   builtinSkills,
   total,
   updateCount,
@@ -678,7 +689,10 @@ function SkillsTab({
         </div>
       )}
       {customSkills.length > 0 && (
-        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="用户安装" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+      )}
+      {connectorSkills.length > 0 && (
+        <SkillSection title="连接器携带" skills={connectorSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
       {builtinSkills.length > 0 && (
         <SkillSection title="系统内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
