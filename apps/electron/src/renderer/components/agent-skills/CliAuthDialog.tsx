@@ -131,7 +131,7 @@ export function CliAuthDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose() }}>
-      <DialogContent className="sm:max-w-[420px] p-0 flex flex-col gap-0 rounded-2xl border-border/70 shadow-xl">
+      <DialogContent className="sm:max-w-[420px] p-0 flex flex-col gap-0 rounded-2xl border-border/70 shadow-xl" hideClose>
         <DialogTitle className="sr-only">{itemName} 扫码授权</DialogTitle>
         <DialogDescription className="sr-only">{itemName} 扫码授权弹窗</DialogDescription>
 
