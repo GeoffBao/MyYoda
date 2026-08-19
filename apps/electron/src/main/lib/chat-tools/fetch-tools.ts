@@ -4,7 +4,7 @@
  * 提供 fetch_url 工具：抓取任意 HTTP(S) URL，剥离脚本/样式后转换为可读文本
  * 返回给 Agent。官方 fetch MCP server 目前只有 Python（uvx）版，npm 上的
  * unscoped `mcp-server-fetch` 是供应链攻击研究 canary 包（2026-08-19 已确认），
- * 因此这里用 Pi defineTool 自研桥接，与 readwise/weread 同模式，无需凭据。
+ * 因此这里用 Pi defineTool 自研桥接，与 weread 同模式，无需凭据。
  *
  * 安全边界：仅 GET；响应体上限 512KB；超时 20s；不携带 Cookie/凭据。
  */

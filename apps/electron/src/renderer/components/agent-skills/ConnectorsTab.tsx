@@ -13,7 +13,7 @@ import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { BuiltinMcpServerSummary, McpServerEntry } from '@myyoda/shared'
+import type { BuiltinMcpServerSummary, McpServerEntry, MarketplaceItemWithStatus } from '@myyoda/shared'
 import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 import { ConnectorCard } from './ConnectorCard'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
@@ -82,9 +82,22 @@ function categoryOfBuiltin(server: BuiltinMcpServerSummary): Exclude<ConnectorCa
   }
 }
 
+/** 市场条目分类（中文）→ 连接器品类 */
+function categoryOfMarketplace(category: string | undefined): Exclude<ConnectorCategory, 'all'> {
+  switch (category) {
+    case '协作办公': return 'office'
+    case '知识': return 'knowledge'
+    case '研发与交付': return 'code'
+    case '设计协作': return 'design'
+    case '搜索与自动化': return 'search'
+    case '数据与基础设施': return 'data'
+    default: return 'system'
+  }
+}
+
 /** 需要凭据配置的连接器（打开凭据配置 Modal）；其余内置连接器打开只读详情 Modal */
 const CONFIGURABLE_IDS = new Set([
-  'wecom', 'readwise', 'weread', 'nano-banana', 'web-search',
+  'weread', 'nano-banana', 'web-search',
   'github', 'gitlab', 'notion', 'figma', 'brave-search', 'exa', 'browserbase', 'sqlite',
 ])
 
@@ -109,7 +122,7 @@ const COLLECTIONS: ConnectorCollection[] = [
     title: '个人知识库',
     description: '阅读笔记与文档',
     icon: <BookOpen size={16} />,
-    connectorIds: ['readwise', 'weread', 'notion'],
+    connectorIds: ['weread', 'notion'],
   },
 ]
 
@@ -134,12 +147,16 @@ interface ConnectorItem {
 interface ConnectorsTabProps {
   builtinServers: BuiltinMcpServerSummary[]
   userEntries: Array<[string, McpServerEntry]>
+  /** 市场目录条目（含安装状态）：已安装的连接器/CLI 展示为卡片 */
+  marketplaceItems?: MarketplaceItemWithStatus[]
   onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
   onOpenMcp: (name: string, entry: McpServerEntry) => void
   onToggleBuiltin: (id: string, enabled: boolean) => void
   onToggleMcp: (name: string, enabled: boolean) => void
   onAddMcp: () => void
   onConfigure: (serverId: string) => void
+  /** 打开市场条目的凭据/详情（serverId 形如 marketplace:<id>） */
+  onConfigureMarketplace: (serverId: string) => void
   externalSearch: string
 }
 
@@ -160,12 +177,14 @@ async function refreshTools(
 export function ConnectorsTab({
   builtinServers,
   userEntries,
+  marketplaceItems = [],
   onOpenBuiltin,
   onOpenMcp,
   onToggleBuiltin,
   onToggleMcp,
   onAddMcp,
   onConfigure,
+  onConfigureMarketplace,
   externalSearch,
 }: ConnectorsTabProps): React.ReactElement {
   const [category, setCategory] = React.useState<ConnectorCategory>('all')
@@ -261,8 +280,27 @@ export function ConnectorsTab({
       })
     }
 
+    for (const item of marketplaceItems) {
+      if (!item.installed) continue
+      const cat = categoryOfMarketplace(item.category)
+      const isCli = item.installKind === 'cli'
+      list.push({
+        key: `marketplace:${item.id}`,
+        name: item.name,
+        description: isCli ? `${item.description}（CLI 工具）` : item.description,
+        icon: item.iconKey ? getBuiltinMcpIcon(item.iconKey) : <Plug size={20} />,
+        category: cat,
+        categoryLabel: CATEGORY_LABEL[cat],
+        statusLabel: isCli ? '已安装' : '已安装',
+        statusTone: 'success',
+        vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
+        enabled: true,
+        hasToggle: false,
+      })
+    }
+
     return list
-  }, [builtinServers, userEntries, customTools, webSearchTool])
+  }, [builtinServers, userEntries, customTools, webSearchTool, marketplaceItems])
 
   // 搜索 + 品类过滤
   const filtered = React.useMemo(() => {
@@ -300,6 +338,10 @@ export function ConnectorsTab({
       const name = item.key.slice('mcp:'.length)
       const entry = userEntries.find(([n]) => n === name)
       if (entry) onOpenMcp(entry[0], entry[1])
+      return
+    }
+    if (item.key.startsWith('marketplace:')) {
+      onConfigureMarketplace(item.key)
       return
     }
     if (item.key.startsWith('custom:')) {

@@ -8,9 +8,9 @@
 
 import * as React from 'react'
 import { Plug, CalendarClock, Users, ClipboardList, Globe } from 'lucide-react'
-import WecomLogo from '@/assets/brand/wecom-logo.png'
 import ChromeLogo from '@/assets/brand/chrome-logo.svg'
 import GeminiLogo from '@/assets/brand/gemini-logo.png'
+import WecomLogo from '@/assets/brand/wecom-logo.png'
 import ReadwiseLogo from '@/assets/brand/readwise-logo.svg'
 import WereadLogo from '@/assets/brand/weread-logo.png'
 import GithubLogo from '@/assets/brand/github-logo.svg'
@@ -22,83 +22,89 @@ import BraveLogo from '@/assets/brand/brave-logo.svg'
 import ExaLogo from '@/assets/brand/exa-logo.png'
 import SqliteLogo from '@/assets/brand/sqlite-logo.svg'
 import BrowserbaseLogo from '@/assets/brand/browserbase-logo.png'
-import SlackLogo from '@/assets/brand/slack-logo.svg'
+import SlackLogo from '@/assets/brand/slack-logo.png'
 import LinearLogo from '@/assets/brand/linear-logo.svg'
-import JiraLogo from '@/assets/brand/jira-logo.svg'
 import CloudflareLogo from '@/assets/brand/cloudflare-logo.svg'
-import RedisLogo from '@/assets/brand/redis-logo.svg'
-import PostgresLogo from '@/assets/brand/postgres-logo.svg'
-import HuggingfaceLogo from '@/assets/brand/huggingface-logo.svg'
-import StripeLogo from '@/assets/brand/stripe-logo.svg'
-import ElevenlabsLogo from '@/assets/brand/elevenlabs-logo.svg'
-import DeepgramLogo from '@/assets/brand/deepgram-logo.svg'
 import ChatcutLogo from '@/assets/brand/chatcut-logo.svg'
 import HeygenLogo from '@/assets/brand/heygen-logo.svg'
 import PlaywrightLogo from '@/assets/brand/playwright-logo.svg'
 import FirecrawlLogo from '@/assets/brand/firecrawl-logo.png'
-import TavilyLogo from '@/assets/brand/tavily-logo.png'
+import TavilyLogo from '@/assets/brand/tavily-mark-black.svg'
+import VercelLogo from '@/assets/brand/vercel-logo.svg'
+import SupabaseLogo from '@/assets/brand/supabase-logo.svg'
+import NetlifyLogo from '@/assets/brand/netlify-logo.svg'
+import RailwayLogo from '@/assets/brand/railway-logo.svg'
 
 /** 内置 MCP 图标尺寸（与默认 Plug size=18 一致） */
 const ICON_CLASS = 'size-[18px]'
 
+/**
+ * 深色模式需反白的品牌图标（纯黑/深色单色 logo，dark:invert 黑白对调）：
+ * Vercel/Notion/Readwise/GitHub 官方 logo 即黑/白双版，invert 语义正确；
+ * Tavily mark 为官方黑色版，反白后深色模式清晰。彩色 logo 不在此列。
+ */
+const DARK_INVERT_IDS = new Set(['vercel', 'notion', 'github', 'readwise', 'tavily'])
+
+/** 品牌图渲染：深色模式对纯黑 logo 做黑白反转 */
+function brandImg(src: string, alt: string, serverId: string): React.ReactElement {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${ICON_CLASS}${DARK_INVERT_IDS.has(serverId) ? ' dark:invert' : ''}`}
+    />
+  )
+}
+
 export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
   switch (serverId) {
     case 'wecom':
-      return <img src={WecomLogo} alt="企业微信" className={ICON_CLASS} />
-    case 'chrome-devtools':
-      return <img src={ChromeLogo} alt="Chrome" className={ICON_CLASS} />
-    case 'nano-banana':
-      return <img src={GeminiLogo} alt="Gemini" className={ICON_CLASS} />
+      return brandImg(WecomLogo, "企业微信", 'wecom')
     case 'readwise':
-      return <img src={ReadwiseLogo} alt="Readwise" className={ICON_CLASS} />
+      return brandImg(ReadwiseLogo, "Readwise", 'readwise')
+    case 'chrome-devtools':
+      return brandImg(ChromeLogo, "Chrome", 'chrome-devtools')
+    case 'nano-banana':
+      return brandImg(GeminiLogo, "Gemini", 'nano-banana')
     case 'weread':
-      return <img src={WereadLogo} alt="微信读书" className={ICON_CLASS} />
+      return brandImg(WereadLogo, "微信读书", 'weread')
     case 'github':
-      return <img src={GithubLogo} alt="GitHub" className={ICON_CLASS} />
+      return brandImg(GithubLogo, "GitHub", 'github')
     case 'gitlab':
-      return <img src={GitlabLogo} alt="GitLab" className={ICON_CLASS} />
+      return brandImg(GitlabLogo, "GitLab", 'gitlab')
     case 'git':
-      return <img src={GitLogo} alt="Git" className={ICON_CLASS} />
+      return brandImg(GitLogo, "Git", 'git')
     case 'notion':
-      return <img src={NotionLogo} alt="Notion" className={ICON_CLASS} />
+      return brandImg(NotionLogo, "Notion", 'notion')
     case 'figma':
-      return <img src={FigmaLogo} alt="Figma" className={ICON_CLASS} />
+      return brandImg(FigmaLogo, "Figma", 'figma')
     case 'brave-search':
-      return <img src={BraveLogo} alt="Brave Search" className={ICON_CLASS} />
+      return brandImg(BraveLogo, "Brave Search", 'brave-search')
     case 'exa':
-      return <img src={ExaLogo} alt="Exa" className={ICON_CLASS} />
+      return brandImg(ExaLogo, "Exa", 'exa')
     case 'sqlite':
-      return <img src={SqliteLogo} alt="SQLite" className={ICON_CLASS} />
+      // 官方深蓝 #003B57 在深色背景对比度不足 → 固定白底容器（与 ChatCut 同款）
+      return (
+        <span className="inline-flex size-[18px] items-center justify-center rounded-[4px] bg-white">
+          <img src={SqliteLogo} alt="SQLite" className="size-[16px]" />
+        </span>
+      )
     case 'browserbase':
-      return <img src={BrowserbaseLogo} alt="Browserbase" className={ICON_CLASS} />
+      return brandImg(BrowserbaseLogo, "Browserbase", 'browserbase')
     // MyYoda社区官方连接器（2026-08-19）
     case 'slack':
-      return <img src={SlackLogo} alt="Slack" className={ICON_CLASS} />
+      return brandImg(SlackLogo, "Slack", 'slack')
     case 'linear':
-      return <img src={LinearLogo} alt="Linear" className={ICON_CLASS} />
-    case 'jira':
-      return <img src={JiraLogo} alt="Jira" className={ICON_CLASS} />
+      return brandImg(LinearLogo, "Linear", 'linear')
     case 'cloudflare':
-      return <img src={CloudflareLogo} alt="Cloudflare" className={ICON_CLASS} />
-    case 'redis':
-      return <img src={RedisLogo} alt="Redis" className={ICON_CLASS} />
-    case 'postgres':
-      return <img src={PostgresLogo} alt="PostgreSQL" className={ICON_CLASS} />
-    case 'huggingface':
-      return <img src={HuggingfaceLogo} alt="Hugging Face" className={ICON_CLASS} />
-    case 'stripe':
-      return <img src={StripeLogo} alt="Stripe" className={ICON_CLASS} />
-    case 'elevenlabs':
-      return <img src={ElevenlabsLogo} alt="ElevenLabs" className={ICON_CLASS} />
-    case 'deepgram':
-      return <img src={DeepgramLogo} alt="Deepgram" className={ICON_CLASS} />
+      return brandImg(CloudflareLogo, "Cloudflare", 'cloudflare')
     // 无官方图标的第三方（语义化 lucide 兜底）
     case 'firecrawl':
-      return <img src={FirecrawlLogo} alt="Firecrawl" className={ICON_CLASS} />
+      return brandImg(FirecrawlLogo, "Firecrawl", 'firecrawl')
     case 'tavily':
-      return <img src={TavilyLogo} alt="Tavily" className={ICON_CLASS} />
+      return brandImg(TavilyLogo, "Tavily", 'tavily')
     case 'playwright':
-      return <img src={PlaywrightLogo} alt="Playwright" className={ICON_CLASS} />
+      return brandImg(PlaywrightLogo, "Playwright", 'playwright')
     case 'chatcut':
       // 官方 favicon 为纯黑图形，深色模式下不可见 → 固定白底容器
       return (
@@ -107,7 +113,17 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
         </span>
       )
     case 'heygen':
-      return <img src={HeygenLogo} alt="HyperFrames by HeyGen" className={ICON_CLASS} />
+      return brandImg(HeygenLogo, "HyperFrames by HeyGen", 'heygen')
+    // CLI 连接器官方图标（2026-08-19）
+    case 'vercel':
+      return brandImg(VercelLogo, "Vercel", 'vercel')
+    case 'supabase':
+      return brandImg(SupabaseLogo, "Supabase", 'supabase')
+    case 'netlify':
+      return brandImg(NetlifyLogo, "Netlify", 'netlify')
+    // Cloudflare Wrangler 复用 Cloudflare 品牌图标（同属 Cloudflare）
+    case 'railway':
+      return brandImg(RailwayLogo, "Railway", 'railway')
     case 'fetch':
       return <Globe size={18} />
     case 'automation':

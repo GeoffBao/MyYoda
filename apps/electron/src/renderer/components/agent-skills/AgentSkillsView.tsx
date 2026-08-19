@@ -39,15 +39,14 @@ import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { ConnectorsTab } from './ConnectorsTab'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
-import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS } from './ConnectorCredentials'
+import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS, type ConnectorCredentialSpec } from './ConnectorCredentials'
+import type { MarketplaceItemWithStatus } from '@myyoda/shared'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
 import { MarketplaceTab } from './MarketplaceTab'
 import {
-  WecomSettings,
   WebSearchSettings,
   NanoBananaSettings,
-  ReadwiseSettings,
   WereadSettings,
 } from '@/components/settings/ToolSettings'
 import { AgentExpertsView } from '@/components/agent-experts/AgentExpertsView'
@@ -135,8 +134,45 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
-  /** 打开凭据配置 Modal 的连接器 id（wecom/readwise/weread/nano-banana/web-search） */
+  /** 打开凭据配置 Modal 的连接器 id（weread/nano-banana/web-search 等；marketplace:<id> 为市场安装条目） */
   const [configureServerId, setConfigureServerId] = React.useState<string | null>(null)
+  /** 市场目录条目（含安装状态）：供连接器 Tab 展示已安装市场连接器/CLI + 凭据 Modal 动态 spec */
+  const [marketplaceItems, setMarketplaceItems] = React.useState<MarketplaceItemWithStatus[]>([])
+  const [marketplaceRemoteAvailable, setMarketplaceRemoteAvailable] = React.useState(true)
+
+  const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
+
+  const loadMarketplace = React.useCallback(() => {
+    if (!workspaceSlug) return
+    void window.electronAPI
+      .marketplaceList(workspaceSlug)
+      .then((result) => {
+        setMarketplaceItems(result.items)
+        setMarketplaceRemoteAvailable(result.remoteAvailable)
+      })
+      .catch((error) => console.error('[AgentSkills] 加载市场目录失败:', error))
+  }, [workspaceSlug])
+
+  React.useEffect(() => {
+    loadMarketplace()
+  }, [loadMarketplace])
+
+  /** 市场条目 → 凭据配置 spec（ConnectorCredentials specOverride） */
+  const marketplaceSpecFor = React.useCallback((serverId: string): ConnectorCredentialSpec | undefined => {
+    if (!serverId.startsWith('marketplace:')) return undefined
+    const item = marketplaceItems.find((i) => `${i.id}` === serverId.slice('marketplace:'.length))
+    if (!item || !item.credentialFields || item.credentialFields.length === 0) return undefined
+    return {
+      description: item.description,
+      authType: 'API Key / Token',
+      fields: item.credentialFields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        placeholder: f.placeholder,
+        secret: f.secret,
+      })),
+    }
+  }, [marketplaceItems])
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -443,12 +479,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             <ConnectorsTab
               builtinServers={builtinMcpServers}
               userEntries={userMcpEntries}
+              marketplaceItems={marketplaceItems}
               onOpenBuiltin={setSelectedBuiltinMcp}
               onOpenMcp={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
               onToggleBuiltin={data.toggleBuiltinMcp}
               onToggleMcp={data.toggleMcp}
               onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
               onConfigure={configureBuiltinMcp}
+              onConfigureMarketplace={(serverId) => setConfigureServerId(serverId)}
               externalSearch={search}
             />
           ) : tab === 'marketplace' ? (
@@ -570,15 +608,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         }
         tags={configureServerId ? (CONFIGURE_META[configureServerId]?.tags ?? []) : []}
       >
-        {configureServerId === 'wecom' && <WecomSettings />}
-        {configureServerId === 'readwise' && <ReadwiseSettings />}
         {configureServerId === 'weread' && <WereadSettings />}
         {configureServerId === 'nano-banana' && <NanoBananaSettings />}
         {configureServerId === 'web-search' && <WebSearchSettings />}
-        {configureServerId && CONNECTOR_CREDENTIAL_SPECS[configureServerId] && (
+        {configureServerId && (CONNECTOR_CREDENTIAL_SPECS[configureServerId] || marketplaceSpecFor(configureServerId)) && (
           <ConnectorCredentials
             connectorId={configureServerId}
-            onChanged={() => void data.refreshBuiltinMcp()}
+            specOverride={marketplaceSpecFor(configureServerId)}
+            onChanged={() => { void data.refreshBuiltinMcp(); loadMarketplace() }}
           />
         )}
       </ConnectorDetailDialog>
@@ -750,8 +787,6 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
 
 /** 可配置凭据的连接器 → Modal 头部标题与标签（Mico 风格） */
 const CONFIGURE_META: Record<string, { title: string; tags: string[] }> = {
-  wecom: { title: '企业微信', tags: ['MCP 连接器', '协作办公', '官方 wecom-cli'] },
-  readwise: { title: 'Readwise', tags: ['MCP 连接器', '知识', 'REST API 直连'] },
   weread: { title: '微信读书', tags: ['MCP 连接器', '知识', 'Agent Gateway'] },
   'nano-banana': { title: 'Nano Banana 生图', tags: ['MCP 连接器', '设计协作', 'Gemini'] },
   'web-search': { title: '联网搜索', tags: ['内置工具', '搜索与自动化'] },

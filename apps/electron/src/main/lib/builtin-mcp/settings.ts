@@ -14,7 +14,7 @@ import { getSettings, updateSettings } from '../settings-service'
  * 需用户在能力列表中手动开启。
  */
 const DEFAULT_DISABLED_IDS = new Set<string>([
-  'nano-banana', 'chrome-devtools', 'wecom', 'readwise', 'weread',
+  'nano-banana', 'chrome-devtools', 'weread',
   // Phase 2（2026-08-19）外部 npx 连接器与自研桥接连接器：默认关闭，凭据/手动开启
   'github', 'gitlab', 'git', 'notion', 'figma', 'brave-search', 'exa', 'fetch', 'sqlite', 'browserbase',
 ])

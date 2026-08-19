@@ -4,7 +4,7 @@
  * Phase 2 接入的 8 个连接器（github/gitlab/notion/figma/brave-search/exa/
  * browserbase/sqlite）凭据字段各不相同，但交互一致：字段输入 blur 静默保存
  * 到 chat-tools.json toolCredentials[<id>] + 内置 MCP 开关 + 可用状态展示。
- * 用一个字段驱动组件覆盖全部，避免复制 8 份 WecomSettings。
+ * 用一个字段驱动组件覆盖全部，避免为每个连接器复制一份设置表单。
  */
 
 import * as React from 'react'
@@ -109,12 +109,14 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
 
 interface ConnectorCredentialsProps {
   connectorId: string
+  /** 外部 spec 覆盖（市场连接器用：CONNECTOR_CREDENTIAL_SPECS 查不到时用条目动态构造） */
+  specOverride?: ConnectorCredentialSpec
   /** 凭据保存/开关切换成功后回调（用于刷新卡片网格状态） */
   onChanged?: () => void
 }
 
-export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCredentialsProps): React.ReactElement {
-  const spec = CONNECTOR_CREDENTIAL_SPECS[connectorId]
+export function ConnectorCredentials({ connectorId, specOverride, onChanged }: ConnectorCredentialsProps): React.ReactElement {
+  const spec = CONNECTOR_CREDENTIAL_SPECS[connectorId] ?? specOverride
   if (!spec) {
     return <div className="text-sm text-muted-foreground">该连接器无需凭据配置。</div>
   }

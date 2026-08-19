@@ -65,9 +65,8 @@ import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { injectBashDefaultTimeout } from './agent-bash-timeout'
 import { injectChromeDevtoolsMcpServer } from './builtin-mcp/chrome-devtools'
-import { injectWecomMcpServer } from './builtin-mcp/wecom-mcp'
 import { injectNpxConnectorMcpServer, NPX_CONNECTOR_SPECS } from './builtin-mcp/npx-connector-mcp'
-import { getInstalledMarketplaceSpecs } from './marketplace/marketplace-service'
+import { getInstalledMarketplaceCliHints, getInstalledMarketplaceSpecs } from './marketplace/marketplace-service'
 import { isBuiltinMcpUserEnabled } from './builtin-mcp/settings'
 import { getBuiltinMcpName } from './builtin-mcp/baseline'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
@@ -1417,11 +1416,6 @@ export class AgentOrchestrator {
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
-      // 企业微信 MCP（2026-08-19）：官方 wecom-cli mcp-server 模式，optional 注入，
-      // 凭据来自 API Tab 配置（Bot ID/Secret）或本机 wecom-cli auth init。
-      if (!toolsDisabled && isBuiltinMcpUserEnabled('wecom')) {
-        injectWecomMcpServer(mcpServers)
-      }
       // Phase 2 外部 npx 连接器（GitHub/GitLab/Notion/Figma/Brave Search/Exa/Browserbase）：
       // 官方 stdio MCP server，npx 拉包 + 环境变量凭据，optional 注入不阻塞会话。
       if (!toolsDisabled) {
@@ -1925,6 +1919,17 @@ export class AgentOrchestrator {
 
 ${workContext}`
           : '')
+
+      // CLI 连接器（市场 installKind='cli'，2026-08-19）：安装后把 cliHint 注入系统提示，
+      // Agent 通过 Bash 调用本机/npx 的 CLI 子命令（如 readwise / wecom-cli）。
+      const cliHints = toolsDisabled ? [] : getInstalledMarketplaceCliHints()
+      if (cliHints.length > 0) {
+        const cliSection = `\n\n## 已安装 CLI 连接器\n\n${cliHints
+          .filter((c) => c.cliHint)
+          .map((c) => `### ${c.name}\n${c.cliHint}`)
+          .join('\n\n')}`
+        systemPromptAppend += cliSection
+      }
 
       // Graphify 知识图谱引导（repoMapTools 开启时注入，2026-08-14 重写）：
       // - 会话级一次注入（修复每轮重复注入的 token 浪费）

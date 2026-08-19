@@ -199,6 +199,25 @@ export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
     .map(marketplaceItemToNpxSpec)
 }
 
+/**
+ * 已安装的 CLI 连接器提示（installKind='cli'）：
+ * 安装后把 cliHint 注入 Agent 系统提示，Agent 通过 Bash 调用对应 CLI 子命令。
+ * CLI 连接器不走 stdio MCP 注入，这里返回 { id, cliPackage, cliHint } 供编排层拼提示。
+ */
+export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: string; cliPackage?: string; cliHint?: string }> {
+  const installed = new Set(getMarketplaceInstalledIds())
+  const local = listMarketplaceCatalog()
+  const remote = Object.values(getMarketplaceRemoteItems())
+  return [...local, ...remote]
+    .filter((item) => item.installKind === 'cli' && installed.has(item.id))
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      cliPackage: item.cliPackage,
+      cliHint: item.cliHint,
+    }))
+}
+
 /** 内置技能资源根目录（dev/build 在 dist/resources；打包在 process.resourcesPath） */
 export function getMarketplaceSkillsSourceDir(folder: string): string {
   // electron 在 bun 单测环境不可用，惰性 require（该函数仅运行时安装路径调用）

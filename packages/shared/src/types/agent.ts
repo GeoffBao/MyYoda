@@ -1405,8 +1405,8 @@ export interface CommunitySkillInstallResult {
 
 // ===== 市场目录（plugin_creator：可安装的第三方连接器/应用） =====
 
-/** 市场条目类型：连接器（MCP/API 注入）或 Skill（技能包） */
-export type MarketplaceItemType = 'connector' | 'skill'
+/** 市场条目类型：连接器（MCP/API/CLI 注入）或 Skill（技能包） */
+export type MarketplaceItemType = 'connector' | 'skill' | 'cli'
 
 /** 市场条目来源：官方 / 社区 / MyYoda 自研 */
 export type MarketplaceVendor = 'official' | 'community' | 'myyoda'
@@ -1426,12 +1426,16 @@ export interface MarketplaceItem {
   author?: string
   homepage?: string
   category?: string
-  /** 安装方式：npx MCP / 自研桥接 / skill 文件 */
-  installKind: 'npx-mcp' | 'bridge' | 'skill'
+  /** 安装方式：npx MCP / 自研桥接 / CLI 命令 / skill 文件 */
+  installKind: 'npx-mcp' | 'bridge' | 'cli' | 'skill'
   /** npx-mcp：注入命令（如 @modelcontextprotocol/server-github） */
   npxPackage?: string
   /** npx-mcp：启动参数 */
   npxArgs?: string[]
+  /** cli：npm 包名（npx -y <cliPackage> 或全局安装后使用），如 @readwise/cli */
+  cliPackage?: string
+  /** cli：安装/使用提示（注入 Agent 系统提示的 CLI 用法说明，含认证步骤） */
+  cliHint?: string
   /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
   envMap?: Record<string, string>
   /** 需要用户在 UI 中填写的凭据字段定义（key=配置键，label=显示名，secret=是否密文） */
