@@ -8,7 +8,7 @@
  */
 
 import * as React from 'react'
-import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, PlugZap, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, PlugZap, ShieldCheck, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -34,6 +34,10 @@ export interface ConnectorCredentialSpec {
   authType: string
   /** 本连接器将访问的数据/能力范围 */
   permissions?: string[]
+  /** 获取凭据的直达链接（如 GitHub Settings → Tokens） */
+  helpUrl?: string
+  /** 链接按钮文案（默认「获取 Token」） */
+  helpLabel?: string
   fields: ConnectorCredentialField[]
 }
 
@@ -43,6 +47,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 GitHub Settings → Developer settings → Personal access tokens 创建 Token（建议只勾 repo 权限）。',
     authType: 'Personal Access Token',
     permissions: ['读取仓库、Issues、Pull Requests、Commits、Branches'],
+    helpUrl: 'https://github.com/settings/tokens',
+    helpLabel: '创建 Personal Access Token',
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...', secret: true },
     ],
@@ -51,6 +57,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 GitLab User Settings → Access Tokens 创建 Token（勾选 api 权限）。自建实例可填 API 地址。',
     authType: 'Personal Access Token',
     permissions: ['读取项目、Issues、Merge Requests、Commits'],
+    helpUrl: 'https://gitlab.com/-/user_settings/personal_access_tokens',
+    helpLabel: '创建 Access Token',
     fields: [
       { key: 'token', label: 'Personal Access Token', placeholder: 'glpat-...', secret: true },
       { key: 'apiUrl', label: 'API 地址（可选，自建实例填）', placeholder: 'https://gitlab.com/api/v4', optional: true },
@@ -60,6 +68,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 notion.so/my-integrations 创建集成并复制 Token（ntn_ 开头），然后把要访问的页面 Share 给该集成。',
     authType: 'API Token（ntn_）',
     permissions: ['读取已授权的页面与数据库内容'],
+    helpUrl: 'https://notion.so/my-integrations',
+    helpLabel: '创建 Notion 集成',
     fields: [
       { key: 'token', label: 'Notion Token', placeholder: 'ntn_...', secret: true },
     ],
@@ -68,6 +78,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 Figma Settings → Security → Personal access tokens 生成 Token（需 File content 读取权限）。',
     authType: 'Personal Access Token',
     permissions: ['读取文件、图层、样式与组件库'],
+    helpUrl: 'https://www.figma.com/settings',
+    helpLabel: '生成 Figma Token',
     fields: [
       { key: 'apiKey', label: 'Figma API Key', placeholder: 'figd_...', secret: true },
     ],
@@ -76,6 +88,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 brave.com/search/api 免费申请 API Key（每月有免费额度）。',
     authType: 'API Key',
     permissions: ['发起公开网络搜索请求'],
+    helpUrl: 'https://brave.com/search/api/',
+    helpLabel: '申请 Brave API Key',
     fields: [
       { key: 'apiKey', label: 'Brave Search API Key', placeholder: 'BSA...', secret: true },
     ],
@@ -84,6 +98,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 dashboard.exa.ai/api-keys 获取 API Key。',
     authType: 'API Key',
     permissions: ['发起语义/关键词网络搜索'],
+    helpUrl: 'https://dashboard.exa.ai/api-keys',
+    helpLabel: '获取 Exa API Key',
     fields: [
       { key: 'apiKey', label: 'Exa API Key', placeholder: '...', secret: true },
     ],
@@ -92,6 +108,8 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
     description: '在 browserbase.com 控制台获取 API Key 与 Project ID（browserbase.com/dashboard）。',
     authType: 'API Key + Project ID',
     permissions: ['创建和管理云端浏览器会话'],
+    helpUrl: 'https://www.browserbase.com/dashboard',
+    helpLabel: '打开 Browserbase 控制台',
     fields: [
       { key: 'apiKey', label: 'API Key', placeholder: 'bb_live_...', secret: true },
       { key: 'projectId', label: 'Project ID', placeholder: '...' },
@@ -248,6 +266,18 @@ export function ConnectorCredentials({ connectorId, specOverride, onChanged }: C
         </span>
       </div>
       <p className="text-[13px] leading-relaxed text-muted-foreground">{spec.description}</p>
+
+      {spec.helpUrl && (
+        <a
+          href={spec.helpUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border/60 bg-content-area/40 px-3 py-1.5 text-[12px] font-medium text-blue-600 transition-colors hover:bg-muted/60 hover:text-blue-500 dark:text-blue-400"
+        >
+          <ExternalLink size={13} />
+          {spec.helpLabel ?? '获取 Token'}
+        </a>
+      )}
 
       {spec.permissions && spec.permissions.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-content-area/40 p-3">

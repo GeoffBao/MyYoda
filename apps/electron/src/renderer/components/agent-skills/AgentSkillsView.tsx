@@ -178,6 +178,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     return {
       description: item.description,
       authType: 'API Key / Token',
+      // 市场条目带 homepage 时透传为「获取 Token」链接
+      helpUrl: item.homepage,
       fields: item.credentialFields.map((f) => ({
         key: f.key,
         label: f.label,
