@@ -284,19 +284,22 @@ export function ConnectorsTab({
     }
 
     for (const item of marketplaceItems) {
-      // 连接器 Tab 只展示市场安装的连接器/CLI；技能类条目（chatcut/heygen 等）归技能 Tab
+      // 连接器 Tab 只展示市场安装的连接器/CLI（停用的卡片保留，installed 不受开关影响）；技能类条目归技能 Tab
       if (!item.installed || item.type !== 'connector') continue
       const cat = categoryOfMarketplace(item.category)
       const isCli = item.installKind === 'cli'
-      // CLI 连接器：系统安装+认证状态区分
-      const statusLabel = isCli
-        ? (!item.systemInstalled ? '未安装'
-          : !item.authenticated ? '需认证' : '系统已安装')
-        : (item.hasCredentials ? '已启用' : '需配置')
-      const statusTone = isCli
-        ? (!item.systemInstalled ? 'muted'
-          : !item.authenticated ? 'warning' : 'success')
-        : (item.hasCredentials ? 'success' : 'warning')
+      // 已停用 → 一律显示「已关闭」（卡片保留）；启用时才区分认证/凭据状态
+      const enabled = item.enabled ?? true
+      const statusLabel = !enabled ? '已关闭'
+        : isCli
+          ? (!item.systemInstalled ? '未安装'
+            : !item.authenticated ? '需认证' : '系统已安装')
+          : (item.hasCredentials ? '已启用' : '需配置')
+      const statusTone = !enabled ? 'muted'
+        : isCli
+          ? (!item.systemInstalled ? 'muted'
+            : !item.authenticated ? 'warning' : 'success')
+          : (item.hasCredentials ? 'success' : 'warning')
       list.push({
         key: `marketplace:${item.id}`,
         name: item.name,
@@ -307,8 +310,8 @@ export function ConnectorsTab({
         statusLabel,
         statusTone,
         vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
-        // 开关 = 注入启用状态（marketplaceInstalled）；垃圾桶 = 彻底移除
-        enabled: item.marketplaceInstalled ?? false,
+        // 开关 = 启用状态（enabled）；关闭只停用，不卸载，卡片保留
+        enabled,
         hasToggle: true,
       })
     }

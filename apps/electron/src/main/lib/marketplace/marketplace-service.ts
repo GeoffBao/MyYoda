@@ -142,6 +142,21 @@ function getMarketplaceIgnoredIds(): string[] {
   return getChatToolsConfig().marketplaceIgnored ?? []
 }
 
+/** 已安装但被停用的条目 id（开关关闭的集合） */
+function getMarketplaceDisabledIds(): string[] {
+  return getChatToolsConfig().marketplaceDisabled ?? []
+}
+
+/** 设置条目停用状态（true=停用注入；false=恢复启用；不改 marketplaceInstalled） */
+function setMarketplaceDisabled(itemId: string, disabled: boolean): void {
+  const cfg = getChatToolsConfig()
+  const set = new Set(cfg.marketplaceDisabled ?? [])
+  if (disabled) set.add(itemId)
+  else set.delete(itemId)
+  cfg.marketplaceDisabled = [...set]
+  saveChatToolsConfig(cfg)
+}
+
 /** 设置条目忽略状态（true=卸载后不自动显示；false=重新添加时解除） */
 function setMarketplaceIgnored(itemId: string, ignored: boolean): void {
   const cfg = getChatToolsConfig()
@@ -235,6 +250,7 @@ async function buildMarketplaceList(
   const merged = mergeMarketplaceItems(local, remote)
   const installedConnectors = new Set(getMarketplaceInstalledIds())
   const ignoredIds = new Set(getMarketplaceIgnoredIds())
+  const disabledIds = new Set(getMarketplaceDisabledIds())
   const installedSlugs = getInstalledSkillSlugs(workspaceSlug)
   return {
     remoteAvailable,
@@ -254,10 +270,14 @@ async function buildMarketplaceList(
       const hasCreds = item.installKind === 'npx-mcp'
         ? hasNpxCredentials(item.id, item.envMap)
         : false
+      // 已安装 = 市场安装列表，或（CLI 且系统已装且未被忽略）；ignored 的条目视为未安装
+      const installed = !ignoredIds.has(item.id) && (inList || sysInstalled)
+      // 已启用 = 已安装且未被 marketplaceDisabled 停用（开关只改 disabled，不删安装记录）
+      const enabled = installed && !disabledIds.has(item.id)
       return {
         ...item,
-        // ignored 的条目视为未安装（系统检测到的 CLI 卸载后不再自动显示）
-        installed: !ignoredIds.has(item.id) && (inList || sysInstalled),
+        installed,
+        enabled,
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
         marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
@@ -321,6 +341,8 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
   installLocalConnector(itemId)
   // 重新添加时解除忽略状态（系统已装的 CLI 重新加入会话）
   setMarketplaceIgnored(itemId, false)
+  // 安装即默认启用：从停用集合移除
+  setMarketplaceDisabled(itemId, false)
   invalidateMarketListCache()
 }
 
@@ -329,34 +351,32 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
 export async function uninstallMarketplaceItem(itemId: string): Promise<void> {
   removeMarketplaceRemoteItem(itemId)
   uninstallLocalConnector(itemId)
+  setMarketplaceDisabled(itemId, false)
   const item = listMarketplaceCatalog().find((i) => i.id === itemId)
   if (item?.installKind === 'cli') setMarketplaceIgnored(itemId, true)
   invalidateMarketListCache()
 }
 
-/** 开关：启用/停用注入（不删除、不 ignored；与内置连接器开关语义一致）
- *  enabled=true → 加入 marketplaceInstalled；false → 仅移除注入 */
+/**
+ * 开关：启用/停用注入（只改 marketplaceDisabled，不删除安装记录）——对齐 Cline 的
+ * Enable/Disable（Toggle a server without deleting it）。
+ * - 停用（false）：加入 disabled，卡片保留显示「已关闭」，不再注入 spec/cliHint；
+ * - 启用（true）：从 disabled 移除，恢复注入。
+ */
 export function toggleMarketplaceItem(itemId: string, enabled: boolean): void {
-  const config = getChatToolsConfig()
-  const installed = new Set(config.marketplaceInstalled ?? [])
-  if (enabled) {
-    installed.add(itemId)
-    setMarketplaceIgnored(itemId, false)
-  } else {
-    installed.delete(itemId)
-  }
-  config.marketplaceInstalled = [...installed]
-  saveChatToolsConfig(config)
+  setMarketplaceDisabled(itemId, !enabled)
+  if (enabled) setMarketplaceIgnored(itemId, false)
   invalidateMarketListCache()
 }
 
-/** 已安装市场连接器 → NpxConnectorSpec（本地目录 + 远程快照统一注入） */
+/** 已安装市场连接器 → NpxConnectorSpec（本地目录 + 远程快照统一注入；停用条目不注入） */
 export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
   const installed = new Set(getMarketplaceInstalledIds())
+  const disabled = new Set(getMarketplaceDisabledIds())
   const local = listMarketplaceCatalog()
   const remote = Object.values(getMarketplaceRemoteItems())
   return [...local, ...remote]
-    .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id))
+    .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id) && !disabled.has(item.id))
     .map(marketplaceItemToNpxSpec)
 }
 
@@ -367,10 +387,11 @@ export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
  */
 export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: string; cliPackage?: string; cliHint?: string }> {
   const installed = new Set(getMarketplaceInstalledIds())
+  const disabled = new Set(getMarketplaceDisabledIds())
   const local = listMarketplaceCatalog()
   const remote = Object.values(getMarketplaceRemoteItems())
   return [...local, ...remote]
-    .filter((item) => item.installKind === 'cli' && installed.has(item.id))
+    .filter((item) => item.installKind === 'cli' && installed.has(item.id) && !disabled.has(item.id))
     .map((item) => ({
       id: item.id,
       name: item.name,

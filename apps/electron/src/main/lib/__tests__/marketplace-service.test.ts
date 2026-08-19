@@ -14,6 +14,7 @@ import {
   saveMarketplaceRemoteItem,
   removeMarketplaceRemoteItem,
   getInstalledMarketplaceSpecs,
+  toggleMarketplaceItem,
   copySkillFolder,
   translateRemoteCategory,
   MARKETPLACE_ID_PREFIX,
@@ -45,13 +46,15 @@ function sampleSkill(): CommunitySkill {
 
 describe('marketplace-service 统一层', () => {
   afterEach(() => {
-    // 清理测试残留：移除远程快照条目与 installed 记录，避免污染同进程其他测试
+    // 清理测试残留：移除远程快照条目、installed 记录与停用标记，避免污染同进程其他测试
     const cfg = getChatToolsConfig()
     const remoteItems = { ...(cfg.marketplaceRemoteItems ?? {}) }
     delete remoteItems[remoteConnector.id]
     const installed = (cfg.marketplaceInstalled ?? []).filter((id) => id !== remoteConnector.id)
+    const disabled = (cfg.marketplaceDisabled ?? []).filter((id) => id !== remoteConnector.id)
     cfg.marketplaceRemoteItems = remoteItems
     cfg.marketplaceInstalled = installed
+    cfg.marketplaceDisabled = disabled
     saveChatToolsConfig(cfg)
   })
 
@@ -127,6 +130,24 @@ describe('marketplace-service 统一层', () => {
     // installed 仍在（卸载未执行前）但快照已删 → spec 不应包含
     const specs = getInstalledMarketplaceSpecs()
     expect(specs.find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeUndefined()
+  })
+
+  test('开关关闭：只停用注入，不删除安装记录（对齐 Cline Enable/Disable）', () => {
+    saveMarketplaceRemoteItem(remoteConnector as any)
+    const cfg = getChatToolsConfig()
+    cfg.marketplaceInstalled = [...(cfg.marketplaceInstalled ?? []), remoteConnector.id]
+    saveChatToolsConfig(cfg)
+
+    // 关闭 → installed 保留，disabled 包含，spec 不再注入
+    toggleMarketplaceItem(remoteConnector.id, false)
+    expect(getMarketplaceInstalledIds()).toContain(remoteConnector.id) // 安装记录仍在
+    expect(getChatToolsConfig().marketplaceDisabled).toContain(remoteConnector.id)
+    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeUndefined()
+
+    // 再开 → disabled 清除，spec 恢复注入
+    toggleMarketplaceItem(remoteConnector.id, true)
+    expect(getChatToolsConfig().marketplaceDisabled ?? []).not.toContain(remoteConnector.id)
+    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeDefined()
   })
 
   test('copySkillFolder：复制本地技能目录到目标 skills 目录（重复安装覆盖）', () => {
