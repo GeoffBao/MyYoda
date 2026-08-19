@@ -20,11 +20,12 @@ import { ConnectorDetailDialog } from './ConnectorDetailDialog'
 
 // ===== 品类 =====
 
-export type ConnectorCategory = 'all' | 'office' | 'code' | 'design' | 'search' | 'data' | 'system' | 'mine' | 'custom'
+export type ConnectorCategory = 'all' | 'office' | 'knowledge' | 'code' | 'design' | 'search' | 'data' | 'system' | 'mine' | 'custom'
 
 const CHIPS: Array<{ key: ConnectorCategory; label: string }> = [
   { key: 'all', label: '全部' },
   { key: 'office', label: '协作办公' },
+  { key: 'knowledge', label: '知识' },
   { key: 'code', label: '研发与交付' },
   { key: 'design', label: '设计协作' },
   { key: 'search', label: '搜索与自动化' },
@@ -36,6 +37,7 @@ const CHIPS: Array<{ key: ConnectorCategory; label: string }> = [
 
 const CATEGORY_LABEL: Record<Exclude<ConnectorCategory, 'all'>, string> = {
   office: '协作办公',
+  knowledge: '知识',
   code: '研发与交付',
   design: '设计协作',
   search: '搜索与自动化',
@@ -49,8 +51,9 @@ const CATEGORY_LABEL: Record<Exclude<ConnectorCategory, 'all'>, string> = {
 function categoryOfBuiltin(server: BuiltinMcpServerSummary): Exclude<ConnectorCategory, 'all'> {
   switch (server.category) {
     case 'office':
-    case 'knowledge':
       return 'office'
+    case 'knowledge':
+      return 'knowledge'
     case 'browser':
     case 'code':
       return 'code'

@@ -749,8 +749,8 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
 /** 可配置凭据的连接器 → Modal 头部标题与标签（Mico 风格） */
 const CONFIGURE_META: Record<string, { title: string; tags: string[] }> = {
   wecom: { title: '企业微信', tags: ['MCP 连接器', '协作办公', '官方 wecom-cli'] },
-  readwise: { title: 'Readwise', tags: ['MCP 连接器', '协作办公', 'REST API 直连'] },
-  weread: { title: '微信读书', tags: ['MCP 连接器', '协作办公', 'Agent Gateway'] },
+  readwise: { title: 'Readwise', tags: ['MCP 连接器', '知识', 'REST API 直连'] },
+  weread: { title: '微信读书', tags: ['MCP 连接器', '知识', 'Agent Gateway'] },
   'nano-banana': { title: 'Nano Banana 生图', tags: ['MCP 连接器', '设计协作', 'Gemini'] },
   'web-search': { title: '联网搜索', tags: ['内置工具', '搜索与自动化'] },
   github: { title: 'GitHub', tags: ['MCP 连接器', '研发与交付', '官方 server'] },
