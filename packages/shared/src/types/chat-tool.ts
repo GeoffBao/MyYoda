@@ -127,6 +127,8 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   MARKETPLACE_CLI_AUTH_STATUS: 'marketplace:cli-auth-status',
   /** 市场目录：取消扫码授权 */
   MARKETPLACE_CLI_AUTH_CANCEL: 'marketplace:cli-auth-cancel',
+  /** 市场目录：token 方式认证 */
+  MARKETPLACE_CLI_AUTH_TOKEN: 'marketplace:cli-auth-token',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */

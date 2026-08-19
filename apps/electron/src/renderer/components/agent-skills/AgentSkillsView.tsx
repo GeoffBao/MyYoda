@@ -688,7 +688,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setCliAuthItem(configureMarketplaceItem)}>
                   <ScanLine size={14} className="mr-1.5" />
-                  扫码授权
+                  {configureMarketplaceItem.authKind === 'token' ? '连接' : '扫码授权'}
                 </Button>
               </div>
             )}
@@ -714,12 +714,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         )}
       </ConnectorDetailDialog>
 
-      {/* CLI 扫码授权弹窗（企业微信等） */}
+      {/* CLI 扫码/token 授权弹窗（企业微信 / Readwise 等） */}
       <CliAuthDialog
         open={cliAuthItem !== null}
         onOpenChange={(open) => { if (!open) setCliAuthItem(null) }}
         itemId={cliAuthItem?.id ?? ''}
         itemName={cliAuthItem?.name ?? ''}
+        authKind={cliAuthItem?.authKind ?? 'qr'}
+        authTokenUrl={cliAuthItem?.authTokenUrl}
         onAuthenticated={() => { void loadMarketplace() }}
       />
 

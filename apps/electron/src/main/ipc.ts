@@ -3864,6 +3864,13 @@ export function registerIpcHandlers(): void {
     const { cliAuthCancel } = await import('./lib/marketplace/cli-auth')
     return cliAuthCancel()
   })
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_TOKEN,
+    async (_, itemId: string, token: string): Promise<{ ok: boolean; error?: string }> => {
+      const { cliAuthToken } = await import('./lib/marketplace/cli-auth')
+      return cliAuthToken(itemId, token)
+    }
+  )
 
   // 测试工具连接
   ipcMain.handle(

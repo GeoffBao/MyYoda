@@ -1107,6 +1107,8 @@ export interface ElectronAPI {
   marketplaceCliAuthStatus: (itemId: string) => Promise<{ authenticated: boolean; error?: string }>
   /** 市场目录：取消扫码授权（终止挂起的进程） */
   marketplaceCliAuthCancel: () => Promise<void>
+  /** 市场目录：token 方式认证（Readwise 等，输入 token 写入凭据） */
+  marketplaceCliAuthToken: (itemId: string, token: string) => Promise<{ ok: boolean; error?: string }>
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -2886,6 +2888,9 @@ const electronAPI: ElectronAPI = {
   },
   marketplaceCliAuthCancel: () => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_CANCEL)
+  },
+  marketplaceCliAuthToken: (itemId: string, token: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_TOKEN, itemId, token)
   },
 
   // AskUserQuestion 交互式问答

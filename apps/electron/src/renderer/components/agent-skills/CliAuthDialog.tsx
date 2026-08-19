@@ -9,7 +9,8 @@
 import * as React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Loader2, RefreshCw, ExternalLink, X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Loader2, RefreshCw, ExternalLink, X, KeyRound, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface CliAuthDialogProps {
@@ -19,6 +20,10 @@ interface CliAuthDialogProps {
   itemId: string
   /** 连接器名称（标题展示） */
   itemName: string
+  /** 认证方式：qr=扫码（默认）；token=输入 token（Readwise 等） */
+  authKind?: 'qr' | 'token'
+  /** token 模式：获取 token 的页面链接 */
+  authTokenUrl?: string
   /** 认证成功回调（刷新列表用） */
   onAuthenticated?: () => void
 }
@@ -28,6 +33,8 @@ export function CliAuthDialog({
   onOpenChange,
   itemId,
   itemName,
+  authKind = 'qr',
+  authTokenUrl,
   onAuthenticated,
 }: CliAuthDialogProps): React.ReactElement {
   const [qrDataUrl, setQrDataUrl] = React.useState<string | undefined>()
@@ -35,6 +42,9 @@ export function CliAuthDialog({
   const [error, setError] = React.useState<string | undefined>()
   const [starting, setStarting] = React.useState(true)
   const [checked, setChecked] = React.useState(false)
+  const [token, setToken] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const [tokenDone, setTokenDone] = React.useState(false)
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   /** 启动扫码（含刷新重试） */
@@ -62,10 +72,14 @@ export function CliAuthDialog({
     }
   }, [itemId])
 
-  /** 打开时启动 + 轮询认证状态 */
+  /** 打开时启动 + 轮询认证状态（扫码模式；token 模式提交后也轮询复检） */
   React.useEffect(() => {
     if (!open) return
-    void startAuth()
+    if (authKind === 'qr') {
+      void startAuth()
+    } else {
+      setStarting(false)
+    }
     timerRef.current = setInterval(async () => {
       try {
         const status = await window.electronAPI.marketplaceCliAuthStatus(itemId)
@@ -84,7 +98,29 @@ export function CliAuthDialog({
       if (timerRef.current) clearInterval(timerRef.current)
       timerRef.current = null
     }
-  }, [open, itemId, itemName, onAuthenticated, onOpenChange, startAuth])
+  }, [open, itemId, itemName, onAuthenticated, onOpenChange, startAuth, authKind])
+
+  /** token 模式：提交 token 写入凭据 */
+  const handleTokenSubmit = React.useCallback(async () => {
+    if (!token.trim()) return
+    setSubmitting(true)
+    setError(undefined)
+    try {
+      const result = await window.electronAPI.marketplaceCliAuthToken(itemId, token.trim())
+      if (result.ok) {
+        setTokenDone(true)
+        toast.success(`${itemName} 认证成功`)
+        onAuthenticated?.()
+        onOpenChange(false)
+      } else {
+        setError(result.error ?? '认证失败')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [token, itemId, itemName, onAuthenticated, onOpenChange])
 
   /** 关闭时终止挂起的扫码进程 */
   const handleClose = React.useCallback(() => {
@@ -115,7 +151,55 @@ export function CliAuthDialog({
 
         {/* 主体 */}
         <div className="flex flex-col items-center gap-3 px-5 py-5">
-          {starting ? (
+          {authKind === 'token' ? (
+            <div className="flex w-full flex-col gap-3">
+              <div className="flex flex-col items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 p-4">
+                <KeyRound size={18} className="text-muted-foreground" />
+                <div className="text-[13px] font-medium text-foreground">输入 Readwise API Token</div>
+                <div className="text-center text-[12px] text-muted-foreground">
+                  Token 在 Readwise 网页获取（登录后可见）
+                </div>
+                {authTokenUrl && (
+                  <a
+                    href={authTokenUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    <ExternalLink size={12} />
+                    前往获取 Token
+                  </a>
+                )}
+              </div>
+              <Input
+                type="password"
+                placeholder="粘贴 Readwise Access Token（rk_...）"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleTokenSubmit() }}
+                className="font-mono text-[13px]"
+              />
+              {error && (
+                <div className="rounded-lg bg-amber-500/10 p-2.5 text-[12px] text-amber-600 dark:text-amber-400">
+                  {error}
+                </div>
+              )}
+              <Button
+                disabled={!token.trim() || submitting}
+                onClick={() => void handleTokenSubmit()}
+                className="w-full"
+              >
+                {submitting ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <CheckCircle2 size={14} className="mr-1.5" />}
+                {submitting ? '正在连接…' : '连接'}
+              </Button>
+              {tokenDone && (
+                <div className="flex items-center justify-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 size={12} />
+                  已认证，正在关闭…
+                </div>
+              )}
+            </div>
+          ) : starting ? (
             <div className="flex h-[300px] w-full flex-col items-center justify-center gap-3">
               <Loader2 size={24} className="animate-spin text-muted-foreground" />
               <div className="text-[13px] text-muted-foreground">正在获取二维码…</div>
@@ -124,7 +208,7 @@ export function CliAuthDialog({
             <div className="flex h-[300px] w-full flex-col items-center justify-center gap-3 px-4 text-center">
               <div className="text-[13px] text-amber-600 dark:text-amber-400">{error}</div>
               <div className="text-[12px] text-muted-foreground">
-                也可以在终端执行 <span className="font-mono">wecom-cli auth init</span> 完成授权
+                也可以打开系统终端，执行 <span className="font-mono">{itemName === '企业微信' ? 'wecom-cli auth init' : '相关 CLI 的 auth 命令'}</span> 完成授权
               </div>
               <Button variant="outline" size="sm" onClick={() => void startAuth()}>
                 <RefreshCw size={14} className="mr-1.5" />

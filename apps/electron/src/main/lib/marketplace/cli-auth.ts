@@ -133,6 +133,37 @@ export async function cliAuthStart(itemId: string): Promise<CliAuthStartResult> 
   }
 }
 
+/**
+ * token 方式认证（Readwise 等）：执行 `<cli> <authTokenCommand> <token>` 写入凭据。
+ * 成功以 authCheckCommand 复检为准（某些 CLI 命令即使成功也输出到 stderr）。
+ */
+export async function cliAuthToken(itemId: string, token: string): Promise<{ ok: boolean; error?: string }> {
+  const item = findCliItem(itemId)
+  if (!item || item.installKind !== 'cli') return { ok: false, error: '条目不存在或非 CLI 连接器' }
+  const cliCommand = item.cliCommand
+  const tokenCommand = item.authTokenCommand
+  if (!cliCommand || !tokenCommand) return { ok: false, error: '条目不支持 token 认证' }
+  if (!token.trim()) return { ok: false, error: 'token 不能为空' }
+
+  let binPath: string
+  try {
+    binPath = await resolveCliPath(cliCommand)
+  } catch {
+    return { ok: false, error: `未检测到 ${cliCommand} 命令，请先安装` }
+  }
+
+  // token 可能包含特殊字符：直接 spawn 传参（不经过 shell），避免注入
+  try {
+    const { stdout } = await execAsync(`"${binPath}" ${tokenCommand} "${token.replace(/"/g, '\\"')}"`, { timeout: 30000 })
+    void stdout
+  } catch (error) {
+    return { ok: false, error: `认证失败：${(error as Error).message.slice(0, 200)}` }
+  }
+  // 写回后复检认证状态
+  const status = await cliAuthStatus(itemId)
+  return status.authenticated ? { ok: true } : { ok: false, error: '认证命令执行完成，但认证状态未生效' }
+}
+
 /** 实时检测 CLI 认证状态（不走 60s 缓存；授权过程需要最新结果） */
 export async function cliAuthStatus(itemId: string): Promise<{ authenticated: boolean; error?: string }> {
   const item = findCliItem(itemId)

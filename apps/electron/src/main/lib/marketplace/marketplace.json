@@ -166,7 +166,10 @@
       "cliCommand": "readwise",
       "authCheckCommand": "readwise whoami",
       "authFailPattern": "not logged",
-      "authGuide": "readwise login-with-token <token>（readwise.io/access_token 获取）"
+      "authGuide": "readwise login-with-token <token>（readwise.io/access_token 获取）",
+      "authKind": "token",
+      "authTokenCommand": "login-with-token",
+      "authTokenUrl": "https://readwise.io/access_token"
     },
     {
       "id": "wecom-cli",

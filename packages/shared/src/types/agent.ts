@@ -1442,6 +1442,12 @@ export interface MarketplaceItem {
   authFailPattern?: string
   /** cli：认证引导命令（如 'wecom-cli auth init' / 'vercel login'） */
   authGuide?: string
+  /** cli：认证方式（qr=扫码弹窗默认；token=凭据表单输入 token） */
+  authKind?: 'qr' | 'token'
+  /** cli token 认证：写入 token 的子命令（如 readwise 的 login-with-token） */
+  authTokenCommand?: string
+  /** cli token 认证：token 获取页面链接（如 readwise.io/access_token） */
+  authTokenUrl?: string
   /** cli：安装/使用提示（注入 Agent 系统提示的 CLI 用法说明，含认证步骤） */
   cliHint?: string
   /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
