@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 
 type MarketFilter = 'all' | 'connector' | 'skill'
 
@@ -32,6 +33,11 @@ const VENDOR_LABEL: Record<string, string> = {
 }
 
 export function MarketplaceTab(): React.ReactElement {
+  const { workspaces, currentWorkspaceId } = useWorkspaceActions()
+  const workspaceSlug = React.useMemo(
+    () => workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? '',
+    [workspaces, currentWorkspaceId],
+  )
   const [items, setItems] = React.useState<MarketplaceItemWithStatus[]>([])
   const [loading, setLoading] = React.useState(true)
   const [filter, setFilter] = React.useState<MarketFilter>('all')
@@ -40,15 +46,15 @@ export function MarketplaceTab(): React.ReactElement {
 
   const refresh = React.useCallback(async () => {
     try {
-      const list = await window.electronAPI.marketplaceList()
-      setItems(list)
+      const list = await window.electronAPI.marketplaceList(workspaceSlug)
+      setItems(list.items)
     } catch (error) {
       console.error('[市场] 加载失败:', error)
       toast.error('市场加载失败')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [workspaceSlug])
 
   React.useEffect(() => {
     void refresh()
@@ -62,7 +68,7 @@ export function MarketplaceTab(): React.ReactElement {
   const handleInstall = async (item: MarketplaceItem): Promise<void> => {
     setInstalling(item.id)
     try {
-      await window.electronAPI.marketplaceInstall(item.id)
+      await window.electronAPI.marketplaceInstall(item.id, workspaceSlug)
       toast.success(`已安装 ${item.name}`)
       await refresh()
     } catch (error) {

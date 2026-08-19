@@ -3822,20 +3822,23 @@ export function registerIpcHandlers(): void {
   )
 
   // 市场目录（plugin_creator）：列表 / 安装 / 卸载
-  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST, async (): Promise<import('@myyoda/shared').MarketplaceItemWithStatus[]> => {
-    const { listMarketplaceItemsWithStatus } = await import('./lib/marketplace/marketplace-manager')
-    return listMarketplaceItemsWithStatus()
-  })
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST,
+    async (_, workspaceSlug: string): Promise<{ items: import('@myyoda/shared').MarketplaceItemWithStatus[]; remoteAvailable: boolean }> => {
+      const { listMarketplaceItems } = await import('./lib/marketplace/marketplace-service')
+      return listMarketplaceItems(workspaceSlug)
+    }
+  )
   ipcMain.handle(
     CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL,
-    async (_, itemId: string): Promise<import('@myyoda/shared').MarketplaceItem> => {
-      const { installMarketplaceItem } = await import('./lib/marketplace/marketplace-manager')
-      return installMarketplaceItem(itemId)
+    async (_, itemId: string, workspaceSlug: string): Promise<void> => {
+      const { installMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+      return installMarketplaceItem(itemId, workspaceSlug)
     }
   )
   ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, async (_, itemId: string): Promise<void> => {
-    const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-manager')
-    uninstallMarketplaceItem(itemId)
+    const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+    return uninstallMarketplaceItem(itemId)
   })
 
   // 测试工具连接

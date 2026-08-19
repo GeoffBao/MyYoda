@@ -192,7 +192,6 @@ import type {
   CodeClawMiniRequest,
   CodeClawPeekRequest,
   CodeClawSize,
-  MarketplaceItem,
   MarketplaceItemWithStatus,
 } from '@myyoda/shared'
 import type { ProjectConfig } from '@myyoda/shared/projects'
@@ -1094,10 +1093,10 @@ export interface ElectronAPI {
   /** 测试内置连接器连接（凭据验证） */
   testBuiltinConnector: (connectorId: string) => Promise<{ success: boolean; message: string }>
 
-  /** 市场目录（plugin_creator）：列表（含安装状态） */
-  marketplaceList: () => Promise<MarketplaceItemWithStatus[]>
+  /** 市场目录（plugin_creator）：列表（含安装状态与远程可用性） */
+  marketplaceList: (workspaceSlug: string) => Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }>
   /** 市场目录：安装条目 */
-  marketplaceInstall: (itemId: string) => Promise<MarketplaceItem>
+  marketplaceInstall: (itemId: string, workspaceSlug: string) => Promise<void>
   /** 市场目录：卸载条目 */
   marketplaceUninstall: (itemId: string) => Promise<void>
 
@@ -2859,11 +2858,11 @@ const electronAPI: ElectronAPI = {
   },
 
   // 市场目录（plugin_creator）：列表 / 安装 / 卸载
-  marketplaceList: () => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST)
+  marketplaceList: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST, workspaceSlug)
   },
-  marketplaceInstall: (itemId: string) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId)
+  marketplaceInstall: (itemId: string, workspaceSlug: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId, workspaceSlug)
   },
   marketplaceUninstall: (itemId: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId)
