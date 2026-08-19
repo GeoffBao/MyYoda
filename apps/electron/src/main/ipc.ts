@@ -3845,6 +3845,26 @@ export function registerIpcHandlers(): void {
     toggleMarketplaceItem(itemId, enabled)
   })
 
+  // CLI 连接器扫码授权（企业微信等）：启动生成二维码 / 实时查状态 / 取消
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_START,
+    async (_, itemId: string): Promise<import('./lib/marketplace/cli-auth').CliAuthStartResult> => {
+      const { cliAuthStart } = await import('./lib/marketplace/cli-auth')
+      return cliAuthStart(itemId)
+    }
+  )
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_STATUS,
+    async (_, itemId: string): Promise<{ authenticated: boolean; error?: string }> => {
+      const { cliAuthStatus } = await import('./lib/marketplace/cli-auth')
+      return cliAuthStatus(itemId)
+    }
+  )
+  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_CANCEL, async (): Promise<void> => {
+    const { cliAuthCancel } = await import('./lib/marketplace/cli-auth')
+    return cliAuthCancel()
+  })
+
   // 测试工具连接
   ipcMain.handle(
     CHAT_TOOL_IPC_CHANNELS.TEST_TOOL,

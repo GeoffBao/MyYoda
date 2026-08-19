@@ -1101,6 +1101,12 @@ export interface ElectronAPI {
   marketplaceUninstall: (itemId: string) => Promise<void>
   /** 市场目录：开关（启用/停用注入） */
   marketplaceToggle: (itemId: string, enabled: boolean) => Promise<void>
+  /** 市场目录：CLI 扫码授权启动（返回二维码 data URL + 扫码链接） */
+  marketplaceCliAuthStart: (itemId: string) => Promise<{ url?: string; qrDataUrl?: string; error?: string }>
+  /** 市场目录：CLI 认证状态（实时，授权轮询用） */
+  marketplaceCliAuthStatus: (itemId: string) => Promise<{ authenticated: boolean; error?: string }>
+  /** 市场目录：取消扫码授权（终止挂起的进程） */
+  marketplaceCliAuthCancel: () => Promise<void>
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -2871,6 +2877,15 @@ const electronAPI: ElectronAPI = {
   },
   marketplaceToggle: (itemId: string, enabled: boolean) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, itemId, enabled)
+  },
+  marketplaceCliAuthStart: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_START, itemId)
+  },
+  marketplaceCliAuthStatus: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_STATUS, itemId)
+  },
+  marketplaceCliAuthCancel: () => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_CANCEL)
   },
 
   // AskUserQuestion 交互式问答

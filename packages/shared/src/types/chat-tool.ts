@@ -121,6 +121,12 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   MARKETPLACE_UNINSTALL: 'marketplace:uninstall',
   /** 市场目录：开关（启用/停用注入） */
   MARKETPLACE_TOGGLE: 'marketplace:toggle',
+  /** 市场目录：CLI 扫码授权启动（生成二维码） */
+  MARKETPLACE_CLI_AUTH_START: 'marketplace:cli-auth-start',
+  /** 市场目录：CLI 认证状态（实时） */
+  MARKETPLACE_CLI_AUTH_STATUS: 'marketplace:cli-auth-status',
+  /** 市场目录：取消扫码授权 */
+  MARKETPLACE_CLI_AUTH_CANCEL: 'marketplace:cli-auth-cancel',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */

@@ -17,7 +17,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2, ExternalLink } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2, ExternalLink, ScanLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -39,6 +39,8 @@ import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { ConnectorsTab } from './ConnectorsTab'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
+import { CliAuthDialog } from './CliAuthDialog'
+import { Button } from '@/components/ui/button'
 import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS, type ConnectorCredentialSpec } from './ConnectorCredentials'
 import type { MarketplaceItemWithStatus } from '@myyoda/shared'
 
@@ -189,6 +191,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const configureMarketplaceItem = configureServerId?.startsWith('marketplace:')
     ? marketplaceItems.find((i) => i.id === configureServerId.slice('marketplace:'.length))
     : undefined
+  // CLI 扫码授权弹窗状态（企业微信等）
+  const [cliAuthItem, setCliAuthItem] = React.useState<MarketplaceItemWithStatus | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -678,8 +682,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               </div>
             )}
             {!configureMarketplaceItem.authenticated && configureMarketplaceItem.authGuide && (
-              <div className="rounded-lg bg-amber-500/10 p-3 text-[12px] text-amber-600 dark:text-amber-400">
-                未认证。请在终端执行 <span className="font-mono">{configureMarketplaceItem.authGuide}</span> 完成授权。
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 p-3">
+                <div className="text-[12px] text-amber-600 dark:text-amber-400">
+                  未认证。也可在终端执行 <span className="font-mono">{configureMarketplaceItem.authGuide}</span> 完成授权。
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setCliAuthItem(configureMarketplaceItem)}>
+                  <ScanLine size={14} className="mr-1.5" />
+                  扫码授权
+                </Button>
               </div>
             )}
             {!configureMarketplaceItem.systemInstalled && configureMarketplaceItem.cliPackage && (
@@ -703,6 +713,15 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </>
         )}
       </ConnectorDetailDialog>
+
+      {/* CLI 扫码授权弹窗（企业微信等） */}
+      <CliAuthDialog
+        open={cliAuthItem !== null}
+        onOpenChange={(open) => { if (!open) setCliAuthItem(null) }}
+        itemId={cliAuthItem?.id ?? ''}
+        itemName={cliAuthItem?.name ?? ''}
+        onAuthenticated={() => { void loadMarketplace() }}
+      />
 
       <ImportSkillDialog
         open={showImport}
