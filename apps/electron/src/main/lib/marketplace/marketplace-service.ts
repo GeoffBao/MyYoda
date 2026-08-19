@@ -11,7 +11,28 @@
 
 import { readdirSync, existsSync, mkdirSync, cpSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
+
+const execAsync = promisify(exec)
+
+/** 市场列表结果缓存（30s TTL：避免每次打开 Tab 重复执行 CLI 检测命令） */
+const MARKET_LIST_CACHE_TTL_MS = 30_000
+const marketListCache = new Map<string, { ts: number; data: { items: MarketplaceItemWithStatus[]; remoteAvailable: boolean } }>()
+
+export function invalidateMarketListCache(): void {
+  marketListCache.clear()
+}
+
+/** 执行命令并返回 stdout（异步，快速失败）；失败返回空字符串 */
+async function runCommand(command: string, timeoutMs: number): Promise<string> {
+  try {
+    const { stdout } = await execAsync(command, { timeout: timeoutMs })
+    return stdout ?? ''
+  } catch {
+    return ''
+  }
+}
 import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
 import {
   listMarketplaceCatalog,
@@ -116,27 +137,14 @@ function getInstalledSkillSlugs(workspaceSlug: string): Set<string> {
   return slugs
 }
 
-/** 检测系统是否已安装某 CLI 命令（command -v / where） */
-function systemHasCli(command: string): boolean {
+/** 检测系统是否已安装某 CLI 命令（command -v / where，异步） */
+async function systemHasCli(command: string): Promise<boolean> {
   // 先用当前 PATH 快速检测（覆盖系统级安装）
-  try {
-    execSync(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, {
-      timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-    return true
-  } catch {
-    // Electron 主进程 PATH 可能不含 nvm 路径 → 用 login shell 检测
-    try {
-      execSync(`zsh -ilc "command -v ${command}" 2>/dev/null`, {
-        timeout: 5000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      return true
-    } catch {
-      return false
-    }
-  }
+  const fast = await runCommand(`command -v ${command} 2>/dev/null || where ${command} 2>/dev/null`, 1500)
+  if (fast.trim()) return true
+  // Electron 主进程 PATH 可能不含 nvm 路径 → 用 login shell 检测
+  const slow = await runCommand(`zsh -ilc "command -v ${command}" 2>/dev/null`, 5000)
+  return Boolean(slow.trim())
 }
 
 /** 检测 npx 连接器凭据是否已配置（所有必填字段非空） */
@@ -146,41 +154,38 @@ function hasNpxCredentials(itemId: string, envMap?: Record<string, string>): boo
   return Object.keys(envMap).every((key) => Boolean(credentials[key]?.trim()))
 }
 
-/** 检测 CLI 认证状态（执行 authCheckCommand，输出含 authFailPattern 则未认证） */
-function checkCliAuth(item: MarketplaceItem): boolean {
+/** 检测 CLI 认证状态（执行 authCheckCommand，输出含 authFailPattern 则未认证，异步） */
+async function checkCliAuth(item: MarketplaceItem): Promise<boolean> {
   if (!item.authCheckCommand) return true  // 无检测命令 → 视为已认证
-  try {
-    const output = execSync(item.authCheckCommand, {
-      timeout: 5000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8',
-    })
-    if (item.authFailPattern && output.toLowerCase().includes(item.authFailPattern.toLowerCase())) {
-      return false
-    }
+  const fast = await runCommand(item.authCheckCommand, 4000)
+  if (fast) {
+    if (item.authFailPattern && fast.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
     return true
-  } catch {
-    // fallback: login shell
-    try {
-      const output = execSync(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, {
-        timeout: 8000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        encoding: 'utf-8',
-      })
-      if (item.authFailPattern && output.toLowerCase().includes(item.authFailPattern.toLowerCase())) {
-        return false
-      }
-      return true
-    } catch {
-      return false
-    }
   }
+  // fallback: login shell
+  const slow = await runCommand(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, 8000)
+  if (item.authFailPattern && slow.toLowerCase().includes(item.authFailPattern.toLowerCase())) return false
+  return Boolean(slow.trim())
 }
 
 /**
  * 远程 manifest 拉取失败不抛错（remoteAvailable=false，本地条目照常）。
  */
 export async function listMarketplaceItems(
+  workspaceSlug: string,
+): Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }> {
+  // 缓存命中直接返回（30s 内不重复执行 CLI 检测）
+  const cached = marketListCache.get(workspaceSlug)
+  if (cached && Date.now() - cached.ts < MARKET_LIST_CACHE_TTL_MS) {
+    return cached.data
+  }
+  const result = await buildMarketplaceList(workspaceSlug)
+  marketListCache.set(workspaceSlug, { ts: Date.now(), data: result })
+  return result
+}
+
+/** 构建市场列表（无缓存）：CLI 检测并行执行 */
+async function buildMarketplaceList(
   workspaceSlug: string,
 ): Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }> {
   const local = listMarketplaceCatalog()
@@ -198,17 +203,17 @@ export async function listMarketplaceItems(
   const installedSlugs = getInstalledSkillSlugs(workspaceSlug)
   return {
     remoteAvailable,
-    items: merged.map((item) => {
+    items: await Promise.all(merged.map(async (item) => {
       const inList = item.type === 'skill'
         ? installedSlugs.has(item.id)
         : installedConnectors.has(item.id)
-      // CLI 连接器：系统是否已安装
+      // CLI 连接器：系统是否已安装（并行检测）
       const sysInstalled = item.installKind === 'cli' && item.cliCommand
-        ? systemHasCli(item.cliCommand)
+        ? await systemHasCli(item.cliCommand)
         : false
-      // CLI 认证状态（系统已装才检查）
+      // CLI 认证状态（系统已装才检查，并行）
       const authed = sysInstalled && item.installKind === 'cli'
-        ? checkCliAuth(item)
+        ? await checkCliAuth(item)
         : false
       // npx 连接器：凭据是否已配置
       const hasCreds = item.installKind === 'npx-mcp'
@@ -222,7 +227,7 @@ export async function listMarketplaceItems(
         marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
         authenticated: authed,
       }
-    }),
+    })),
   }
 }
 
@@ -262,7 +267,8 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
 
   // CLI 连接器：实际执行 npm install -g <cliPackage>（仅当系统未安装时）
   if (item.installKind === 'cli' && item.cliPackage && item.cliCommand) {
-    if (!systemHasCli(item.cliCommand)) {
+    if (!(await systemHasCli(item.cliCommand))) {
+      const { execSync } = await import('node:child_process')
       try {
         execSync(`npm install -g ${item.cliPackage}`, {
           timeout: 120000,
@@ -276,12 +282,14 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
 
   if (item.source === 'remote') saveMarketplaceRemoteItem(item)
   installLocalConnector(itemId)
+  invalidateMarketListCache()
 }
 
 /** 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用） */
 export async function uninstallMarketplaceItem(itemId: string): Promise<void> {
   removeMarketplaceRemoteItem(itemId)
   uninstallLocalConnector(itemId)
+  invalidateMarketListCache()
 }
 
 /** 已安装市场连接器 → NpxConnectorSpec（本地目录 + 远程快照统一注入） */
