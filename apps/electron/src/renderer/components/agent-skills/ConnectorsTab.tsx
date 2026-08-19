@@ -17,6 +17,7 @@ import type { BuiltinMcpServerSummary, McpServerEntry } from '@myyoda/shared'
 import { getBuiltinMcpIcon } from '@/lib/builtin-mcp-icons'
 import { ConnectorCard } from './ConnectorCard'
 import { ConnectorDetailDialog } from './ConnectorDetailDialog'
+import { ConnectorCollectionDialog, type ConnectorCollection } from './ConnectorCollectionDialog'
 
 // ===== 品类 =====
 
@@ -88,13 +89,7 @@ const CONFIGURABLE_IDS = new Set([
 ])
 
 /** 精选集合（对标 OpenAI Plugins Collections：推荐组合一键启用） */
-const COLLECTIONS: Array<{
-  id: string
-  title: string
-  description: string
-  icon: React.ReactNode
-  connectorIds: string[]
-}> = [
+const COLLECTIONS: ConnectorCollection[] = [
   {
     id: 'dev-essentials',
     title: '开发必备',
@@ -175,6 +170,7 @@ export function ConnectorsTab({
 }: ConnectorsTabProps): React.ReactElement {
   const [category, setCategory] = React.useState<ConnectorCategory>('all')
   const [selectedCustomToolId, setSelectedCustomToolId] = React.useState<string | null>(null)
+  const [activeCollection, setActiveCollection] = React.useState<ConnectorCollection | null>(null)
   const chatTools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
 
@@ -323,6 +319,16 @@ export function ConnectorsTab({
     }
   }
 
+  // 集合引导面板：点击某项 → 关闭面板 → 打开对应凭据配置 / 只读详情
+  const handleCollectionItem = (server: BuiltinMcpServerSummary): void => {
+    setActiveCollection(null)
+    if (CONFIGURABLE_IDS.has(server.id)) {
+      onConfigure(server.id)
+    } else {
+      onOpenBuiltin(server)
+    }
+  }
+
   const selectedCustomTool = selectedCustomToolId
     ? customTools.find((t) => t.meta.id === selectedCustomToolId)
     : null
@@ -352,17 +358,18 @@ export function ConnectorsTab({
     <div className="flex flex-col gap-5">
       {/* 精选集合（对标 OpenAI Plugins Collections）：推荐组合一键启用，仅在「全部」分类显示 */}
       {category === 'all' && builtinServers.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {COLLECTIONS.map((collection) => {
             const servers = collection.connectorIds
               .map((id) => builtinServers.find((s) => s.id === id))
               .filter((s): s is BuiltinMcpServerSummary => Boolean(s))
-            const enabledCount = servers.filter((s) => s.enabled).length
-            const allEnabled = enabledCount === servers.length
+            const configuredCount = servers.filter((s) => s.enabled && s.available).length
             return (
-              <div
+              <button
                 key={collection.id}
-                className="flex flex-col gap-2.5 rounded-xl border border-dashed border-border/70 bg-content-area/50 p-3.5"
+                type="button"
+                onClick={() => setActiveCollection(collection)}
+                className="group flex flex-col gap-2.5 rounded-xl border border-dashed border-border/70 bg-content-area/50 p-3.5 text-left transition-colors hover:border-primary/40 hover:bg-content-area/80"
               >
                 <div className="flex items-center gap-2">
                   <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -375,25 +382,17 @@ export function ConnectorsTab({
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {enabledCount}/{servers.length} 已启用
+                    {configuredCount === servers.length ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">全部配置完成</span>
+                    ) : (
+                      `已配置 ${configuredCount}/${servers.length}`
+                    )}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={allEnabled}
-                    onClick={() => {
-                      void (async () => {
-                        for (const server of servers) {
-                          if (!server.enabled) await onToggleBuiltin(server.id, true)
-                        }
-                        toast.success(`「${collection.title}」已全部启用`)
-                      })()
-                    }}
-                  >
-                    {allEnabled ? '已全部启用' : '一键启用'}
-                  </Button>
+                  <span className="text-[11px] font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
+                    去配置 →
+                  </span>
                 </div>
-              </div>
+              </button>
             )
           })}
         </div>
@@ -474,6 +473,17 @@ export function ConnectorsTab({
           ))}
         </div>
       )}
+
+      {/* 精选集合配置引导面板 */}
+      <ConnectorCollectionDialog
+        open={activeCollection !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveCollection(null)
+        }}
+        collection={activeCollection}
+        servers={builtinServers}
+        onOpenServer={handleCollectionItem}
+      />
 
       {/* 自定义工具详情（居中 Modal） */}
       <ConnectorDetailDialog
