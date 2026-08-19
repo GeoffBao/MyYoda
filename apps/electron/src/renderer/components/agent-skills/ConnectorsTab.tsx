@@ -432,7 +432,7 @@ export function ConnectorsTab({
             return (
               <section key={cat} className="flex flex-col gap-3">
                 <div className="text-sm font-semibold text-foreground">{CATEGORY_LABEL[cat]}</div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {catItems.map((item) => (
                     <ConnectorCard
                       key={item.key}
@@ -455,7 +455,7 @@ export function ConnectorsTab({
           })}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {filtered.map((item) => (
             <ConnectorCard
               key={item.key}

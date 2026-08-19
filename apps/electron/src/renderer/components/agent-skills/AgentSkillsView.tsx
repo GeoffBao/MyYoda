@@ -241,7 +241,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     <div className={embedded ? 'flex flex-col' : 'flex h-full flex-col overflow-hidden'}>
       {/* 标题栏：全屏模式保留；embedded（设置面板内）由设置面板导航提供标题，隐藏以免重复 */}
       {!embedded && (
-        <div className="titlebar-no-drag mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
+        <div className="titlebar-no-drag mx-auto flex w-full max-w-7xl xl:max-w-8xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
           <div className="flex items-center gap-2.5">
             <Blocks className="size-6 text-foreground/70" />
             <h1 className="text-2xl font-semibold text-foreground">插件</h1>
@@ -306,7 +306,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       )}
 
       {/* 工具条 */}
-      <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-6xl px-8 pb-4')}>
+      <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-7xl xl:max-w-8xl px-8 pb-4')}>
         {/* 专家 / 专家团 / 技能 / 连接器 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
@@ -432,7 +432,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
       {/* 内容 */}
       <div className={cn(embedded ? 'mt-4' : 'min-h-0 flex-1 overflow-y-auto scrollbar-thin')}>
-        <div className={embedded ? '' : 'mx-auto w-full max-w-6xl px-8 pb-10'}>
+        <div className={embedded ? '' : 'mx-auto w-full max-w-7xl xl:max-w-8xl px-8 pb-10'}>
           {data.loading ? (
             <div className="py-20 text-center text-sm text-muted-foreground">加载中...</div>
           ) : tab === 'experts' ? (
