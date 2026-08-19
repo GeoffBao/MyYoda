@@ -379,16 +379,24 @@ export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: str
     }))
 }
 
-/** 内置技能资源根目录（dev/build 在 dist/resources；打包在 process.resourcesPath） */
+/** 内置技能资源根目录（dev：dist/resources 或源码 resources；打包：process.resourcesPath） */
 export function getMarketplaceSkillsSourceDir(folder: string): string {
   // electron 在 bun 单测环境不可用，惰性 require（该函数仅运行时安装路径调用）
   let base = join(__dirname, 'resources')
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { app } = require('electron') as typeof import('electron')
-    if (app?.isPackaged) base = process.resourcesPath
+    if (app?.isPackaged) {
+      base = process.resourcesPath
+    } else if (!existsSync(join(base, 'marketplace-skills'))) {
+      // dev 时 dist/resources 可能未拷贝（build:resources 未跑/被清理）→ fallback 源码 resources
+      base = join(__dirname, '..', 'resources')
+    }
   } catch {
-    // 非 electron 环境（bun test）→ dev 路径
+    // 非 electron 环境（bun test）→ 源码 resources
+    if (!existsSync(join(base, 'marketplace-skills'))) {
+      base = join(__dirname, '..', 'resources')
+    }
   }
   return join(base, 'marketplace-skills', folder)
 }

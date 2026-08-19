@@ -505,7 +505,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               externalSearch={search}
             />
           ) : tab === 'marketplace' ? (
-            <MarketplaceTab onChanged={loadMarketplace} />
+            <MarketplaceTab onChanged={() => { loadMarketplace(); bumpCapabilities((v) => v + 1) }} />
           ) : !data.hasWorkspace ? (
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}
