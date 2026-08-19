@@ -88,9 +88,11 @@ export const CONNECTOR_CREDENTIAL_SPECS: Record<string, ConnectorCredentialSpec>
 
 interface ConnectorCredentialsProps {
   connectorId: string
+  /** 凭据保存/开关切换成功后回调（用于刷新卡片网格状态） */
+  onChanged?: () => void
 }
 
-export function ConnectorCredentials({ connectorId }: ConnectorCredentialsProps): React.ReactElement {
+export function ConnectorCredentials({ connectorId, onChanged }: ConnectorCredentialsProps): React.ReactElement {
   const spec = CONNECTOR_CREDENTIAL_SPECS[connectorId]
   if (!spec) {
     return <div className="text-sm text-muted-foreground">该连接器无需凭据配置。</div>
@@ -168,11 +170,12 @@ export function ConnectorCredentials({ connectorId }: ConnectorCredentialsProps)
       savedRef.current = current
       toast.success('凭据已保存')
       if (workspaceSlug) await refreshServerState(workspaceSlug)
+      onChanged?.()
     } catch (error) {
       console.error(`[连接器凭据] 保存失败（${connectorId}）:`, error)
       toast.error('保存失败')
     }
-  }, [connectorId, values, workspaceSlug, spec, refreshServerState])
+  }, [connectorId, values, workspaceSlug, spec, refreshServerState, onChanged])
 
   const handleToggle = async (checked: boolean): Promise<void> => {
     if (!workspaceSlug) {
@@ -183,6 +186,7 @@ export function ConnectorCredentials({ connectorId }: ConnectorCredentialsProps)
       await window.electronAPI.setBuiltinMcpEnabled(workspaceSlug, connectorId, checked)
       setEnabled(checked)
       await refreshServerState(workspaceSlug)
+      onChanged?.()
     } catch (error) {
       console.error(`[连接器凭据] 切换失败（${connectorId}）:`, error)
     }

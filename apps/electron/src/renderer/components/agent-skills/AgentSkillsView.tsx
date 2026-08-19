@@ -558,7 +558,13 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       {/* 凭据配置 Modal（居中，Mico 风格） */}
       <ConnectorDetailDialog
         open={configureServerId !== null}
-        onOpenChange={(open) => { if (!open) setConfigureServerId(null) }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfigureServerId(null)
+            // 凭据可能在 Modal 里已保存：关闭时刷新卡片网格状态（「需配置」→「已启用」）
+            void data.refreshBuiltinMcp()
+          }
+        }}
         eyebrow="预置连接器"
         title={configureServerId ? (CONFIGURE_META[configureServerId]?.title ?? '') : ''}
         icon={
@@ -576,7 +582,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         {configureServerId === 'nano-banana' && <NanoBananaSettings />}
         {configureServerId === 'web-search' && <WebSearchSettings />}
         {configureServerId && CONNECTOR_CREDENTIAL_SPECS[configureServerId] && (
-          <ConnectorCredentials connectorId={configureServerId} />
+          <ConnectorCredentials
+            connectorId={configureServerId}
+            onChanged={() => void data.refreshBuiltinMcp()}
+          />
         )}
       </ConnectorDetailDialog>
 

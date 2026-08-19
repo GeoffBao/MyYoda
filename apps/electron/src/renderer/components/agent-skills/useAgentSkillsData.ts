@@ -46,6 +46,8 @@ export interface AgentSkillsData {
   toggleMcp: (name: string, enabled: boolean) => Promise<void>
   toggleBuiltinMcp: (id: string, enabled: boolean) => Promise<void>
   deleteMcp: (name: string) => Promise<void>
+  /** 重新拉取工作区能力摘要（凭据保存后刷新内置连接器卡片状态，如「需配置」→「已启用」） */
+  refreshBuiltinMcp: () => Promise<void>
 }
 
 export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
@@ -227,6 +229,18 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     }
   }, [workspaceSlug, scopeProjectId, mcpConfig, bumpCapabilitiesVersion])
 
+  /** 重新拉取工作区能力摘要（凭据保存后刷新内置连接器卡片状态，如「需配置」→「已启用」） */
+  const refreshBuiltinMcp = React.useCallback(async (): Promise<void> => {
+    if (!workspaceSlug) return
+    try {
+      const nextCapabilities = await window.electronAPI.getWorkspaceCapabilities(workspaceSlug)
+      setCapabilities(nextCapabilities)
+      setBuiltinMcpServers(nextCapabilities.builtinMcpServers)
+    } catch (error) {
+      console.error('[Agent 技能] 刷新内置连接器状态失败:', error)
+    }
+  }, [workspaceSlug])
+
   return {
     workspaceSlug,
     workspaceName: currentWorkspace?.name ?? '',
@@ -245,5 +259,6 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     toggleMcp,
     toggleBuiltinMcp,
     deleteMcp,
+    refreshBuiltinMcp,
   }
 }
