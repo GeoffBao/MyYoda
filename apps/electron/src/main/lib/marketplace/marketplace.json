@@ -51,37 +51,6 @@
       ]
     },
     {
-      "id": "sentry",
-      "source": "local",
-      "type": "connector",
-      "name": "Sentry",
-      "description": "查询 Issue、Crash 与项目健康度，让 Agent 直接定位线上异常。",
-      "iconKey": "sentry",
-      "vendor": "official",
-      "author": "Sentry",
-      "homepage": "https://github.com/getsentry/sentry-mcp",
-      "category": "研发与交付",
-      "installKind": "npx-mcp",
-      "npxPackage": "sentry-mcp",
-      "envMap": {
-        "authToken": "SENTRY_AUTH_TOKEN",
-        "organization": "SENTRY_ORG"
-      },
-      "credentialFields": [
-        {
-          "key": "authToken",
-          "label": "Auth Token",
-          "secret": true,
-          "placeholder": "sntrys_..."
-        },
-        {
-          "key": "organization",
-          "label": "组织 slug",
-          "placeholder": "my-org"
-        }
-      ]
-    },
-    {
       "id": "cloudflare",
       "source": "local",
       "type": "connector",
@@ -203,31 +172,6 @@
       "npxArgs": [
         "--browser",
         "chromium"
-      ]
-    },
-    {
-      "id": "deepgram",
-      "source": "local",
-      "type": "connector",
-      "name": "Deepgram",
-      "description": "语音识别与转录，音频转文字的官方 MCP。",
-      "iconKey": "deepgram",
-      "vendor": "official",
-      "author": "Deepgram",
-      "homepage": "https://github.com/deepgram/mcp",
-      "category": "设计协作",
-      "installKind": "npx-mcp",
-      "npxPackage": "deepgram-mcp",
-      "envMap": {
-        "apiKey": "DEEPGRAM_API_KEY"
-      },
-      "credentialFields": [
-        {
-          "key": "apiKey",
-          "label": "API Key",
-          "secret": true,
-          "placeholder": "..."
-        }
       ]
     },
     {

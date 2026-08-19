@@ -66,7 +66,7 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
       return <img src={SqliteLogo} alt="SQLite" className={ICON_CLASS} />
     case 'browserbase':
       return <img src={BrowserbaseLogo} alt="Browserbase" className={ICON_CLASS} />
-    // 市场目录官方连接器（2026-08-19）
+    // MyYoda社区官方连接器（2026-08-19）
     case 'slack':
       return <img src={SlackLogo} alt="Slack" className={ICON_CLASS} />
     case 'linear':

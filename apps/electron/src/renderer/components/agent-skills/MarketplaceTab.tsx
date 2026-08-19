@@ -1,5 +1,5 @@
 /**
- * MarketplaceTab — 市场目录（统一发现中心：官方连接器 + 社区技能）
+ * MarketplaceTab — MyYoda社区（统一发现中心：官方连接器 + 社区技能）
  *
  * 对标 OpenAI Plugins / Trae Marketplace 的「预置目录 + 用户决策安装」：
  * - 本地官方连接器（marketplace.json）与远程社区 Skill/连接器（myyoda-skills manifest）同构浏览；
@@ -153,7 +153,7 @@ export function MarketplaceTab(): React.ReactElement {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        <div className="text-[15px] font-semibold text-foreground">市场目录</div>
+        <div className="text-[15px] font-semibold text-foreground">MyYoda社区</div>
         <div className="text-[12px] leading-relaxed text-muted-foreground">
           官方稳定连接器与社区贡献的技能统一发现中心：按需安装、零占用。连接器安装后自动注入 Agent 会话，凭据在连接器页配置；技能安装后进入技能页管理。
         </div>
