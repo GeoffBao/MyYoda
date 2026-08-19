@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { Plug, CalendarClock, Users, ClipboardList, Globe, Flame, Radar, Bug } from 'lucide-react'
+import { Plug, CalendarClock, Users, ClipboardList, Globe } from 'lucide-react'
 import WecomLogo from '@/assets/brand/wecom-logo.png'
 import ChromeLogo from '@/assets/brand/chrome-logo.svg'
 import GeminiLogo from '@/assets/brand/gemini-logo.png'
@@ -34,6 +34,9 @@ import ElevenlabsLogo from '@/assets/brand/elevenlabs-logo.svg'
 import DeepgramLogo from '@/assets/brand/deepgram-logo.svg'
 import ChatcutLogo from '@/assets/brand/chatcut-logo.svg'
 import HeygenLogo from '@/assets/brand/heygen-logo.svg'
+import PlaywrightLogo from '@/assets/brand/playwright-logo.svg'
+import FirecrawlLogo from '@/assets/brand/firecrawl-logo.png'
+import TavilyLogo from '@/assets/brand/tavily-logo.png'
 
 /** 内置 MCP 图标尺寸（与默认 Plug size=18 一致） */
 const ICON_CLASS = 'size-[18px]'
@@ -91,11 +94,11 @@ export function getBuiltinMcpIcon(serverId: string): React.ReactNode {
       return <img src={DeepgramLogo} alt="Deepgram" className={ICON_CLASS} />
     // 无官方图标的第三方（语义化 lucide 兜底）
     case 'firecrawl':
-      return <Flame size={18} />
+      return <img src={FirecrawlLogo} alt="Firecrawl" className={ICON_CLASS} />
     case 'tavily':
-      return <Radar size={18} />
+      return <img src={TavilyLogo} alt="Tavily" className={ICON_CLASS} />
     case 'playwright':
-      return <Bug size={18} />
+      return <img src={PlaywrightLogo} alt="Playwright" className={ICON_CLASS} />
     case 'chatcut':
       return <img src={ChatcutLogo} alt="ChatCut" className={ICON_CLASS} />
     case 'heygen':
