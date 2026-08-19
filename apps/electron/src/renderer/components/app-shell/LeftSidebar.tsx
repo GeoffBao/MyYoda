@@ -3555,7 +3555,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  aria-label="应用市场"
+                  aria-label="能力"
                   onClick={() => handleOpenSkills()}
                   className={cn(
                     'relative size-10 flex items-center justify-center rounded-[12px] transition-colors titlebar-no-drag border',
@@ -3567,7 +3567,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   <Blocks size={16} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">应用市场</TooltipContent>
+              <TooltipContent side="right">能力</TooltipContent>
             </Tooltip>
           )}
 
@@ -4041,7 +4041,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 )}
               >
                 <Blocks size={13} className="shrink-0 text-foreground/45" />
-                <span className="min-w-0 flex-1 truncate text-left">应用市场</span>
+                <span className="min-w-0 flex-1 truncate text-left">能力</span>
               </button>
             )}
 

@@ -247,7 +247,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         <div className="titlebar-no-drag mx-auto flex w-full max-w-7xl xl:max-w-8xl shrink-0 items-center justify-between px-8 pt-14 pb-4">
           <div className="flex items-center gap-2.5">
             <Blocks className="size-6 text-foreground/70" />
-            <h1 className="text-2xl font-semibold text-foreground">应用市场</h1>
+            <h1 className="text-2xl font-semibold text-foreground">能力</h1>
           </div>
 
           {/* 范围切换：当前工作区默认（跨 Project 共享，今天的行为）+ 该工作区下嵌套的 Project（Skills/MCP 项目级覆盖），
@@ -310,7 +310,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
       {/* 工具条 */}
       <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-7xl xl:max-w-8xl px-8 pb-4')}>
-        {/* 专家 / 专家团 / 技能 / 连接器 / 记忆 / 市场 切换（MCP + API 已合并为连接器，2026-08-19；市场 = 预置目录 plugin_creator） */}
+        {/* 专家 / 专家团 / 技能 / 连接器 / 市场 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19；市场 = 预置目录 plugin_creator） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
             className={cn(
@@ -319,8 +319,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               tab === 'teams' && 'translate-x-full',
               tab === 'skills' && 'translate-x-[200%]',
               tab === 'connectors' && 'translate-x-[300%]',
-              tab === 'memory' && 'translate-x-[400%]',
-              tab === 'marketplace' && 'translate-x-[500%]',
+              tab === 'marketplace' && 'translate-x-[400%]',
+              tab === 'memory' && 'translate-x-[500%]',
             )}
           />
           {([
@@ -328,8 +328,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             { value: 'teams' as const, label: '专家团', count: teamsCount },
             { value: 'skills' as const, label: '技能', count: data.skills.length },
             { value: 'connectors' as const, label: '连接器', count: connectorCount },
-            { value: 'memory' as const, label: '记忆', count: memoryCount },
             { value: 'marketplace' as const, label: '市场' },
+            { value: 'memory' as const, label: '记忆', count: memoryCount },
           ]).map(({ value, label, count }) => (
             <button
               key={value}
