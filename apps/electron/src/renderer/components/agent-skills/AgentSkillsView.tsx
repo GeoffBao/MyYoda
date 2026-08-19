@@ -308,15 +308,15 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
       {/* 工具条 */}
       <div className={cn('titlebar-no-drag flex w-full items-center gap-3 shrink-0', embedded ? 'flex-wrap' : 'mx-auto max-w-7xl xl:max-w-8xl px-8 pb-4')}>
-        {/* 专家 / 专家团 / 技能 / 连接器 / 市场 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19；市场 = 预置目录 plugin_creator） */}
+        {/* 专家 / 专家团 / 连接器 / 技能 / 市场 / 记忆 切换（MCP + API 已合并为连接器，2026-08-19；市场 = 预置目录 plugin_creator） */}
         <div className="relative flex h-8 items-stretch rounded-xl bg-muted p-0.5">
           <div
             className={cn(
               'absolute bottom-0.5 top-0.5 w-[calc(16.666%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
               tab === 'experts' && 'translate-x-0',
               tab === 'teams' && 'translate-x-full',
-              tab === 'skills' && 'translate-x-[200%]',
-              tab === 'connectors' && 'translate-x-[300%]',
+              tab === 'connectors' && 'translate-x-[200%]',
+              tab === 'skills' && 'translate-x-[300%]',
               tab === 'marketplace' && 'translate-x-[400%]',
               tab === 'memory' && 'translate-x-[500%]',
             )}
@@ -324,8 +324,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           {([
             { value: 'experts' as const, label: '专家', count: expertsCount },
             { value: 'teams' as const, label: '专家团', count: teamsCount },
-            { value: 'skills' as const, label: '技能', count: data.skills.length },
             { value: 'connectors' as const, label: '连接器', count: connectorCount },
+            { value: 'skills' as const, label: '技能', count: data.skills.length },
             { value: 'marketplace' as const, label: '市场' },
             { value: 'memory' as const, label: '记忆', count: memoryCount },
           ]).map(({ value, label, count }) => (
