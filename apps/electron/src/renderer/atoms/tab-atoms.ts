@@ -165,6 +165,14 @@ export const rightWorkspaceSplitRatioAtom = atomWithStorage<number>(
   { getOnInit: true },
 )
 
+/** 右侧工作区中 Browser 与其余面板（文档槽/Scratch）并排时，Browser 占比 */
+export const browserWorkspaceSplitRatioAtom = atomWithStorage<number>(
+  'myyoda-browser-workspace-split-ratio',
+  0.5,
+  undefined,
+  { getOnInit: true },
+)
+
 // ===== 派生 Atoms =====
 
 /** 当前活跃标签 */
