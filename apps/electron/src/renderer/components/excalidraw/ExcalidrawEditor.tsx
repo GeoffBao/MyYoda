@@ -9,7 +9,7 @@
  */
 
 import * as React from 'react'
-import { ArrowLeft, PenTool, Loader2 } from 'lucide-react'
+import { ArrowLeft, PenTool, Loader2, X } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { activeViewAtom } from '@/atoms/active-view'
 import { currentAgentWorkspaceIdAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
@@ -26,7 +26,24 @@ const Excalidraw = React.lazy(() =>
   import('@excalidraw/excalidraw').then((m) => ({ default: m.Excalidraw })),
 )
 
-export function ExcalidrawEditor(): React.ReactElement {
+export interface ExcalidrawEditorProps {
+  /** 受控模式：直接指定要打开的 slug（null = 全新未命名画布）。
+   *  不传（undefined）= 非受控，沿用 sessionStorage 'excalidraw:editingSlug' 的老行为。 */
+  controlledSlug?: string | null
+  /** 受控模式下点击"返回/关闭"按钮时调用；不传则沿用 setActiveView('excalidraw-gallery') 老行为。 */
+  onExit?: () => void
+  /** 首次创建成功或重命名后，把最新 slug/title 同步给外部（面板模式用于写回 canvasFileMapAtom）。 */
+  onSlugChange?: (ref: { slug: string; title: string }) => void
+  /** 面板模式下额外展示"浏览全部画布"入口，点击调用。不传则不展示该按钮。 */
+  onBrowseAll?: () => void
+}
+
+export function ExcalidrawEditor({
+  controlledSlug,
+  onExit,
+  onSlugChange,
+  onBrowseAll,
+}: ExcalidrawEditorProps = {}): React.ReactElement {
   const setActiveView = useSetAtom(activeViewAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
@@ -75,7 +92,8 @@ export function ExcalidrawEditor(): React.ReactElement {
   React.useEffect(() => {
     if (!workspaceSlug) return
 
-    const editingSlug = sessionStorage.getItem('excalidraw:editingSlug')
+    // 受控模式：controlledSlug !== undefined 时，直接用它，不读 sessionStorage。
+    const editingSlug = controlledSlug !== undefined ? controlledSlug : sessionStorage.getItem('excalidraw:editingSlug')
     if (!editingSlug) {
       setLoading(false)
       setIsNew(true)
@@ -83,7 +101,7 @@ export function ExcalidrawEditor(): React.ReactElement {
     }
 
     setSlug(editingSlug)
-    sessionStorage.removeItem('excalidraw:editingSlug')
+    if (controlledSlug === undefined) sessionStorage.removeItem('excalidraw:editingSlug')
 
     window.electronAPI
       .readExcalidrawFile(workspaceSlug, editingSlug)
@@ -102,6 +120,9 @@ export function ExcalidrawEditor(): React.ReactElement {
       })
       .catch((err) => console.error('[ExcalidrawEditor] 加载失败:', err))
       .finally(() => setLoading(false))
+    // controlledSlug 有意不放进依赖数组：受控模式只在挂载时按初始 slug 加载一次；
+    // CanvasPanel 会通过 key 切换会话时重新挂载，保持与现有 ExcalidrawView 约定一致。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceSlug])
 
   function showStatus(msg: string, autoClear = true): void {
@@ -152,6 +173,7 @@ export function ExcalidrawEditor(): React.ReactElement {
         // loadedTitleRef 比对，永远判定为"标题变了"，进而尝试 rename 到一个已被占用的
         // 文件名而报错——保存直接失败，且此后每次保存都会重复触发（真实复现过的 bug）。
         setTitle(result.title)
+        onSlugChange?.({ slug: result.slug, title: result.title })
       } else if (trimmedTitle !== loadedTitleRef.current) {
         // 标题输入框相对已加载的真实标题有改动：落盘重命名，而不是让它只是个从不生效的摆设
         const result = await window.electronAPI.renameExcalidrawFile(workspaceSlug, currentSlug, trimmedTitle)
@@ -161,6 +183,7 @@ export function ExcalidrawEditor(): React.ReactElement {
         // 同理：RENAME 会清洗非法字符（如 "A/B" → "A-B"），落盘标题可能和输入框原文不同，
         // 不同步会导致下次保存又把这次已经生效的改动误判成"还需要 rename"。
         setTitle(result.title)
+        onSlugChange?.({ slug: result.slug, title: result.title })
       }
 
       await window.electronAPI.writeExcalidrawFile(workspaceSlug, currentSlug, {
@@ -273,9 +296,13 @@ export function ExcalidrawEditor(): React.ReactElement {
         setSaving(false)
       }
     }
+    if (onExit) {
+      onExit()
+      return
+    }
     sessionStorage.removeItem('excalidraw:editingSlug')
     setActiveView('excalidraw-gallery')
-  }, [setActiveView])
+  }, [onExit, setActiveView])
 
   if (loading) {
     return (
@@ -295,9 +322,9 @@ export function ExcalidrawEditor(): React.ReactElement {
             className="text-foreground/50 hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
             onClick={handleBack}
             disabled={saving}
-            aria-label="返回画廊"
+            aria-label={onExit ? '关闭画布' : '返回画廊'}
           >
-            {saving ? <Loader2 size={18} className="animate-spin" /> : <ArrowLeft size={18} />}
+            {saving ? <Loader2 size={18} className="animate-spin" /> : onExit ? <X size={18} /> : <ArrowLeft size={18} />}
           </button>
           <PenTool size={16} className="text-foreground/60 shrink-0" />
           <input
@@ -308,6 +335,15 @@ export function ExcalidrawEditor(): React.ReactElement {
             placeholder="未命名画布…"
             spellCheck={false}
           />
+          {onBrowseAll && (
+            <button
+              type="button"
+              className="text-[11px] text-foreground/50 hover:text-primary transition-colors shrink-0 whitespace-nowrap"
+              onClick={onBrowseAll}
+            >
+              浏览全部画布
+            </button>
+          )}
           {isNew && (
             <span className="text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0">
               新建
