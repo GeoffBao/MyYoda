@@ -124,6 +124,7 @@ const COLLECTIONS: ConnectorCollection[] = [
     description: '阅读笔记与文档',
     icon: <BookOpen size={16} />,
     connectorIds: ['weread', 'notion'],
+    marketplaceIds: ['readwise-cli'],
   },
   {
     id: 'content-creation',
@@ -501,12 +502,17 @@ export function ConnectorsTab({
     <div className="flex flex-col gap-5">
       {/* 精选集合（对标 OpenAI Plugins Collections）：推荐组合一键启用，仅在「全部」分类显示 */}
       {category === 'all' && builtinServers.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {COLLECTIONS.map((collection) => {
             const servers = collection.connectorIds
               .map((id) => builtinServers.find((s) => s.id === id))
               .filter((s): s is BuiltinMcpServerSummary => Boolean(s))
+            const presetServers = (collection.marketplaceIds ?? [])
+              .map((id) => marketplaceItems.find((i) => i.id === id))
+              .filter((i): i is MarketplaceItemWithStatus => Boolean(i))
             const configuredCount = servers.filter((s) => s.enabled && s.available).length
+              + presetServers.filter((p) => p.installed).length
+            const totalCount = servers.length + presetServers.length
             return (
               <button
                 key={collection.id}
@@ -525,12 +531,12 @@ export function ConnectorsTab({
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {servers.length === 0 ? (
+                    {totalCount === 0 ? (
                       <span className="text-emerald-600 dark:text-emerald-400">已内置</span>
-                    ) : configuredCount === servers.length ? (
+                    ) : configuredCount === totalCount ? (
                       <span className="text-emerald-600 dark:text-emerald-400">全部配置完成</span>
                     ) : (
-                      `已配置 ${configuredCount}/${servers.length}`
+                      `已配置 ${configuredCount}/${totalCount}`
                     )}
                   </span>
                   <span className="text-[11px] font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
@@ -634,6 +640,11 @@ export function ConnectorsTab({
         collection={activeCollection}
         servers={builtinServers}
         onOpenServer={handleCollectionItem}
+        presets={marketplaceItems.map((i) => ({ id: i.id, name: i.name, description: i.description, iconKey: i.iconKey, installed: i.installed }))}
+        onOpenPreset={(id) => {
+          setActiveCollection(null)
+          onConfigureMarketplace(`marketplace:${id}`)
+        }}
         skills={skillsMeta}
         onOpenSkill={(slug) => {
           setActiveCollection(null)

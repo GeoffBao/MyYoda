@@ -19,6 +19,8 @@ export interface ConnectorCollection {
   description: string
   icon: React.ReactNode
   connectorIds: string[]
+  /** 预装连接器条目（Readwise/企业微信等，未安装显示「需安装」） */
+  marketplaceIds?: string[]
   /** 预装技能条目（ChatCut/HyperFrames 等，点击引导去技能 Tab） */
   skillIds?: string[]
 }
@@ -32,6 +34,10 @@ interface ConnectorCollectionDialogProps {
   servers: BuiltinMcpServerSummary[]
   /** 点击集合内某一项（由父组件决定打开凭据配置还是只读详情） */
   onOpenServer: (server: BuiltinMcpServerSummary) => void
+  /** 预装连接器条目（marketplace 状态，未安装可引导安装） */
+  presets?: Array<{ id: string; name: string; description?: string; iconKey?: string; installed: boolean }>
+  /** 点击集合内预装连接器（打开凭据/详情或安装引导） */
+  onOpenPreset?: (id: string) => void
   /** 技能条目（slug → 名称/描述），用于集合内预装技能展示 */
   skills?: Array<{ slug: string; name: string; description?: string }>
   /** 点击集合内技能（由父组件切到技能 Tab 并打开详情） */
@@ -44,6 +50,8 @@ export function ConnectorCollectionDialog({
   collection,
   servers,
   onOpenServer,
+  presets = [],
+  onOpenPreset,
   skills = [],
   onOpenSkill,
 }: ConnectorCollectionDialogProps): React.ReactElement {
@@ -51,6 +59,9 @@ export function ConnectorCollectionDialog({
   const items = collection.connectorIds
     .map((id) => servers.find((s) => s.id === id))
     .filter((s): s is BuiltinMcpServerSummary => Boolean(s))
+  const presetItems = (collection.marketplaceIds ?? [])
+    .map((id) => presets.find((p) => p.id === id))
+    .filter((p): p is NonNullable<(typeof presets)[number]> => Boolean(p))
   const skillItems = (collection.skillIds ?? [])
     .map((slug) => skills.find((s) => s.slug === slug))
     .filter((s): s is NonNullable<(typeof skills)[number]> => Boolean(s))
@@ -109,6 +120,32 @@ export function ConnectorCollectionDialog({
               </button>
             )
           })}
+          {presetItems.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => onOpenPreset?.(preset.id)}
+              className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left transition-colors hover:border-border hover:bg-content-area/60"
+            >
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-content-area">
+                {getBuiltinMcpIcon(preset.iconKey ?? preset.id)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-foreground">{preset.name}</div>
+                <div className="text-[11px] text-muted-foreground">{preset.description || '预装连接器'}</div>
+              </div>
+              {preset.installed ? (
+                <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  已安装
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  需安装
+                </span>
+              )}
+              <ChevronRight size={16} className="shrink-0 text-muted-foreground/60" />
+            </button>
+          ))}
           {skillItems.map((skill) => (
             <button
               key={skill.slug}
