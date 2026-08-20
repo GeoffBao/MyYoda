@@ -149,8 +149,8 @@
       "cliPackage": "supabase",
       "cliHint": "Supabase CLI（supabase 包）已可用。\n- 认证：supabase login（Access Token）\n- 链接项目：supabase link --project-ref <ref>\n- 查询数据库：supabase db ...（或 psql 直接查询）\n- 迁移：supabase migration list / db push\n- 函数：supabase functions list / deploy <name>\n数据库操作为高风险操作，执行前先向用户确认。",
       "cliCommand": "supabase",
-      "authCheckCommand": "",
-      "authFailPattern": "",
+      "authCheckCommand": "supabase projects list",
+      "authFailPattern": "access token not provided",
       "authGuide": "supabase login"
     },
     {
