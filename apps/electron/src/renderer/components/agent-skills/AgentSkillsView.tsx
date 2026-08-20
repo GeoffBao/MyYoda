@@ -524,6 +524,11 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onConfigure={configureBuiltinMcp}
               onConfigureMarketplace={(serverId) => setConfigureServerId(serverId)}
               onMarketplaceChanged={loadMarketplace}
+              skillsMeta={data.skills.map((s) => ({ slug: s.slug, name: s.name, description: s.description }))}
+              onOpenSkill={(slug) => {
+                setTab('skills')
+                setSelectedSkillSlug(slug)
+              }}
               externalSearch={search}
             />
           ) : tab === 'memory' ? (

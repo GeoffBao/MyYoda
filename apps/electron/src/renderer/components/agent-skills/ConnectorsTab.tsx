@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { Plug, Search, Globe, Trash2, GitBranch, Compass, BookOpen } from 'lucide-react'
+import { Plug, Search, Globe, Trash2, GitBranch, Compass, BookOpen, Clapperboard } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
@@ -125,6 +125,14 @@ const COLLECTIONS: ConnectorCollection[] = [
     icon: <BookOpen size={16} />,
     connectorIds: ['weread', 'notion'],
   },
+  {
+    id: 'content-creation',
+    title: '内容创作',
+    description: 'AI 视频剪辑与渲染',
+    icon: <Clapperboard size={16} />,
+    connectorIds: [],
+    skillIds: ['chatcut', 'heygen'],
+  },
 ]
 
 // ===== 卡片视图模型 =====
@@ -164,6 +172,10 @@ interface ConnectorsTabProps {
   onConfigureMarketplace: (serverId: string) => void
   /** 市场条目卸载后刷新（重新拉取市场列表） */
   onMarketplaceChanged?: () => void
+  /** 预装技能元数据（集合内技能条目展示） */
+  skillsMeta?: Array<{ slug: string; name: string; description?: string }>
+  /** 点击集合内技能：切到技能 Tab 并打开详情 */
+  onOpenSkill?: (slug: string) => void
   externalSearch: string
 }
 
@@ -193,6 +205,8 @@ export function ConnectorsTab({
   onConfigure,
   onConfigureMarketplace,
   onMarketplaceChanged,
+  skillsMeta = [],
+  onOpenSkill,
   externalSearch,
 }: ConnectorsTabProps): React.ReactElement {
   const [category, setCategory] = React.useState<ConnectorCategory>('all')
@@ -511,7 +525,9 @@ export function ConnectorsTab({
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {configuredCount === servers.length ? (
+                    {servers.length === 0 ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">已内置</span>
+                    ) : configuredCount === servers.length ? (
                       <span className="text-emerald-600 dark:text-emerald-400">全部配置完成</span>
                     ) : (
                       `已配置 ${configuredCount}/${servers.length}`
@@ -618,6 +634,11 @@ export function ConnectorsTab({
         collection={activeCollection}
         servers={builtinServers}
         onOpenServer={handleCollectionItem}
+        skills={skillsMeta}
+        onOpenSkill={(slug) => {
+          setActiveCollection(null)
+          onOpenSkill?.(slug)
+        }}
       />
 
       {/* 自定义工具详情（居中 Modal） */}

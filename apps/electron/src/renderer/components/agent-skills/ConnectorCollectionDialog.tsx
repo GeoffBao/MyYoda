@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { CheckCircle2, ChevronRight } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Blocks } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
@@ -19,6 +19,8 @@ export interface ConnectorCollection {
   description: string
   icon: React.ReactNode
   connectorIds: string[]
+  /** 预装技能条目（ChatCut/HyperFrames 等，点击引导去技能 Tab） */
+  skillIds?: string[]
 }
 
 interface ConnectorCollectionDialogProps {
@@ -30,6 +32,10 @@ interface ConnectorCollectionDialogProps {
   servers: BuiltinMcpServerSummary[]
   /** 点击集合内某一项（由父组件决定打开凭据配置还是只读详情） */
   onOpenServer: (server: BuiltinMcpServerSummary) => void
+  /** 技能条目（slug → 名称/描述），用于集合内预装技能展示 */
+  skills?: Array<{ slug: string; name: string; description?: string }>
+  /** 点击集合内技能（由父组件切到技能 Tab 并打开详情） */
+  onOpenSkill?: (slug: string) => void
 }
 
 export function ConnectorCollectionDialog({
@@ -38,11 +44,16 @@ export function ConnectorCollectionDialog({
   collection,
   servers,
   onOpenServer,
+  skills = [],
+  onOpenSkill,
 }: ConnectorCollectionDialogProps): React.ReactElement {
   if (!collection) return <></>
   const items = collection.connectorIds
     .map((id) => servers.find((s) => s.id === id))
     .filter((s): s is BuiltinMcpServerSummary => Boolean(s))
+  const skillItems = (collection.skillIds ?? [])
+    .map((slug) => skills.find((s) => s.slug === slug))
+    .filter((s): s is NonNullable<(typeof skills)[number]> => Boolean(s))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,6 +109,26 @@ export function ConnectorCollectionDialog({
               </button>
             )
           })}
+          {skillItems.map((skill) => (
+            <button
+              key={skill.slug}
+              type="button"
+              onClick={() => onOpenSkill?.(skill.slug)}
+              className="flex w-full items-center gap-3 rounded-xl border border-border/60 bg-background p-3 text-left transition-colors hover:border-border hover:bg-content-area/60"
+            >
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-content-area">
+                <Blocks size={16} className="text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-foreground">{skill.name}</div>
+                <div className="text-[11px] text-muted-foreground">{skill.description || '预装技能'}</div>
+              </div>
+              <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                已内置
+              </span>
+              <ChevronRight size={16} className="shrink-0 text-muted-foreground/60" />
+            </button>
+          ))}
         </div>
       </DialogContent>
     </Dialog>
