@@ -1424,7 +1424,7 @@ export class AgentOrchestrator {
             injectNpxConnectorMcpServer(spec, mcpServers)
           }
         }
-        // 市场目录安装的连接器（plugin_creator）：已安装即注入（无开关层，卸载才移除）
+        // 市场目录连接器（plugin_creator）：已安装/预装即注入（开关层 = marketplaceDisabled 停用）
         for (const spec of getInstalledMarketplaceSpecs()) {
           injectNpxConnectorMcpServer(spec, mcpServers)
         }

@@ -45,7 +45,6 @@ import { ConnectorCredentials, CONNECTOR_CREDENTIAL_SPECS, type ConnectorCredent
 import type { MarketplaceItemWithStatus } from '@myyoda/shared'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
-import { MarketplaceTab } from './MarketplaceTab'
 import {
   WebSearchSettings,
   NanoBananaSettings,
@@ -107,9 +106,7 @@ version: "1.0.0"
 export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): React.ReactElement {
   const { workspaces, currentWorkspaceId, selectWorkspace } = useWorkspaceActions()
   // 对齐「项目=工作区」：Skills/MCP 全部工作区级（无嵌套项目覆盖），顶部选择器只做工作区切换
-  // reloadKey：市场安装/卸载技能后递增，显式重载技能列表（见 onChanged）
-  const [marketReloadKey, setMarketReloadKey] = React.useState(0)
-  const data = useAgentSkillsData(null, marketReloadKey)
+  const data = useAgentSkillsData(null)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const chatTools = useAtomValue(chatToolsAtom)
@@ -375,8 +372,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               tab === 'teams' && 'translate-x-full',
               tab === 'connectors' && 'translate-x-[200%]',
               tab === 'skills' && 'translate-x-[300%]',
-              tab === 'marketplace' && 'translate-x-[400%]',
-              tab === 'memory' && 'translate-x-[500%]',
+              tab === 'memory' && 'translate-x-[400%]',
             )}
           />
           {([
@@ -384,7 +380,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             { value: 'teams' as const, label: '专家团', count: teamsCount },
             { value: 'connectors' as const, label: '连接器', count: connectorCount },
             { value: 'skills' as const, label: '技能', count: data.skills.length },
-            { value: 'marketplace' as const, label: '市场' },
             { value: 'memory' as const, label: '记忆', count: memoryCount },
           ]).map(({ value, label, count }) => (
             <button
@@ -407,7 +402,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索技能...' : tab === 'connectors' ? '搜索连接器...' : tab === 'marketplace' ? '搜索市场条目...' : '搜索记忆文件...'}
+            placeholder={tab === 'experts' ? '搜索专家名称或 slug...' : tab === 'teams' ? '搜索专家团名称或角色...' : tab === 'skills' ? '搜索技能...' : tab === 'connectors' ? '搜索连接器...' : '搜索记忆文件...'}
             className="w-full bg-transparent text-[13px] text-foreground placeholder:text-foreground/35 focus:outline-none"
           />
         </div>
@@ -512,8 +507,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onMarketplaceChanged={loadMarketplace}
               externalSearch={search}
             />
-          ) : tab === 'marketplace' ? (
-            <MarketplaceTab onChanged={() => { loadMarketplace(); setMarketReloadKey((v) => v + 1); bumpCapabilities((v) => v + 1) }} />
           ) : !data.hasWorkspace ? (
             <EmptyState
               icon={<Blocks className="size-8 text-foreground/30" />}

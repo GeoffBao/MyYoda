@@ -1469,6 +1469,8 @@ export interface MarketplaceItemWithStatus extends MarketplaceItem {
   authenticated?: boolean
   /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
   marketplaceInstalled?: boolean
+  /** 预装连接器（市场移除后常驻连接器 Tab，不可卸载，2026-08-20） */
+  alwaysOn?: boolean
   /** 是否已启用（installed 且未被 marketplaceDisabled 停用；开关关闭时 installed=true 但 enabled=false，2026-08-19） */
   enabled?: boolean
   /** 用户是否已卸载/忽略（系统已装的 CLI 卸载后不再自动显示） */

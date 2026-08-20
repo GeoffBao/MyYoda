@@ -15,6 +15,7 @@ import {
   removeMarketplaceRemoteItem,
   getInstalledMarketplaceSpecs,
   toggleMarketplaceItem,
+  ALWAYS_ON_CONNECTOR_IDS,
   copySkillFolder,
   translateRemoteCategory,
   MARKETPLACE_ID_PREFIX,
@@ -172,17 +173,16 @@ describe('marketplace-service 统一层', () => {
     expect(() => copySkillFolder('/nonexistent/src', '/tmp/target-x', 'x')).toThrow('技能资源不存在')
   })
 
-  test('本地技能条目在目录中：ChatCut 与 HyperFrames', () => {
+  test('预装连接器：ChatCut/HyperFrames 已转为默认技能，连接器目录保留 9 个预装条目', () => {
     const catalog = listMarketplaceCatalog()
-    const chatcut = catalog.find((i) => i.id === 'chatcut')
-    const heygen = catalog.find((i) => i.id === 'heygen')
-    expect(chatcut).toBeDefined()
-    expect(chatcut!.type).toBe('skill')
-    expect(chatcut!.source).toBe('local')
-    expect(chatcut!.skillFolder).toBe('chatcut')
-    expect(heygen).toBeDefined()
-    expect(heygen!.type).toBe('skill')
-    expect(heygen!.skillFolder).toBe('heygen')
+    // ChatCut / HyperFrames 已从市场目录移除（转为 default-skills 内置技能）
+    expect(catalog.find((i) => i.id === 'chatcut')).toBeUndefined()
+    expect(catalog.find((i) => i.id === 'heygen')).toBeUndefined()
+    // 用户点名的 9 个连接器全部在目录中且标记为预装
+    for (const id of ['readwise-cli', 'wecom-cli', 'supabase', 'playwright', 'cloudflare', 'wrangler', 'tavily', 'railway', 'vercel']) {
+      expect(catalog.find((i) => i.id === id)).toBeDefined()
+      expect(ALWAYS_ON_CONNECTOR_IDS.has(id)).toBe(true)
+    }
   })
 
   test('translateRemoteCategory：英文分类转中文，未知保持原文', () => {

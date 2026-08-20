@@ -141,6 +141,8 @@ interface ConnectorItem {
   vendorLabel?: string
   enabled: boolean
   hasToggle: boolean
+  /** 预装连接器（无垃圾桶，不可卸载） */
+  alwaysOn?: boolean
 }
 
 // ===== Props =====
@@ -311,9 +313,10 @@ export function ConnectorsTab({
         statusLabel,
         statusTone,
         vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
-        // 开关 = 启用状态（enabled）；关闭只停用，不卸载，卡片保留
+        // 开关 = 启用状态（enabled）；关闭只停用，不卸载，卡片保留；预装条目无垃圾桶（不可卸载）
         enabled,
         hasToggle: true,
+        alwaysOn: item.alwaysOn ?? false,
       })
     }
 
@@ -548,7 +551,7 @@ export function ConnectorsTab({
                       enabled={item.enabled}
                       onOpen={() => handleOpen(item)}
                       onToggle={(enabled) => handleToggle(item, enabled)}
-                      onRemove={item.key.startsWith('marketplace:') ? () => handleRemoveMarketplace(item) : undefined}
+                      onRemove={item.key.startsWith('marketplace:') && !item.alwaysOn ? () => handleRemoveMarketplace(item) : undefined}
                     />
                   ))}
                 </div>
@@ -572,7 +575,7 @@ export function ConnectorsTab({
               enabled={item.enabled}
               onOpen={() => handleOpen(item)}
               onToggle={(enabled) => handleToggle(item, enabled)}
-              onRemove={item.key.startsWith('marketplace:') ? () => handleRemoveMarketplace(item) : undefined}
+              onRemove={item.key.startsWith('marketplace:') && !item.alwaysOn ? () => handleRemoveMarketplace(item) : undefined}
             />
           ))}
         </div>

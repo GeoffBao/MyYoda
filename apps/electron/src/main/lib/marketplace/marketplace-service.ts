@@ -270,14 +270,17 @@ async function buildMarketplaceList(
       const hasCreds = item.installKind === 'npx-mcp'
         ? hasNpxCredentials(item.id, item.envMap)
         : false
-      // 已安装 = 市场安装列表，或（CLI 且系统已装且未被忽略）；ignored 的条目视为未安装
-      const installed = !ignoredIds.has(item.id) && (inList || sysInstalled)
+      // 已安装 = 预装条目恒为已安装；或市场安装列表；或（CLI 且系统已装且未被忽略）
+      const installed = ALWAYS_ON_CONNECTOR_IDS.has(item.id)
+        || (!ignoredIds.has(item.id) && (inList || sysInstalled))
+      const alwaysOn = ALWAYS_ON_CONNECTOR_IDS.has(item.id)
       // 已启用 = 已安装且未被 marketplaceDisabled 停用（开关只改 disabled，不删安装记录）
       const enabled = installed && !disabledIds.has(item.id)
       return {
         ...item,
         installed,
         enabled,
+        alwaysOn,
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
         marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
@@ -396,7 +399,9 @@ export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
   const local = listMarketplaceCatalog()
   const remote = Object.values(getMarketplaceRemoteItems())
   return [...local, ...remote]
-    .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id) && !disabled.has(item.id))
+    .filter((item) => item.installKind === 'npx-mcp'
+      && (installed.has(item.id) || ALWAYS_ON_CONNECTOR_IDS.has(item.id))
+      && !disabled.has(item.id))
     .map(marketplaceItemToNpxSpec)
 }
 
@@ -411,7 +416,9 @@ export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: str
   const local = listMarketplaceCatalog()
   const remote = Object.values(getMarketplaceRemoteItems())
   return [...local, ...remote]
-    .filter((item) => item.installKind === 'cli' && installed.has(item.id) && !disabled.has(item.id))
+    .filter((item) => item.installKind === 'cli'
+      && (installed.has(item.id) || ALWAYS_ON_CONNECTOR_IDS.has(item.id))
+      && !disabled.has(item.id))
     .map((item) => ({
       id: item.id,
       name: item.name,
@@ -452,3 +459,19 @@ export function copySkillFolder(srcDir: string, targetSkillsDir: string, folderN
 }
 
 export { MARKETPLACE_ID_PREFIX }
+
+/**
+ * 预装连接器（2026-08-20 起不再需要市场安装，直接常驻连接器 Tab）：
+ * 市场 Tab 移除后，这些条目始终可见、默认可用（开关可停用），注入不受 install 门控。
+ */
+export const ALWAYS_ON_CONNECTOR_IDS = new Set([
+  'readwise-cli',   // Readwise
+  'wecom-cli',      // 企业微信
+  'supabase',
+  'playwright',
+  'cloudflare',     // Cloudflare npx MCP
+  'wrangler',       // Cloudflare Wrangler CLI
+  'tavily',
+  'railway',
+  'vercel',
+])
