@@ -20,6 +20,7 @@ import {
   type PreviewFile,
   type PreviewModePreference,
 } from '@/atoms/preview-atoms'
+import { canvasPanelOpenMapAtom } from '@/atoms/canvas-panel-atoms'
 import {
   activeTabIdAtom,
   closeTab,
@@ -60,10 +61,15 @@ export function useOpenPreview() {
       const preferSplit = resolvePreviewMode(options, store.get(previewModePreferenceAtom)) === 'split'
 
       if (preferSplit) {
-        // 分屏：开启预览面板，不创建 Tab
+        // 分屏：开启预览面板，不创建 Tab；文档槽同一时刻只展示一份内容，顺带关闭画布。
         store.set(previewPanelOpenMapAtom, (prev) => {
           const m = new Map(prev)
           m.set(sessionId, true)
+          return m
+        })
+        store.set(canvasPanelOpenMapAtom, (prev) => {
+          const m = new Map(prev)
+          m.set(sessionId, false)
           return m
         })
         return
@@ -119,10 +125,15 @@ export function tearOffPreviewToSplit(store: JotaiStore, tabId: string): void {
     return m
   })
 
-  // 开启右侧分屏
+  // 开启右侧分屏；文档槽互斥，顺带关闭画布
   store.set(previewPanelOpenMapAtom, (prev) => {
     const m = new Map(prev)
     m.set(sessionId, true)
+    return m
+  })
+  store.set(canvasPanelOpenMapAtom, (prev) => {
+    const m = new Map(prev)
+    m.set(sessionId, false)
     return m
   })
 }
