@@ -98,3 +98,29 @@ ChatCut / HyperFrames 从市场条目转为 `default-skills/` 内置技能（ver
 - 1700 tests 0 fail（含新增：开关不删安装记录、预装集合断言、卸载双选项）
 - typecheck 全绿；renderer build 通过
 - 实测：9 预装 installed/enabled=true；6 CLI hints + 3 npx specs 注入；扫码进程无孤儿；升级脚本已补齐 5 工作区 chatcut/heygen
+
+---
+
+## 6. 第二轮深度 Review（2026-08-20，市场移除 + 预装策略修正后）
+
+### 本轮审查范围
+marketplace-service（重写后）/ marketplace-manager / cli-auth / ConnectorsTab / ConnectorCard / ConnectorCollectionDialog / CliAuthDialog / CliUninstallConfirm / AgentSkillsView / ConnectorCredentials / 测试
+
+### 发现并修复
+
+| # | 级别 | 问题 | 修复 |
+|---|---|---|---|
+| A | 🔴 安全 | cliAuthToken 注释声称"不经 shell"但用 execAsync shell 拼接——token 含 `$(...)`/反引号会在 bash 双引号内被执行（命令注入） | 改为 spawn 数组传参（不经 shell），退出码判定成功 |
+| B | 🟡 竞态 | CliAuthDialog 轮询与 token 提交双路径可能重复 toast.success + 重复关闭 | doneRef 互斥锁，只允许一次成功路径 |
+| C | 🟢 死代码 | marketplace-manager 的 listMarketplaceItemsWithStatus / hasMarketplaceCredentials 无调用方 | 删除（含测试引用同步） |
+| D | 🟢 死代码 | cli-auth 的 activeAuthCommand 赋值未使用 | 删除 |
+| E | 🟢 测试 | marketplace-manager.test 引用被删函数导致隐式 any | 同步更新 |
+
+### 确认健康（无需改动）
+- 状态机一致性：installed/enabled/disabled 三段式写入无遗漏路径（安装清 disabled、卸载清 disabled、开关只写 disabled）
+- preset 未安装不注入（specs/hints 均 0）；安装后注入；卸载回未安装卡片常驻
+- CLI 检测缓存 60s + 认证成功后 invalidateCliCheckCache（扫码轮询/token 复检双路径均清）
+- ConnectorsTab 分类/搜索/集合逻辑一致；集合支持 skillIds（内容创作）
+- 凭据表单 helpUrl 覆盖 7 内置 + 市场 homepage 透传
+- 扫码进程 detached 进程组 + SIGKILL 兜底，实测无孤儿
+- 1696 tests 0 fail / typecheck 绿 / renderer build 通过
