@@ -467,8 +467,14 @@ export function ConnectorsTab({
   const handleCollectionItem = (server: BuiltinMcpServerSummary): void => {
     setActiveCollection(null)
     if (CONFIGURABLE_IDS.has(server.id)) {
+      // 需凭据连接器：打开配置表单
       onConfigure(server.id)
+    } else if (!server.enabled) {
+      // 免配置连接器（git/fetch 等）未启用：直接启用——集合引导语义「按顺序配置即可用」
+      onToggleBuiltin(server.id, true)
+      toast.success(`已启用 ${server.displayName}`)
     } else {
+      // 已启用且免配置：打开只读详情
       onOpenBuiltin(server)
     }
   }
