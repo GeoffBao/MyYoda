@@ -76,12 +76,28 @@ function sanitizeDimension(value: number, fallback: number): number {
   return Math.max(1, Math.round(value))
 }
 
-function intersectionArea(bounds: WindowBounds, area: WindowWorkArea): number {
+/** 标题栏交叠视为“可用可见”所需的最小宽高：用户至少要能抓到这么大一块标题栏才能把窗口拖回来。 */
+const MIN_USABLE_TITLE_BAR_WIDTH = 120
+const MIN_USABLE_TITLE_BAR_HEIGHT = 32
+
+/**
+ * 判断 bounds 相对某个显示器可见区域是否有“可用”的可见部分。
+ *
+ * 不是任意 1px 交叠即视为可见——外接显示器断开后，窗口可能只以 1px 边缘
+ * 蹭到剩余屏幕，标题栏（用户唯一能抓取拖动窗口的位置）实际仍完全不可达。
+ * 因此只看窗口顶部标题栏区域与目标区域的交叠是否达到最小可用宽高，未达标
+ * 则视为不可见，需要触发重新定位。
+ */
+function hasUsableVisibleTitleBar(bounds: WindowBounds, area: WindowWorkArea): boolean {
+  const titleBarHeight = Math.min(MIN_USABLE_TITLE_BAR_HEIGHT, bounds.height)
   const left = Math.max(bounds.x, area.x)
   const right = Math.min(bounds.x + bounds.width, area.x + area.width)
   const top = Math.max(bounds.y, area.y)
-  const bottom = Math.min(bounds.y + bounds.height, area.y + area.height)
-  return Math.max(0, right - left) * Math.max(0, bottom - top)
+  const bottom = Math.min(bounds.y + titleBarHeight, area.y + area.height)
+  const visibleWidth = Math.max(0, right - left)
+  const visibleHeight = Math.max(0, bottom - top)
+  return visibleWidth >= Math.min(MIN_USABLE_TITLE_BAR_WIDTH, bounds.width)
+    && visibleHeight >= titleBarHeight
 }
 
 /**
@@ -107,7 +123,7 @@ export function normalizeWindowBoundsToVisibleArea(
     y: isFiniteNumber(bounds.y) ? Math.round(bounds.y) : fallbackArea.y,
   }
 
-  if (areas.some((area) => intersectionArea(safeBounds, area) > 0)) return safeBounds
+  if (areas.some((area) => hasUsableVisibleTitleBar(safeBounds, area))) return safeBounds
 
   const areaWidth = Math.max(1, Math.round(fallbackArea.width))
   const areaHeight = Math.max(1, Math.round(fallbackArea.height))

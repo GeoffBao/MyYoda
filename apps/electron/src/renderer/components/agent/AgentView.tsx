@@ -961,6 +961,21 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, next))
   }, [sessionId, setMessagesCache])
 
+  /**
+   * 回滚 appendOptimisticPersistedMessage 乐观插入的用户消息（按对象引用匹配，无需 uuid）。
+   * 仅在 sendAgentMessage 在 runAgent 真正启动前就被拒绝（例如 reserveAgentSessionStart
+   * 会话忙碌时同步 throw）的路径上调用，避免未落盘、未处理的消息残留在 UI 中直到下次刷新。
+   * 若真正启动后才失败（已进入全局错误/完成联动），该消息已不在数组中或已被真实事件取代，
+   * 过滤无匹配时不会误删。
+   */
+  const removeOptimisticPersistedMessage = React.useCallback((message: SDKMessage) => {
+    const next = persistedSDKMessagesRef.current.filter((m) => m !== message)
+    if (next.length === persistedSDKMessagesRef.current.length) return
+    persistedSDKMessagesRef.current = next
+    setPersistedSDKMessages(next)
+    setMessagesCache((prev) => setSessionMessagesCache(prev, sessionId, next))
+  }, [sessionId, setMessagesCache])
+
   const appendLiveUserMessage = React.useCallback((message: SDKMessage) => {
     store.set(liveMessagesMapAtom, (prev) => {
       const map = new Map(prev)
@@ -1047,7 +1062,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       return map
     })
 
-    appendOptimisticPersistedMessage(createUserSDKMessage(displayText, undefined, streamStartedAt))
+    const optimisticMsg = createUserSDKMessage(displayText, undefined, streamStartedAt)
+    appendOptimisticPersistedMessage(optimisticMsg)
 
     try {
       await window.electronAPI.sendAgentMessage({
@@ -1071,6 +1087,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         ...(mentions.mentionedCalendarEventIds.length > 0 && { mentionedCalendarEventIds: mentions.mentionedCalendarEventIds }),
       })
     } catch (error) {
+      // 若请求在 runAgent 真正启动前就被拒绝（例如会话忙碌），乐观插入的用户消息不会被
+      // 真实事件流处理，必须主动回滚，避免残留从未落盘的“幽灵消息”。
+      removeOptimisticPersistedMessage(optimisticMsg)
       setStreamingStates((prev) => {
         const current = prev.get(sessionId)
         if (!current) return prev
@@ -1083,6 +1102,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   }, [
     agentModelId,
     appendOptimisticPersistedMessage,
+    removeOptimisticPersistedMessage,
     createBaseAdditionalDirectories,
     currentWorkspaceId,
     permissionMode,
@@ -1366,6 +1386,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       }
       window.electronAPI.sendAgentMessage(input).catch((error) => {
         console.error('[AgentView] 自动发送配置消息失败:', error)
+        // 若在 runAgent 真正启动前就被拒绝，乐观插入的用户消息不会被真实事件流处理，必须主动回滚。
+        removeOptimisticPersistedMessage(tempUserSDKMsg)
         setStreamingStates((prev) => {
           const current = prev.get(sessionId)
           if (!current) return prev
@@ -1375,7 +1397,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         })
       })
     })
-  }, [messagesLoaded, pendingPrompt, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories])
+  }, [messagesLoaded, pendingPrompt, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, setPendingPrompt, setStreamingStates, permissionMode, attachedDirs, attachedFileDirectories, appendOptimisticPersistedMessage, removeOptimisticPersistedMessage])
   // ===== 附件处理 =====
 
   /** 为文件生成唯一文件名（避免粘贴多张图片时文件名重复导致覆盖） */
@@ -2402,6 +2424,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
     window.electronAPI.sendAgentMessage(input).catch((error) => {
       console.error('[AgentView] 发送消息失败:', error)
+      // 若在 runAgent 真正启动前就被拒绝，乐观插入的用户消息不会被真实事件流处理，必须主动回滚。
+      removeOptimisticPersistedMessage(tempUserSDKMsg)
       setStreamingStates((prev) => {
         const current = prev.get(sessionId)
         if (!current) return prev
@@ -2410,7 +2434,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         return map
       })
     })
-  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, buildDeferredQueueInput, isLegacyTranscript, isStopping])
+  }, [createBaseAdditionalDirectories, preparePendingFilesForSend, prepareDraftGitContextForSend, restoreQueuedAttachmentsToPending, sessionId, agentChannelId, agentModelId, agentChannelProvider, currentWorkspaceId, streaming, backgroundWaiting, suggestion, hasAvailableModel, store, consumeQuotedSelection, setStreamingStates, setAgentStreamErrors, setPromptSuggestions, setInputContent, setLiveMessagesMap, permissionMode, messagesLoaded, setQueuedMessages, setQuotedSelectionMap, sendPlainTextAgentMessage, buildDeferredQueueInput, isLegacyTranscript, isStopping, appendOptimisticPersistedMessage, removeOptimisticPersistedMessage])
 
   /** 停止生成。异常流未发出终态时，允许再次下发幂等的 abort 请求。 */
   const handleStop = React.useCallback((): void => {
