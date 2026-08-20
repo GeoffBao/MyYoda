@@ -145,6 +145,27 @@ function getMainRendererWebContents(): WebContents | null {
   return win && !win.webContents.isDestroyed() ? win.webContents : null
 }
 
+/**
+ * Renderer run 在创建飞书镜像卡片时尚未进入 orchestrator.activeSessions。
+ * 在此期间保留启动槽位，避免会话迁移改变已接受请求的项目归属。
+ * （本地 agentQueueCoordinator 实例在本文件靠后定义，仅在运行时被 isAgentSessionBusy 调用，模块加载顺序无影响）。
+ */
+const startingAgentSessions = new Set<string>()
+
+export function reserveAgentSessionStart(sessionId: string): () => void {
+  if (startingAgentSessions.has(sessionId) || orchestrator.isActive(sessionId)) {
+    throw new Error('会话正在启动或运行中，请等待当前请求结束后再发送。')
+  }
+  startingAgentSessions.add(sessionId)
+  return () => startingAgentSessions.delete(sessionId)
+}
+
+export function isAgentSessionBusy(sessionId: string): boolean {
+  return startingAgentSessions.has(sessionId)
+    || orchestrator.isActive(sessionId)
+    || agentQueueCoordinator.hasPending(sessionId)
+}
+
 function publishRunStopped(
   sessionId: string,
   stoppedByUser: boolean | undefined,
@@ -510,7 +531,7 @@ export async function runAgentHeadless(
             source: callbacks.source ?? 'bridge',
             sessionId: runInput.sessionId,
             title: session?.title,
-            workspaceId: runInput.workspaceId ?? session?.workspaceId,
+            workspaceId: session?.workspaceId ?? runInput.workspaceId,
             modelId: runInput.modelId,
             startedAt: persistedStartedAt,
             ...(session ? { session } : {}),
