@@ -18,7 +18,7 @@ import { promisify } from 'node:util'
 import { exec as execCallback } from 'node:child_process'
 import type { MarketplaceItem } from '@myyoda/shared'
 import { listMarketplaceCatalog } from './marketplace-manager'
-import { getMarketplaceRemoteItems, invalidateCliCheckCache } from './marketplace-service'
+import { invalidateCliCheckCache } from './marketplace-service'
 
 const execAsync = promisify(execCallback)
 
@@ -44,11 +44,9 @@ function extractAuthUrl(output: string): string | undefined {
   return match?.[0]
 }
 
-/** 查找工作区内已安装的 CLI 条目（本地目录 + 远程快照） */
+/** 查找本地目录内的 CLI 条目 */
 function findCliItem(itemId: string): MarketplaceItem | undefined {
-  const local = listMarketplaceCatalog().find((i) => i.id === itemId)
-  if (local) return local
-  return getMarketplaceRemoteItems()[itemId]
+  return listMarketplaceCatalog().find((i) => i.id === itemId)
 }
 
 export interface CliAuthStartResult {

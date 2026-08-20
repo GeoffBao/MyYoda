@@ -139,7 +139,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [configureServerId, setConfigureServerId] = React.useState<string | null>(null)
   /** 市场目录条目（含安装状态）：供连接器 Tab 展示已安装市场连接器/CLI + 凭据 Modal 动态 spec */
   const [marketplaceItems, setMarketplaceItems] = React.useState<MarketplaceItemWithStatus[]>([])
-  const [marketplaceRemoteAvailable, setMarketplaceRemoteAvailable] = React.useState(true)
 
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
 
@@ -149,7 +148,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       .marketplaceList(workspaceSlug)
       .then((result) => {
         setMarketplaceItems(result.items)
-        setMarketplaceRemoteAvailable(result.remoteAvailable)
       })
       .catch((error) => console.error('[AgentSkills] 加载市场目录失败:', error))
   }, [workspaceSlug])

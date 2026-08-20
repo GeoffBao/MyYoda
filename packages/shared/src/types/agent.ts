@@ -1469,8 +1469,8 @@ export interface MarketplaceItemWithStatus extends MarketplaceItem {
   authenticated?: boolean
   /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
   marketplaceInstalled?: boolean
-  /** 预装连接器（市场移除后常驻连接器 Tab，不可卸载，2026-08-20） */
-  alwaysOn?: boolean
+  /** 预装连接器（第三方常驻连接器 Tab，但需点击安装后才可用，2026-08-20） */
+  preset?: boolean
   /** 是否已启用（installed 且未被 marketplaceDisabled 停用；开关关闭时 installed=true 但 enabled=false，2026-08-19） */
   enabled?: boolean
   /** 用户是否已卸载/忽略（系统已装的 CLI 卸载后不再自动显示） */
@@ -2425,11 +2425,6 @@ export const AGENT_IPC_CHANNELS = {
   /** 凭邀请码加入组织 */
   ORG_JOIN: 'org:join',
 
-  // 社区市场
-  /** 拉取社区市场清单 */
-  COMMUNITY_FETCH_MANIFEST: 'community:fetch-manifest',
-  /** 安装社区市场 Skill 到工作区 */
-  COMMUNITY_INSTALL_SKILL: 'community:install-skill',
 
   // 流式事件（主进程 → 渲染进程推送）
   /** Agent 流式事件 */

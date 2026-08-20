@@ -413,7 +413,6 @@ import {
   orgListMembers,
   orgListSkills,
 } from './lib/org-skill-service'
-import { fetchCommunityManifest, installCommunitySkill } from './lib/community-skill-service'
 import { projectRepository } from './lib/project-repository'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
@@ -3343,24 +3342,6 @@ export function registerIpcHandlers(): void {
 
   // ── 社区市场 ─────────────────────────────────
 
-  // 拉取社区市场清单
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.COMMUNITY_FETCH_MANIFEST,
-    async (): Promise<CommunitySkill[]> => {
-      return fetchCommunityManifest()
-    }
-  )
-
-  // 安装社区市场 Skill 到工作区
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL,
-    async (_, workspaceSlug: string, skill: CommunitySkill): Promise<CommunitySkillInstallResult> => {
-      const { getWorkspaceSkillsDir } = await import('./lib/config-paths')
-      const dir = getWorkspaceSkillsDir(workspaceSlug)
-      return installCommunitySkill(dir, skill)
-    }
-  )
-
   ipcMain.handle(
     AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
     async (_, workspaceSlug: string, skillSlug: string): Promise<string> => {
@@ -3824,16 +3805,16 @@ export function registerIpcHandlers(): void {
   // 市场目录（plugin_creator）：列表 / 安装 / 卸载
   ipcMain.handle(
     CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST,
-    async (_, workspaceSlug: string): Promise<{ items: import('@myyoda/shared').MarketplaceItemWithStatus[]; remoteAvailable: boolean }> => {
+    async (_, workspaceSlug: string): Promise<{ items: import('@myyoda/shared').MarketplaceItemWithStatus[] }> => {
       const { listMarketplaceItems } = await import('./lib/marketplace/marketplace-service')
       return listMarketplaceItems(workspaceSlug)
     }
   )
   ipcMain.handle(
     CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL,
-    async (_, itemId: string, workspaceSlug: string): Promise<void> => {
+    async (_, itemId: string): Promise<void> => {
       const { installMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
-      return installMarketplaceItem(itemId, workspaceSlug)
+      return installMarketplaceItem(itemId)
     }
   )
   ipcMain.handle(

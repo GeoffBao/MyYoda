@@ -1,195 +1,101 @@
 /**
- * marketplace-service 单测：统一市场层的转换映射、合并去重、远程快照注入闭环。
+ * marketplace-service 单测：预装连接器的安装/开关/卸载状态机 + 注入门控。
  */
 
 import { describe, test, expect, afterEach } from 'bun:test'
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import type { CommunitySkill } from '@myyoda/shared'
 import {
-  communitySkillToMarketplaceItem,
-  mergeMarketplaceItems,
-  getMarketplaceRemoteItems,
-  saveMarketplaceRemoteItem,
-  removeMarketplaceRemoteItem,
   getInstalledMarketplaceSpecs,
+  getInstalledMarketplaceCliHints,
   toggleMarketplaceItem,
-  ALWAYS_ON_CONNECTOR_IDS,
-  copySkillFolder,
-  translateRemoteCategory,
+  installMarketplaceItem,
+  uninstallMarketplaceItem,
+  PRESET_CONNECTOR_IDS,
   MARKETPLACE_ID_PREFIX,
 } from '../marketplace/marketplace-service'
 import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
 import { getMarketplaceInstalledIds, listMarketplaceCatalog } from '../marketplace/marketplace-manager'
 
-/** 测试用远程连接器条目（与本地 marketplace.json 同 schema） */
-const remoteConnector = {
-  id: 'remote-test-connector',
-  source: 'remote',
-  type: 'connector',
-  name: 'Remote Test',
-  description: '远程市场连接器（测试）',
-  vendor: 'community',
-  category: '研发与交付',
-  installKind: 'npx-mcp',
-  npxPackage: '@remote/test-mcp',
-  envMap: { token: 'REMOTE_TEST_TOKEN' },
-}
+/** 测试用条目 id（预装 npx 连接器，避免真实 CLI 安装） */
+const TEST_NPX_ID = 'playwright'
+const TEST_CLI_ID = 'readwise-cli'
 
-function sampleSkill(): CommunitySkill {
-  return {
-    name: 'web-research',
-    description: 'd',
-    path: 'skills/web-research',
-  }
-}
-
-describe('marketplace-service 统一层', () => {
+describe('marketplace-service 预装连接器', () => {
   afterEach(() => {
-    // 清理测试残留：移除远程快照条目、installed 记录与停用标记，避免污染同进程其他测试
+    // 清理测试残留：installed 与 disabled
     const cfg = getChatToolsConfig()
-    const remoteItems = { ...(cfg.marketplaceRemoteItems ?? {}) }
-    delete remoteItems[remoteConnector.id]
-    const installed = (cfg.marketplaceInstalled ?? []).filter((id) => id !== remoteConnector.id)
-    const disabled = (cfg.marketplaceDisabled ?? []).filter((id) => id !== remoteConnector.id)
-    cfg.marketplaceRemoteItems = remoteItems
-    cfg.marketplaceInstalled = installed
-    cfg.marketplaceDisabled = disabled
+    cfg.marketplaceInstalled = (cfg.marketplaceInstalled ?? []).filter((id) => id !== TEST_NPX_ID && id !== TEST_CLI_ID)
+    cfg.marketplaceDisabled = (cfg.marketplaceDisabled ?? []).filter((id) => id !== TEST_NPX_ID && id !== TEST_CLI_ID)
     saveChatToolsConfig(cfg)
   })
 
-  test('communitySkillToMarketplaceItem：skill 转换映射', () => {
-    const item = communitySkillToMarketplaceItem({
-      name: 'web-research', displayName: 'Web Research',
-      description: 'd', category: 'research', verified: true,
-      authorName: 'a', homepage: 'https://h', version: '1.2.0', downloads: 10,
-      path: 'skills/web-research',
-    })
-    expect(item.id).toBe('web-research')
-    expect(item.type).toBe('skill')
-    expect(item.installKind).toBe('skill')
-    expect(item.source).toBe('remote')
-    expect(item.vendor).toBe('official')   // verified → official
-    expect(item.category).toBe('research')
-    expect(item.author).toBe('a')
-    expect(item.homepage).toBe('https://h')
-    expect(item.version).toBe('1.2.0')
-    expect(item.downloads).toBe(10)
-    // skillRef 保留原 CommunitySkill 供安装
-    expect(item.skillRef).toBeDefined()
-    expect(item.skillRef?.name).toBe('web-research')
-    expect(item.skillRef?.path).toBe('skills/web-research')
-  })
-
-  test('communitySkillToMarketplaceItem：未 verified → community，缺省字段兜底', () => {
-    const item = communitySkillToMarketplaceItem(sampleSkill())
-    expect(item.vendor).toBe('community')
-    expect(item.name).toBe('web-research')      // 无 displayName 时回退 name
-    expect(item.description).toBe('d')
-  })
-
-  test('合并去重：同 id 本地优先', () => {
-    const local = { id: 'x', source: 'local', name: 'local-x' } as any
-    const remote = { id: 'x', source: 'remote', name: 'remote-x' } as any
-    const merged = mergeMarketplaceItems([local], [remote])
-    expect(merged).toHaveLength(1)
-    expect(merged[0]!.name).toBe('local-x')
-  })
-
-  test('合并去重：不同 id 全部保留', () => {
-    const local = [{ id: 'a', source: 'local', name: 'a' }] as any
-    const remote = [{ id: 'b', source: 'remote', name: 'b' }] as any
-    expect(mergeMarketplaceItems(local, remote)).toHaveLength(2)
-  })
-
-  test('远程连接器快照 → 注入 spec 转换闭环', () => {
-    // 构造：远程条目已快照 + 已安装
-    saveMarketplaceRemoteItem(remoteConnector as any)
-    const cfg = getChatToolsConfig()
-    cfg.marketplaceInstalled = [...(cfg.marketplaceInstalled ?? []), remoteConnector.id]
-    saveChatToolsConfig(cfg)
-
-    expect(Object.keys(getMarketplaceRemoteItems())).toContain(remoteConnector.id)
-    expect(getMarketplaceInstalledIds()).toContain(remoteConnector.id)
-
-    const specs = getInstalledMarketplaceSpecs()
-    const spec = specs.find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)
-    expect(spec).toBeDefined()
-    expect(spec!.npmPackage).toBe('@remote/test-mcp')
-    expect(spec!.envMap).toEqual({ token: 'REMOTE_TEST_TOKEN' })
-  })
-
-  test('远程快照条目：卸载后不再进入注入 spec', () => {
-    saveMarketplaceRemoteItem(remoteConnector as any)
-    const cfg = getChatToolsConfig()
-    cfg.marketplaceInstalled = [...(cfg.marketplaceInstalled ?? []), remoteConnector.id]
-    saveChatToolsConfig(cfg)
-
-    removeMarketplaceRemoteItem(remoteConnector.id)
-    expect(getMarketplaceRemoteItems()[remoteConnector.id]).toBeUndefined()
-    // installed 仍在（卸载未执行前）但快照已删 → spec 不应包含
-    const specs = getInstalledMarketplaceSpecs()
-    expect(specs.find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeUndefined()
-  })
-
-  test('开关关闭：只停用注入，不删除安装记录（对齐 Cline Enable/Disable）', () => {
-    saveMarketplaceRemoteItem(remoteConnector as any)
-    const cfg = getChatToolsConfig()
-    cfg.marketplaceInstalled = [...(cfg.marketplaceInstalled ?? []), remoteConnector.id]
-    saveChatToolsConfig(cfg)
-
-    // 关闭 → installed 保留，disabled 包含，spec 不再注入
-    toggleMarketplaceItem(remoteConnector.id, false)
-    expect(getMarketplaceInstalledIds()).toContain(remoteConnector.id) // 安装记录仍在
-    expect(getChatToolsConfig().marketplaceDisabled).toContain(remoteConnector.id)
-    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeUndefined()
-
-    // 再开 → disabled 清除，spec 恢复注入
-    toggleMarketplaceItem(remoteConnector.id, true)
-    expect(getChatToolsConfig().marketplaceDisabled ?? []).not.toContain(remoteConnector.id)
-    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${remoteConnector.id}`)).toBeDefined()
-  })
-
-  test('copySkillFolder：复制本地技能目录到目标 skills 目录（重复安装覆盖）', () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'marketplace-skill-'))
-    try {
-      const src = join(tmp, 'src')
-      const target = join(tmp, 'target')
-      mkdirSync(src, { recursive: true })
-      writeFileSync(join(src, 'SKILL.md'), '---\nname: demo\n---\nhello')
-      copySkillFolder(src, target, 'demo')
-      expect(existsSync(join(target, 'demo', 'SKILL.md'))).toBe(true)
-      // 重复安装：覆盖旧目录而不是抛错
-      writeFileSync(join(src, 'SKILL.md'), '---\nname: demo\n---\nupdated')
-      copySkillFolder(src, target, 'demo')
-      expect(existsSync(join(target, 'demo', 'SKILL.md'))).toBe(true)
-    } finally {
-      rmSync(tmp, { recursive: true, force: true })
-    }
-  })
-
-  test('copySkillFolder：源目录缺失时抛错', () => {
-    expect(() => copySkillFolder('/nonexistent/src', '/tmp/target-x', 'x')).toThrow('技能资源不存在')
-  })
-
-  test('预装连接器：ChatCut/HyperFrames 已转为默认技能，连接器目录保留 9 个预装条目', () => {
+  test('目录仅含预装连接器：9 个第三方条目，无淘汰条目', () => {
     const catalog = listMarketplaceCatalog()
-    // ChatCut / HyperFrames 已从市场目录移除（转为 default-skills 内置技能）
-    expect(catalog.find((i) => i.id === 'chatcut')).toBeUndefined()
-    expect(catalog.find((i) => i.id === 'heygen')).toBeUndefined()
-    // 用户点名的 9 个连接器全部在目录中且标记为预装
+    const ids = catalog.map((i) => i.id)
+    expect(ids.sort()).toEqual(['cloudflare', 'playwright', 'readwise-cli', 'railway', 'supabase', 'tavily', 'vercel', 'wecom-cli', 'wrangler'].sort())
+    // 淘汰条目已删除
+    expect(ids).not.toContain('slack')
+    expect(ids).not.toContain('linear')
+    expect(ids).not.toContain('firecrawl')
+    expect(ids).not.toContain('netlify')
+    // 无技能条目（ChatCut/HyperFrames 已转 default-skills）
+    expect(catalog.every((i) => i.type === 'connector')).toBe(true)
+  })
+
+  test('预装标记：9 个条目全部在 PRESET_CONNECTOR_IDS', () => {
     for (const id of ['readwise-cli', 'wecom-cli', 'supabase', 'playwright', 'cloudflare', 'wrangler', 'tavily', 'railway', 'vercel']) {
-      expect(catalog.find((i) => i.id === id)).toBeDefined()
-      expect(ALWAYS_ON_CONNECTOR_IDS.has(id)).toBe(true)
+      expect(PRESET_CONNECTOR_IDS.has(id)).toBe(true)
     }
   })
 
-  test('translateRemoteCategory：英文分类转中文，未知保持原文', () => {
-    expect(translateRemoteCategory('video')).toBe('视频')
-    expect(translateRemoteCategory('devtools')).toBe('开发工具')
-    expect(translateRemoteCategory('camera')).toBe('相机诊断')
-    expect(translateRemoteCategory('unknown-cat')).toBe('unknown-cat')
-    expect(translateRemoteCategory(undefined)).toBeUndefined()
+  test('未安装的预装连接器不注入（第三方不开箱即用）', () => {
+    // 未安装 → specs/cliHints 均为空
+    expect(getInstalledMarketplaceSpecs().length).toBe(0)
+    expect(getInstalledMarketplaceCliHints().length).toBe(0)
+  })
+
+  test('安装 npx 连接器后注入 spec；开关关闭后停止注入（记录保留）', async () => {
+    await installMarketplaceItem(TEST_NPX_ID)
+    expect(getMarketplaceInstalledIds()).toContain(TEST_NPX_ID)
+    const specs = getInstalledMarketplaceSpecs()
+    expect(specs.find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${TEST_NPX_ID}`)).toBeDefined()
+
+    // 开关关闭 → 不注入，但安装记录仍在
+    toggleMarketplaceItem(TEST_NPX_ID, false)
+    expect(getMarketplaceInstalledIds()).toContain(TEST_NPX_ID)
+    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${TEST_NPX_ID}`)).toBeUndefined()
+
+    // 再开 → 恢复注入
+    toggleMarketplaceItem(TEST_NPX_ID, true)
+    expect(getInstalledMarketplaceSpecs().find((s) => s.id === `${MARKETPLACE_ID_PREFIX}${TEST_NPX_ID}`)).toBeDefined()
+  })
+
+  test('安装 CLI 连接器后注入 cliHint；卸载后停止注入', async () => {
+    // 安装（CLI 可能系统已装 → npm install 跳过）
+    await installMarketplaceItem(TEST_CLI_ID)
+    expect(getMarketplaceInstalledIds()).toContain(TEST_CLI_ID)
+    expect(getInstalledMarketplaceCliHints().map((h) => h.id)).toContain(TEST_CLI_ID)
+
+    // 卸载（不 purge 系统）→ 安装记录移除 → 不再注入
+    await uninstallMarketplaceItem(TEST_CLI_ID, false)
+    expect(getMarketplaceInstalledIds()).not.toContain(TEST_CLI_ID)
+    expect(getInstalledMarketplaceCliHints().map((h) => h.id)).not.toContain(TEST_CLI_ID)
+  })
+
+  test('卸载后重装：安装记录恢复且默认启用', async () => {
+    await installMarketplaceItem(TEST_NPX_ID)
+    toggleMarketplaceItem(TEST_NPX_ID, false) // 停用
+    expect(getChatToolsConfig().marketplaceDisabled).toContain(TEST_NPX_ID)
+
+    await uninstallMarketplaceItem(TEST_NPX_ID)
+    expect(getMarketplaceInstalledIds()).not.toContain(TEST_NPX_ID)
+
+    // 重装 → 安装记录恢复、disabled 清除（默认启用）
+    await installMarketplaceItem(TEST_NPX_ID)
+    expect(getMarketplaceInstalledIds()).toContain(TEST_NPX_ID)
+    expect(getChatToolsConfig().marketplaceDisabled ?? []).not.toContain(TEST_NPX_ID)
+  })
+
+  test('安装不存在的条目抛错', async () => {
+    expect(installMarketplaceItem('nonexistent')).rejects.toThrow('连接器不存在')
   })
 })

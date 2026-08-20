@@ -1,16 +1,18 @@
 /**
- * marketplace-service — 统一市场服务（本地 + 远程合并/安装/快照注入）
+ * marketplace-service — 预装连接器服务（本地目录 + 安装/卸载/开关 + 注入）
  *
- * 收敛本地 marketplace-manager（官方内置目录）与 community-skill-service
- * （远程社区 manifest）的读侧与安装侧：
- * - 列表：本地 marketplace.json + 远程 sources.yaml 合并，本地优先去重；
- * - 安装：skill → 工作区级 installCommunitySkill；connector → marketplaceInstalled
- *   （远程条目先快照到 marketplaceRemoteItems，避免卸载/注入依赖网络）；
- * - 注入：本地条目 + 远程快照统一转 NpxConnectorSpec（agent-orchestrator 用）。
+ * 2026-08-20 市场（MyYoda社区）移除后的收敛形态：
+ * - 目录：marketplace.json 仅含预装连接器（第三方需 install，不可开箱即用）；
+ * - 预装（PRESET_CONNECTOR_IDS）：常驻连接器 Tab 展示（即使未安装），
+ *   但「安装」前不注入、不启用——第三方（企业微信/Readwise/Supabase/Vercel/
+ *   Playwright/Tavily/Cloudflare/Railway/Wrangler）必须点击安装后才可用；
+ * - 安装：CLI → npm install -g（系统未装时）+ 写 marketplaceInstalled；
+ *   npx → 写 marketplaceInstalled（默认启用）；
+ * - 开关：只改 marketplaceDisabled（停用注入，不删安装记录，卡片保留）；
+ * - 卸载：CLI 双选项（仅移除会话 / 同时卸载系统 CLI）；卸载后回到「未安装」，
+ *   卡片仍在（预装常驻），可再次安装。
  */
 
-import { readdirSync, existsSync, mkdirSync, cpSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -18,7 +20,7 @@ const execAsync = promisify(exec)
 
 /** 市场列表结果缓存（30s TTL：避免每次打开 Tab 重复执行 CLI 检测命令） */
 const MARKET_LIST_CACHE_TTL_MS = 30_000
-const marketListCache = new Map<string, { ts: number; data: { items: MarketplaceItemWithStatus[]; remoteAvailable: boolean } }>()
+const marketListCache = new Map<string, { ts: number; data: { items: MarketplaceItemWithStatus[] } }>()
 
 export function invalidateMarketListCache(): void {
   marketListCache.clear()
@@ -42,105 +44,27 @@ import {
   marketplaceItemToNpxSpec,
   MARKETPLACE_ID_PREFIX,
 } from './marketplace-manager'
-import { fetchCommunityManifest, installCommunitySkill, type CommunitySkill } from '../community-skill-service'
 import { getChatToolsConfig, saveChatToolsConfig, getToolCredentials } from '../chat-tool-config'
-import { getWorkspaceSkillsDir } from '../config-paths'
 import type { NpxConnectorSpec } from '../builtin-mcp/npx-connector-mcp'
 
-/** skill 类型市场条目：附加原 CommunitySkill 引用（安装时原样传递） */
-export type MarketplaceSkillItem = MarketplaceItem & {
-  skillRef: CommunitySkill
-  version?: string
-  downloads?: number
-}
+export { MARKETPLACE_ID_PREFIX }
 
-/** 远程社区 Skill 分类 → 中文标签（本地条目 category 已是中文） */
-const REMOTE_CATEGORY_LABELS: Record<string, string> = {
-  video: '视频',
-  devtools: '开发工具',
-  reading: '阅读',
-  presentation: '演示',
-  visualization: '可视化',
-  documents: '文档',
-  camera: '相机诊断',
-  web: '网页',
-  search: '搜索',
-  productivity: '效率工具',
-  frontend: '前端',
-}
-
-/** 远程分类 → 中文（未知分类保持原文） */
-export function translateRemoteCategory(category: string | undefined): string | undefined {
-  if (!category) return undefined
-  return REMOTE_CATEGORY_LABELS[category] ?? category
-}
-
-/** 远程社区 Skill 条目 → 统一市场条目（id = skill.name，slug 即 name） */
-export function communitySkillToMarketplaceItem(skill: CommunitySkill): MarketplaceSkillItem {
-  return {
-    id: skill.name,
-    type: 'skill',
-    source: 'remote',
-    name: skill.displayName ?? skill.name,
-    description: skill.description ?? '',
-    vendor: skill.verified ? 'official' : 'community',
-    author: skill.authorName,
-    homepage: skill.homepage,
-    category: translateRemoteCategory(skill.category),
-    version: skill.version,
-    downloads: skill.downloads,
-    installKind: 'skill',
-    skillRef: skill,
-  }
-}
-
-/** 合并本地 + 远程条目：同 id 本地优先（后写覆盖），保持远程在前便于保留 manifest 顺序 */
-export function mergeMarketplaceItems(local: MarketplaceItem[], remote: MarketplaceItem[]): MarketplaceItem[] {
-  const byId = new Map<string, MarketplaceItem>()
-  for (const item of [...remote, ...local]) byId.set(item.id, item)
-  return [...byId.values()]
-}
-
-/** 已安装远程连接器快照（id → 条目） */
-export function getMarketplaceRemoteItems(): Record<string, MarketplaceItem> {
-  return getChatToolsConfig().marketplaceRemoteItems ?? {}
-}
-
-/** 快照远程连接器条目（安装前落盘，卸载/注入不依赖网络） */
-export function saveMarketplaceRemoteItem(item: MarketplaceItem): void {
-  const cfg = getChatToolsConfig()
-  cfg.marketplaceRemoteItems = { ...(cfg.marketplaceRemoteItems ?? {}), [item.id]: item }
-  saveChatToolsConfig(cfg)
-}
-
-/** 移除远程连接器快照（卸载时清理） */
-export function removeMarketplaceRemoteItem(itemId: string): void {
-  const cfg = getChatToolsConfig()
-  if (!cfg.marketplaceRemoteItems) return
-  delete cfg.marketplaceRemoteItems[itemId]
-  saveChatToolsConfig(cfg)
-}
-
-/** 工作区已装 skill slug 集合：扫描 skills/ 下含 SKILL.md 的目录名（slug = 目录名） */
-function getInstalledSkillSlugs(workspaceSlug: string): Set<string> {
-  const slugs = new Set<string>()
-  try {
-    const skillsDir = getWorkspaceSkillsDir(workspaceSlug)
-    for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
-      if (entry.isDirectory() && existsSync(join(skillsDir, entry.name, 'SKILL.md'))) {
-        slugs.add(entry.name)
-      }
-    }
-  } catch {
-    // 工作区 skills 目录不存在 → 空集合
-  }
-  return slugs
-}
-
-/** 用户主动卸载/忽略的条目 id */
-function getMarketplaceIgnoredIds(): string[] {
-  return getChatToolsConfig().marketplaceIgnored ?? []
-}
+/**
+ * 预装连接器（2026-08-20）：第三方连接器常驻连接器 Tab，但**必须安装后才能用**（不开箱即用）。
+ * 与自研内置连接器（default-mcp.json，开箱即用）不同：这些条目未安装时显示「安装」按钮，
+ * 点击后执行真实安装（CLI npm install -g / npx 注入标记），安装后才注入工具。
+ */
+export const PRESET_CONNECTOR_IDS = new Set([
+  'readwise-cli',   // Readwise
+  'wecom-cli',      // 企业微信
+  'supabase',
+  'playwright',
+  'cloudflare',     // Cloudflare npx MCP
+  'wrangler',       // Cloudflare Wrangler CLI
+  'tavily',
+  'railway',
+  'vercel',
+])
 
 /** 已安装但被停用的条目 id（开关关闭的集合） */
 function getMarketplaceDisabledIds(): string[] {
@@ -154,16 +78,6 @@ function setMarketplaceDisabled(itemId: string, disabled: boolean): void {
   if (disabled) set.add(itemId)
   else set.delete(itemId)
   cfg.marketplaceDisabled = [...set]
-  saveChatToolsConfig(cfg)
-}
-
-/** 设置条目忽略状态（true=卸载后不自动显示；false=重新添加时解除） */
-function setMarketplaceIgnored(itemId: string, ignored: boolean): void {
-  const cfg = getChatToolsConfig()
-  const set = new Set(cfg.marketplaceIgnored ?? [])
-  if (ignored) set.add(itemId)
-  else set.delete(itemId)
-  cfg.marketplaceIgnored = [...set]
   saveChatToolsConfig(cfg)
 }
 
@@ -223,46 +137,22 @@ async function checkCliAuth(item: MarketplaceItem): Promise<boolean> {
 }
 
 /**
- * 远程 manifest 拉取失败不抛错（remoteAvailable=false，本地条目照常）。
+ * 构建连接器列表：本地目录（仅预装条目）附状态；CLI 检测并行执行。
  */
 export async function listMarketplaceItems(
   workspaceSlug: string,
-): Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }> {
+): Promise<{ items: MarketplaceItemWithStatus[] }> {
   // 缓存命中直接返回（30s 内不重复执行 CLI 检测）
   const cached = marketListCache.get(workspaceSlug)
   if (cached && Date.now() - cached.ts < MARKET_LIST_CACHE_TTL_MS) {
     return cached.data
   }
-  const result = await buildMarketplaceList(workspaceSlug)
-  marketListCache.set(workspaceSlug, { ts: Date.now(), data: result })
-  return result
-}
-
-/** 构建市场列表（无缓存）：CLI 检测并行执行 */
-async function buildMarketplaceList(
-  workspaceSlug: string,
-): Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }> {
   const local = listMarketplaceCatalog()
-  let remote: MarketplaceItem[] = []
-  let remoteAvailable = true
-  try {
-    const skills = await fetchCommunityManifest()
-    remote = skills.map(communitySkillToMarketplaceItem)
-  } catch (error) {
-    remoteAvailable = false
-    console.error('[市场统一] 远程 manifest 拉取失败，仅展示本地条目:', error)
-  }
-  const merged = mergeMarketplaceItems(local, remote)
   const installedConnectors = new Set(getMarketplaceInstalledIds())
-  const ignoredIds = new Set(getMarketplaceIgnoredIds())
   const disabledIds = new Set(getMarketplaceDisabledIds())
-  const installedSlugs = getInstalledSkillSlugs(workspaceSlug)
-  return {
-    remoteAvailable,
-    items: await Promise.all(merged.map(async (item) => {
-      const inList = item.type === 'skill'
-        ? installedSlugs.has(item.id)
-        : installedConnectors.has(item.id)
+  const result = {
+    items: await Promise.all(local.map(async (item) => {
+      const inList = installedConnectors.has(item.id)
       // CLI 连接器：系统是否已安装（并行检测）
       const sysInstalled = item.installKind === 'cli' && item.cliCommand
         ? await systemHasCli(item.cliCommand)
@@ -275,65 +165,35 @@ async function buildMarketplaceList(
       const hasCreds = item.installKind === 'npx-mcp'
         ? hasNpxCredentials(item.id, item.envMap)
         : false
-      // 已安装 = 预装条目恒为已安装；或市场安装列表；或（CLI 且系统已装且未被忽略）
-      const installed = ALWAYS_ON_CONNECTOR_IDS.has(item.id)
-        || (!ignoredIds.has(item.id) && (inList || sysInstalled))
-      const alwaysOn = ALWAYS_ON_CONNECTOR_IDS.has(item.id)
+      // 已安装 = 市场安装列表，或（CLI 且系统已装）
+      const installed = inList || sysInstalled
       // 已启用 = 已安装且未被 marketplaceDisabled 停用（开关只改 disabled，不删安装记录）
       const enabled = installed && !disabledIds.has(item.id)
       return {
         ...item,
         installed,
         enabled,
-        alwaysOn,
         hasCredentials: hasCreds,
         systemInstalled: sysInstalled,
-        marketplaceInstalled: item.type === 'connector' ? installedConnectors.has(item.id) : false,
+        marketplaceInstalled: installedConnectors.has(item.id),
         authenticated: authed,
-        ignored: ignoredIds.has(item.id),
+        // 预装条目：常驻连接器 Tab（未安装也显示「安装」按钮）
+        preset: PRESET_CONNECTOR_IDS.has(item.id),
       }
     })),
   }
-}
-
-/** 从远程 manifest 查找条目；失败时抛出可区分的错误（网络失败 vs 条目不存在） */
-async function fetchRemoteItem(itemId: string): Promise<MarketplaceItem | undefined> {
-  try {
-    const skills = await fetchCommunityManifest()
-    return skills.map(communitySkillToMarketplaceItem).find((i) => i.id === itemId)
-  } catch (error) {
-    throw new Error(`远程社区清单拉取失败（${itemId}）：${error instanceof Error ? error.message : String(error)}`)
-  }
+  marketListCache.set(workspaceSlug, { ts: Date.now(), data: result })
+  return result
 }
 
 /**
- * 安装市场条目：本地优先，其次远程 manifest。
- * - skill → 工作区级 installCommunitySkill（skillRef 原样传递）；
- * - connector（远程）→ 先快照到 marketplaceRemoteItems 再写 marketplaceInstalled；
- * - connector（本地）→ 现有 installMarketplaceItem。
+ * 安装预装连接器：
+ * - CLI：系统未装时执行 npm install -g <cliPackage>；写 marketplaceInstalled；
+ * - npx：写 marketplaceInstalled（默认启用，注入 stdio MCP）。
  */
-export async function installMarketplaceItem(itemId: string, workspaceSlug: string): Promise<void> {
-  const local = listMarketplaceCatalog().find((i) => i.id === itemId)
-  let remote: MarketplaceItem | undefined
-  try {
-    remote = await fetchRemoteItem(itemId)
-  } catch (error) {
-    if (!local) throw error  // 本地没有 → 直接抛远程拉取失败
-  }
-  const item = local ?? remote
-  if (!item) throw new Error(`市场条目不存在：${itemId}`)
-
-  if (item.type === 'skill') {
-    // 本地内嵌技能（如 ChatCut / HyperFrames）：复制 resources/marketplace-skills/<folder> 到工作区
-    if (item.source === 'local' && item.skillFolder) {
-      copySkillFolder(getMarketplaceSkillsSourceDir(item.skillFolder), getWorkspaceSkillsDir(workspaceSlug), item.skillFolder)
-      return
-    }
-    const skillItem = item as MarketplaceSkillItem
-    if (!skillItem.skillRef) throw new Error('Skill 条目缺少引用')
-    await installCommunitySkill(getWorkspaceSkillsDir(workspaceSlug), skillItem.skillRef)
-    return
-  }
+export async function installMarketplaceItem(itemId: string): Promise<void> {
+  const item = listMarketplaceCatalog().find((i) => i.id === itemId)
+  if (!item) throw new Error(`连接器不存在：${itemId}`)
 
   // CLI 连接器：实际执行 npm install -g <cliPackage>（仅当系统未安装时）
   if (item.installKind === 'cli' && item.cliPackage && item.cliCommand) {
@@ -350,80 +210,61 @@ export async function installMarketplaceItem(itemId: string, workspaceSlug: stri
     }
   }
 
-  if (item.source === 'remote') saveMarketplaceRemoteItem(item)
   installLocalConnector(itemId)
-  // 重新添加时解除忽略状态（系统已装的 CLI 重新加入会话）
-  setMarketplaceIgnored(itemId, false)
   // 安装即默认启用：从停用集合移除
   setMarketplaceDisabled(itemId, false)
   invalidateMarketListCache()
+  invalidateCliCheckCache()
 }
 
 /**
- * 卸载市场条目：移除 installed 与远程快照（凭据保留，重装复用）
- * - purgeSystem=false（默认）：CLI 条目加入 ignored——系统 CLI 保留（用户可能在其他地方用），
- *   市场显示「已忽略 + 添加到会话」，需用户主动重新添加；
- * - purgeSystem=true：执行 npm uninstall -g 真正删除系统 CLI（失败不阻断，仅记录），
- *   不写 ignored（系统已删，检测不到自然隐藏），市场显示「未安装 + 安装」。
+ * 卸载连接器：移除 installed（凭据保留，重装复用）
+ * - purgeSystem=false（默认）：CLI 系统二进制保留（用户可能在其他地方用），卡片回到「未安装」；
+ * - purgeSystem=true：执行 npm uninstall -g 真正删除系统 CLI（失败不阻断，仅记录）。
+ * 预装条目卸载后仍在连接器 Tab（显示「安装」按钮），可随时重装。
  */
 export async function uninstallMarketplaceItem(itemId: string, purgeSystem?: boolean): Promise<void> {
-  removeMarketplaceRemoteItem(itemId)
   uninstallLocalConnector(itemId)
   setMarketplaceDisabled(itemId, false)
   const item = listMarketplaceCatalog().find((i) => i.id === itemId)
-  if (item?.installKind === 'cli') {
-    if (purgeSystem && item.cliPackage) {
-      try {
-        await runCommand(`npm uninstall -g ${item.cliPackage}`, 60_000)
-      } catch {
-        console.error(`[市场] 卸载系统 CLI 失败（${item.cliPackage}）`)
-      }
-    } else {
-      setMarketplaceIgnored(itemId, true)
+  if (item?.installKind === 'cli' && purgeSystem && item.cliPackage) {
+    try {
+      await runCommand(`npm uninstall -g ${item.cliPackage}`, 60_000)
+    } catch {
+      console.error(`[连接器] 卸载系统 CLI 失败（${item.cliPackage}）`)
     }
   }
   invalidateMarketListCache()
+  invalidateCliCheckCache()
 }
 
 /**
  * 开关：启用/停用注入（只改 marketplaceDisabled，不删除安装记录）——对齐 Cline 的
  * Enable/Disable（Toggle a server without deleting it）。
- * - 停用（false）：加入 disabled，卡片保留显示「已关闭」，不再注入 spec/cliHint；
- * - 启用（true）：从 disabled 移除，恢复注入。
  */
 export function toggleMarketplaceItem(itemId: string, enabled: boolean): void {
   setMarketplaceDisabled(itemId, !enabled)
-  if (enabled) setMarketplaceIgnored(itemId, false)
   invalidateMarketListCache()
 }
 
-/** 已安装市场连接器 → NpxConnectorSpec（本地目录 + 远程快照统一注入；停用条目不注入） */
+/** 已安装连接器 → NpxConnectorSpec（仅注入已安装且未停用的 npx 条目；预装未安装不注入） */
 export function getInstalledMarketplaceSpecs(): NpxConnectorSpec[] {
   const installed = new Set(getMarketplaceInstalledIds())
   const disabled = new Set(getMarketplaceDisabledIds())
-  const local = listMarketplaceCatalog()
-  const remote = Object.values(getMarketplaceRemoteItems())
-  return [...local, ...remote]
-    .filter((item) => item.installKind === 'npx-mcp'
-      && (installed.has(item.id) || ALWAYS_ON_CONNECTOR_IDS.has(item.id))
-      && !disabled.has(item.id))
+  return listMarketplaceCatalog()
+    .filter((item) => item.installKind === 'npx-mcp' && installed.has(item.id) && !disabled.has(item.id))
     .map(marketplaceItemToNpxSpec)
 }
 
 /**
- * 已安装的 CLI 连接器提示（installKind='cli'）：
- * 安装后把 cliHint 注入 Agent 系统提示，Agent 通过 Bash 调用对应 CLI 子命令。
- * CLI 连接器不走 stdio MCP 注入，这里返回 { id, cliPackage, cliHint } 供编排层拼提示。
+ * 已安装的 CLI 连接器提示（installKind='cli'）：安装后把 cliHint 注入 Agent 系统提示。
+ * 预装未安装（未点 install）不注入——第三方连接器不开箱即用。
  */
 export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: string; cliPackage?: string; cliHint?: string }> {
   const installed = new Set(getMarketplaceInstalledIds())
   const disabled = new Set(getMarketplaceDisabledIds())
-  const local = listMarketplaceCatalog()
-  const remote = Object.values(getMarketplaceRemoteItems())
-  return [...local, ...remote]
-    .filter((item) => item.installKind === 'cli'
-      && (installed.has(item.id) || ALWAYS_ON_CONNECTOR_IDS.has(item.id))
-      && !disabled.has(item.id))
+  return listMarketplaceCatalog()
+    .filter((item) => item.installKind === 'cli' && installed.has(item.id) && !disabled.has(item.id))
     .map((item) => ({
       id: item.id,
       name: item.name,
@@ -431,52 +272,3 @@ export function getInstalledMarketplaceCliHints(): Array<{ id: string; name: str
       cliHint: item.cliHint,
     }))
 }
-
-/** 内置技能资源根目录（dev：dist/resources 或源码 resources；打包：process.resourcesPath） */
-export function getMarketplaceSkillsSourceDir(folder: string): string {
-  // electron 在 bun 单测环境不可用，惰性 require（该函数仅运行时安装路径调用）
-  let base = join(__dirname, 'resources')
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { app } = require('electron') as typeof import('electron')
-    if (app?.isPackaged) {
-      base = process.resourcesPath
-    } else if (!existsSync(join(base, 'marketplace-skills'))) {
-      // dev 时 dist/resources 可能未拷贝（build:resources 未跑/被清理）→ fallback 源码 resources
-      base = join(__dirname, '..', 'resources')
-    }
-  } catch {
-    // 非 electron 环境（bun test）→ 源码 resources
-    if (!existsSync(join(base, 'marketplace-skills'))) {
-      base = join(__dirname, '..', 'resources')
-    }
-  }
-  return join(base, 'marketplace-skills', folder)
-}
-
-/** 复制技能目录到目标 skills 目录（纯函数，便于单测） */
-export function copySkillFolder(srcDir: string, targetSkillsDir: string, folderName: string): void {
-  if (!existsSync(srcDir)) throw new Error(`技能资源不存在：${folderName}`)
-  mkdirSync(targetSkillsDir, { recursive: true })
-  const target = join(targetSkillsDir, folderName)
-  if (existsSync(target)) rmSync(target, { recursive: true, force: true })
-  cpSync(srcDir, target, { recursive: true })
-}
-
-export { MARKETPLACE_ID_PREFIX }
-
-/**
- * 预装连接器（2026-08-20 起不再需要市场安装，直接常驻连接器 Tab）：
- * 市场 Tab 移除后，这些条目始终可见、默认可用（开关可停用），注入不受 install 门控。
- */
-export const ALWAYS_ON_CONNECTOR_IDS = new Set([
-  'readwise-cli',   // Readwise
-  'wecom-cli',      // 企业微信
-  'supabase',
-  'playwright',
-  'cloudflare',     // Cloudflare npx MCP
-  'wrangler',       // Cloudflare Wrangler CLI
-  'tavily',
-  'railway',
-  'vercel',
-])

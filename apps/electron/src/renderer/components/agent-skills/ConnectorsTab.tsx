@@ -141,8 +141,10 @@ interface ConnectorItem {
   vendorLabel?: string
   enabled: boolean
   hasToggle: boolean
-  /** 预装连接器（无垃圾桶，不可卸载） */
+  /** 预装连接器（常驻可见；未安装时显示安装按钮） */
   alwaysOn?: boolean
+  /** 是否已安装（预装未安装时显示「安装」按钮） */
+  installed?: boolean
 }
 
 // ===== Props =====
@@ -287,22 +289,25 @@ export function ConnectorsTab({
     }
 
     for (const item of marketplaceItems) {
-      // 连接器 Tab 只展示市场安装的连接器/CLI（停用的卡片保留，installed 不受开关影响）；技能类条目归技能 Tab
-      if (!item.installed || item.type !== 'connector') continue
+      // 连接器 Tab 展示：已安装 + 预装条目（未安装的第三方预装显示「安装」按钮）；技能类条目已随市场移除
+      if ((!item.installed && !item.preset) || item.type !== 'connector') continue
       const cat = categoryOfMarketplace(item.category)
       const isCli = item.installKind === 'cli'
-      // 已停用 → 一律显示「已关闭」（卡片保留）；启用时才区分认证/凭据状态
+      // 未安装的预装条目 → 「未安装 + 安装按钮」；已停用 → 一律显示「已关闭」（卡片保留）
+      const installed = item.installed
       const enabled = item.enabled ?? true
-      const statusLabel = !enabled ? '已关闭'
-        : isCli
-          ? (!item.systemInstalled ? '未安装'
-            : !item.authenticated ? '需认证' : '系统已安装')
-          : (item.hasCredentials ? '已启用' : '需配置')
-      const statusTone = !enabled ? 'muted'
-        : isCli
-          ? (!item.systemInstalled ? 'muted'
-            : !item.authenticated ? 'warning' : 'success')
-          : (item.hasCredentials ? 'success' : 'warning')
+      const statusLabel = !installed ? '未安装'
+        : !enabled ? '已关闭'
+          : isCli
+            ? (!item.systemInstalled ? '未安装'
+              : !item.authenticated ? '需认证' : '系统已安装')
+            : (item.hasCredentials ? '已启用' : '需配置')
+      const statusTone = !installed ? 'muted'
+        : !enabled ? 'muted'
+          : isCli
+            ? (!item.systemInstalled ? 'muted'
+              : !item.authenticated ? 'warning' : 'success')
+            : (item.hasCredentials ? 'success' : 'warning')
       list.push({
         key: `marketplace:${item.id}`,
         name: item.name,
@@ -313,10 +318,11 @@ export function ConnectorsTab({
         statusLabel,
         statusTone,
         vendorLabel: item.vendor === 'official' ? '官方' : item.vendor === 'community' ? '社区' : undefined,
-        // 开关 = 启用状态（enabled）；关闭只停用，不卸载，卡片保留；预装条目无垃圾桶（不可卸载）
+        // 开关 = 启用状态（enabled）；未安装的预装条目显示安装按钮（onInstall）
         enabled,
         hasToggle: true,
-        alwaysOn: item.alwaysOn ?? false,
+        alwaysOn: item.preset ?? false,
+        installed,
       })
     }
 
@@ -394,6 +400,24 @@ export function ConnectorsTab({
   /** 卸载市场安装的连接器：CLI 先弹双选项确认，npx 直接卸载 */
   const [pendingRemoveItem, setPendingRemoveItem] = React.useState<ConnectorItem | null>(null)
   const [removing, setRemoving] = React.useState(false)
+  /** 安装预装连接器（第三方需 install，不可开箱即用） */
+  const [installingId, setInstallingId] = React.useState<string | null>(null)
+
+  const handleInstallMarketplace = (item: ConnectorItem): void => {
+    const id = item.key.slice('marketplace:'.length)
+    setInstallingId(id)
+    void window.electronAPI
+      .marketplaceInstall(id)
+      .then(() => {
+        toast.success(`已安装 ${item.name}`)
+        onMarketplaceChanged?.()
+      })
+      .catch((error) => {
+        console.error(`[连接器] 安装失败（${id}）:`, error)
+        toast.error(`安装失败：${error instanceof Error ? error.message : String(error)}`)
+      })
+      .finally(() => setInstallingId(null))
+  }
 
   const handleRemoveMarketplace = (item: ConnectorItem): void => {
     const id = item.key.slice('marketplace:'.length)
@@ -551,7 +575,9 @@ export function ConnectorsTab({
                       enabled={item.enabled}
                       onOpen={() => handleOpen(item)}
                       onToggle={(enabled) => handleToggle(item, enabled)}
-                      onRemove={item.key.startsWith('marketplace:') && !item.alwaysOn ? () => handleRemoveMarketplace(item) : undefined}
+                      onInstall={item.key.startsWith('marketplace:') && !item.installed ? () => handleInstallMarketplace(item) : undefined}
+              installing={installingId === item.key.slice('marketplace:'.length)}
+              onRemove={item.key.startsWith('marketplace:') && item.installed ? () => handleRemoveMarketplace(item) : undefined}
                     />
                   ))}
                 </div>
@@ -575,7 +601,9 @@ export function ConnectorsTab({
               enabled={item.enabled}
               onOpen={() => handleOpen(item)}
               onToggle={(enabled) => handleToggle(item, enabled)}
-              onRemove={item.key.startsWith('marketplace:') && !item.alwaysOn ? () => handleRemoveMarketplace(item) : undefined}
+              onInstall={item.key.startsWith('marketplace:') && !item.installed ? () => handleInstallMarketplace(item) : undefined}
+              installing={installingId === item.key.slice('marketplace:'.length)}
+              onRemove={item.key.startsWith('marketplace:') && item.installed ? () => handleRemoveMarketplace(item) : undefined}
             />
           ))}
         </div>

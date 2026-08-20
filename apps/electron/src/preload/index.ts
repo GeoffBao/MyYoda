@@ -970,13 +970,6 @@ export interface ElectronAPI {
   /** 从组织源更新已导入 Skill */
   orgUpdateSkill: (targetSlug: string, skillSlug: string) => Promise<SkillMeta>
 
-  // ── 社区市场 ───────────────────────────────
-
-  /** 拉取社区市场清单 */
-  communityFetchManifest: () => Promise<CommunitySkill[]>
-  /** 安装社区市场 Skill 到工作区 */
-  communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => Promise<CommunitySkillInstallResult>
-
   /** 读取 SKILL.md 全文内容 */
   readSkillContent: (workspaceSlug: string, skillSlug: string) => Promise<string>
 
@@ -1094,9 +1087,9 @@ export interface ElectronAPI {
   testBuiltinConnector: (connectorId: string) => Promise<{ success: boolean; message: string }>
 
   /** 市场目录（plugin_creator）：列表（含安装状态与远程可用性） */
-  marketplaceList: (workspaceSlug: string) => Promise<{ items: MarketplaceItemWithStatus[]; remoteAvailable: boolean }>
+  marketplaceList: (workspaceSlug: string) => Promise<{ items: MarketplaceItemWithStatus[] }>
   /** 市场目录：安装条目 */
-  marketplaceInstall: (itemId: string, workspaceSlug: string) => Promise<void>
+  marketplaceInstall: (itemId: string) => Promise<void>
   /** 市场目录：卸载条目（purgeSystem=true 时 CLI 同时 npm uninstall -g） */
   marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => Promise<void>
   /** 市场目录：开关（启用/停用注入） */
@@ -2675,16 +2668,6 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ORG_UPDATE_SKILL, targetSlug, skillSlug)
   },
 
-  // ── 社区市场 ───────────────────────────────
-
-  communityFetchManifest: () => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_FETCH_MANIFEST)
-  },
-
-  communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL, workspaceSlug, skill)
-  },
-
   readSkillContent: (workspaceSlug: string, skillSlug: string) => {
     return ipcRenderer.invoke(
       AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
@@ -2871,8 +2854,8 @@ const electronAPI: ElectronAPI = {
   marketplaceList: (workspaceSlug: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST, workspaceSlug)
   },
-  marketplaceInstall: (itemId: string, workspaceSlug: string) => {
-    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId, workspaceSlug)
+  marketplaceInstall: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId)
   },
   marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId, purgeSystem)

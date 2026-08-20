@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Download } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +30,10 @@ interface ConnectorCardProps {
   enabled?: boolean
   /** 移除操作（市场安装的连接器：卸载；渲染为垃圾桶按钮替代开关） */
   onRemove?: () => void
+  /** 安装操作（预装但未安装的第三方连接器：显示「安装」按钮替代开关） */
+  onInstall?: () => void
+  /** 安装中（按钮 loading） */
+  installing?: boolean
   onOpen: () => void
   onToggle?: (enabled: boolean) => void
 }
@@ -51,6 +55,8 @@ export function ConnectorCard({
   vendorLabel,
   enabled,
   onRemove,
+  onInstall,
+  installing,
   onOpen,
   onToggle,
 }: ConnectorCardProps): React.ReactElement {
@@ -124,7 +130,23 @@ export function ConnectorCard({
               {statusLabel}
             </span>
           )}
-          {onToggle && (
+          {onInstall ? (
+            <button
+              type="button"
+              title="安装"
+              aria-label={`安装 ${name}`}
+              disabled={installing}
+              onClick={(e) => { e.stopPropagation(); onInstall() }}
+              className="flex items-center gap-1 rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {installing ? (
+                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : (
+                <Download size={12} />
+              )}
+              安装
+            </button>
+          ) : onToggle && (
             <Switch
               checked={enabled ?? false}
               onCheckedChange={onToggle}
