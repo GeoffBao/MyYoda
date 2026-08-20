@@ -370,16 +370,16 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               'absolute bottom-0.5 top-0.5 w-[calc(16.666%-2px)] rounded-lg bg-background shadow-sm transition-transform duration-base ease-out',
               tab === 'experts' && 'translate-x-0',
               tab === 'teams' && 'translate-x-full',
-              tab === 'connectors' && 'translate-x-[200%]',
-              tab === 'skills' && 'translate-x-[300%]',
+              tab === 'skills' && 'translate-x-[200%]',
+              tab === 'connectors' && 'translate-x-[300%]',
               tab === 'memory' && 'translate-x-[400%]',
             )}
           />
           {([
             { value: 'experts' as const, label: '专家', count: expertsCount },
             { value: 'teams' as const, label: '专家团', count: teamsCount },
-            { value: 'connectors' as const, label: '连接器', count: connectorCount },
             { value: 'skills' as const, label: '技能', count: data.skills.length },
+            { value: 'connectors' as const, label: '连接器', count: connectorCount },
             { value: 'memory' as const, label: '记忆', count: memoryCount },
           ]).map(({ value, label, count }) => (
             <button
@@ -492,27 +492,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               kind="team"
               externalSearch={search}
             />
-          ) : tab === 'connectors' ? (
-            <ConnectorsTab
-              builtinServers={builtinMcpServers}
-              userEntries={userMcpEntries}
-              marketplaceItems={marketplaceItems}
-              onOpenBuiltin={setSelectedBuiltinMcp}
-              onOpenMcp={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
-              onToggleBuiltin={data.toggleBuiltinMcp}
-              onToggleMcp={data.toggleMcp}
-              onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
-              onConfigure={configureBuiltinMcp}
-              onConfigureMarketplace={(serverId) => setConfigureServerId(serverId)}
-              onMarketplaceChanged={loadMarketplace}
-              externalSearch={search}
-            />
-          ) : !data.hasWorkspace ? (
-            <EmptyState
-              icon={<Blocks className="size-8 text-foreground/30" />}
-              title="未选择工作区"
-              hint="请先选择或创建一个工作区，再来管理它的 Skills、连接器与 Memory。"
-            />
           ) : tab === 'skills' ? (
             <SkillsTab
               customSkills={customSkills}
@@ -527,6 +506,27 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onToggle={data.toggleSkill}
               onUpdate={data.updateSkill}
               onImport={() => setShowImport(true)}
+            />
+          ) : !data.hasWorkspace ? (
+            <EmptyState
+              icon={<Blocks className="size-8 text-foreground/30" />}
+              title="未选择工作区"
+              hint="请先选择或创建一个工作区，再来管理它的 Skills、连接器与 Memory。"
+            />
+          ) : tab === 'connectors' ? (
+            <ConnectorsTab
+              builtinServers={builtinMcpServers}
+              userEntries={userMcpEntries}
+              marketplaceItems={marketplaceItems}
+              onOpenBuiltin={setSelectedBuiltinMcp}
+              onOpenMcp={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
+              onToggleBuiltin={data.toggleBuiltinMcp}
+              onToggleMcp={data.toggleMcp}
+              onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
+              onConfigure={configureBuiltinMcp}
+              onConfigureMarketplace={(serverId) => setConfigureServerId(serverId)}
+              onMarketplaceChanged={loadMarketplace}
+              externalSearch={search}
             />
           ) : tab === 'memory' ? (
             // 记忆页统一为工作区记忆（AGENTS.md + memory/ 文件列表 + 授权引导，Proma 形态）；
