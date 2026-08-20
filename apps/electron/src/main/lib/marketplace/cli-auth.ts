@@ -18,7 +18,7 @@ import { promisify } from 'node:util'
 import { exec as execCallback } from 'node:child_process'
 import type { MarketplaceItem } from '@myyoda/shared'
 import { listMarketplaceCatalog } from './marketplace-manager'
-import { getMarketplaceRemoteItems } from './marketplace-service'
+import { getMarketplaceRemoteItems, invalidateCliCheckCache } from './marketplace-service'
 
 const execAsync = promisify(execCallback)
 
@@ -161,6 +161,7 @@ export async function cliAuthToken(itemId: string, token: string): Promise<{ ok:
   }
   // 写回后复检认证状态
   const status = await cliAuthStatus(itemId)
+  if (status.authenticated) invalidateCliCheckCache()  // 清除列表检测缓存，卡片立即刷新为已认证
   return status.authenticated ? { ok: true } : { ok: false, error: '认证命令执行完成，但认证状态未生效' }
 }
 
@@ -175,12 +176,16 @@ export async function cliAuthStatus(itemId: string): Promise<{ authenticated: bo
     const fastOut = fast.stdout ?? ''
     if (fastOut) {
       const failed = item.authFailPattern && fastOut.toLowerCase().includes(item.authFailPattern.toLowerCase())
-      return { authenticated: !failed }
+      const authenticated = !failed
+      if (authenticated) invalidateCliCheckCache()  // 检测到已认证 → 清除列表检测缓存，卡片立即刷新
+      return { authenticated }
     }
     const slow = await execAsync(`zsh -ilc "${item.authCheckCommand}" 2>/dev/null`, { timeout: 8000 })
     const slowOut = slow.stdout ?? ''
     const failed = item.authFailPattern && slowOut.toLowerCase().includes(item.authFailPattern.toLowerCase())
-    return { authenticated: Boolean(slowOut.trim()) && !failed }
+    const authenticated = Boolean(slowOut.trim()) && !failed
+    if (authenticated) invalidateCliCheckCache()
+    return { authenticated }
   } catch {
     return { authenticated: false }
   }

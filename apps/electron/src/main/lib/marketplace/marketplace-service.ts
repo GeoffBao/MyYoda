@@ -174,6 +174,11 @@ function setMarketplaceIgnored(itemId: string, ignored: boolean): void {
 const CLI_CHECK_CACHE_TTL_MS = 60_000
 const cliCheckCache = new Map<string, { ts: number; value: boolean }>()
 
+/** 清除 CLI 检测缓存（认证成功后调用，避免列表重建命中旧值显示「需认证」） */
+export function invalidateCliCheckCache(): void {
+  cliCheckCache.clear()
+}
+
 async function cachedCliCheck(key: string, check: () => Promise<boolean>): Promise<boolean> {
   const hit = cliCheckCache.get(key)
   if (hit && Date.now() - hit.ts < CLI_CHECK_CACHE_TTL_MS) return hit.value
