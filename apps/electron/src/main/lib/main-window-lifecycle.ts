@@ -103,8 +103,8 @@ function hasUsableVisibleTitleBar(bounds: WindowBounds, area: WindowWorkArea): b
 /**
  * 规范化用于“创建窗口”的持久化 bounds。
  *
- * 仅在窗口与所有当前显示器完全没有交叠时恢复到主屏；仍有任意可见像素时
- * 原样保留，以免破坏用户有意横跨多块屏幕摆放的普通窗口。
+ * 仅在窗口顶部标题栏相对所有当前显示器都缺少可抓取的可见区域时恢复到主屏；
+ * 标题栏仍可用时原样保留，以免破坏用户有意横跨多块屏幕摆放的普通窗口。
  */
 export function normalizeWindowBoundsToVisibleArea(
   bounds: WindowBounds,

@@ -146,8 +146,9 @@ function getMainRendererWebContents(): WebContents | null {
 }
 
 /**
- * Renderer run 在创建飞书镜像卡片时尚未进入 orchestrator.activeSessions。
- * 在此期间保留启动槽位，避免会话迁移改变已接受请求的项目归属。
+ * Renderer run 从接受发送请求到本轮 run 结束期间保留启动槽位。
+ * 槽位覆盖进入 orchestrator.activeSessions 前的异步准备窗口；进入 activeSessions 后
+ * 与 orchestrator.isActive 结果重叠但保持幂等，避免会话迁移改变已接受请求的项目归属。
  * （本地 agentQueueCoordinator 实例在本文件靠后定义，仅在运行时被 isAgentSessionBusy 调用，模块加载顺序无影响）。
  */
 const startingAgentSessions = new Set<string>()

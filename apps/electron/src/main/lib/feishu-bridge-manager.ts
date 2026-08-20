@@ -200,11 +200,15 @@ class FeishuBridgeManager {
     const activeBotIds = new Set(this.bridges.keys())
 
     for (const bridge of this.bridges.values()) {
-      for (const binding of bridge.listBindings()) {
-        if (binding.sessionId === sessionId && binding.workspaceId !== workspaceId) {
-          bridge.updateBinding({ chatId: binding.chatId, workspaceId })
-          updated++
+      try {
+        for (const binding of bridge.listBindings()) {
+          if (binding.sessionId === sessionId && binding.workspaceId !== workspaceId) {
+            bridge.updateBinding({ chatId: binding.chatId, workspaceId })
+            updated++
+          }
         }
+      } catch (error) {
+        console.error('[飞书 BridgeManager] 同步已启动 Bot 的会话项目失败:', redactSensitiveLogValue(error))
       }
     }
 

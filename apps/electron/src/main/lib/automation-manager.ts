@@ -505,10 +505,11 @@ export function updateAutomation(input: UpdateAutomationInput): Automation | und
     const nextWorkspaceId = input.workspaceId || undefined
     if (nextWorkspaceId !== target.workspaceId) {
       target.workspaceId = nextWorkspaceId
-      // 会话 cwd 与项目绑定；项目改变后不能复用旧会话。
+      // 会话 cwd 与工作区绑定；工作区改变后不能复用旧会话。
       target.lastSessionId = undefined
     }
   }
+  // projectId 只影响 create_task 输出挂载，不影响复用会话的 cwd；因此变更时不清空 lastSessionId。
   // projectId 允许设为空字符串表示「解除项目挂载」；用 undefined 区分「不修改」
   if (input.projectId !== undefined) {
     target.projectId = input.projectId || undefined

@@ -1929,7 +1929,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
               break
             case 'compaction_start': {
               compactionNoopReported = false
-              const afterCompletedTurn = completedAgentTurnPendingCompaction
+              const afterCompletedTurn = pendingTerminalResult != null && completedAgentTurnPendingCompaction
               completedAgentTurnPendingCompaction = false
               // 压缩开始（手动 /compact 或自动阈值/溢出触发）：发前端已识别的 compacting system 消息，
               // 展示「正在压缩上下文...」分隔符。此前迁移遗漏了该事件，导致自动压缩与手动压缩都无 UI。
@@ -2113,6 +2113,7 @@ export class PiAgentAdapter implements AgentProviderAdapter {
                   pendingCompactionContinuation = appendOutputFormatInstruction(continuation.prompt, input.outputFormat)
                   // 当前终态仅表示为执行压缩而结束的内部 loop，不应让上层把原任务视为完成。
                   pendingTerminalResult = undefined
+                  completedAgentTurnPendingCompaction = false
                 } else if (continuation.reason === 'continuation_limit') {
                   pendingTerminalResult = createCompactionContinuationLimitResult(session.sessionId)
                 }
@@ -2123,9 +2124,11 @@ export class PiAgentAdapter implements AgentProviderAdapter {
                 retryTerminalGate.settle(true)
                 pendingNativeOverflowRecovery = false
                 pendingTerminalResult = undefined
+                completedAgentTurnPendingCompaction = false
               } else if (pendingTerminalResult) {
                 queue.push(pendingTerminalResult)
                 pendingTerminalResult = undefined
+                completedAgentTurnPendingCompaction = false
               }
             } finally {
               if (active.interrupting) {

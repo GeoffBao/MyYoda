@@ -100,6 +100,29 @@ export function MainArea(): React.ReactElement {
     void hidePresentation(nextBrowserLayoutRevision()).catch(() => undefined)
   }, [activeView, browserSessionId])
 
+  const clearBrowserSessionState = React.useCallback((sessionId: string) => {
+    setBrowserOpenMap((previous) => {
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
+    setBrowserMinimizedMap((previous) => {
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
+    setBrowserStateMap((previous) => {
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
+    setPendingNavigationMap((previous) => {
+      const next = new Map(previous)
+      next.delete(sessionId)
+      return next
+    })
+  }, [setBrowserMinimizedMap, setBrowserOpenMap, setBrowserStateMap, setPendingNavigationMap])
+
   const publishBrowserState = React.useCallback((state: BrowserViewState) => {
     setBrowserStateMap((previous) => { const next = new Map(previous); next.set(state.sessionId, state); return next })
     const isMinimized = store.get(browserPanelMinimizedMapAtom).get(state.sessionId) === true
@@ -121,12 +144,14 @@ export function MainArea(): React.ReactElement {
     let cancelled = false
     void getState(browserSessionId)
       .then((state) => {
-        if (!cancelled && state) publishBrowserState(state)
+        if (cancelled) return
+        if (state) publishBrowserState(state)
+        else clearBrowserSessionState(browserSessionId)
       })
-      // 后台会话及已删除会话会被主进程拒绝或返回空状态；无需打断当前界面。
+      // 后台会话及已删除会话会被主进程拒绝；无需打断当前界面。
       .catch(() => undefined)
     return () => { cancelled = true }
-  }, [browserSessionId, publishBrowserState])
+  }, [browserSessionId, clearBrowserSessionState, publishBrowserState])
 
   // 终端状态推送（主进程 → 渲染）：打开/退出时更新 state map（key = terminalId）。
   const publishTerminalState = React.useCallback((event: { state: import('@myyoda/shared').TerminalViewState }) => {
@@ -213,22 +238,8 @@ export function MainArea(): React.ReactElement {
 
   const clearClosedBrowser = React.useCallback((sessionId: string) => {
     setBrowserClosingState((previous) => previous?.sessionId === sessionId ? null : previous)
-    setBrowserMinimizedMap((previous) => {
-      const next = new Map(previous)
-      next.delete(sessionId)
-      return next
-    })
-    setBrowserStateMap((previous) => {
-      const next = new Map(previous)
-      next.delete(sessionId)
-      return next
-    })
-    setPendingNavigationMap((previous) => {
-      const next = new Map(previous)
-      next.delete(sessionId)
-      return next
-    })
-  }, [setBrowserMinimizedMap, setBrowserStateMap, setPendingNavigationMap])
+    clearBrowserSessionState(sessionId)
+  }, [clearBrowserSessionState])
 
   React.useEffect(() => {
     if (!browserClosingState) return

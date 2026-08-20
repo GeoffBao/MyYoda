@@ -218,7 +218,7 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, access
   /** 在文件夹中显示 */
   const handleShowInFolder = React.useCallback((entry: FileEntry) => {
     window.electronAPI.showInFolder(entry.path, access).catch(console.error)
-  }, [])
+  }, [access])
 
   /** 在系统终端中打开文件夹（仅 macOS） */
   const handleOpenInTerminal = React.useCallback((entry: FileEntry) => {
@@ -258,7 +258,7 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, access
     } catch (err) {
       return err instanceof Error ? err.message : '重命名失败'
     }
-  }, [loadRoot])
+  }, [access, loadRoot])
 
   /** 触发删除（支持多选） */
   const handleRequestDelete = React.useCallback((entry: FileEntry) => {
@@ -284,7 +284,7 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, access
       console.error('[FileBrowser] 删除失败:', err)
     }
     setDeleteTarget(null)
-  }, [deleteTarget, selectedPaths, loadRoot])
+  }, [access, deleteTarget, selectedPaths, loadRoot])
 
   /** 移动文件 */
   const handleMove = React.useCallback(async (entry: FileEntry) => {
@@ -307,7 +307,7 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, access
     } finally {
       setMoving(false)
     }
-  }, [selectedPaths, loadRoot])
+  }, [access, selectedPaths, loadRoot])
 
   // 显示根路径最后两段作为面包屑
   const breadcrumb = React.useMemo(() => {
