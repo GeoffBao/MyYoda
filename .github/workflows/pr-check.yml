@@ -48,9 +48,12 @@ jobs:
 
       # 全量测试只在 windows 跑：与本地开发环境一致；ubuntu 存在 40+ 既有环境差异失败
       # （OAuth 认证解析/会话分组等，本地与 CI-windows 均通过），待单独排期修复
+      # --timeout=15000：默认 5000ms 在负载较高的 windows-latest runner 上偶发误杀无关测试
+      # （2026-08-20 观测：同日至少 3 个互不相关的 PR 各自因不同、与自身 diff 无关的
+      # 测试命中 5000ms 超时，ubuntu-latest 同代码全绿），放宽至 15s 给 CI 留出冗余
       - name: 全量测试
         if: matrix.os == 'windows-latest'
-        run: bun test
+        run: bun test --timeout=15000
 
       - name: 主进程打包验证（esbuild）
         working-directory: apps/electron

@@ -14,6 +14,7 @@ import type {
   FeishuBotConfig,
   AgentSessionMeta,
 } from '@myyoda/shared'
+import { existsSync, readFileSync } from 'node:fs'
 import { FeishuBridge } from './feishu-bridge'
 import { redactSensitiveLogValue } from './bridge-log-redaction'
 import { getFeishuMultiBotConfig, getFeishuBotById } from './feishu-config'
@@ -184,6 +185,53 @@ class FeishuBridgeManager {
   }
 
   // ===== 聚合查询 =====
+
+  /**
+   * 会话迁移后同步飞书 binding，确保附件保存和 headless run 使用同一项目。
+   * 未启动的 Bot 直接更新其持久化 binding 文件。
+   *
+   * 注意：本函数整体必须保持全同步（不能引入 await）——
+   * MOVE_SESSION_TO_WORKSPACE handler 依赖这个 read-modify-write 临界区在 Node 单线程下
+   * 不被其他 IPC handler 打断来避免并发写同一份 binding 文件丢失更新；若未来需要引入异步 IO，
+   * 必须先评估并补充文件级锁/原子写保护。
+   */
+  syncWorkspaceForSession(sessionId: string, workspaceId: string): number {
+    let updated = 0
+    const activeBotIds = new Set(this.bridges.keys())
+
+    for (const bridge of this.bridges.values()) {
+      for (const binding of bridge.listBindings()) {
+        if (binding.sessionId === sessionId && binding.workspaceId !== workspaceId) {
+          bridge.updateBinding({ chatId: binding.chatId, workspaceId })
+          updated++
+        }
+      }
+    }
+
+    for (const bot of getFeishuMultiBotConfig().bots) {
+      if (activeBotIds.has(bot.id)) continue
+      const bindingsPath = getFeishuBotBindingsPath(bot.id)
+      if (!existsSync(bindingsPath)) continue
+      try {
+        const bindings = JSON.parse(readFileSync(bindingsPath, 'utf-8')) as unknown
+        if (!Array.isArray(bindings)) continue
+        let changed = false
+        const next = bindings.map((binding) => {
+          if (!binding || typeof binding !== 'object') return binding
+          const candidate = binding as Partial<FeishuChatBinding>
+          if (candidate.sessionId !== sessionId || candidate.workspaceId === workspaceId) return binding
+          changed = true
+          updated++
+          return { ...candidate, workspaceId }
+        })
+        if (changed) writeJsonFileAtomic(bindingsPath, next)
+      } catch (error) {
+        console.error(`[飞书 BridgeManager] 同步 Bot ${bot.id} 的会话项目失败:`, redactSensitiveLogValue(error))
+      }
+    }
+
+    return updated
+  }
 
   /** 跨所有 Bot 的绑定列表 */
   listAllBindings(): FeishuChatBinding[] {

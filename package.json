@@ -16,7 +16,7 @@
     "dist:mac": "bun run --filter='@myyoda/electron' dist:mac",
     "build": "bun run --filter='*' build",
     "typecheck": "bun run --filter='*' typecheck",
-    "test": "bun test",
+    "test": "bun test --timeout=15000",
     "sync:check": "bun scripts/upstream-sync/check.ts",
     "sync:apply-renames": "bun scripts/upstream-sync/apply-renames.ts",
     "sync:weekly": "bun scripts/upstream-sync/weekly-sync.ts",
