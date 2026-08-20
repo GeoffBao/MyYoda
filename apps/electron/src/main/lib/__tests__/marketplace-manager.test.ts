@@ -5,7 +5,6 @@
 import { describe, test, expect } from 'bun:test'
 import {
   listMarketplaceCatalog,
-  listMarketplaceItemsWithStatus,
   installMarketplaceItem,
   uninstallMarketplaceItem,
   getMarketplaceInstalledIds,
@@ -43,8 +42,7 @@ describe('市场目录（plugin_creator）', () => {
     try {
       installMarketplaceItem(item.id)
       expect(getMarketplaceInstalledIds()).toContain(item.id)
-      const withStatus = listMarketplaceItemsWithStatus()
-      expect(withStatus.find((i) => i.id === item.id)?.installed).toBe(true)
+      expect(getMarketplaceInstalledIds()).toContain(item.id)
     } finally {
       uninstallMarketplaceItem(item.id)
     }

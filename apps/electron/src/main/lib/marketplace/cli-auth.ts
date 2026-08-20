@@ -25,7 +25,6 @@ const execAsync = promisify(execCallback)
 /** 当前正在进行的扫码授权进程（同一时间只允许一个） */
 let activeAuthProcess: ChildProcess | null = null
 let activeAuthDir: string | null = null
-let activeAuthCommand: string | null = null
 
 /** 解析出 cli 命令的绝对路径（优先当前 PATH，其次 login shell） */
 async function resolveCliPath(command: string): Promise<string> {
@@ -96,7 +95,6 @@ export async function cliAuthStart(itemId: string): Promise<CliAuthStartResult> 
   } catch { /* 忽略 */ }
   activeAuthProcess = child
   activeAuthDir = dir
-  activeAuthCommand = cliCommand
 
   let output = ''
   child.stdout?.on('data', (chunk: Buffer) => { output += chunk.toString() })
@@ -150,10 +148,20 @@ export async function cliAuthToken(itemId: string, token: string): Promise<{ ok:
     return { ok: false, error: `未检测到 ${cliCommand} 命令，请先安装` }
   }
 
-  // token 可能包含特殊字符：直接 spawn 传参（不经过 shell），避免注入
+  // token 可能包含特殊字符（$()、反引号等）：必须用 spawn 传数组参数，不经 shell，杜绝注入
   try {
-    const { stdout } = await execAsync(`"${binPath}" ${tokenCommand} "${token.replace(/"/g, '\\"')}"`, { timeout: 30000 })
-    void stdout
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(binPath, [tokenCommand, token], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 30_000,
+      })
+      child.on('error', reject)
+      child.on('exit', (code) => {
+        // 退出码非 0 视为失败（某些 CLI 成功也可能输出到 stderr，但退出码可靠）
+        if (code === 0) resolve()
+        else reject(new Error(`${cliCommand} ${tokenCommand} 退出码 ${code}`))
+      })
+    })
   } catch (error) {
     return { ok: false, error: `认证失败：${(error as Error).message.slice(0, 200)}` }
   }
@@ -205,5 +213,4 @@ export async function cliAuthCancel(): Promise<void> {
     try { rmSync(activeAuthDir, { recursive: true, force: true }) } catch { /* 忽略 */ }
     activeAuthDir = null
   }
-  activeAuthCommand = null
 }

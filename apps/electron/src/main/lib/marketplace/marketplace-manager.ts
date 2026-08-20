@@ -1,5 +1,5 @@
 /**
- * marketplace-manager — 市场目录（plugin_creator 接口）
+ * marketplace-manager — 连接器目录（预装 marketplace.json）
  *
  * 对标 OpenAI Plugins / Trae Marketplace 的「预置目录 + 用户决策安装」模型：
  * - 目录数据在 marketplace.json（官方/稳定条目优先），随应用内置，零运行时占用；
@@ -9,9 +9,9 @@
  * - 卸载 = 从列表移除（保留凭据，重新安装可复用）。
  */
 
-import type { MarketplaceItem, MarketplaceItemWithStatus } from '@myyoda/shared'
+import type { MarketplaceItem } from '@myyoda/shared'
 import { getChatToolsConfig, saveChatToolsConfig } from '../chat-tool-config'
-import { hasNpxConnectorCredentials, type NpxConnectorSpec } from '../builtin-mcp/npx-connector-mcp'
+import type { NpxConnectorSpec } from '../builtin-mcp/npx-connector-mcp'
 import marketplaceData from './marketplace.json'
 
 /** 市场条目唯一前缀（避免与内置 MCP id / 用户自定义冲突） */
@@ -28,12 +28,6 @@ export function listMarketplaceCatalog(): MarketplaceItem[] {
 /** 已安装的市场条目 id（持久化在 chat-tools.json） */
 export function getMarketplaceInstalledIds(): string[] {
   return getChatToolsConfig().marketplaceInstalled ?? []
-}
-
-/** 市场条目 + 安装状态（渲染进程展示用） */
-export function listMarketplaceItemsWithStatus(): MarketplaceItemWithStatus[] {
-  const installed = new Set(getMarketplaceInstalledIds())
-  return listMarketplaceCatalog().map((item) => ({ ...item, installed: installed.has(item.id) }))
 }
 
 /** 安装市场条目（plugin_creator：install） */
@@ -66,11 +60,4 @@ export function marketplaceItemToNpxSpec(item: MarketplaceItem): NpxConnectorSpe
     extraArgs: item.npxArgs,
     envMap: item.envMap,
   }
-}
-
-/** 已安装市场连接器是否已配置凭据（catalog 可用性 / UI 状态判断） */
-export function hasMarketplaceCredentials(item: MarketplaceItem): boolean {
-  if (item.installKind !== 'npx-mcp') return true
-  const spec = marketplaceItemToNpxSpec(item)
-  return hasNpxConnectorCredentials(spec)
 }

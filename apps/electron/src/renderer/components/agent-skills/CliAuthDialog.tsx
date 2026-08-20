@@ -46,6 +46,8 @@ export function CliAuthDialog({
   const [submitting, setSubmitting] = React.useState(false)
   const [tokenDone, setTokenDone] = React.useState(false)
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+  /** 认证成功互斥：轮询与 token 提交都可能检测到成功，只允许一次 toast/关闭 */
+  const doneRef = React.useRef(false)
 
   /** 启动扫码（含刷新重试） */
   const startAuth = React.useCallback(async () => {
@@ -75,6 +77,7 @@ export function CliAuthDialog({
   /** 打开时启动 + 轮询认证状态（扫码模式；token 模式提交后也轮询复检） */
   React.useEffect(() => {
     if (!open) return
+    doneRef.current = false
     if (authKind === 'qr') {
       void startAuth()
     } else {
@@ -84,7 +87,8 @@ export function CliAuthDialog({
       try {
         const status = await window.electronAPI.marketplaceCliAuthStatus(itemId)
         setChecked(true)
-        if (status.authenticated) {
+        if (status.authenticated && !doneRef.current) {
+          doneRef.current = true
           if (timerRef.current) clearInterval(timerRef.current)
           toast.success(`${itemName} 认证成功`)
           onAuthenticated?.()
@@ -107,12 +111,13 @@ export function CliAuthDialog({
     setError(undefined)
     try {
       const result = await window.electronAPI.marketplaceCliAuthToken(itemId, token.trim())
-      if (result.ok) {
+      if (result.ok && !doneRef.current) {
+        doneRef.current = true
         setTokenDone(true)
         toast.success(`${itemName} 认证成功`)
         onAuthenticated?.()
         onOpenChange(false)
-      } else {
+      } else if (!result.ok) {
         setError(result.error ?? '认证失败')
       }
     } catch (err) {
