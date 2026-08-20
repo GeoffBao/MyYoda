@@ -17,7 +17,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2, ExternalLink, ScanLine } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Sparkles, Loader2, Building2, ExternalLink, ScanLine, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -190,6 +190,23 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     : undefined
   // CLI 扫码授权弹窗状态（企业微信等）
   const [cliAuthItem, setCliAuthItem] = React.useState<MarketplaceItemWithStatus | null>(null)
+  // 详情弹窗内安装预装连接器（未安装的 CLI/npx 引导安装）
+  const [installingMarketplaceId, setInstallingMarketplaceId] = React.useState<string | null>(null)
+
+  const handleInstallMarketplace = React.useCallback((itemId: string): Promise<void> => {
+    setInstallingMarketplaceId(itemId)
+    return window.electronAPI
+      .marketplaceInstall(itemId)
+      .then(() => {
+        toast.success('已安装')
+        void loadMarketplace()
+      })
+      .catch((error) => {
+        console.error(`[连接器] 安装失败（${itemId}）:`, error)
+        toast.error(`安装失败：${error instanceof Error ? error.message : String(error)}`)
+      })
+      .finally(() => setInstallingMarketplaceId(null))
+  }, [loadMarketplace])
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -691,8 +708,23 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               </div>
             )}
             {!configureMarketplaceItem.systemInstalled && configureMarketplaceItem.cliPackage && (
-              <div className="rounded-lg bg-amber-500/10 p-3 text-[12px] text-amber-600 dark:text-amber-400">
-                系统未检测到 <span className="font-mono">{configureMarketplaceItem.cliCommand}</span> 命令。请在终端执行 <span className="font-mono">npm install -g {configureMarketplaceItem.cliPackage}</span> 安装，或在市场点击「安装」。
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 p-3">
+                <div className="text-[12px] text-amber-600 dark:text-amber-400">
+                  系统未检测到 <span className="font-mono">{configureMarketplaceItem.cliCommand}</span> 命令，安装后即可使用。
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={installingMarketplaceId === configureMarketplaceItem.id}
+                  onClick={() => void handleInstallMarketplace(configureMarketplaceItem.id)}
+                >
+                  {installingMarketplaceId === configureMarketplaceItem.id ? (
+                    <Loader2 size={14} className="mr-1.5 animate-spin" />
+                  ) : (
+                    <Download size={14} className="mr-1.5" />
+                  )}
+                  安装
+                </Button>
               </div>
             )}
           </div>

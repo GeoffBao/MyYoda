@@ -501,7 +501,7 @@ export function ConnectorsTab({
   return (
     <div className="flex flex-col gap-5">
       {/* 精选集合（对标 OpenAI Plugins Collections）：推荐组合一键启用，仅在「全部」分类显示 */}
-      {category === 'all' && builtinServers.length > 0 && (
+      {category === 'all' && !q && builtinServers.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {COLLECTIONS.map((collection) => {
             const servers = collection.connectorIds
