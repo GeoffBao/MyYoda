@@ -408,7 +408,10 @@ export function MainArea(): React.ReactElement {
   }, [tabs, activeTabId, setActiveTabId])
 
   // 关闭动画期间右侧面板脱离 flex 流，保持原宽度，只使用 transform/opacity 做退出动画。
-  const rightPanelClosing = showBrowserClosing || (closing && !showScratchPanel)
+  // Browser / 文档槽 / Scratch 可共存后，只有右侧没有任何稳定面板留下时，
+  // 才能让整个右侧工作区进入 closing overlay；否则只移除正在关闭的子面板。
+  const hasStableRightPanel = showBrowserPanel || previewOpen || showCanvasPane || showScratchPanel
+  const rightPanelClosing = (showBrowserClosing || closing) && !hasStableRightPanel
   const closingOverlayStyle: React.CSSProperties | undefined = rightPanelClosing
     ? {
         position: 'absolute',
@@ -421,6 +424,18 @@ export function MainArea(): React.ReactElement {
         pointerEvents: 'none',
       }
     : undefined
+
+  React.useEffect(() => {
+    if (!showBrowserClosing || rightPanelClosing || !browserClosingState) return
+    const frameId = requestAnimationFrame(() => clearClosedBrowser(browserClosingState.sessionId))
+    return () => cancelAnimationFrame(frameId)
+  }, [browserClosingState, clearClosedBrowser, rightPanelClosing, showBrowserClosing])
+
+  React.useEffect(() => {
+    if (!closing || rightPanelClosing || previewOpen) return
+    const frameId = requestAnimationFrame(() => setClosingState(false))
+    return () => cancelAnimationFrame(frameId)
+  }, [closing, previewOpen, rightPanelClosing])
 
   // 左侧容器宽度：右侧工作区打开时固定占 splitRatio；关闭动画结束后再恢复全宽。
   const showRightPanel = showBrowserPanel || showBrowserClosing || showScratchPanel || showPreviewPane || showCanvasPane
@@ -524,7 +539,7 @@ export function MainArea(): React.ReactElement {
               onAnimationEnd={(e) => {
                 if (!rightPanelClosing || e.target !== e.currentTarget) return
                 if (showBrowserClosing && browserClosingState) clearClosedBrowser(browserClosingState.sessionId)
-                else if (closing) setClosingState(false)
+                if (closing) setClosingState(false)
               }}
             >
               {!rightPanelClosing && (
