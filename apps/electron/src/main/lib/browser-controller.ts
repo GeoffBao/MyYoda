@@ -850,8 +850,9 @@ export class BrowserController {
       .sort((left, right) => this.sessionLastActivityAt(left) - this.sessionLastActivityAt(right))
     const excess = candidates.length - MAX_BACKGROUND_BROWSER_SESSIONS
     for (const browserSession of candidates.slice(0, Math.max(0, excess))) {
-      // 已知行为：本地 renderer 不订阅 closed 通知（fork 采用关闭动画 + 按会话清理的架构），
-      // 被回收 session 的浏览器按钮可能短暂保留「恢复」高亮；点击恢复会 getOrCreateSession 重建自愈。
+      // 已知行为：本地 renderer 不订阅 closed 通知（fork 采用关闭动画 + 按会话清理的架构）。
+      // 被回收 session 再次激活时，renderer 通过 getAgentBrowserState(null) 清理本地 open/state，
+      // 随后用户点击浏览器入口会 getOrCreateSession 重建自愈。
       void this.close(browserSession.sessionId).catch((error) => {
         console.warn('[受管浏览器] 回收后台浏览器失败:', error)
       })

@@ -576,16 +576,26 @@ interface ThinkingBlockProps {
 
 /** 思考块折叠行数阈值 */
 const THINKING_COLLAPSE_LINE_THRESHOLD = 4
+const THINKING_STREAMING_COLLAPSE_LINE_THRESHOLD = 2
 
 function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingBlockProps): React.ReactElement {
   const thinkingExpanded = useAtomValue(thinkingExpandedAtom)
-  const [isExpanded, setIsExpanded] = React.useState(thinkingExpanded)
+  const [isExpanded, setIsExpanded] = React.useState(isStreaming ? false : thinkingExpanded)
   const [shouldCollapse, setShouldCollapse] = React.useState(false)
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const wasStreamingRef = React.useRef(isStreaming)
   const { displayedContent } = useSmoothStream({
     content: block.thinking,
     isStreaming,
   })
+
+  // 流式阶段默认收起，避免 Thinking 持续增长时占满对话区域；完成态保留原有展开阈值。
+  React.useEffect(() => {
+    if (isStreaming && !wasStreamingRef.current) {
+      setIsExpanded(false)
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming])
 
   // 流式期间避免对每批思考文本同步读取 scrollHeight；这会强制布局且与 Markdown 重渲染叠加。
   // 输出完成后再测量，保留历史态的默认折叠行为。
@@ -599,12 +609,15 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
 
   // 当全局偏好变更时同步（仅在"应折叠"时生效）
   React.useEffect(() => {
-    setIsExpanded(thinkingExpanded)
-  }, [thinkingExpanded])
+    if (!isStreaming) setIsExpanded(thinkingExpanded)
+  }, [isStreaming, thinkingExpanded])
 
   const toggleExpand = React.useCallback(() => {
     setIsExpanded((prev) => !prev)
   }, [])
+
+  const showCollapseControls = isStreaming || shouldCollapse
+  const isCollapsed = showCollapseControls && !isExpanded
 
   return (
     <div className="relative mb-3">
@@ -626,18 +639,18 @@ function ThinkingBlock({ block, dimmed = false, isStreaming = false }: ThinkingB
       >
         <div
           ref={contentRef}
-          data-agent-history-selection-excluded={shouldCollapse && !isExpanded ? 'true' : undefined}
+          data-agent-history-selection-excluded={isCollapsed ? 'true' : undefined}
           className={cn(
             'prose prose-sm dark:prose-invert max-w-none prose-p:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-[14px] leading-relaxed overflow-hidden transition-[max-height] duration-base',
             dimmed ? 'text-muted-foreground' : 'text-foreground/90',
-            shouldCollapse && !isExpanded && 'max-h-[5.6em]',
+            isCollapsed && (isStreaming ? 'max-h-[3.25em]' : 'max-h-[5.6em]'),
           )}
         >
           <MessageResponse className="font-normal prose-strong:font-normal [&_strong]:font-normal [&_b]:font-normal">
             {displayedContent}
           </MessageResponse>
         </div>
-        {shouldCollapse && (
+        {showCollapseControls && (
           <button
             type="button"
             onClick={toggleExpand}
