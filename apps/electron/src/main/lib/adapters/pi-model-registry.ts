@@ -100,6 +100,20 @@ function compilePiReasoningCapabilities(
   }
 }
 
+/**
+ * MyYoda re-registers every non-OAuth channel as an ephemeral Pi provider. Preserve
+ * only this protocol-safe catalog flag: current Claude models require adaptive
+ * thinking, while copying the complete catalog compat object could leak unrelated
+ * tool/sampling behaviour across provider protocols.
+ */
+export function shouldForcePiAdaptiveThinking(
+  api: Api,
+  catalogModel: { api: Api, compat?: unknown } | undefined,
+): boolean {
+  if (api !== 'anthropic-messages' || catalogModel?.api !== 'anthropic-messages') return false
+  return (catalogModel.compat as { forceAdaptiveThinking?: unknown } | undefined)?.forceAdaptiveThinking === true
+}
+
 const CODEX_56_THINKING_LEVEL_MAP = compilePiReasoningCapabilities('openai-responses', 'gpt-5.6')?.thinkingLevelMap
 
 export function getCodexAlignedGPT5Capabilities(modelId: string | undefined): Pick<PiModelDefaults, 'contextWindow'> | undefined {
@@ -505,12 +519,15 @@ async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiMod
   const isCatalogMissingGlm53 = !catalogModel && glmModelId === 'glm-5.3'
   const catalogContextWindow = catalogModel?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   const inferredContextWindow = inferAgentSdkContextWindow(input.model, input.provider) ?? DEFAULT_CONTEXT_WINDOW
+  const shouldForceAdaptiveThinking = shouldForcePiAdaptiveThinking(api, catalogModel)
   return {
     reasoning: catalogModel?.reasoning ?? true,
     // 同名 GPT-5.x 统一采用 Codex 已验证的 effort 映射，避免第三方 catalog 缺失
     // max/minimal/off 映射时 UI 与 Pi 最终 payload 出现不一致。
     thinkingLevelMap: providerSpecificCapabilities?.thinkingLevelMap ?? catalogModel?.thinkingLevelMap,
-    compat: providerSpecificCapabilities?.compat,
+    compat: shouldForceAdaptiveThinking
+      ? { ...providerSpecificCapabilities?.compat, forceAdaptiveThinking: true }
+      : providerSpecificCapabilities?.compat,
     input: catalogModel ? [...catalogModel.input] : ['text', 'image'],
     cost: catalogModel ? { ...catalogModel.cost } : { ...ZERO_MODEL_COST },
     // Codex 对齐策略优先；其他模型仍保留 catalog 与 shared inference 中更大的已验证能力。
