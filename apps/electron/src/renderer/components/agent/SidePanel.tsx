@@ -143,21 +143,28 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = currentSession?.workspaceId ?? selectedWorkspaceId
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
-  const [sessionFileRoots, setSessionFileRoots] = React.useState<AgentSessionFileRoots | null>(null)
+  // 文件根必须与会话绑定：切换/新建会话后，旧会话的 roots 立即失效（渲染时按 sessionId
+  // 过滤），否则 FileBrowser 会短暂地用「旧项目路径 + 新会话授权」发起 list-directory，
+  // 被主进程判定越界并报「访问路径超出当前会话的授权范围」。
+  const [sessionFileRootsEntry, setSessionFileRootsEntry] = React.useState<{
+    sessionId: string
+    roots: AgentSessionFileRoots | null
+  } | null>(null)
+  const sessionFileRoots = sessionFileRootsEntry?.sessionId === sessionId ? sessionFileRootsEntry.roots : null
   React.useEffect(() => {
     if (!currentWorkspaceId) {
-      setSessionFileRoots(null)
+      setSessionFileRootsEntry({ sessionId, roots: null })
       return
     }
     let cancelled = false
     window.electronAPI.getAgentSessionFileRoots(currentWorkspaceId, sessionId)
       .then((roots) => {
         if (cancelled) return
-        setSessionFileRoots(roots)
+        setSessionFileRootsEntry({ sessionId, roots })
       }).catch((error) => {
         if (cancelled) return
         console.error('[SidePanel] 加载会话文件根失败:', error)
-        setSessionFileRoots(null)
+        setSessionFileRootsEntry({ sessionId, roots: null })
       })
     return () => { cancelled = true }
   }, [currentWorkspaceId, sessionId, filesVersion, currentSession?.projectId])

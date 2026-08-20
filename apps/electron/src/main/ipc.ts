@@ -4271,6 +4271,7 @@ export function registerIpcHandlers(): void {
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
         // 路径可能刚好在 existsSync 与 realpath 校验之间被删除。
         if (!existsSync(safePath)) return []
+        console.warn('[Agent 文件] 拒绝越界 list-directory:', safePath, 'sessionId=', access?.sessionId ?? '(none)')
         throw new Error('访问路径超出当前会话的授权范围')
       }
 

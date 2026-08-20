@@ -183,7 +183,7 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, access
     } finally {
       setLoading(false)
     }
-  }, [rootPath])
+  }, [rootPath, access])
 
   React.useEffect(() => {
     loadRoot()
