@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { Plug, Search, Globe, Trash2, GitBranch, Compass, BookOpen, Zap } from 'lucide-react'
+import { Plug, Search, Globe, Trash2, GitBranch, Compass, BookOpen } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
@@ -124,20 +124,6 @@ const COLLECTIONS: ConnectorCollection[] = [
     description: '阅读笔记与文档',
     icon: <BookOpen size={16} />,
     connectorIds: ['weread', 'notion'],
-  },
-  {
-    id: 'web-automation',
-    title: '网页自动化',
-    description: '浏览器控制与云端会话',
-    icon: <Globe size={16} />,
-    connectorIds: ['chrome-devtools', 'browserbase'],
-  },
-  {
-    id: 'agent-efficiency',
-    title: 'Agent 效率',
-    description: '定时任务与协作子会话',
-    icon: <Zap size={16} />,
-    connectorIds: ['automation', 'collaboration', 'create-task'],
   },
 ]
 
