@@ -22,7 +22,8 @@ import { SidebarToggleButton } from './SidebarToggleButton'
 import { ModeSwitcher } from './ModeSwitcher'
 import { TabNavigationControls } from '@/components/tabs/TabNavigationControls'
 import { UserAvatar } from '@/components/chat/UserAvatar'
-import { activeViewAtom, agentSkillsTabAtom, type AgentSkillsCapabilityTab } from '@/atoms/active-view'
+import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
+import type { PluginCenterTab } from '@/lib/plugin-center-model'
 import { discoverCommunityUnreadAtom, discoverFeedUnreadAtom } from '@/atoms/discover-atoms'
 import { automationFormAtom, automationsAtom } from '@/atoms/automation-atoms'
 import { planningTabAtom } from '@/atoms/planning-atoms'
@@ -1047,8 +1048,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('planning')
   }, [activeView, setAutomationForm, setActiveView, setPlanningTab, store])
 
-  /** 打开/关闭 Yoda 插件视图（专家 / 专家团 / Skills / MCP / API 统一配置，独立左栏视图，非设置面板） */
-  const handleOpenSkills = React.useCallback((tab?: AgentSkillsCapabilityTab): void => {
+  /** 打开/关闭 Yoda 插件中心（总览 / 专家 / 专家团 / 技能 / 连接器 / 记忆，独立左栏视图） */
+  const handleOpenSkills = React.useCallback((tab?: PluginCenterTab): void => {
     if (tab) setAgentSkillsTab(tab)
     if (activeView === 'agent-skills' && !tab) {
       setActiveView('conversations')
@@ -1104,9 +1105,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('excalidraw-gallery')
   }, [activeView, setActiveView, setAutomationForm])
 
-  /** 打开 Yoda 插件视图并切到 MCP 管理 */
-  const handleOpenMcpManagement = React.useCallback((): void => {
-    handleOpenSkills('mcp')
+  /** 打开插件中心总览（连接器是插件的一类，不单独并列入口） */
+  const handleOpenPlugins = React.useCallback((): void => {
+    handleOpenSkills('overview')
   }, [handleOpenSkills])
 
   // 切换模式时重置归档视图：Chat 用 viewMode，Agent 用状态筛选，统一回到活跃（对齐 Proma）。
@@ -3189,7 +3190,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               onDragEnd={handleProjectDragEnd}
               onConfigureProject={isAuto ? noopVoid : (workspaceId) => {
                 handleSelectProject(workspaceId)
-                handleOpenMcpManagement()
+                handleOpenPlugins()
               }}
               onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
               onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
@@ -3276,7 +3277,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleClearProjectBinding,
     handleCollapseExtraSessions,
     handleCreateProjectFromFolder,
-    handleOpenMcpManagement,
+    handleOpenPlugins,
     handleProjectDragEnd,
     handleProjectDragLeave,
     handleProjectDragOver,
@@ -3534,7 +3535,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </TooltipContent>
           </Tooltip>
 
-          {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置（独立左栏视图） */}
+          {/* Yoda 插件中心：总览 / 专家 / 专家团 / 技能 / 连接器 / 记忆 */}
           {mode === 'agent' && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -3808,7 +3809,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         onDragEnd={noopVoid}
         onConfigureProject={isAuto ? noopVoid : (workspaceId) => {
           handleSelectProject(workspaceId)
-          handleOpenMcpManagement()
+          handleOpenPlugins()
         }}
         onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
         onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
@@ -4013,7 +4014,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               </button>
             )}
 
-            {/* Yoda 插件：专家 / 专家团 / Skills / MCP / API 统一配置 */}
+            {/* Yoda 插件中心：总览 / 专家 / 专家团 / 技能 / 连接器 / 记忆 */}
             {mode === 'agent' && (
               <button
                 type="button"
@@ -5038,7 +5039,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               onSelect={() => onConfigureProject(group.workspace.id)}
             >
               <Settings size={14} />
-              配置 MCP 与 Skills
+              打开插件
             </DropdownMenuItem>
             <DropdownMenuSeparator className="my-0.5" />
             <DropdownMenuItem

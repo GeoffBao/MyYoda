@@ -15,6 +15,8 @@ interface SettingsSectionProps {
   description?: string
   /** 右侧操作按钮插槽（可选） */
   action?: React.ReactNode
+  /** 嵌入详情弹层时隐藏标题/开关，避免与弹层头部重复 */
+  embedded?: boolean
   /** 子内容 */
   children: React.ReactNode
 }
@@ -23,19 +25,20 @@ export function SettingsSection({
   title,
   description,
   action,
+  embedded = false,
   children,
 }: SettingsSectionProps): React.ReactElement {
   return (
     <div className="space-y-3">
-      {/* 区块头部 */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h4 className={SECTION_TITLE_CLASS}>{title}</h4>
-          {description && <p className={SECTION_DESCRIPTION_CLASS}>{description}</p>}
+      {!embedded && (
+        <div className="flex items-start justify-between">
+          <div>
+            <h4 className={SECTION_TITLE_CLASS}>{title}</h4>
+            {description && <p className={SECTION_DESCRIPTION_CLASS}>{description}</p>}
+          </div>
+          {action && <div className="flex-shrink-0 ml-4">{action}</div>}
         </div>
-        {action && <div className="flex-shrink-0 ml-4">{action}</div>}
-      </div>
-      {/* 区块内容 */}
+      )}
       {children}
     </div>
   )

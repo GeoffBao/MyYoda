@@ -907,6 +907,9 @@ export interface ElectronAPI {
   /** 测试 MCP 服务器连接 */
   testMcpServer: (name: string, entry: import('@myyoda/shared').McpServerEntry) => Promise<{ success: boolean; message: string }>
 
+  /** 测试内置连接器依赖（如 Chrome / npx） */
+  testBuiltinConnector: (id: string) => Promise<{ success: boolean; message: string }>
+
   /** 启用或关闭 MyYoda 内置 MCP */
   setBuiltinMcpEnabled: (workspaceSlug: string, id: string, enabled: boolean) => Promise<WorkspaceCapabilities>
 
@@ -2553,6 +2556,10 @@ const electronAPI: ElectronAPI = {
 
   testMcpServer: (name: string, entry: import('@myyoda/shared').McpServerEntry) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_MCP_SERVER, name, entry) as Promise<{ success: boolean; message: string }>
+  },
+
+  testBuiltinConnector: (id: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR, id) as Promise<{ success: boolean; message: string }>
   },
 
   setBuiltinMcpEnabled: (workspaceSlug: string, id: string, enabled: boolean) => {

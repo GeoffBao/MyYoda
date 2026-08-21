@@ -123,15 +123,26 @@ function buildEntryFromValues(values: McpFormValues, includeTestResult = false):
 }
 
 export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onChanged, onCancel }: McpServerFormProps): React.ReactElement {
-  // MCP 已全局化：projectId 未传或项目未自己配置过时读写全局唯一配置（~/.myyoda/mcp.json，所有工作区共享）；
-  // 项目已自己配置过时完全覆盖为项目专属配置。workspaceSlug 仅项目分支需要。
+  // 仅项目已有覆盖配置时读写项目档；否则读写全局，避免第一次保存把空项目配置写成整份覆盖。
   const readMcpConfig = React.useCallback(
-    () => (projectId ? window.electronAPI.getProjectMcpConfig(workspaceSlug, projectId) : window.electronAPI.getGlobalMcpConfig()),
-    [workspaceSlug, projectId],
+    async () => {
+      const overrideId = projectId
+      if (overrideId && await window.electronAPI.hasProjectMcpServers(workspaceSlug, overrideId)) {
+        return window.electronAPI.getProjectMcpConfig(workspaceSlug, overrideId)
+      }
+      return window.electronAPI.getGlobalMcpConfig()
+    },
+    [projectId, workspaceSlug],
   )
   const writeMcpConfig = React.useCallback(
-    (config: WorkspaceMcpConfig) => (projectId ? window.electronAPI.saveProjectMcpConfig(workspaceSlug, projectId, config) : window.electronAPI.saveGlobalMcpConfig(config)),
-    [workspaceSlug, projectId],
+    async (config: WorkspaceMcpConfig) => {
+      const overrideId = projectId
+      if (overrideId && await window.electronAPI.hasProjectMcpServers(workspaceSlug, overrideId)) {
+        return window.electronAPI.saveProjectMcpConfig(workspaceSlug, overrideId, config)
+      }
+      return window.electronAPI.saveGlobalMcpConfig(config)
+    },
+    [projectId, workspaceSlug],
   )
   const isEdit = server !== null
   const isBuiltin = server?.entry.isBuiltin === true
@@ -410,7 +421,7 @@ export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onCha
           <ArrowLeft size={18} />
         </Button>
         <h3 className="text-lg font-medium text-foreground flex-1">
-          {isEdit ? '编辑 MCP 服务器' : '添加 MCP 服务器'}
+          {isEdit ? '编辑连接器' : '添加连接器'}
         </h3>
         {isEdit && (saveStatus === 'saved' || saveStatus === 'error') && (
           <div className={cn(
@@ -428,7 +439,7 @@ export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onCha
         {!isEdit && (
           <Button size="sm" type="submit" disabled={saving || !canSubmit()}>
             {saving && <Loader2 size={14} className="animate-spin" />}
-            <span>创建服务器</span>
+            <span>添加</span>
           </Button>
         )}
       </div>
@@ -437,10 +448,10 @@ export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onCha
       <SettingsSection title="基本信息">
         <SettingsCard>
           <SettingsInput
-            label="服务器名称"
+            label="名称"
             value={name}
             onChange={setName}
-            placeholder="例如: github-mcp"
+            placeholder="例如: github"
             required
             disabled={isEdit}
           />
@@ -582,11 +593,11 @@ export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onCha
 
           {/* 启用开关 */}
           <SettingsToggle
-            label="启用此服务器"
+            label="启用此连接器"
             description={
               testResult?.success
-                ? '开启后该 MCP 服务器将在 Agent 会话中加载'
-                : '开启后该 MCP 服务器将在 Agent 会话中加载；如配置有误，Agent 会按运行时错误提示处理'
+                ? '开启后 Agent 会话会加载这个连接器'
+                : '开启后 Agent 会话会加载这个连接器；如配置有误，运行时会提示错误'
             }
             checked={enabled}
             onCheckedChange={setEnabled}

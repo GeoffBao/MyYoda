@@ -3,14 +3,14 @@ import type { CapabilityChange } from '@myyoda/shared'
 
 /** 变化类型 → 中文描述 */
 const CHANGE_LABELS: Record<CapabilityChange['type'], string> = {
-  mcp_added: 'MCP 服务器已添加',
-  mcp_removed: 'MCP 服务器已移除',
-  mcp_enabled: 'MCP 服务器已启用',
-  mcp_disabled: 'MCP 服务器已禁用',
-  skill_added: 'Skill 已添加',
-  skill_removed: 'Skill 已移除',
-  skill_enabled: 'Skill 已启用',
-  skill_disabled: 'Skill 已禁用',
+  mcp_added: '连接器已添加',
+  mcp_removed: '连接器已移除',
+  mcp_enabled: '连接器已启用',
+  mcp_disabled: '连接器已禁用',
+  skill_added: '技能已添加',
+  skill_removed: '技能已移除',
+  skill_enabled: '技能已启用',
+  skill_disabled: '技能已禁用',
 }
 
 /**
@@ -37,8 +37,8 @@ export function showCapabilityChangeToasts(changes: CapabilityChange[]): void {
     const mcpCount = changes.filter((c) => c.type.startsWith('mcp_')).length
     const skillCount = changes.filter((c) => c.type.startsWith('skill_')).length
     const parts: string[] = []
-    if (mcpCount > 0) parts.push(`${mcpCount} 个 MCP 服务器`)
-    if (skillCount > 0) parts.push(`${skillCount} 个 Skill`)
+    if (mcpCount > 0) parts.push(`${mcpCount} 个连接器`)
+    if (skillCount > 0) parts.push(`${skillCount} 个技能`)
     toast.info(`工作区配置已更新：${parts.join('、')}`)
   }
 }

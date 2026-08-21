@@ -26,8 +26,15 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
   }
 }
 
+interface EmbeddedToolSettingsProps {
+  /** 嵌入连接器详情时隐藏 SettingsSection 标题与开关 */
+  embedded?: boolean
+  /** 保存凭据后回调（嵌入场景下供宿主刷新连接器卡片状态，如内置连接器可用性） */
+  onChanged?: () => void
+}
+
 /** 联网搜索工具设置区域 */
-function WebSearchSettings(): React.ReactElement {
+export function WebSearchSettings({ embedded = false }: EmbeddedToolSettingsProps): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
@@ -118,11 +125,14 @@ function WebSearchSettings(): React.ReactElement {
     <SettingsSection
       title="联网搜索"
       description="启用后 AI 可以实时搜索互联网获取最新信息"
+      embedded={embedded}
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={handleToggle}
-        />
+        embedded ? undefined : (
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
+          />
+        )
       }
     >
       <SettingsCard divided={false}>
@@ -195,7 +205,7 @@ function WebSearchSettings(): React.ReactElement {
 }
 
 /** Nano Banana 生图工具设置区域 */
-function NanoBananaSettings(): React.ReactElement {
+export function NanoBananaSettings({ embedded = false, onChanged }: EmbeddedToolSettingsProps): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -239,11 +249,12 @@ function NanoBananaSettings(): React.ReactElement {
       await window.electronAPI.updateChatToolCredentials('nano-banana', current)
       savedCredentialsRef.current = current
       await refreshChatTools(setChatTools)
+      onChanged?.()
       toast.success('Nano Banana 设置已保存')
     } catch (error) {
       console.error('[Nano Banana 设置] 保存失败:', error)
     }
-  }, [apiKey, baseUrl, model, setChatTools])
+  }, [apiKey, baseUrl, model, setChatTools, onChanged])
 
   const handleToggle = async (checked: boolean): Promise<void> => {
     try {
@@ -264,6 +275,7 @@ function NanoBananaSettings(): React.ReactElement {
         await window.electronAPI.updateChatToolCredentials('nano-banana', current)
         savedCredentialsRef.current = current
         await refreshChatTools(setChatTools)
+        onChanged?.()
       } catch (error) {
         console.error('[Nano Banana 设置] 保存失败:', error)
       }
@@ -289,11 +301,14 @@ function NanoBananaSettings(): React.ReactElement {
     <SettingsSection
       title="Nano Banana"
       description="启用后 AI 可以生成和编辑图片（基于 Gemini Image Generation）"
+      embedded={embedded}
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={handleToggle}
-        />
+        embedded ? undefined : (
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
+          />
+        )
       }
     >
       <SettingsCard divided={false}>
@@ -390,7 +405,7 @@ function NanoBananaSettings(): React.ReactElement {
 }
 
 /** 自定义工具列表区域 */
-function CustomToolsSection(): React.ReactElement | null {
+export function CustomToolsSection(): React.ReactElement | null {
   const tools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
 

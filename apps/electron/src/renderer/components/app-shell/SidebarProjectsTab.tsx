@@ -237,7 +237,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     enterWork()
   }, [currentWorkspaceId, enterWork, selectWorkspace])
 
-  /** 打开该工作区的详情页（项目资料，参考 craft ProjectInfoPage） */
+  /** 打开该工作区的详情页（工作区资料，参考 craft ProjectInfoPage） */
   const openWorkspacePage = React.useCallback((workspaceId: string) => {
     if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
     setActiveProjectPageId(workspaceId)
@@ -246,10 +246,10 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [currentWorkspaceId, selectWorkspace, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
 
-  /** 打开该工作区的 MCP 与 Skills 配置（对齐 Proma 项目菜单：先切到该工作区，再进插件视图的 MCP tab） */
-  const configureMcpAndSkills = React.useCallback((workspaceId: string) => {
+  /** 打开该工作区的插件中心（先切到该工作区，再进入总览） */
+  const openPluginCenter = React.useCallback((workspaceId: string) => {
     if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
-    setAgentSkillsTab('mcp')
+    setAgentSkillsTab('overview')
     setActiveView('agent-skills')
   }, [currentWorkspaceId, selectWorkspace, setAgentSkillsTab, setActiveView])
 
@@ -512,7 +512,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                               {!isCurrent && (
                                 <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => handleSelectWorkspace(wsId)}>
                                   <FolderOpen size={13} />
-                                  切换到该项目
+                                  切换到该工作区
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspaceBoard(wsId)}>
@@ -521,11 +521,11 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                               </DropdownMenuItem>
                               <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspacePage(wsId)}>
                                 <FolderOpen size={13} />
-                                项目资料
+                                工作区资料
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
+                              <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openPluginCenter(wsId)}>
                                 <Settings size={13} />
-                                配置 MCP 与 Skills
+                                打开插件
                               </DropdownMenuItem>
                               {ws.projectRootPath ? (
                                 ws.projectRootStatus === 'missing' ? (
@@ -562,16 +562,16 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                       {!isCurrent && (
                         <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => handleSelectWorkspace(wsId)}>
                           <FolderOpen size={13} />
-                          切换到该项目
+                          切换到该工作区
                         </ContextMenuItem>
                       )}
                       <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openWorkspaceBoard(wsId)}>
                         <LayoutDashboard size={13} />
                         查看任务
                       </ContextMenuItem>
-                      <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
+                      <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => openPluginCenter(wsId)}>
                         <Settings size={13} />
-                        配置 MCP 与 Skills
+                        打开插件
                       </ContextMenuItem>
                       <ContextMenuSeparator className="my-0.5" />
                       <ContextMenuItem

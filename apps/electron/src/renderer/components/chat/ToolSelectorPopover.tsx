@@ -59,10 +59,10 @@ export function ToolSelectorPopover(): React.ReactElement {
     }
   }
 
-  /** 跳转到 Yoda 插件视图（API/增强工具 Tab），Home / Code 两模式共享同一份配置 */
+  /** 跳转到插件中心的连接器 Tab（Chat 工具是连接器的子集） */
   const goToToolSettings = (): void => {
     setOpen(false)
-    setAgentSkillsTab('api')
+    setAgentSkillsTab('connectors')
     setActiveView('agent-skills')
   }
 
@@ -139,14 +139,14 @@ export function ToolSelectorPopover(): React.ReactElement {
             </div>
           )}
 
-          {/* 管理工具链接 */}
+          {/* 跳转到插件中心连接器 */}
           <button
             type="button"
             onClick={goToToolSettings}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full pt-1 border-t border-border/50"
           >
             <Settings className="size-3" />
-            <span>管理工具</span>
+            <span>管理连接器</span>
           </button>
         </div>
       </PopoverContent>

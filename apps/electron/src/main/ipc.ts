@@ -3117,6 +3117,24 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 测试内置连接器依赖（Chrome / npx 等，不拉起完整 MCP 会话）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR,
+    async (_, id: string): Promise<{ success: boolean; message: string }> => {
+      if (id === 'chrome-devtools') {
+        const { resolveChromeDevtoolsAvailability } = await import('./lib/builtin-mcp/chrome-devtools-availability')
+        const result = resolveChromeDevtoolsAvailability()
+        return {
+          success: result.available,
+          message: result.available
+            ? '已检测到 Chrome 与 npx，可以启动浏览器连接器'
+            : (result.reason ?? '浏览器连接器不可用'),
+        }
+      }
+      return { success: false, message: '该连接器请在配置表单中测试' }
+    }
+  )
+
   // 启用或关闭 MyYoda 内置 MCP
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SET_BUILTIN_MCP_ENABLED,

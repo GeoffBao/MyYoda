@@ -1,7 +1,7 @@
 ---
 name: find-skills
 description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
-version: "1.0.1"
+version: "1.0.3"
 ---
 # Find Skills
 
@@ -96,15 +96,22 @@ The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts
 
 ## MyYoda-Specific Installation Notes
 
-**MyYoda 只从工作区 `skills/` 目录加载 Skill**（如 `~/.myyoda/agent-workspaces/<workspace>/skills/`）。`npx skills add` 默认安装到 `.agents/skills/` 等位置**不会被 MyYoda 加载**，安装后必须手动移动（`mv`）到当前工作区的 `skills/` 目录，刷新后才会出现在 Agent 技能列表中。
+技能是插件的一类，在 **插件 → 技能** 管理。加载范围是 **全局 + 当前工作区 + 当前 Project** 三层叠加，不是「只读工作区 `skills/`」。
 
-在 MyYoda 中安装 Skill 的推荐流程：
+优先让用户在应用内安装：打开 **插件 → 技能** 的社区市场。只有市场没有、必须从 skills.sh 拉的，才走 CLI。
 
-1. `npx skills add <owner/repo@skill>`（可先 `npx skills find <query>` 搜索）
-2. 将安装产物移动/复制到当前工作区的 `skills/<skill-name>/` 目录
-3. 告知用户在 Agent 能力中心刷新技能列表以加载新 Skill
+`npx skills add` 默认装到 `.agents/skills/` 等位置，**MyYoda 不会加载**。装完必须拷到叠加层之一：
 
-如果安装的是打包的 `.skill` 文件，也可用 `skill-creator` 的 `package_skill.py` 解包后放入 `skills/` 目录。
+- 工作区：`~/.myyoda/agent-workspaces/<workspace>/skills/<skill-name>/`（开发模式 `~/.myyoda-dev/`）
+- 某个 Project 的技能目录（插件作用域选该 Project 后再导入）
+
+推荐流程：
+
+1. 先看 **插件 → 技能** 能否直接安装
+2. 否则 `npx skills find <query>` / `npx skills add <owner/repo@skill>`
+3. 把安装产物拷到上面对应目录，告知用户回 **插件 → 技能** 确认已出现
+
+如果安装的是打包的 `.skill` 文件，也可用 `skill-creator` 的 `package_skill.py` 解包后放入上述目录。
 
 ## Common Skill Categories
 

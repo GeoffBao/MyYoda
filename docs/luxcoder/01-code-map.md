@@ -96,7 +96,7 @@
 
 - path:
   - `apps/electron/default-skills/` — 内置 Skill 包：`agent-collaboration`、`automation`、`brainstorming`、`docx`、`executing-plans`、`find-skills`、`guizang-ppt-skill`、`pdf`、`pptx`、`proma-coach`、`skill-creator`、`tool-builder`、`writing-plans`、`xlsx`
-  - `apps/electron/src/renderer/components/agent-skills/` — AgentSkillsView.tsx、SkillCard.tsx、SkillDetailSheet.tsx、ImportSkillDialog.tsx、McpCard.tsx、McpDetailSheet.tsx、BuiltinMcpDetailSheet.tsx、useAgentSkillsData.ts、skillMdUtils.ts
+  - `apps/electron/src/renderer/components/agent-skills/` — AgentSkillsView.tsx、PluginOverviewTab.tsx、ConnectorsTab.tsx、ConnectorCard.tsx、ConnectorDetailDialog.tsx、AddConnectorMenu.tsx、CustomHttpConnectorDialog.tsx、PluginScopeSelector.tsx、SkillCard.tsx、SkillDetailSheet.tsx、ImportSkillDialog.tsx、McpDetailSheet.tsx、useAgentSkillsData.ts、skillMdUtils.ts
   - `apps/electron/src/main/lib/agent-workspace-manager.ts` — Skills CRUD 实现（含 seedDefaultSkills / upgradeDefaultSkillsInWorkspaces）
 - notes: `proma-coach` skill 名称需改为 `luxcoder-coach`；每次修改 default-skills 内容必须同步递增 SKILL.md 的 `version` 字段
 
@@ -107,7 +107,7 @@
 - path:
   - `apps/electron/src/main/lib/builtin-mcp/` — `catalog.ts`（内置 MCP 目录）、`memory.ts`（记忆 MCP）、`registry.ts`（注册表）、`settings.ts`（设置 MCP）
   - `apps/electron/src/main/lib/mcp-validator.ts` — MCP Server 配置校验
-  - `apps/electron/src/renderer/components/agent-skills/McpCard.tsx` / `McpDetailSheet.tsx` / `BuiltinMcpDetailSheet.tsx`
+  - `apps/electron/src/renderer/components/agent-skills/ConnectorCard.tsx` / `ConnectorDetailDialog.tsx` / `McpDetailSheet.tsx`（连接器卡片与详情；内置 MCP 详情已并入 ConnectorDetailDialog）
   - `apps/electron/src/renderer/components/settings/McpServerForm.tsx`
   - `packages/shared/src/utils/mcp-transport.ts` / `mcp-transport.test.ts` — MCP 传输层工具
 - notes: MCP 配置按工作区隔离，存储于 `~/.luxcoder/agent-workspaces/{slug}/mcp.json`；内置 MCP 通过 registry.ts 注册

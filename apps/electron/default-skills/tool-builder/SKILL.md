@@ -1,11 +1,11 @@
 ---
 name: tool-builder
-description: 交互式创建和管理 Chat 模式的自定义 HTTP 工具。当用户想要创建新的 API 工具、配置 Chat 工具、添加自定义工具、管理自定义工具、或说"帮我创建一个 XX 工具"时使用此 Skill。也适用于调试、修复或删除已有的自定义工具。
-version: "1.0.2"
+description: 交互式创建和管理自定义 HTTP 连接器。当用户想要添加连接器、创建 API 工具、配置 Chat 工具、自定义 HTTP、管理自定义工具、或说"帮我创建一个 XX 工具/连接器"时使用此 Skill。也适用于调试、修复或删除已有的自定义 HTTP 连接器。
+version: "1.0.3"
 ---
 # Tool Builder
 
-通过交互式对话帮助用户创建可在 Chat 模式中使用的自定义 HTTP API 工具。
+通过交互式对话创建自定义 HTTP 连接器。它是插件中心里的一类连接器，配置写在 `chat-tools.json`；Chat 输入栏可以开关，完整管理在 **插件 → 连接器**。
 
 ## 工作流程
 
@@ -31,7 +31,7 @@ version: "1.0.2"
   "toolStates": {
     "memory": { "enabled": true },
     "web-search": { "enabled": false },
-    "custom-weather": { "enabled": true }
+    "custom-weather": { "enabled": false }
   },
   "toolCredentials": {},
   "customTools": [
@@ -92,17 +92,17 @@ version: "1.0.2"
 操作步骤：
 1. 读取 `~/.myyoda/chat-tools.json`（如不存在则创建）
 2. 将新工具追加到 `customTools` 数组（按 `id` 去重）
-3. 在 `toolStates` 中添加 `{ "enabled": true }` 使其默认启用
+3. 在 `toolStates` 中添加 `{ "enabled": false }`（与插件中心一致：添加后默认关闭）
 4. 写回文件（保持 JSON 格式化）
 
-写入后应用会自动检测文件变化并刷新工具列表。
+写入后应用会自动检测文件变化并刷新连接器列表。
 
 ### 4. 测试引导
 
 告知用户：
-- "工具已创建并启用，请切换到 Chat 模式测试"
-- "在 Chat 输入框左下角的工具选择器中应该能看到新工具"
-- "试着问一个需要用到这个工具的问题"
+- "连接器已添加，默认关闭。到 **插件 → 连接器** 启用后再测"
+- "Chat 输入栏的工具列表里也能看到，点「管理连接器」会进同一页"
+- "启用后问一个会用到它的问题"
 - "如果有问题，回到 Agent 模式告诉我，我帮你调试"
 
 ### 5. 调试修复
@@ -116,11 +116,11 @@ version: "1.0.2"
 
 修复后重新写入 `chat-tools.json`，应用自动刷新。
 
-### 6. 删除工具
+### 6. 删除连接器
 
-从 `customTools` 数组中移除对应工具，同时删除 `toolStates` 中的条目。
+从 `customTools` 数组中移除对应条目，同时删除 `toolStates` 中的条目。用户也可以在 **插件 → 连接器** 详情里删除。
 
-## 完整示例：天气查询工具
+## 完整示例：天气查询连接器
 
 ```json
 {
@@ -140,7 +140,7 @@ version: "1.0.2"
 }
 ```
 
-## 完整示例：翻译工具（POST + API Key）
+## 完整示例：翻译连接器（POST + API Key）
 
 ```json
 {
