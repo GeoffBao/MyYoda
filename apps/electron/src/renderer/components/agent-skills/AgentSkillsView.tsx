@@ -31,7 +31,7 @@ import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 
 
 import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta } from '@myyoda/shared'
-import { useAgentSkillsData } from './useAgentSkillsData'
+import { useAgentSkillsData, getSkillKey } from './useAgentSkillsData'
 import { LocalProjectBadge } from './LocalProjectBadge'
 import { SkillCard } from './SkillCard'
 import { McpCard } from './McpCard'
@@ -138,7 +138,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       .catch((cause) => console.error('[AgentSkills] 获取迁移提示失败:', cause))
     return () => { cancelled = true }
   }, [tab])
-  const [selectedSkillSlug, setSelectedSkillSlug] = React.useState<string | null>(null)
+  // 存 getSkillKey(skill)（scope+slug 复合键），不能单存 slug——三层合并后同名可能跨 scope 存在多份（shadowedByGlobal 场景）
+  const [selectedSkillKey, setSelectedSkillKey] = React.useState<string | null>(null)
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
@@ -194,7 +195,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const workspaceMemoryCount = (data.capabilities?.memory.agentsMd.exists ? 1 : 0) + (data.capabilities?.memory.autoMemory.fileCount ?? 0)
   const memoryCount = workspaceMemoryCount
 
-  const selectedSkill = data.skills.find((s) => s.slug === selectedSkillSlug) ?? null
+  const selectedSkill = selectedSkillKey ? data.skills.find((s) => getSkillKey(s) === selectedSkillKey) ?? null : null
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
 
   const configureBuiltinMcp = React.useCallback((serverId: string): void => {
@@ -471,10 +472,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               total={data.skills.length}
               updateCount={updateCount}
               shadowedCount={shadowedCount}
-              updatingSkill={data.updatingSkill}
+              isSkillUpdating={data.isSkillUpdating}
               isProjectScope={false}
               isBuiltin={(slug) => data.defaultSkillSlugs.has(slug)}
-              onOpen={setSelectedSkillSlug}
+              onOpen={(skill) => setSelectedSkillKey(getSkillKey(skill))}
               onToggle={data.toggleSkill}
               onUpdate={data.updateSkill}
               onImport={() => setShowImport(true)}
@@ -508,31 +509,35 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         workspaceSlug={data.workspaceSlug}
         projectId={null}
         isBuiltin={selectedIsBuiltin}
-        updating={data.updatingSkill === selectedSkill?.slug}
-        onOpenChange={(open) => { if (!open) setSelectedSkillSlug(null) }}
-        onToggle={(enabled) => selectedSkill && data.toggleSkill(selectedSkill.slug, enabled)}
-        onUpdate={() => selectedSkill && data.updateSkill(selectedSkill.slug)}
+        updating={selectedSkill ? data.isSkillUpdating(selectedSkill) : false}
+        onOpenChange={(open) => { if (!open) setSelectedSkillKey(null) }}
+        onToggle={(enabled) => selectedSkill && data.toggleSkill(selectedSkill, enabled)}
+        onUpdate={() => selectedSkill && data.updateSkill(selectedSkill)}
         onRequestDelete={() => selectedSkill && setPendingDeleteSkill(selectedSkill)}
         onOpenFolder={() => selectedSkill && data.openSkillFolder(selectedSkill)}
         onChanged={() => bumpCapabilities((v) => v + 1)}
       />
 
-      {/* Skill 删除确认 */}
+      {/* Skill 删除确认：全局 Skill 影响所有共享该层的工作区，文案单独说明影响范围，不与工作区/项目级混用同一句描述 */}
       <ConfirmDialog
         open={pendingDeleteSkill !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteSkill(null) }}
         title={`确认删除 Skill「${pendingDeleteSkill?.name}」？`}
-        description="删除后将无法恢复，确定要卸载这个 Skill 吗？"
+        description={
+          pendingDeleteSkill?.scope === 'global'
+            ? '这是全局 Skill，删除将影响所有共享该局的工作区，且无法恢复，确定要卸载吗？'
+            : '删除后将无法恢复，确定要卸载这个 Skill 吗？'
+        }
         confirmLabel="删除"
         loadingLabel="删除中..."
         loading={isDeletingSkill}
         onConfirm={async () => {
           if (!pendingDeleteSkill || isDeletingSkill) return
           setIsDeletingSkill(true)
-          const ok = await data.deleteSkill(pendingDeleteSkill.slug, pendingDeleteSkill.name)
+          const ok = await data.deleteSkill(pendingDeleteSkill)
           setIsDeletingSkill(false)
           setPendingDeleteSkill(null)
-          if (ok) setSelectedSkillSlug(null)
+          if (ok) setSelectedSkillKey(null)
         }}
       />
 
@@ -606,13 +611,15 @@ interface SkillsTabProps {
   updateCount: number
   /** 被同名全局 Skill 遮蔽、实际不生效的工作区/项目层副本数量 */
   shadowedCount: number
-  updatingSkill: string | null
+  /** 按 scope+slug 定位判断某个 Skill 是否在更新中（同名跨 scope 时不会串号） */
+  isSkillUpdating: (skill: SkillMeta) => boolean
   /** 当前是否处于嵌套 Project 范围（仅影响空列表提示文案中“其他工作区”/“其他项目”的描述） */
   isProjectScope: boolean
   isBuiltin: (slug: string) => boolean
-  onOpen: (slug: string) => void
-  onToggle: (slug: string, enabled: boolean) => void
-  onUpdate: (slug: string) => void
+  /** 以下三个回调均传完整 SkillMeta，不传裸 slug——防止同名跨 scope（shadowedByGlobal）时操作错卡片 */
+  onOpen: (skill: SkillMeta) => void
+  onToggle: (skill: SkillMeta, enabled: boolean) => void
+  onUpdate: (skill: SkillMeta) => void
   /** 打开导入弹窗（按当前 scope 已在上层路由好），空列表下直接给一个可点击的入口，不再只用文字描述 */
   onImport: () => void
 }
@@ -622,7 +629,7 @@ function SkillsTab({
   total,
   updateCount,
   shadowedCount,
-  updatingSkill,
+  isSkillUpdating,
   isProjectScope,
   isBuiltin,
   onOpen,
@@ -673,10 +680,10 @@ function SkillsTab({
         </div>
       )}
       {projectSkills.length > 0 && (
-        <SkillSection title="本项目 Skills" skills={projectSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="本项目 Skills" skills={projectSkills} isBuiltin={isBuiltin} isSkillUpdating={isSkillUpdating} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
       {workspaceSkills.length > 0 && (
-        <SkillSection title="工作区 Skills" skills={workspaceSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="工作区 Skills" skills={workspaceSkills} isBuiltin={isBuiltin} isSkillUpdating={isSkillUpdating} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
       {globalSkills.length > 0 && (
         <SkillSection
@@ -684,7 +691,7 @@ function SkillsTab({
           subtitle="所有工作区共享"
           skills={globalSkills}
           isBuiltin={isBuiltin}
-          updatingSkill={updatingSkill}
+          isSkillUpdating={isSkillUpdating}
           onOpen={onOpen}
           onToggle={onToggle}
           onUpdate={onUpdate}
@@ -700,13 +707,13 @@ interface SkillSectionProps {
   subtitle?: string
   skills: SkillMeta[]
   isBuiltin: (slug: string) => boolean
-  updatingSkill: string | null
-  onOpen: (slug: string) => void
-  onToggle: (slug: string, enabled: boolean) => void
-  onUpdate: (slug: string) => void
+  isSkillUpdating: (skill: SkillMeta) => boolean
+  onOpen: (skill: SkillMeta) => void
+  onToggle: (skill: SkillMeta, enabled: boolean) => void
+  onUpdate: (skill: SkillMeta) => void
 }
 
-function SkillSection({ title, subtitle, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
+function SkillSection({ title, subtitle, skills, isBuiltin, isSkillUpdating, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set())
   const groups = React.useMemo(() => groupSkills(skills), [skills])
 
@@ -744,13 +751,13 @@ function SkillSection({ title, subtitle, skills, isBuiltin, updatingSkill, onOpe
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {group.skills.map((skill) => (
                     <SkillCard
-                      key={skill.slug}
+                      key={getSkillKey(skill)}
                       skill={skill}
                       isBuiltin={isBuiltin(skill.slug)}
-                      updating={updatingSkill === skill.slug}
-                      onOpen={() => onOpen(skill.slug)}
-                      onToggle={(enabled) => onToggle(skill.slug, enabled)}
-                      onUpdate={() => onUpdate(skill.slug)}
+                      updating={isSkillUpdating(skill)}
+                      onOpen={() => onOpen(skill)}
+                      onToggle={(enabled) => onToggle(skill, enabled)}
+                      onUpdate={() => onUpdate(skill)}
                     />
                   ))}
                 </div>

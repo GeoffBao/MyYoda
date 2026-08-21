@@ -30,6 +30,18 @@ import {
 } from '@/atoms/agent-atoms'
 import type { BuiltinMcpServerSummary, SkillMeta, WorkspaceCapabilities, WorkspaceMcpConfig } from '@myyoda/shared'
 
+/**
+ * Skill 在“全局+工作区+项目三层合并列表”里的唯一 key。
+ *
+ * 三层合并后同一 slug 可能同时存在于多个 scope（正是 shadowedByGlobal 要标记的那种情况），
+ * 单用 slug 做标识会让“点击工作区那张卡片”误路由到全局那份（反之亦然）。所有需要从
+ * skills 数组里定位具体一项的地方（选中项、toggle/delete/update 路由、loading 比对）都必须用这个
+ * key，不能单用 slug。
+ */
+export function getSkillKey(skill: Pick<SkillMeta, 'slug' | 'scope'>): string {
+  return `${skill.scope ?? 'workspace'}:${skill.slug}`
+}
+
 export interface AgentSkillsData {
   /** 当前工作区（未选中时为 null） */
   workspaceSlug: string
@@ -50,10 +62,11 @@ export interface AgentSkillsData {
   /** 工作区级能力摘要（builtinMcpServers / memory），不随 projectId 变化 */
   capabilities: WorkspaceCapabilities | null
   builtinMcpServers: BuiltinMcpServerSummary[]
-  updatingSkill: string | null
-  toggleSkill: (slug: string, enabled: boolean) => Promise<void>
-  deleteSkill: (slug: string, name: string) => Promise<boolean>
-  updateSkill: (slug: string) => Promise<void>
+  /** 判断某个具体 Skill（按 scope+slug 定位）当前是否处于“来源更新中” */
+  isSkillUpdating: (skill: SkillMeta) => boolean
+  toggleSkill: (skill: SkillMeta, enabled: boolean) => Promise<void>
+  deleteSkill: (skill: SkillMeta) => Promise<boolean>
+  updateSkill: (skill: SkillMeta) => Promise<void>
   toggleMcp: (name: string, enabled: boolean) => Promise<void>
   toggleBuiltinMcp: (id: string, enabled: boolean) => Promise<void>
   deleteMcp: (name: string) => Promise<void>
@@ -79,7 +92,9 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
   const [mcpIsProjectOverride, setMcpIsProjectOverride] = React.useState(false)
   const [capabilities, setCapabilities] = React.useState<WorkspaceCapabilities | null>(null)
   const [builtinMcpServers, setBuiltinMcpServers] = React.useState<BuiltinMcpServerSummary[]>([])
-  const [updatingSkill, setUpdatingSkill] = React.useState<string | null>(null)
+  /** 存 getSkillKey(skill)，不能单存 slug（同名跨 scope 会串号） */
+  const [updatingSkillKey, setUpdatingSkillKey] = React.useState<string | null>(null)
+  const isSkillUpdating = React.useCallback((skill: SkillMeta) => updatingSkillKey === getSkillKey(skill), [updatingSkillKey])
 
   const loadData = React.useCallback(async () => {
     if (!workspaceSlug) {
@@ -136,34 +151,35 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     void loadData()
   }, [loadData])
 
-  const toggleSkill = React.useCallback(async (slug: string, enabled: boolean) => {
+  const toggleSkill = React.useCallback(async (skill: SkillMeta, enabled: boolean) => {
+    const { slug, scope } = skill
     try {
-      const target = skills.find((s) => s.slug === slug)
-      if (target?.scope === 'global') {
+      if (scope === 'global') {
         await window.electronAPI.toggleGlobalSkill(slug, enabled)
-      } else if (target?.scope === 'project' && scopeProjectId) {
+      } else if (scope === 'project' && scopeProjectId) {
         await window.electronAPI.toggleProjectSkill(workspaceSlug, scopeProjectId, slug, enabled)
       } else {
         await window.electronAPI.toggleWorkspaceSkill(workspaceSlug, slug, enabled)
       }
-      setSkills((prev) => prev.map((s) => (s.slug === slug ? { ...s, enabled } : s)))
+      // 按 slug+scope 精确匹配，避免同名跨 scope 时误同步另一张卡片的状态
+      setSkills((prev) => prev.map((s) => (s.slug === slug && s.scope === scope ? { ...s, enabled } : s)))
     } catch (error) {
       console.error('[Agent 技能] 切换 Skill 状态失败:', error)
       toast.error('切换 Skill 状态失败')
     }
-  }, [workspaceSlug, scopeProjectId, skills])
+  }, [workspaceSlug, scopeProjectId])
 
-  const deleteSkill = React.useCallback(async (slug: string, name: string): Promise<boolean> => {
+  const deleteSkill = React.useCallback(async (skill: SkillMeta): Promise<boolean> => {
+    const { slug, scope, name } = skill
     try {
-      const target = skills.find((s) => s.slug === slug)
-      if (target?.scope === 'global') {
+      if (scope === 'global') {
         await window.electronAPI.deleteGlobalSkill(slug)
-      } else if (target?.scope === 'project' && scopeProjectId) {
+      } else if (scope === 'project' && scopeProjectId) {
         await window.electronAPI.deleteProjectSkill(workspaceSlug, scopeProjectId, slug)
       } else {
         await window.electronAPI.deleteWorkspaceSkill(workspaceSlug, slug)
       }
-      setSkills((prev) => prev.filter((s) => s.slug !== slug))
+      setSkills((prev) => prev.filter((s) => !(s.slug === slug && s.scope === scope)))
       bumpCapabilitiesVersion((v) => v + 1)
       toast.success(`已删除 Skill：${name}`)
       return true
@@ -172,13 +188,13 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
       toast.error('删除 Skill 失败')
       return false
     }
-  }, [workspaceSlug, scopeProjectId, skills, bumpCapabilitiesVersion])
+  }, [workspaceSlug, scopeProjectId, bumpCapabilitiesVersion])
 
-  const updateSkill = React.useCallback(async (slug: string) => {
-    if (!workspaceSlug || updatingSkill) return
-    const target = skills.find((s) => s.slug === slug)
+  const updateSkill = React.useCallback(async (skill: SkillMeta) => {
+    const { slug, scope } = skill
+    if (!workspaceSlug || updatingSkillKey) return
     // v1：Skill 来源更新（社区/组织同步）仅支持工作区级；全局/项目级 Skill 没有导入来源追踪体系。
-    if (target?.scope === 'global') {
+    if (scope === 'global') {
       toast.error('全局 Skill 暂不支持一键更新来源')
       return
     }
@@ -186,13 +202,12 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
       toast.error('项目级 Skill 暂不支持一键更新来源，请到工作区 Skills 里操作对应来源')
       return
     }
-    setUpdatingSkill(slug)
+    setUpdatingSkillKey(getSkillKey(skill))
     try {
-      const existing = target
-      const updated = existing?.importSource?.sourceType === 'organization'
+      const updated = skill.importSource?.sourceType === 'organization'
         ? await window.electronAPI.orgUpdateSkill(workspaceSlug, slug)
         : await window.electronAPI.updateSkillFromSource(workspaceSlug, slug)
-      setSkills((prev) => prev.map((s) => (s.slug === slug ? { ...updated, scope: s.scope } : s)))
+      setSkills((prev) => prev.map((s) => (s.slug === slug && s.scope === scope ? { ...updated, scope: s.scope } : s)))
       bumpCapabilitiesVersion((v) => v + 1)
       toast.success(`已同步更新 Skill：${updated.name}`)
     } catch (error) {
@@ -200,9 +215,9 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
       const message = error instanceof Error ? error.message : '未知错误'
       toast.error('更新 Skill 失败', { description: message })
     } finally {
-      setUpdatingSkill(null)
+      setUpdatingSkillKey(null)
     }
-  }, [workspaceSlug, scopeProjectId, updatingSkill, bumpCapabilitiesVersion, skills])
+  }, [workspaceSlug, scopeProjectId, updatingSkillKey, bumpCapabilitiesVersion])
 
   const openSkillFolder = React.useCallback((skill: SkillMeta): void => {
     const baseDir = skill.scope === 'global' ? globalSkillsDir : skillsDir
@@ -277,7 +292,7 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     mcpIsProjectOverride,
     capabilities,
     builtinMcpServers,
-    updatingSkill,
+    isSkillUpdating,
     toggleSkill,
     deleteSkill,
     updateSkill,

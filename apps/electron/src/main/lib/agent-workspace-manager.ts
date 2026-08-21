@@ -1254,7 +1254,9 @@ export function getProjectSkills(workspaceSlug: string, projectId: string): Skil
   const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, projectId)
   const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, projectId)
   if (!activeDir || !inactiveDir) return []
-  return [...scanSkillsInDir(activeDir, true), ...scanSkillsInDir(inactiveDir, false)]
+  // 显式传 'project' scope：与 getAllEffectiveSkills 保持一致的类型契约，避免未来某处把这里的结果与
+  // 其他层合并展示时，因 scope 缺失被误归入默认的 'workspace'。
+  return [...scanSkillsInDir(activeDir, true, 'project'), ...scanSkillsInDir(inactiveDir, false, 'project')]
 }
 
 /**
@@ -1707,8 +1709,27 @@ function writeSkillImportSource(skillDir: string, source: SkillImportSource): vo
   writeFileSync(join(skillDir, SOURCE_META_FILE), JSON.stringify(source, null, 2), 'utf-8')
 }
 
+/**
+ * 校验 Skill slug 合法性：拒绝路径分隔符与 . / ..，防止通过 skillSlug 参数发起路径穿越（如
+ * skillSlug='../../etc' 使 join(getGlobalSkillsDir(), skillSlug) 解析到预制 Skill 目录之外）。
+ * 同目录下的 resolveAutoMemoryFilePath 已有类似防护，这里补齐 Skill 目录解析一侧的同样防护。
+ */
+function assertValidSkillSlug(skillSlug: string): void {
+  if (
+    typeof skillSlug !== 'string'
+    || skillSlug.length === 0
+    || skillSlug === '.'
+    || skillSlug === '..'
+    || skillSlug.includes('/')
+    || skillSlug.includes('\\')
+  ) {
+    throw new Error(`非法 Skill slug: ${skillSlug}`)
+  }
+}
+
 /** 解析 Skill 所在目录（active 或 inactive），不存在则返回 null */
 function resolveSkillDir(workspaceSlug: string, skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
   const active = join(getWorkspaceSkillsDir(workspaceSlug), skillSlug)
   if (existsSync(active)) return active
   const inactive = join(getInactiveSkillsDir(workspaceSlug), skillSlug)
@@ -1718,6 +1739,7 @@ function resolveSkillDir(workspaceSlug: string, skillSlug: string): string | nul
 
 /** 解析全局 Skill 所在目录（active 或 inactive），不存在则返回 null */
 function resolveGlobalSkillDir(skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
   const active = join(getGlobalSkillsDir(), skillSlug)
   if (existsSync(active)) return active
   const inactive = join(getGlobalInactiveSkillsDir(), skillSlug)
@@ -1727,6 +1749,7 @@ function resolveGlobalSkillDir(skillSlug: string): string | null {
 
 /** 解析项目级 Skill 所在目录（active 或 inactive），不存在则返回 null */
 function resolveProjectSkillDir(workspaceSlug: string, projectId: string, skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
   const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
   const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, projectId)
   const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, projectId)
