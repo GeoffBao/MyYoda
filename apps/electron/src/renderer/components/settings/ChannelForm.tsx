@@ -41,6 +41,7 @@ import {
 import {
   PROVIDER_DEFAULT_URLS,
   PROVIDER_LABELS,
+  VOLCENGINE_CODING_PLAN_MODELS,
   parseZhipuTeamCredentials,
   parseCodexCredentials,
   parseClaudeOAuthCredentials,
@@ -90,7 +91,7 @@ const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', '
 
 /** 需要用 messages 端点测试的供应商预设模型（均为官方真实存在的模型，供无用户模型时测试连接用；custom 不预设——自定义服务模型名不可知，必须由用户添加） */
 const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
-  deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+  deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'],
   'kimi-api': ['kimi-k3', 'kimi-k2.6'],
   'opencode-go-openai': ['grok-4.5', 'kimi-k3'],
   xiaomi: ['mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2-omni', 'mimo-v2-flash'],
@@ -449,6 +450,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
         setModels([
           { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', enabled: true },
           { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', enabled: true },
+          { id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision Exp', enabled: true },
         ])
       } else if (p === 'kimi-api') {
         setModels([
@@ -478,7 +480,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           { id: 'glm-5.3', name: 'GLM-5.3', enabled: true },
           { id: 'glm-5.1', name: 'GLM-5.1', enabled: false },
         ])
-      } else if (p === 'ark-coding-plan' || p === 'doubao') {
+      } else if (p === 'ark-coding-plan') {
         setModels([
           { id: 'doubao-seed-2.1-pro', name: 'Doubao Seed 2.1 Pro', enabled: true },
           { id: 'doubao-seed-2.1-turbo', name: 'Doubao Seed 2.1 Turbo', enabled: true },
@@ -492,6 +494,8 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
           { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', enabled: true },
           { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', enabled: true },
         ])
+      } else if (p === 'doubao') {
+        setModels(VOLCENGINE_CODING_PLAN_MODELS.map((model) => ({ ...model })))
       } else if (p === 'minimax') {
         setModels([
           { id: 'MiniMax-M3', name: 'MiniMax-M3', enabled: true },

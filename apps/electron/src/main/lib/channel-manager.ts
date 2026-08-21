@@ -40,6 +40,7 @@ import {
   parseXaiCredentials,
   serializeXaiCredentials,
   isXaiCredentialExpired,
+  VOLCENGINE_CODING_PLAN_MODELS,
 } from '@myyoda/shared'
 import { refreshCodexOAuth } from './codex-oauth-service'
 import { refreshClaudeOAuthToken } from './claude-oauth-service'
@@ -74,6 +75,7 @@ const ARK_CODING_PLAN_TEST_MODEL = 'doubao-seed-2.0-code'
 const DEEPSEEK_PRESET_MODELS: ChannelModel[] = [
   { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', enabled: true },
   { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', enabled: true },
+  { id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision Exp', enabled: true },
 ]
 const KIMI_PRESET_MODELS: ChannelModel[] = [
   { id: 'kimi-k3', name: 'Kimi K3', enabled: true },
@@ -107,13 +109,16 @@ const ARK_CODING_PLAN_MODELS: ChannelModel[] = [
 /**
  * 一次性预设更新 ID。独立于配置 schema 版本，保证高版本配置也能收到新增候选模型。
  */
-const GLM_53_PRESET_MODEL_UPDATE_ID = 'glm-5.3-candidates-v1'
+const PRESET_MODEL_CANDIDATE_UPDATE_ID = 'model-candidates-v2'
 
 /**
  * 本次预设更新向存量渠道追加的候选模型，默认禁用。
  * 不在每次启动时按完整预设列表补齐，以尊重用户主动删除过的模型。
  */
-const GLM_53_PRESET_MODEL_CANDIDATES: Partial<Record<ProviderType, readonly ChannelModel[]>> = {
+const PRESET_MODEL_CANDIDATES: Partial<Record<ProviderType, readonly ChannelModel[]>> = {
+  deepseek: [
+    { id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision Exp', enabled: false },
+  ],
   'ark-coding-plan': [
     { id: 'glm-5.3', name: 'GLM-5.3', enabled: false },
   ],
@@ -146,10 +151,14 @@ function cloneModels(models: ChannelModel[]): ChannelModel[] {
   return models.map((model) => ({ ...model }))
 }
 
-function createPresetModelsResult(providerName: string, models: ChannelModel[]): FetchModelsResult {
+function createPresetModelsResult(
+  providerName: string,
+  models: ChannelModel[],
+  reason = '未开放模型列表端点',
+): FetchModelsResult {
   return {
     success: true,
-    message: `${providerName} 未开放模型列表端点，已加载 ${models.length} 个预设模型`,
+    message: `${providerName} ${reason}，已加载 ${models.length} 个预设模型`,
     models: cloneModels(models),
   }
 }
@@ -277,12 +286,12 @@ function migrateConfig(config: ChannelsConfig): { config: ChannelsConfig; change
  */
 function applyPresetModelCandidateUpdates(config: ChannelsConfig): { config: ChannelsConfig; changed: boolean } {
   const appliedUpdates = new Set(config.appliedPresetModelUpdates ?? [])
-  if (appliedUpdates.has(GLM_53_PRESET_MODEL_UPDATE_ID)) {
+  if (appliedUpdates.has(PRESET_MODEL_CANDIDATE_UPDATE_ID)) {
     return { config, changed: false }
   }
 
   const channels = config.channels.map((channel) => {
-    const candidates = GLM_53_PRESET_MODEL_CANDIDATES[channel.provider]
+    const candidates = PRESET_MODEL_CANDIDATES[channel.provider]
     if (!candidates) return channel
 
     const existingModelIds = new Set(channel.models.map((model) => model.id))
@@ -290,7 +299,7 @@ function applyPresetModelCandidateUpdates(config: ChannelsConfig): { config: Cha
     if (missingCandidates.length === 0) return channel
 
     console.log(
-      `[渠道管理] 预设更新 ${GLM_53_PRESET_MODEL_UPDATE_ID} 为渠道 ${channel.name} (${channel.provider}) 添加 ${missingCandidates.length} 个候选模型`,
+      `[渠道管理] 预设更新 ${PRESET_MODEL_CANDIDATE_UPDATE_ID} 为渠道 ${channel.name} (${channel.provider}) 添加 ${missingCandidates.length} 个候选模型`,
     )
     return {
       ...channel,
@@ -298,7 +307,7 @@ function applyPresetModelCandidateUpdates(config: ChannelsConfig): { config: Cha
     }
   })
 
-  appliedUpdates.add(GLM_53_PRESET_MODEL_UPDATE_ID)
+  appliedUpdates.add(PRESET_MODEL_CANDIDATE_UPDATE_ID)
   return {
     config: {
       ...config,
@@ -1973,6 +1982,13 @@ export async function fetchModels(input: FetchModelsInput): Promise<FetchModelsR
       case 'openrouter':
       case 'nuwa':
       case 'custom':
+        if (provider === 'doubao') {
+          return createPresetModelsResult(
+            '火山方舟 Coding Plan',
+            [...VOLCENGINE_CODING_PLAN_MODELS],
+            '使用套餐支持清单，不采用通用 /models 目录',
+          )
+        }
         return await fetchOpenAICompatibleModels(input.baseUrl, input.apiKey, proxyUrl, provider)
       case 'google':
         return await fetchGoogleModels(input.baseUrl, input.apiKey, proxyUrl)

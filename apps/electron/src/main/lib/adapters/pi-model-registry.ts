@@ -39,7 +39,8 @@ type PiModelCost = PiCatalogModel['cost']
 type PiRequestHeaders = Record<string, string>
 type PiCatalogModelPatch = Pick<PiCatalogModel, 'id'> & Partial<PiCatalogModel>
 
-interface PiModelDefaults {
+export interface PiModelDefaults {
+  api: Api
   reasoning: boolean
   thinkingLevelMap?: PiCatalogModel['thinkingLevelMap']
   compat?: PiCatalogModel['compat']
@@ -237,6 +238,26 @@ function createXaiRuntimeCredentialStore(
   }
 }
 
+/**
+ * Pi 0.84.2 的内置 catalog 尚未声明以下 DeepSeek V4 Flash 变体的原生视觉。
+ * 在上游目录同步前，本地覆盖只扩展 input，不改变实际模型 ID、协议或推理参数。
+ */
+const DEEPSEEK_V4_FLASH_VISION_MODEL_IDS = new Set([
+  'deepseek-v4-flash',
+  'deepseek-v4-flash-vision-exp',
+])
+
+/** 判断模型是否已确认支持原生图片输入。 */
+export function supportsPiNativeImageInput(modelId: string | undefined): boolean {
+  const normalized = stripAgentSdkContextSuffix(modelId)?.trim().toLowerCase()
+  return normalized !== undefined && DEEPSEEK_V4_FLASH_VISION_MODEL_IDS.has(normalized)
+}
+
+function applyPiModelCapabilityOverrides(model: PiCatalogModel | undefined): PiCatalogModel | undefined {
+  if (!model || !supportsPiNativeImageInput(model.id) || model.input.includes('image')) return model
+  return { ...model, input: [...model.input, 'image'] }
+}
+
 const CODEX_MODEL_PATCHES: PiCatalogModelPatch[] = [
   {
     id: 'gpt-5.4',
@@ -320,6 +341,15 @@ function normalizePiApi(provider: ProviderType): Api {
   }
 }
 
+/**
+ * OpenCode Go 在同一渠道提供多种协议，必须以模型目录声明为准。
+ * 未命中目录时保留历史 OpenAI Chat Completions 默认值。
+ */
+export function resolvePiApi(provider: ProviderType, catalogApi?: Api): Api {
+  if (provider === 'opencode-go-openai' && catalogApi) return catalogApi
+  return normalizePiApi(provider)
+}
+
 function candidatePiProviders(provider: ProviderType): KnownProvider[] {
   switch (provider) {
     case 'anthropic':
@@ -361,8 +391,10 @@ function candidatePiProviders(provider: ProviderType): KnownProvider[] {
 function findCatalogModelById(models: readonly PiCatalogModel[], modelId: string): PiCatalogModel | undefined {
   const normalized = modelId.toLowerCase()
   // ID 是渠道实际发送到上游的稳定标识；同名展示名称只能在没有 ID 命中时兜底。
-  return models.find((model) => model.id.toLowerCase() === normalized)
-    ?? models.find((model) => model.name.toLowerCase() === normalized)
+  return applyPiModelCapabilityOverrides(
+    models.find((model) => model.id.toLowerCase() === normalized)
+      ?? models.find((model) => model.name.toLowerCase() === normalized),
+  )
 }
 
 /** 从常见 provider alias 中提取 Claude family/version key，避免 catalog 命名差异导致能力丢失。 */
@@ -438,6 +470,8 @@ export async function resolvePiImageInputCapability(
 ): Promise<'supported' | 'unsupported' | 'unknown'> {
   const resolvedModelId = stripAgentSdkContextSuffix(modelId)
   if (!resolvedModelId) return 'unknown'
+  // 实验变体尚未进入 Pi catalog，不能因目录缺失退回 unknown。
+  if (supportsPiNativeImageInput(resolvedModelId)) return 'supported'
   const catalogModel = await findPiCatalogModel(provider, resolvedModelId)
   if (!catalogModel) return 'unknown'
   return catalogModel.input.includes('image') ? 'supported' : 'unsupported'
@@ -495,13 +529,13 @@ export async function resolvePiReasoningCapability(
   modelId: string | undefined,
 ): Promise<ReasoningCapability | undefined> {
   const resolvedModelId = stripAgentSdkContextSuffix(modelId)
+  const catalogModel = resolvedModelId ? await findPiCatalogModel(provider, resolvedModelId) : undefined
   const profile = resolveReasoningProfile({
     modelId: resolvedModelId,
     transport: provider === 'openai-codex' || provider === 'xai'
       ? 'openai-responses'
-      : toReasoningTransport(normalizePiApi(provider)),
+      : toReasoningTransport(resolvePiApi(provider, catalogModel?.api)),
   })
-  const catalogModel = resolvedModelId ? await findPiCatalogModel(provider, resolvedModelId) : undefined
   return resolveReasoningCapability({
     profile,
     catalog: catalogModel && { reasoning: catalogModel.reasoning, thinkingLevelMap: catalogModel.thinkingLevelMap },
@@ -511,7 +545,7 @@ export async function resolvePiReasoningCapability(
 async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiModelDefaults> {
   const catalogModel = input.model ? await findPiCatalogModel(input.provider, input.model) : undefined
   const codexAlignedCapabilities = getCodexAlignedGPT5Capabilities(input.model)
-  const api = normalizePiApi(input.provider)
+  const api = resolvePiApi(input.provider, catalogModel?.api)
   const providerSpecificCapabilities = compilePiReasoningCapabilities(api, input.model)
   const glmModelId = input.model?.toLowerCase()
   const isVolcengineGlm5x = (input.provider === 'doubao' || input.provider === 'doubao-api' || input.provider === 'ark-coding-plan')
@@ -521,6 +555,7 @@ async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiMod
   const inferredContextWindow = inferAgentSdkContextWindow(input.model, input.provider) ?? DEFAULT_CONTEXT_WINDOW
   const shouldForceAdaptiveThinking = shouldForcePiAdaptiveThinking(api, catalogModel)
   return {
+    api,
     reasoning: catalogModel?.reasoning ?? true,
     // 同名 GPT-5.x 统一采用 Codex 已验证的 effort 映射，避免第三方 catalog 缺失
     // max/minimal/off 映射时 UI 与 Pi 最终 payload 出现不一致。
@@ -539,12 +574,12 @@ async function resolvePiModelDefaults(input: PiAgentQueryOptions): Promise<PiMod
   }
 }
 
-function normalizePiBaseUrl(baseUrl: string | undefined, provider: ProviderType): string | undefined {
+function normalizePiBaseUrl(baseUrl: string | undefined, provider: ProviderType, api = normalizePiApi(provider)): string | undefined {
   if (!baseUrl) return undefined
-  if (normalizePiApi(provider) === 'anthropic-messages') {
+  if (api === 'anthropic-messages') {
     return normalizeAnthropicBaseUrlForSdk(resolveAnthropicMessagesUrl(baseUrl, provider))
   }
-  if (provider === 'custom' || provider === 'openai-responses') {
+  if (api === 'openai-responses' || provider === 'custom') {
     return normalizeOpenAIBaseUrlForSdk(baseUrl)
   }
   return baseUrl.trim().replace(/\/$/, '')
@@ -727,9 +762,9 @@ export async function buildModel(sdk: PiSdk, input: PiAgentQueryOptions) {
   // pi runtime 统一剥离 `[1m]` 后缀：无论上游从哪条路径传入，注册与查找都用干净 ID。
   const resolvedModelId = stripAgentSdkContextSuffix(input.model)
   const modelRuntime = await sdk.ModelRuntime.create({ allowModelNetwork: false })
-  const api = normalizePiApi(input.provider)
   const modelDefaults = await resolvePiModelDefaults({ ...input, model: resolvedModelId })
-  const baseUrl = normalizePiBaseUrl(input.baseUrl, input.provider)
+  const api = modelDefaults.api
+  const baseUrl = normalizePiBaseUrl(input.baseUrl, input.provider, api)
   if (!baseUrl) {
     throw new Error(`渠道 ${input.channelName ?? input.provider} 缺少 Base URL`)
   }

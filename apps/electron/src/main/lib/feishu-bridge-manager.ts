@@ -271,7 +271,7 @@ class FeishuBridgeManager {
 
   // ===== 连接测试（静态，不影响运行中的 Bridge） =====
 
-  async testConnection(appId: string, appSecret: string): Promise<FeishuTestResult> {
+  async testConnection(appId: string, appSecret: string, domain?: FeishuBotConfig['domain']): Promise<FeishuTestResult> {
     // 复用 Bridge 的测试逻辑，创建临时 config
     const tempConfig: FeishuBotConfig = {
       id: 'test',
@@ -279,9 +279,10 @@ class FeishuBridgeManager {
       enabled: true,
       appId,
       appSecret: '', // 不需要加密的，testConnection 直接用明文
+      domain,
     }
     const tempBridge = new FeishuBridge(tempConfig)
-    return tempBridge.testConnection(appId, appSecret)
+    return tempBridge.testConnection(appId, appSecret, domain)
   }
 }
 
