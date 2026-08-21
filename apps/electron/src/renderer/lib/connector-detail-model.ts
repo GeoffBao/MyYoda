@@ -8,22 +8,23 @@ export interface ConnectorDetailMeta {
 }
 
 export function describeConnectorDetail(item: ConnectorItem): ConnectorDetailMeta {
-  switch (item.sourceId) {
-    case 'chrome-devtools':
+  // 按带 kind 命名空间的完整 id 判定，避免用户自建同名 MCP（如 mcp:web-search）误拿内置连接器的配置文案。
+  switch (item.id) {
+    case 'builtin:chrome-devtools':
       return {
         permissionLabel: '可控制本机浏览器（打开网页、点击、输入）',
         configMethodLabel: '本机 Chrome，无需 API Key',
         capabilities: ['打开真实网页', '截图并检查页面结构', '点击、输入、查看网络请求'],
         nextStep: nextStepOf(item, '安装 Google Chrome 后点启用，或检查本机是否有 Node.js（npx）'),
       }
-    case 'nano-banana':
+    case 'builtin:nano-banana':
       return {
         permissionLabel: '网络 · 调用 Gemini 生成或编辑图片',
         configMethodLabel: 'Gemini API Key',
         capabilities: ['按描述生成图片', '在已有图片上继续编辑'],
         nextStep: nextStepOf(item, '填写 Gemini API Key，然后启用'),
       }
-    case 'web-search':
+    case 'api:web-search':
       return {
         permissionLabel: '网络 · 调用搜索 API',
         configMethodLabel: 'Tavily API Key',

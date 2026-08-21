@@ -53,7 +53,6 @@ export function ConnectorCard({
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         item.status === 'disabled' && 'opacity-70',
       )}
-      data-connector-card={item.id}
     >
       <div className="flex items-start gap-3">
         <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.04]">
@@ -100,6 +99,7 @@ export function ConnectorCard({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  aria-label={`移除连接器 ${item.name}`}
                   onClick={(e) => { e.stopPropagation(); onRequestDelete() }}
                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-[opacity,background-color,color] duration-fast ease-out hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                 >

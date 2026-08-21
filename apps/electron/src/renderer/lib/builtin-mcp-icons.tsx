@@ -4,7 +4,7 @@
  * 现有内置连接器使用官方品牌图标；其余回退语义 lucide。
  */
 
-import * as React from 'react'
+import type * as React from 'react'
 import { Globe, ImageIcon, Plug, Search } from 'lucide-react'
 import ChromeLogo from '@/assets/brand/chrome-logo.svg'
 import GeminiLogo from '@/assets/brand/gemini-logo.png'
@@ -24,12 +24,13 @@ function brandImg(src: string, alt: string, invertDark = false): React.ReactElem
 }
 
 export function getConnectorIcon(item: ConnectorItem): React.ReactNode {
-  switch (item.sourceId) {
-    case 'chrome-devtools':
+  // 按带 kind 命名空间的完整 id 判定，避免自建同名 MCP（如 mcp:web-search）误拿内置连接器品牌图标。
+  switch (item.id) {
+    case 'builtin:chrome-devtools':
       return brandImg(ChromeLogo, 'Chrome')
-    case 'nano-banana':
+    case 'builtin:nano-banana':
       return brandImg(GeminiLogo, 'Gemini')
-    case 'web-search':
+    case 'api:web-search':
       return brandImg(TavilyLogo, 'Tavily', true)
     default:
       break

@@ -40,7 +40,8 @@ interface ConnectorsTabProps {
   workspaceSlug: string
   projectId?: string | null
   onUserMcpChanged?: () => void
-  openConnectorSourceId?: string | null
+  /** 要自动打开的连接器完整 id（带 kind 命名空间，如 api:web-search / builtin:chrome-devtools） */
+  openConnectorId?: string | null
   onOpenConnectorConsumed?: () => void
   onRequestDeleteMcp?: (name: string) => void
   onRequestDeleteHttp?: (item: { id: string; name: string }) => void
@@ -60,7 +61,7 @@ export function ConnectorsTab({
   workspaceSlug,
   projectId,
   onUserMcpChanged,
-  openConnectorSourceId,
+  openConnectorId,
   onOpenConnectorConsumed,
   onRequestDeleteMcp,
   onRequestDeleteHttp,
@@ -107,18 +108,18 @@ export function ConnectorsTab({
   }, [])
 
   React.useEffect(() => {
-    if (!openConnectorSourceId) return
-    const item = items.find((candidate) => candidate.sourceId === openConnectorSourceId)
+    if (!openConnectorId) return
+    const item = items.find((candidate) => candidate.id === openConnectorId)
     if (item) {
       openItem(item)
       onOpenConnectorConsumed?.()
       return
     }
     if (!toolsFetchDone) return
-    console.error('[连接器] 未找到要打开的连接器:', openConnectorSourceId)
+    console.error('[连接器] 未找到要打开的连接器:', openConnectorId)
     toast.error('未找到对应连接器')
     onOpenConnectorConsumed?.()
-  }, [items, onOpenConnectorConsumed, openConnectorSourceId, openItem, toolsFetchDone])
+  }, [items, onOpenConnectorConsumed, openConnectorId, openItem, toolsFetchDone])
 
   React.useEffect(() => {
     if (!selected) return

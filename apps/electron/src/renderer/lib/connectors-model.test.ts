@@ -297,4 +297,70 @@ describe('connectors-model', () => {
       'builtin:nano-banana',
     ])
   })
+
+  test('keeps user MCP and same-name API tool as distinct namespaced items', () => {
+    const items = buildConnectorItems({
+      builtinServers: [],
+      userEntries: [['web-search', { type: 'http', url: 'https://mcp.example', enabled: true }]],
+      chatTools: [chatTool('web-search', '联网搜索', true, true)],
+    })
+
+    // 同名但不互斥：id 带 kind 命名空间，二者唯一，不会因裸 sourceId 反查串线
+    expect(items.map((item) => item.id).sort()).toEqual(['api:web-search', 'mcp:web-search'])
+    expect(new Set(items.map((item) => item.id)).size).toBe(2)
+    expect(items.find((item) => item.id === 'mcp:web-search')?.kind).toBe('user-mcp')
+  })
+
+  test('excludes internal product tools from connector items', () => {
+    const items = buildConnectorItems({
+      builtinServers: [],
+      userEntries: [],
+      chatTools: [
+        chatTool('agent-mode-recommend', 'Agent 模式推荐', true, true),
+        chatTool('web-search', '联网搜索', true, true),
+      ],
+    })
+
+    expect(items.map((item) => item.id)).toEqual(['api:web-search'])
+  })
+
+  test('marks enabled user MCP with failed last test as connect_failed', () => {
+    const items = buildConnectorItems({
+      builtinServers: [],
+      userEntries: [[
+        'broken-db',
+        {
+          type: 'stdio',
+          command: 'sqlite-mcp',
+          enabled: true,
+          lastTestResult: { success: false, message: '连接失败：进程退出异常', timestamp: 1 },
+        },
+      ]],
+      chatTools: [],
+    })
+
+    expect(items[0]).toMatchObject({
+      id: 'mcp:broken-db',
+      status: 'connect_failed',
+      statusLabel: '连接失败',
+      statusReason: '连接失败：进程退出异常',
+      nextActionLabel: '去排查',
+    })
+  })
+
+  test('groups unknown categories after the ordered ones', () => {
+    const items = buildConnectorItems({
+      builtinServers: [
+        builtin('memory-server', 'memory'),
+        builtin('chrome-devtools', 'browser'),
+      ],
+      userEntries: [],
+      chatTools: [],
+    })
+
+    expect(groupConnectorItems(items).map((group) => group.categoryLabel)).toEqual([
+      '浏览器',
+      '记忆',
+    ])
+  })
 })

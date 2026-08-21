@@ -77,7 +77,19 @@ export interface ConnectorGroup {
   items: ConnectorItem[]
 }
 
-const SYSTEM_BUILTIN_IDS = new Set(['automation', 'collaboration', 'create-task'])
+/**
+ * 属于「Runtime 系统能力」的内置分类（只进总览内置能力，不进连接器列表）。
+ * 连接器侧的过滤按数据自带的 category 判定（default-mcp.json 单一事实源），
+ * 避免新增同类内置能力时漏排除。
+ */
+const INTERNAL_BUILTIN_CATEGORIES: ReadonlySet<BuiltinMcpCategory> = new Set(['automation', 'collaboration', 'task'])
+
+/** chat tool 侧没有 BuiltinMcpCategory，只能按 id 排除（当前工具集本就不含这三者，防御性保留）。 */
+const SYSTEM_TOOL_IDS = new Set(['automation', 'collaboration', 'create-task'])
+
+/** 内部产品能力（非连接器），配置入口在设置 → 工具，不进连接器列表。 */
+const NON_CONNECTOR_TOOL_IDS = new Set(['agent-mode-recommend'])
+
 const HIDDEN_USER_MCP_IDS = new Set(['memos-cloud'])
 
 export const CONNECTOR_CATEGORY_ORDER = ['浏览器', '媒体', '搜索', '我的连接', '自定义'] as const
@@ -95,7 +107,11 @@ export const CONNECTOR_FILTER_CHIPS: Array<{ key: ConnectorFilterChip; label: st
 ]
 
 export function isSystemBuiltinAbility(id: string): boolean {
-  return SYSTEM_BUILTIN_IDS.has(id)
+  return SYSTEM_TOOL_IDS.has(id)
+}
+
+export function isInternalBuiltinCategory(category: BuiltinMcpCategory): boolean {
+  return INTERNAL_BUILTIN_CATEGORIES.has(category)
 }
 
 export function classifyConnectorBlocker(reason?: string): Exclude<ConnectorStatus, 'enabled' | 'disabled'> {
@@ -141,6 +157,7 @@ function categoryLabelOfBuiltin(category: BuiltinMcpCategory): string {
     case 'automation':
     case 'collaboration':
     case 'task':
+      // 后三个分类当前被 INTERNAL_BUILTIN_CATEGORIES 过滤不进连接器列表；保留映射以应对未来非内部连接器复用这些分类。
       return '外部工具'
     default: {
       const _exhaustive: never = category
@@ -150,7 +167,7 @@ function categoryLabelOfBuiltin(category: BuiltinMcpCategory): string {
 }
 
 function categoryLabelOfTool(tool: ChatToolMeta): string {
-  if (tool.category === 'custom') return '自定义'
+  // custom 工具在 buildConnectorItems 里已被单独分流为「自定义」，此处只会收到 builtin 工具。
   if (tool.id === 'web-search') return '搜索'
   if (tool.id === 'nano-banana') return '媒体'
   return '搜索'
@@ -216,7 +233,7 @@ export function buildConnectorItems(input: {
   chatTools: ChatToolInfo[]
 }): ConnectorItem[] {
   const connectorBuiltins = input.builtinServers.filter(
-    (server) => !isSystemBuiltinAbility(server.id),
+    (server) => !isInternalBuiltinCategory(server.category),
   )
   const builtinSourceIds = new Set(connectorBuiltins.map((server) => server.id))
 
@@ -234,8 +251,13 @@ export function buildConnectorItems(input: {
     ...statusOf(server.enabled, server.available, server.availabilityReason),
   }))
 
+  // 去重策略：同 sourceId 时内置连接器无条件优先、chat tool 无条件丢弃。
+  // 当前内置项与同名 chat tool 共享同一份凭据/可用性（如 nano-banana），不会出现
+  // 「内置不可用但工具可用」的分化；若未来某个 id 出现双源分化，需改为「内置不可用时回退展示工具」。
   const uniqueChatTools = input.chatTools.filter(
-    (tool) => !isSystemBuiltinAbility(tool.meta.id) && !builtinSourceIds.has(tool.meta.id),
+    (tool) => !isSystemBuiltinAbility(tool.meta.id)
+      && !NON_CONNECTOR_TOOL_IDS.has(tool.meta.id)
+      && !builtinSourceIds.has(tool.meta.id),
   )
 
   const apiItems = uniqueChatTools
@@ -274,6 +296,9 @@ export function buildConnectorItems(input: {
     .filter(([name, entry]) => !isHiddenUserMcp(name, entry))
     .map(([name, entry]) => {
       const available = userMcpAvailable(entry)
+      const baseStatus = statusOf(entry.enabled, available, userMcpReason(entry, available))
+      // 上次测试失败且仍启用 → 直接标「连接失败」，让用户扫一眼就能发现配置错误的 MCP（原 McpCard 行为）。
+      const lastTestFailed = entry.enabled && entry.lastTestResult?.success === false
       return {
         id: `mcp:${name}`,
         kind: 'user-mcp' as const,
@@ -285,7 +310,10 @@ export function buildConnectorItems(input: {
         typeLabel: 'MCP' as const,
         enabled: entry.enabled,
         available,
-        ...statusOf(entry.enabled, available, userMcpReason(entry, available)),
+        status: lastTestFailed ? 'connect_failed' as const : baseStatus.status,
+        statusLabel: lastTestFailed ? STATUS_LABEL.connect_failed : baseStatus.statusLabel,
+        statusReason: lastTestFailed ? entry.lastTestResult?.message : baseStatus.statusReason,
+        nextActionLabel: lastTestFailed ? STATUS_NEXT.connect_failed : baseStatus.nextActionLabel,
       }
     })
 

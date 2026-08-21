@@ -29,6 +29,8 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
 interface EmbeddedToolSettingsProps {
   /** 嵌入连接器详情时隐藏 SettingsSection 标题与开关 */
   embedded?: boolean
+  /** 保存凭据后回调（嵌入场景下供宿主刷新连接器卡片状态，如内置连接器可用性） */
+  onChanged?: () => void
 }
 
 /** 联网搜索工具设置区域 */
@@ -203,7 +205,7 @@ export function WebSearchSettings({ embedded = false }: EmbeddedToolSettingsProp
 }
 
 /** Nano Banana 生图工具设置区域 */
-export function NanoBananaSettings({ embedded = false }: EmbeddedToolSettingsProps): React.ReactElement {
+export function NanoBananaSettings({ embedded = false, onChanged }: EmbeddedToolSettingsProps): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -247,11 +249,12 @@ export function NanoBananaSettings({ embedded = false }: EmbeddedToolSettingsPro
       await window.electronAPI.updateChatToolCredentials('nano-banana', current)
       savedCredentialsRef.current = current
       await refreshChatTools(setChatTools)
+      onChanged?.()
       toast.success('Nano Banana 设置已保存')
     } catch (error) {
       console.error('[Nano Banana 设置] 保存失败:', error)
     }
-  }, [apiKey, baseUrl, model, setChatTools])
+  }, [apiKey, baseUrl, model, setChatTools, onChanged])
 
   const handleToggle = async (checked: boolean): Promise<void> => {
     try {
@@ -272,6 +275,7 @@ export function NanoBananaSettings({ embedded = false }: EmbeddedToolSettingsPro
         await window.electronAPI.updateChatToolCredentials('nano-banana', current)
         savedCredentialsRef.current = current
         await refreshChatTools(setChatTools)
+        onChanged?.()
       } catch (error) {
         console.error('[Nano Banana 设置] 保存失败:', error)
       }

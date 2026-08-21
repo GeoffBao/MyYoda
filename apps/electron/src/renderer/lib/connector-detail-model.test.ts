@@ -2,9 +2,16 @@ import { describe, expect, test } from 'bun:test'
 import type { ConnectorItem } from './connectors-model'
 import { describeConnectorDetail } from './connector-detail-model'
 
+const ID_PREFIX: Record<ConnectorItem['kind'], string> = {
+  'builtin-mcp': 'builtin',
+  'api-tool': 'api',
+  'custom-http': 'custom',
+  'user-mcp': 'mcp',
+}
+
 function item(overrides: Partial<ConnectorItem> & Pick<ConnectorItem, 'kind' | 'sourceId' | 'name'>): ConnectorItem {
   return {
-    id: `${overrides.kind}:${overrides.sourceId}`,
+    id: `${ID_PREFIX[overrides.kind]}:${overrides.sourceId}`,
     description: 'desc',
     categoryLabel: '浏览器',
     sourceLabel: 'MyYoda 内置',
@@ -61,5 +68,18 @@ describe('connector-detail-model', () => {
       name: 'Nano Banana 生图',
       categoryLabel: '媒体',
     })).capabilities).toContain('按描述生成图片')
+  })
+
+  test('自建与内置同名的 user MCP 不误用内置连接器文案', () => {
+    const meta = describeConnectorDetail(item({
+      kind: 'user-mcp',
+      sourceId: 'web-search',
+      name: 'web-search',
+      sourceLabel: '我的连接',
+      typeLabel: 'MCP',
+    }))
+    expect(meta.configMethodLabel).not.toContain('Tavily')
+    expect(meta.configMethodLabel).toBe('命令或 URL')
+    expect(meta.permissionLabel).toContain('本机命令')
   })
 })

@@ -1,7 +1,7 @@
 ---
 name: find-skills
 description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
-version: "1.0.2"
+version: "1.0.3"
 ---
 # Find Skills
 
@@ -102,7 +102,7 @@ The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts
 
 `npx skills add` 默认装到 `.agents/skills/` 等位置，**MyYoda 不会加载**。装完必须拷到叠加层之一：
 
-- 工作区：`~/.myyoda/agent-workspaces/<workspace>/skills/<skill-name>/`（开发模式 `~/.luxcoder-dev/`）
+- 工作区：`~/.myyoda/agent-workspaces/<workspace>/skills/<skill-name>/`（开发模式 `~/.myyoda-dev/`）
 - 某个 Project 的技能目录（插件作用域选该 Project 后再导入）
 
 推荐流程：

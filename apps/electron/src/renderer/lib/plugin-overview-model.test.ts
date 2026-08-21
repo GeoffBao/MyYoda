@@ -89,15 +89,15 @@ describe('plugin-overview-model', () => {
 
     expect(overview.summary.connectorsNeedingAttention).toBe(4)
     expect(overview.pendingItems.map((item) => item.id)).toEqual([
-      'connector:chrome-devtools',
-      'connector:disabled-builtin',
-      'connector:missing-credential',
-      'connector:disabled-tool',
+      'connector:builtin:chrome-devtools',
+      'connector:builtin:disabled-builtin',
+      'connector:api:missing-credential',
+      'connector:api:disabled-tool',
     ])
     expect(overview.pendingItems[0]).toMatchObject({
       title: 'Chrome',
       description: '需要安装 Chrome',
-      actionConnectorId: 'chrome-devtools',
+      actionConnectorId: 'builtin:chrome-devtools',
       actionLabel: '去处理',
     })
   })

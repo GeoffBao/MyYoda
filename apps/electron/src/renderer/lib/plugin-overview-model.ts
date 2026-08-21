@@ -4,7 +4,7 @@ import type {
   McpServerEntry,
   SkillMeta,
 } from '@myyoda/shared'
-import { isSystemBuiltinAbility, buildConnectorItems, isConnectorAttentionStatus } from './connectors-model'
+import { isInternalBuiltinCategory, buildConnectorItems, isConnectorAttentionStatus, type ConnectorItem } from './connectors-model'
 import type { PluginCenterTab } from './plugin-center-model'
 
 export interface PluginOverviewInput {
@@ -38,15 +38,15 @@ export interface PluginOverviewModel {
   builtinAbilities: PluginOverviewItem[]
 }
 
-function connectorPendingItem(
-  item: { sourceId: string; name: string; statusReason?: string; nextActionLabel?: string },
-): PluginOverviewItem {
+function connectorPendingItem(item: ConnectorItem): PluginOverviewItem {
   return {
-    id: `connector:${item.sourceId}`,
+    // id 与 actionConnectorId 均用带 kind 命名空间的完整 id（如 api:web-search / mcp:web-search），
+    // 避免自建 MCP 与内置/API 连接器同名时误路由或 React key 冲突（PR #111 同源教训）。
+    id: `connector:${item.id}`,
     title: item.name,
     description: item.statusReason ?? '连接器当前不可用，请检查配置或授权。',
     actionTab: 'connectors',
-    actionConnectorId: item.sourceId,
+    actionConnectorId: item.id,
     actionLabel: item.nextActionLabel ?? '去配置',
   }
 }
@@ -65,7 +65,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
 
   const builtinAbilities: PluginOverviewItem[] = [
     ...input.builtinMcpServers
-      .filter((server) => isSystemBuiltinAbility(server.id))
+      .filter((server) => isInternalBuiltinCategory(server.category))
       .map((server) => ({
         id: server.id,
         title: server.displayName,
@@ -137,7 +137,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
         title: 'Chrome 浏览器',
         description: '打开真实网页、截图与检查 DOM。',
         actionTab: 'connectors',
-        actionConnectorId: 'chrome-devtools',
+        actionConnectorId: 'builtin:chrome-devtools',
         actionLabel: '查看',
       },
       {
@@ -145,7 +145,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
         title: '联网搜索',
         description: '为 Agent 提供实时网页搜索。',
         actionTab: 'connectors',
-        actionConnectorId: 'web-search',
+        actionConnectorId: 'api:web-search',
         actionLabel: '查看',
       },
       {
@@ -153,7 +153,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
         title: 'Nano Banana 生图',
         description: '用 Gemini 生成和编辑图片。',
         actionTab: 'connectors',
-        actionConnectorId: 'nano-banana',
+        actionConnectorId: 'builtin:nano-banana',
         actionLabel: '查看',
       },
     ],

@@ -20,7 +20,7 @@ interface PluginOverviewTabProps {
   model: PluginOverviewModel
   onOpenTab: (tab: PluginCenterTab) => void
   onCreateExpert: () => void
-  onOpenConnector?: (sourceId: string) => void
+  onOpenConnector?: (connectorId: string) => void
 }
 
 export function PluginOverviewTab({
@@ -190,7 +190,7 @@ function PendingRow({
 }: {
   item: PluginOverviewItem
   onOpenTab: (tab: PluginCenterTab) => void
-  onOpenConnector?: (sourceId: string) => void
+  onOpenConnector?: (connectorId: string) => void
 }): React.ReactElement {
   return (
     <button

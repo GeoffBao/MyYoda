@@ -57,10 +57,10 @@ export function ConnectorDetailDialog({
     }
   }, [open, item?.id])
 
-  const userEntry = item
+  const userEntry = item?.kind === 'user-mcp'
     ? userEntries.find(([name]) => name === item.sourceId)?.[1]
     : undefined
-  const canTest = item?.sourceId === 'chrome-devtools'
+  const canTest = item?.id === 'builtin:chrome-devtools'
     || (item?.kind === 'user-mcp' && !!userEntry)
   const showFooter = !editingUserMcp
 
@@ -69,7 +69,7 @@ export function ConnectorDetailDialog({
     setTesting(true)
     setTestResult(null)
     try {
-      if (item.sourceId === 'chrome-devtools') {
+      if (item.id === 'builtin:chrome-devtools') {
         setTestResult(await window.electronAPI.testBuiltinConnector(item.sourceId))
         onUserMcpChanged?.()
         return
@@ -109,12 +109,16 @@ export function ConnectorDetailDialog({
               </h2>
               {item && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {[item.typeLabel, item.categoryLabel, item.statusLabel].map((tag) => (
+                  {[
+                    ['类型', item.typeLabel],
+                    ['分类', item.categoryLabel],
+                    ['状态', item.statusLabel],
+                  ].map(([field, label]) => (
                     <span
-                      key={tag}
+                      key={field}
                       className="rounded-md bg-foreground/[0.05] px-1.5 py-0.5 text-[11px] font-medium text-foreground/70"
                     >
-                      {tag}
+                      {label}
                     </span>
                   ))}
                 </div>
@@ -143,6 +147,7 @@ export function ConnectorDetailDialog({
               builtinServers={builtinServers}
               userEntries={userEntries}
               testResult={testResult}
+              onUserMcpChanged={onUserMcpChanged}
               onEditUserMcp={() => setEditingUserMcp(true)}
               onDeletedHttp={() => {
                 onDeletedHttp?.()
@@ -185,6 +190,7 @@ interface DetailBodyProps {
   builtinServers: BuiltinMcpServerSummary[]
   userEntries: Array<[string, McpServerEntry]>
   testResult: { success: boolean; message: string } | null
+  onUserMcpChanged?: () => void
   onEditUserMcp: () => void
   onDeletedHttp?: () => void
 }
@@ -194,6 +200,7 @@ function DetailBody({
   builtinServers,
   userEntries,
   testResult,
+  onUserMcpChanged,
   onEditUserMcp,
   onDeletedHttp,
 }: DetailBodyProps): React.ReactElement {
@@ -205,10 +212,10 @@ function DetailBody({
   }
 
   const meta = describeConnectorDetail(item)
-  const credentialForm = credentialFormOf(item.sourceId)
-  const builtin = builtinServers.find((server) => server.id === item.sourceId)
-  const userEntry = userEntries.find(([name]) => name === item.sourceId)?.[1]
-  const customTool = chatTools.find((tool) => tool.meta.id === item.sourceId)
+  const credentialForm = credentialFormOf(item)
+  const builtin = item.kind === 'builtin-mcp' ? builtinServers.find((server) => server.id === item.sourceId) : undefined
+  const userEntry = item.kind === 'user-mcp' ? userEntries.find(([name]) => name === item.sourceId)?.[1] : undefined
+  const customTool = item.kind === 'custom-http' ? chatTools.find((tool) => tool.meta.id === item.sourceId) : undefined
   const writable = builtin?.tools.some((tool) => !tool.readOnly) ?? item.kind !== 'api-tool'
 
   return (
@@ -237,6 +244,21 @@ function DetailBody({
         </ul>
       </div>
 
+      {item.kind === 'builtin-mcp' && builtin && builtin.tools.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-sm font-medium text-foreground">包含工具</div>
+          <ul className="flex flex-col gap-1.5">
+            {builtin.tools.map((tool) => (
+              <li key={tool.name} className="rounded-lg bg-muted/45 px-3 py-2 text-[13px] text-foreground">
+                <span className="font-medium">{tool.name}</span>
+                {tool.readOnly ? <span className="ml-1.5 text-[11px] text-muted-foreground">（只读）</span> : null}
+                {tool.description ? <span className="block text-[12px] text-muted-foreground">{tool.description}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="text-[12px] leading-relaxed text-muted-foreground">
         启用后，Agent 可能在任务中调用此能力。
         {writable ? '高风险写操作仍会在运行时请求确认。' : ''}
@@ -257,7 +279,7 @@ function DetailBody({
       )}
 
       {credentialForm === 'web-search' && <WebSearchSettings embedded />}
-      {credentialForm === 'nano-banana' && <NanoBananaSettings embedded />}
+      {credentialForm === 'nano-banana' && <NanoBananaSettings embedded onChanged={onUserMcpChanged} />}
 
       {item.kind === 'user-mcp' && userEntry && (
         <div className="flex flex-col gap-3">
@@ -267,6 +289,24 @@ function DetailBody({
           )}
           {(userEntry.type === 'http' || userEntry.type === 'sse') && userEntry.url && (
             <InfoRow label="URL" value={userEntry.url} mono />
+          )}
+          {userEntry.lastTestResult && (
+            <div className={cn(
+              'flex items-start gap-2 rounded-lg p-3 text-sm',
+              userEntry.lastTestResult.success
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-destructive/10 text-destructive',
+            )}>
+              {userEntry.lastTestResult.success
+                ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                : <XCircle size={16} className="mt-0.5 shrink-0" />}
+              <span className="flex flex-col gap-0.5">
+                <span>{userEntry.lastTestResult.message}</span>
+                <span className="text-[11px] opacity-70">
+                  最近测试：{new Date(userEntry.lastTestResult.timestamp).toLocaleString()}
+                </span>
+              </span>
+            </div>
           )}
           <Button variant="outline" size="sm" className="self-start" onClick={onEditUserMcp}>
             编辑配置
@@ -311,9 +351,9 @@ function DetailBody({
   )
 }
 
-function credentialFormOf(sourceId: string): 'web-search' | 'nano-banana' | null {
-  if (sourceId === 'web-search') return 'web-search'
-  if (sourceId === 'nano-banana') return 'nano-banana'
+function credentialFormOf(item: ConnectorItem): 'web-search' | 'nano-banana' | null {
+  if (item.id === 'api:web-search') return 'web-search'
+  if (item.id === 'builtin:nano-banana') return 'nano-banana'
   return null
 }
 

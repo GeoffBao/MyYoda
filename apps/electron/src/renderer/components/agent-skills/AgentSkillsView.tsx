@@ -156,8 +156,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     setTab('experts')
   }, [setTab, tab])
 
-  // 加载专家/专家团数量（侧栏入口移除后，插件视图自身维护角标数据）
+  // 加载专家/专家团数量（侧栏入口移除后，插件视图自身维护角标数据）。
+  // 切回总览/专家/专家团 Tab 时重拉，避免视图内新建/删除专家后计数与总览「已启用」数字 stale。
   React.useEffect(() => {
+    if (tab !== 'overview' && tab !== 'experts' && tab !== 'teams') return
     let cancelled = false
     window.electronAPI.experts.list()
       .then((list) => {
@@ -167,7 +169,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       })
       .catch((cause) => console.error('[AgentSkills] 加载专家数量失败:', cause))
     return () => { cancelled = true }
-  }, [])
+  }, [tab])
 
   // 连接器全局作用域迁移后续提示（遗留工作区 mcp.json / 同名冲突后缀）：
   // 只在进入连接器 Tab 时拉一次，避免与技能/专家等无关 Tab 也发请求。
@@ -186,7 +188,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [httpDialogOpen, setHttpDialogOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
-  const [openConnectorSourceId, setOpenConnectorSourceId] = React.useState<string | null>(null)
+  const [openConnectorId, setOpenConnectorId] = React.useState<string | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
   const [showCommunityMarket, setShowCommunityMarket] = React.useState(false)
@@ -309,12 +311,12 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
 
   const consumeOpenConnector = React.useCallback((): void => {
-    setOpenConnectorSourceId(null)
+    setOpenConnectorId(null)
   }, [])
 
-  const openConnector = React.useCallback((sourceId: string): void => {
+  const openConnector = React.useCallback((connectorId: string): void => {
     setTab('connectors')
-    setOpenConnectorSourceId(sourceId)
+    setOpenConnectorId(connectorId)
   }, [setTab])
 
   const handleClassifySkills = React.useCallback(async (): Promise<void> => {
@@ -609,7 +611,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
                 bumpCapabilities((v) => v + 1)
                 void data.reload()
               }}
-              openConnectorSourceId={openConnectorSourceId}
+              openConnectorId={openConnectorId}
               onOpenConnectorConsumed={consumeOpenConnector}
               onRequestDeleteMcp={setPendingDeleteMcpName}
               onRequestDeleteHttp={setPendingDeleteHttp}
@@ -645,7 +647,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         title={`确认删除 Skill「${pendingDeleteSkill?.name}」？`}
         description={
           pendingDeleteSkill?.scope === 'global'
-            ? '这是全局 Skill，删除将影响所有共享该局的工作区，且无法恢复，确定要卸载吗？'
+            ? '这是全局 Skill，删除将影响所有共享该层的工作区，且无法恢复，确定要卸载吗？'
             : '删除后将无法恢复，确定要卸载这个 Skill 吗？'
         }
         confirmLabel="删除"
