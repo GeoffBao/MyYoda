@@ -549,3 +549,92 @@ describe('项目级 Skills 目录解析（仅查看不创建）', () => {
     expect(manager.getProjectSkillsDir(workspace.slug, 'not-a-real-project-id')).toBe('')
   })
 })
+
+describe('Skill slug 路径穿越防护（resolveSkillDir / resolveGlobalSkillDir / resolveProjectSkillDir 共享）', () => {
+  test('Given skillSlug 包含 .. 相对路径段 When 读取工作区 Skill 内容 Then 报错而不是静默解析到目录外', () => {
+    const workspaceSlug = 'workspace-a'
+    writeWorkspaceSkill(workspaceSlug, 'alpha', 'Alpha')
+
+    expect(() => manager.readWorkspaceSkillContent(workspaceSlug, '../../../../etc/passwd')).toThrow()
+    expect(() => manager.readWorkspaceSkillContent(workspaceSlug, '..')).toThrow()
+    expect(() => manager.readWorkspaceSkillContent(workspaceSlug, '.')).toThrow()
+  })
+
+  test('Given skillSlug 包含路径分隔符 When 读取全局 Skill 子文件列表 Then 报错（global scope 同样受保护）', () => {
+    expect(() => manager.listSkillFiles('', 'foo/../../bar', 'global')).toThrow()
+    expect(() => manager.listSkillFiles('', 'foo\\..\\bar', 'global')).toThrow()
+  })
+
+  test('Given 合法 slug When 调用上述函数 Then 不受影响（校验不误伤正常路径）', () => {
+    const workspaceSlug = 'workspace-valid'
+    writeWorkspaceSkill(workspaceSlug, 'alpha', 'Alpha')
+
+    expect(manager.readWorkspaceSkillContent(workspaceSlug, 'alpha')).toContain('Alpha')
+  })
+})
+
+describe('全局 Skills 启用/禁用/删除', () => {
+  function writeGlobalSkill(slug: string, name: string): void {
+    const dir = join(configPaths.getGlobalSkillsDir(), slug)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${name}\n---\n`, 'utf-8')
+  }
+
+  test('Given 全局 Skill 处于 active When 禁用 Then 移入 global-skills-inactive/，再启用可移回', () => {
+    writeGlobalSkill('shared-tool', '共享工具')
+
+    manager.toggleGlobalSkill('shared-tool', false)
+    expect(existsSync(join(configPaths.getGlobalSkillsDir(), 'shared-tool'))).toBe(false)
+    expect(existsSync(join(configPaths.getGlobalInactiveSkillsDir(), 'shared-tool'))).toBe(true)
+
+    manager.toggleGlobalSkill('shared-tool', true)
+    expect(existsSync(join(configPaths.getGlobalSkillsDir(), 'shared-tool'))).toBe(true)
+    expect(existsSync(join(configPaths.getGlobalInactiveSkillsDir(), 'shared-tool'))).toBe(false)
+  })
+
+  test('Given 全局 Skill 不存在 When 切换或删除 Then 报错', () => {
+    expect(() => manager.toggleGlobalSkill('not-exist', false)).toThrow()
+    expect(() => manager.deleteGlobalSkill('not-exist')).toThrow()
+  })
+
+  test('Given 全局 Skill 存在 When 删除 Then 真实从磁盘移除（不是移入备份目录，调用方需自行确认）', () => {
+    writeGlobalSkill('to-remove', '待删除')
+
+    manager.deleteGlobalSkill('to-remove')
+
+    expect(existsSync(join(configPaths.getGlobalSkillsDir(), 'to-remove'))).toBe(false)
+    expect(existsSync(join(configPaths.getGlobalInactiveSkillsDir(), 'to-remove'))).toBe(false)
+  })
+})
+
+describe('getAllEffectiveSkills —— 全局+工作区三层合并', () => {
+  test('Given 工作区技能与全局同名 When 获取合并列表 Then 两份都在且 scope 正确，工作区那份标记 shadowedByGlobal', () => {
+    const workspaceSlug = 'workspace-shadow'
+    const globalDir = join(configPaths.getGlobalSkillsDir(), 'code-review')
+    mkdirSync(globalDir, { recursive: true })
+    writeFileSync(join(globalDir, 'SKILL.md'), '---\nname: 全局版代码审查\n---\n', 'utf-8')
+    writeWorkspaceSkill(workspaceSlug, 'code-review', '工作区自建同名')
+
+    const all = manager.getAllEffectiveSkills(workspaceSlug)
+    const globalOne = all.find((s) => s.slug === 'code-review' && s.scope === 'global')
+    const workspaceOne = all.find((s) => s.slug === 'code-review' && s.scope === 'workspace')
+
+    expect(globalOne).toBeDefined()
+    expect(workspaceOne).toBeDefined()
+    expect(globalOne?.shadowedByGlobal).toBeUndefined()
+    expect(workspaceOne?.shadowedByGlobal).toBe(true)
+  })
+
+  test('Given 全局与工作区 Skill 互不同名 When 获取合并列表 Then 都不标记 shadowedByGlobal', () => {
+    const workspaceSlug = 'workspace-no-shadow'
+    const globalDir = join(configPaths.getGlobalSkillsDir(), 'global-only')
+    mkdirSync(globalDir, { recursive: true })
+    writeFileSync(join(globalDir, 'SKILL.md'), '---\nname: 仅全局\n---\n', 'utf-8')
+    writeWorkspaceSkill(workspaceSlug, 'workspace-only', '仅工作区')
+
+    const all = manager.getAllEffectiveSkills(workspaceSlug)
+
+    expect(all.find((s) => s.slug === 'global-only')?.shadowedByGlobal).toBeUndefined()
+    expect(all.find((s) => s.slug === 'workspace-only')?.shadowedByGlobal).toBeUndefined()
+  })
+})

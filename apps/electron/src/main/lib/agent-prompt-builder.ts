@@ -16,7 +16,7 @@ import { formatProjectContextForPrompt } from '@myyoda/shared/projects'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getUserProfile } from './user-profile-service'
-import { getWorkspaceMcpConfig } from './agent-workspace-manager'
+import { getEffectiveMcpConfig, hasProjectMcpServers, getProjectMcpConfig } from './agent-workspace-manager'
 import { getConfigDirName } from './config-paths'
 import { buildGitAttributionPromptSection, isGitAttributionEnabled } from './agent-git-attribution'
 import { buildGitWorktreePromptSection } from './agent-git-worktree-policy'
@@ -394,6 +394,8 @@ export function buildSyntheticWorkspaceProjectContext(
 interface DynamicContext {
   workspaceName?: string
   workspaceSlug?: string
+  /** 会话绑定的嵌套 Project ID；仅用于判断 MCP 服务器列表是否需要用项目级覆盖全局（与 buildMcpServers 保持一致） */
+  projectId?: string
   agentCwd?: string
   /** 会话绑定项目的提示词上下文（每次实时构建） */
   projectContext?: ProjectPromptContext
@@ -437,8 +439,12 @@ export function buildDynamicContext(ctx: DynamicContext): string {
       wsLines.push(`工作区: ${ctx.workspaceName}`)
     }
 
-    // MCP 服务器列表
-    const mcpConfig = getWorkspaceMcpConfig(ctx.workspaceSlug)
+    // MCP 服务器列表：与 buildMcpServers 同样的 fallback 规则（项目自己配置过才用项目级，
+    // 否则读生效的全局配置）。不能用 getWorkspaceMcpConfig——工作区级 mcp.json 迁移后已改名，
+    // 继续读旧路径会让模型看到的服务器列表长期为空，即使全局配置里实际存在。
+    const mcpConfig = ctx.projectId && hasProjectMcpServers(ctx.workspaceSlug, ctx.projectId)
+      ? getProjectMcpConfig(ctx.workspaceSlug, ctx.projectId)
+      : getEffectiveMcpConfig(ctx.workspaceSlug)
     const serverEntries = Object.entries(mcpConfig.servers ?? {})
     if (serverEntries.length > 0) {
       wsLines.push('MCP 服务器:')

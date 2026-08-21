@@ -71,6 +71,7 @@ import type {
   StopTaskInput,
   WorkspaceMcpConfig,
   SkillMeta,
+  SkillScope,
   BulkImportSkillItemResult,
   BulkImportSkillsResult,
   BulkImportWorkspaceSelection,
@@ -349,6 +350,11 @@ import {
   ensureDefaultWorkspace,
   getWorkspaceMcpConfig,
   saveWorkspaceMcpConfig,
+  getGlobalMcpConfig,
+  saveGlobalMcpConfig,
+  getAllEffectiveSkills,
+  toggleGlobalSkill,
+  deleteGlobalSkill,
   getAllWorkspaceSkills,
   getOtherWorkspaceSkills,
   getDefaultSkillSlugs,
@@ -399,6 +405,7 @@ import {
   getAgentDefaultWorkingDirectory,
   setAgentDefaultWorkingDirectory,
 } from './lib/agent-workspace-manager'
+import { getGlobalScopeReviewHints } from './lib/agent-global-scope-migration'
 import { deleteWorkspaceCascade } from './lib/workspace-deletion-service'
 import {
   getOrganizationConnection,
@@ -3057,6 +3064,39 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 获取全局 MCP 配置（~/.myyoda/mcp.json，所有工作区共享，设置页真实编辑入口）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_GLOBAL_MCP_CONFIG,
+    async (): Promise<WorkspaceMcpConfig> => {
+      return getGlobalMcpConfig()
+    }
+  )
+
+  // 保存全局 MCP 配置
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SAVE_GLOBAL_MCP_CONFIG,
+    async (_, config: WorkspaceMcpConfig): Promise<void> => {
+      return saveGlobalMcpConfig(config)
+    }
+  )
+
+  // 获取全局作用域迁移后续提示（遗留工作区 mcp.json / 同名冲突后缀）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_GLOBAL_SCOPE_REVIEW_HINTS,
+    async (): Promise<import('@myyoda/shared').GlobalScopeReviewHints> => {
+      return getGlobalScopeReviewHints()
+    }
+  )
+
+  // 获取全局 Skills 目录绝对路径
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_GLOBAL_SKILLS_DIR,
+    async (): Promise<string> => {
+      const { getGlobalSkillsDir } = await import('./lib/config-paths')
+      return getGlobalSkillsDir()
+    }
+  )
+
   // 测试 MCP 服务器连接
   ipcMain.handle(
     AGENT_IPC_CHANNELS.TEST_MCP_SERVER,
@@ -3108,6 +3148,30 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.TOGGLE_SKILL,
     async (_, workspaceSlug: string, skillSlug: string, enabled: boolean): Promise<void> => {
       return toggleWorkspaceSkill(workspaceSlug, skillSlug, enabled)
+    }
+  )
+
+  // 获取全局+工作区+项目三层合并后的生效 Skill 列表（插件中心 UI 用，带 scope/shadowedByGlobal）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_ALL_EFFECTIVE_SKILLS,
+    async (_, workspaceSlug: string | undefined, projectId?: string): Promise<SkillMeta[]> => {
+      return getAllEffectiveSkills(workspaceSlug, projectId)
+    }
+  )
+
+  // 删除全局 Skill
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.DELETE_GLOBAL_SKILL,
+    async (_, skillSlug: string): Promise<void> => {
+      return deleteGlobalSkill(skillSlug)
+    }
+  )
+
+  // 切换全局 Skill 启用/禁用
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TOGGLE_GLOBAL_SKILL,
+    async (_, skillSlug: string, enabled: boolean): Promise<void> => {
+      return toggleGlobalSkill(skillSlug, enabled)
     }
   )
 
@@ -3367,59 +3431,61 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
-    async (_, workspaceSlug: string, skillSlug: string): Promise<string> => {
-      return readWorkspaceSkillContent(workspaceSlug, skillSlug)
+    async (_, workspaceSlug: string, skillSlug: string, scope?: SkillScope, projectId?: string): Promise<string> => {
+      return readWorkspaceSkillContent(workspaceSlug, skillSlug, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.WRITE_SKILL_CONTENT,
-    async (_, workspaceSlug: string, skillSlug: string, content: string): Promise<void> => {
-      writeWorkspaceSkillContent(workspaceSlug, skillSlug, content)
+    async (_, workspaceSlug: string, skillSlug: string, content: string, scope?: SkillScope, projectId?: string): Promise<void> => {
+      writeWorkspaceSkillContent(workspaceSlug, skillSlug, content, scope, projectId)
     }
   )
 
   // ===== Skill 子文件管理 =====
+  // 以下通道均支持可选 scope/projectId 参数（默认 scope='workspace' 保持既有行为不变），
+  // 用于定位到全局/项目层 Skill 的子文件。
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.LIST_SKILL_FILES,
-    async (_, workspaceSlug: string, skillSlug: string) => {
-      return listSkillFiles(workspaceSlug, skillSlug)
+    async (_, workspaceSlug: string, skillSlug: string, scope?: SkillScope, projectId?: string) => {
+      return listSkillFiles(workspaceSlug, skillSlug, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.READ_SKILL_FILE,
-    async (_, workspaceSlug: string, skillSlug: string, relativePath: string) => {
-      return readSkillFile(workspaceSlug, skillSlug, relativePath)
+    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, scope?: SkillScope, projectId?: string) => {
+      return readSkillFile(workspaceSlug, skillSlug, relativePath, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.WRITE_SKILL_FILE,
-    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, content: string): Promise<void> => {
-      writeSkillFile(workspaceSlug, skillSlug, relativePath, content)
+    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, content: string, scope?: SkillScope, projectId?: string): Promise<void> => {
+      writeSkillFile(workspaceSlug, skillSlug, relativePath, content, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_SKILL_ENTRY,
-    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory'): Promise<void> => {
-      createSkillEntry(workspaceSlug, skillSlug, relativePath, type)
+    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory', scope?: SkillScope, projectId?: string): Promise<void> => {
+      createSkillEntry(workspaceSlug, skillSlug, relativePath, type, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SKILL_ENTRY,
-    async (_, workspaceSlug: string, skillSlug: string, relativePath: string): Promise<void> => {
-      deleteSkillEntry(workspaceSlug, skillSlug, relativePath)
+    async (_, workspaceSlug: string, skillSlug: string, relativePath: string, scope?: SkillScope, projectId?: string): Promise<void> => {
+      deleteSkillEntry(workspaceSlug, skillSlug, relativePath, scope, projectId)
     }
   )
 
   ipcMain.handle(
     AGENT_IPC_CHANNELS.RENAME_SKILL_ENTRY,
-    async (_, workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string): Promise<void> => {
-      renameSkillEntry(workspaceSlug, skillSlug, fromRelative, toRelative)
+    async (_, workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string, scope?: SkillScope, projectId?: string): Promise<void> => {
+      renameSkillEntry(workspaceSlug, skillSlug, fromRelative, toRelative, scope, projectId)
     }
   )
 

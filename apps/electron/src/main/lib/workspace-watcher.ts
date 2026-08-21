@@ -17,7 +17,7 @@ import { stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { AGENT_IPC_CHANNELS } from '@myyoda/shared'
-import { getAgentWorkspacesDir } from './config-paths'
+import { getAgentWorkspacesDir, getGlobalMcpPath } from './config-paths'
 import { listAgentSessions } from './agent-session-manager'
 import { invalidateGitDiffCache } from './git-diff-service'
 import { isHighNoisePath, normalizeWatchFilename, shouldNotifyForWatchFilename } from './workspace-watcher-utils'
@@ -43,6 +43,8 @@ function scheduleWatcherRestart(callback: () => void): void {
 // 高频变动目录：跳过其中的变更事件，防止 node_modules / .next 等产生 IPC 事件风暴
 
 let watcher: FSWatcher | null = null
+/** 全局 MCP 配置监听器（监听 ~/.myyoda/mcp.json 变化） */
+let globalMcpWatcher: FSWatcher | null = null
 
 /** 已存在的附加目录监听器：路径 → FSWatcher */
 const attachedWatchers = new Map<string, FSWatcher>()
@@ -287,6 +289,31 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
       })
     })
 
+    // 全局 MCP 监听（~/.myyoda/mcp.json 变化时通知侧边栏刷新）
+    const globalMcpPath = getGlobalMcpPath()
+    try {
+      if (existsSync(globalMcpPath)) {
+        let globalCapabilitiesTimer: ReturnType<typeof setTimeout> | null = null
+        globalMcpWatcher = watch(globalMcpPath, () => {
+          if (globalCapabilitiesTimer) clearTimeout(globalCapabilitiesTimer)
+          globalCapabilitiesTimer = setTimeout(() => {
+            if (!win.isDestroyed()) {
+              win.webContents.send(AGENT_IPC_CHANNELS.CAPABILITIES_CHANGED)
+            }
+            globalCapabilitiesTimer = null
+          }, DEBOUNCE_MS)
+        })
+        globalMcpWatcher.on('error', (err) => {
+          console.warn('[全局 MCP 监听] 运行时错误:', err)
+          try { globalMcpWatcher?.close() } catch { /* watcher 可能已自动关闭 */ }
+          globalMcpWatcher = null
+        })
+        console.log('[全局 MCP 监听] 已启动文件监听:', globalMcpPath)
+      }
+    } catch (error) {
+      console.warn('[全局 MCP 监听] 启动失败:', error)
+    }
+
     console.log('[工作区监听] 已启动文件监听:', watchDir)
   } catch (error) {
     console.error('[工作区监听] 启动失败:', error)
@@ -304,6 +331,11 @@ export function stopWorkspaceWatcher(): void {
     watcher.close()
     watcher = null
     console.log('[工作区监听] 已停止')
+  }
+  if (globalMcpWatcher) {
+    globalMcpWatcher.close()
+    globalMcpWatcher = null
+    console.log('[全局 MCP 监听] 已停止')
   }
   // 同时清理所有附加目录及其缺失路径父目录监听器。
   for (const [dirPath, w] of attachedWatchers) {
