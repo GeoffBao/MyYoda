@@ -67,6 +67,8 @@ export interface AgentSkillsData {
   toggleSkill: (skill: SkillMeta, enabled: boolean) => Promise<void>
   deleteSkill: (skill: SkillMeta) => Promise<boolean>
   updateSkill: (skill: SkillMeta) => Promise<void>
+  /** 重新读取当前生效的 MCP 配置（不重新读 Skills），用于关闭 MCP 编辑抽屉后局部刷新 */
+  refreshMcpConfig: () => Promise<void>
   toggleMcp: (name: string, enabled: boolean) => Promise<void>
   toggleBuiltinMcp: (id: string, enabled: boolean) => Promise<void>
   deleteMcp: (name: string) => Promise<void>
@@ -224,6 +226,21 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     if (baseDir) window.electronAPI.openFile(`${baseDir}/${skill.slug}`)
   }, [globalSkillsDir, skillsDir])
 
+  /** 重新从磁盘读取当前生效的 MCP 配置（与 loadData 中的 MCP 分支同步），供关闭编辑抽屉后刷新卡片上的测试状态 */
+  const refreshMcpConfig = React.useCallback(async () => {
+    if (!workspaceSlug) return
+    try {
+      const projectHasOwnMcp = scopeProjectId ? await window.electronAPI.hasProjectMcpServers(workspaceSlug, scopeProjectId) : false
+      setMcpIsProjectOverride(projectHasOwnMcp)
+      const config = projectHasOwnMcp && scopeProjectId
+        ? await window.electronAPI.getProjectMcpConfig(workspaceSlug, scopeProjectId)
+        : await window.electronAPI.getGlobalMcpConfig()
+      setMcpConfig(config)
+    } catch (error) {
+      console.error('[Agent 技能] 刷新 MCP 配置失败:', error)
+    }
+  }, [workspaceSlug, scopeProjectId])
+
   const toggleMcp = React.useCallback(async (name: string, enabled: boolean) => {
     try {
       const entry = mcpConfig.servers[name]
@@ -296,6 +313,7 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     toggleSkill,
     deleteSkill,
     updateSkill,
+    refreshMcpConfig,
     toggleMcp,
     toggleBuiltinMcp,
     deleteMcp,
