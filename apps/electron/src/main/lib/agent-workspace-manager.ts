@@ -22,6 +22,9 @@ import {
   getWorkspaceSkillsDir,
   getInactiveSkillsDir,
   getDefaultSkillsDir,
+  getGlobalMcpPath,
+  getGlobalSkillsDir,
+  getGlobalInactiveSkillsDir,
   parseSkillVersion,
   RETIRED_DEFAULT_SKILL_SLUGS,
   isRetiredDefaultSkill,
@@ -31,7 +34,7 @@ import { projectRepository } from './project-repository'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@myyoda/shared'
-import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, KanbanColumnDef, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
+import type { AgentWorkspace, LocalProjectRootStatus, CreateAgentWorkspaceInput, KanbanColumnDef, WorkspaceMcpConfig, SkillMeta, SkillScope, SkillImportSource, OtherWorkspaceSkillsGroup, OtherProjectSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection, BulkImportProjectSelection, OrganizationConnection, OrganizationSkill } from '@myyoda/shared'
 import { extractSkillZip, orgDownloadSkill, buildOrganizationImportSource } from './org-skill-service'
 import { assertRecoveryRootSafe, assertRecoveryTargetSafe, quarantineForRecovery } from './recovery-trash-service'
 import { getSettings, updateSettings } from './settings-service'
@@ -590,11 +593,16 @@ function removeRetiredDefaultSkillsFromWorkspace(workspace: AgentWorkspace): voi
 }
 
 /**
- * 同步默认 Skills 到所有工作区。规则：
- * - 缺失：注入到 skills/（active），让升级后新增的内置 Skill 对老用户立即可用
- * - 已存在（active 或 inactive）：比较 SKILL.md 的 version，bundled 更新时才覆盖
- *   （保留用户停用决定 — 在 inactive 的依然在 inactive；同时避免每次启动
- *    全量 cpSync 4MB+ 文件阻塞主进程）
+ * 兼容层：升级存量工作区中残留的默认 Skill 副本。
+ *
+ * Skills 已全局化（见 getGlobalSkillsDir / getEffectiveSkillsDirs）：预制 Skill 的“真真正正
+ * 生效副本”仅存在 ~/.myyoda/global-skills/，运行时优先读它（见 seedDefaultSkills 同步到
+ * 全局层的逻辑）。本函数不再向工作区 skills/ 注入新副本——否则会把
+ * migrateGlobalScopes 的 skills-cleanup 步骤刚搬走的副本在同一次启动内立刻搬回来。
+ *
+ * 仅处理一种边缘情况：若某工作区因迁移尚未完成/失败而仍残留预制 Skill 副本，
+ * 顺便将其版本升级到最新，避免设置页展示过时版本号误导用户（这些残留副本终将在下一次
+ * 迁移清理补跑时被移除，运行时不会读到）。
  */
 export function upgradeDefaultSkillsInWorkspaces(): void {
   const defaultDir = getDefaultSkillsDir()
@@ -632,16 +640,18 @@ export function upgradeDefaultSkillsInWorkspaces(): void {
       const activePath = join(activeDir, slug)
       const inactivePath = join(inactiveDir, slug)
 
+      // 注意：此处故意不处理“两边都不存在”的情况——旧版本会在那里注入一份新副本，
+      // 但那正是 Skills 全局化要消除的行为（工作区不再持有默认 Skill 自己的副本）。
       if (existsSync(activePath)) {
         const currentVer = parseSkillVersion(activePath)
         if (compareSemver(info.version, currentVer) > 0) {
           if (safeReplaceSkillDir(info.sourcePath, activePath)) {
             console.log(
-              `[Agent 工作区] 已升级默认 Skill: ${workspace.slug}/${slug} (active, ${currentVer} → ${info.version})`,
+              `[Agent 工作区] 已升级残留默认 Skill 副本: ${workspace.slug}/${slug} (active, ${currentVer} → ${info.version})`,
             )
           } else {
             console.warn(
-              `[Agent 工作区] 升级默认 Skill 失败 (${workspace.slug}/${slug}, active)，跳过`,
+              `[Agent 工作区] 升级残留默认 Skill 副本失败 (${workspace.slug}/${slug}, active)，跳过`,
             )
           }
         }
@@ -653,23 +663,15 @@ export function upgradeDefaultSkillsInWorkspaces(): void {
         if (compareSemver(info.version, currentVer) > 0) {
           if (safeReplaceSkillDir(info.sourcePath, inactivePath)) {
             console.log(
-              `[Agent 工作区] 已升级默认 Skill: ${workspace.slug}/${slug} (inactive, ${currentVer} → ${info.version})`,
+              `[Agent 工作区] 已升级残留默认 Skill 副本: ${workspace.slug}/${slug} (inactive, ${currentVer} → ${info.version})`,
             )
           } else {
             console.warn(
-              `[Agent 工作区] 升级默认 Skill 失败 (${workspace.slug}/${slug}, inactive)，跳过`,
+              `[Agent 工作区] 升级残留默认 Skill 副本失败 (${workspace.slug}/${slug}, inactive)，跳过`,
             )
           }
         }
         continue
-      }
-
-      try {
-        if (!existsSync(activeDir)) mkdirSync(activeDir, { recursive: true })
-        cpSync(info.sourcePath, activePath, { recursive: true, filter: skillCopyFilter })
-        console.log(`[Agent 工作区] 已注入新默认 Skill: ${workspace.slug}/${slug} → active`)
-      } catch (err) {
-        console.warn(`[Agent 工作区] 注入默认 Skill 失败 (${workspace.slug}/${slug}):`, err)
       }
     }
   }
@@ -826,11 +828,172 @@ export function saveWorkspaceMcpConfig(workspaceSlug: string, config: WorkspaceM
   }
 }
 
+// ===== 全局作用域 MCP（全局默认 + 项目覆盖合并） =====
+
+/** 读取全局 MCP 配置（~/.myyoda/mcp.json）；不存在时返回空配置 */
+export function getGlobalMcpConfig(): WorkspaceMcpConfig {
+  const mcpPath = getGlobalMcpPath()
+
+  if (!existsSync(mcpPath)) {
+    return { servers: {} }
+  }
+
+  try {
+    const raw = readFileSync(mcpPath, 'utf-8')
+    const parsed = JSON.parse(raw) as Partial<WorkspaceMcpConfig>
+    return normalizeWorkspaceMcpConfig(parsed)
+  } catch (error) {
+    console.error('[全局 MCP] 读取配置失败:', error)
+    return { servers: {} }
+  }
+}
+
+/** 保存全局 MCP 配置（~/.myyoda/mcp.json） */
+export function saveGlobalMcpConfig(config: WorkspaceMcpConfig): void {
+  const mcpPath = getGlobalMcpPath()
+
+  try {
+    writeFileSync(mcpPath, JSON.stringify(normalizeWorkspaceMcpConfig(config), null, 2), 'utf-8')
+    console.log('[全局 MCP] 已保存配置')
+  } catch (error) {
+    console.error('[全局 MCP] 保存配置失败:', error)
+    throw new Error('保存全局 MCP 配置失败')
+  }
+}
+
+/**
+ * 读取生效的 MCP 配置（全局单层）。
+ *
+ * MCP 是「全局唯一配置」：运行时只读 ~/.myyoda/mcp.json。工作区/嵌套项目的 mcp.json
+ * 已在 migrateGlobalScopes 中合并并改名为 .migrated；若仍发现未改名的遗留文件，
+ * 只打告警、不参与合并，避免和 UI「只编全局」的心智模型打架。
+ */
+export function getEffectiveMcpConfig(
+  workspaceSlug: string | undefined,
+  _projectId?: string | undefined,
+): WorkspaceMcpConfig {
+  if (workspaceSlug) {
+    warnLeftoverWorkspaceMcp(workspaceSlug)
+  }
+  return getGlobalMcpConfig()
+}
+
+const leftoverMcpWarned = new Set<string>()
+
+/** 遗留工作区 mcp.json 只告警一次，不覆盖全局配置 */
+function warnLeftoverWorkspaceMcp(workspaceSlug: string): void {
+  if (leftoverMcpWarned.has(workspaceSlug)) return
+  leftoverMcpWarned.add(workspaceSlug)
+  try {
+    if (existsSync(getWorkspaceMcpPath(workspaceSlug))) {
+      console.warn(
+        `[全局 MCP] 发现遗留工作区配置 ${getWorkspaceMcpPath(workspaceSlug)}，已忽略（MCP 仅为全局单层）。` +
+          '若迁移未完成，重启应用会重试改名为 .migrated。',
+      )
+    }
+  } catch {
+    leftoverMcpWarned.delete(workspaceSlug)
+  }
+}
+
 // ===== Skill 目录扫描 =====
 
-/** 扫描工作区活跃 Skills，仅返回 skills/ 下的 Skill */
+/** 扫描工作区 Skills（活跃 + 停用），scope=workspace */
 export function getWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
+  return [
+    ...scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, 'workspace'),
+    ...scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false, 'workspace'),
+  ]
+}
+
+/** 获取工作区所有 Skills（含活跃和不活跃），用于设置页 UI */
+export function getAllWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
+  const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, 'workspace')
+  const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false, 'workspace')
+  return [...activeSkills, ...inactiveSkills]
+}
+
+// ===== 全局作用域 Skills（全局默认 + 项目覆盖合并） =====
+
+/** 获取全局所有 Skills（含活跃和不活跃，scope=global） */
+export function getGlobalSkills(): SkillMeta[] {
+  const activeSkills = scanSkillsInDir(getGlobalSkillsDir(), true, 'global')
+  const inactiveSkills = scanSkillsInDir(getGlobalInactiveSkillsDir(), false, 'global')
+  return [...activeSkills, ...inactiveSkills]
+}
+
+/**
+ * 获取全局 Skills 中已启用的 slug 集合（供运行时判断/UI 徽标使用）。
+ * 活跃目录存在但扫描失败时返回空集。
+ */
+export function getEnabledGlobalSkillSlugs(): Set<string> {
+  return new Set(scanSkillsInDir(getGlobalSkillsDir(), true, 'global').map((s) => s.slug))
+}
+
+/**
+ * 返回生效的 Skills 目录列表（三层：global < workspace < project）。
+ *
+ * - global：~/.myyoda/global-skills/（预制 skill 默认在此，所有工作区共享）
+ * - workspace：工作区 skills/（项目级，按项目隔离）
+ * - project：嵌套 Project 的 .context/skills/（仅绑定嵌套 Project 且已配置时存在）
+ *
+ * 注意：Pi SDK 按目录顺序加载，同名 skill 为 first-wins（先声明的 global 生效，
+ * 后加载的同名目录仅产生 collision 诊断）；global 实际优先级最高。
+ */
+export function getEffectiveSkillsDirs(
+  workspaceSlug: string | undefined,
+  projectId?: string | undefined,
+): string[] {
+  const dirs: string[] = []
+  dirs.push(getGlobalSkillsDir())
+
+  if (workspaceSlug) {
+    dirs.push(getWorkspaceSkillsDir(workspaceSlug))
+    if (projectId && hasProjectSkills(workspaceSlug, projectId)) {
+      const projectDir = getProjectSkillsDir(workspaceSlug, projectId)
+      if (projectDir) dirs.push(projectDir)
+    }
+  }
+
+  return dirs
+}
+
+/**
+ * 扫描各层 Skills（含活跃与停用），同名不去重。
+ *
+ * 运行时 Pi SDK 按 getEffectiveSkillsDirs 顺序 first-wins（全局优先）。
+ * 工作区/嵌套项目层与全局活跃同名的副本标记 shadowedByGlobal，UI 同时展示两张卡片。
+ */
+export function getAllEffectiveSkills(
+  workspaceSlug: string | undefined,
+  projectId?: string | undefined,
+): SkillMeta[] {
+  const globalActiveSlugs = new Set(scanSkillsInDir(getGlobalSkillsDir(), true, 'global').map((s) => s.slug))
+  const skills: SkillMeta[] = []
+
+  const layers: { dir: string; enabled: boolean; scope: SkillMeta['scope'] }[] = [
+    { dir: getGlobalSkillsDir(), enabled: true, scope: 'global' },
+    { dir: getGlobalInactiveSkillsDir(), enabled: false, scope: 'global' },
+  ]
+  if (workspaceSlug) {
+    layers.push({ dir: getWorkspaceSkillsDir(workspaceSlug), enabled: true, scope: 'workspace' })
+    layers.push({ dir: getInactiveSkillsDir(workspaceSlug), enabled: false, scope: 'workspace' })
+  }
+  if (workspaceSlug && projectId && hasProjectSkills(workspaceSlug, projectId)) {
+    const projectDir = getProjectSkillsDir(workspaceSlug, projectId)
+    if (projectDir) {
+      layers.push({ dir: projectDir, enabled: true, scope: 'project' })
+    }
+  }
+
+  for (const layer of layers) {
+    for (const skill of scanSkillsInDir(layer.dir, layer.enabled, layer.scope)) {
+      const isShadowed = skill.scope !== 'global' && globalActiveSlugs.has(skill.slug)
+      skills.push(isShadowed ? { ...skill, shadowedByGlobal: true } : skill)
+    }
+  }
+
+  return skills
 }
 
 /** 解析 SKILL.md 的 YAML frontmatter，支持单行值、block scalar（`|` / `>`）和多行缩进 */
@@ -893,7 +1056,8 @@ function parseSkillFrontmatter(content: string, slug: string, enabled: boolean):
 // ===== 工作区能力摘要 =====
 
 export function getWorkspaceCapabilities(workspaceSlug: string): WorkspaceCapabilities {
-  const mcpConfig = getWorkspaceMcpConfig(workspaceSlug)
+  // MCP 全局化：能力摘要读生效配置（全局 + 工作区/项目合并），工作区 mcp.json 已迁移改名
+  const mcpConfig = getEffectiveMcpConfig(workspaceSlug)
   const skills = getWorkspaceSkills(workspaceSlug)
   const builtinMcpServers = listBuiltinMcpServers({ workspaceSlug })
   const memory = getWorkspaceMemorySummary(workspaceSlug)
@@ -931,7 +1095,7 @@ function isSkillDirectoryEntry(dir: string, entry: Dirent): boolean {
   }
 }
 
-function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
+function scanSkillsInDir(dir: string, enabled: boolean, scope?: SkillMeta['scope']): SkillMeta[] {
   const skills: SkillMeta[] = []
 
   try {
@@ -946,6 +1110,7 @@ function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
       try {
         const content = readFileSync(skillMdPath, 'utf-8')
         const meta = parseSkillFrontmatter(content, entry.name, enabled)
+        if (scope) meta.scope = scope
 
         // 如果是导入的 Skill，读取来源信息并检测更新
         const importSource = readSkillImportSource(join(dir, entry.name))
@@ -993,13 +1158,6 @@ export function getDefaultSkillSlugs(): string[] {
   }
 }
 
-/** 获取工作区所有 Skills（含活跃和不活跃），用于设置页 UI */
-export function getAllWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
-  const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false)
-  return [...activeSkills, ...inactiveSkills]
-}
-
 /** 在 skills/ 和 skills-inactive/ 之间移动来切换启用/禁用 */
 export function toggleWorkspaceSkill(workspaceSlug: string, skillSlug: string, enabled: boolean): void {
   const activeDir = getWorkspaceSkillsDir(workspaceSlug)
@@ -1021,6 +1179,43 @@ export function toggleWorkspaceSkill(workspaceSlug: string, skillSlug: string, e
 
   renameWithRetry(srcPath, destPath)
   console.log(`[Agent 工作区] Skill ${enabled ? '启用' : '禁用'}: ${workspaceSlug}/${skillSlug}`)
+}
+
+/** 删除全局 Skill（active 或 inactive 目录均可）。影响所有共享该全局层的工作区，调用方需先确认。 */
+export function deleteGlobalSkill(skillSlug: string): void {
+  const activePath = join(getGlobalSkillsDir(), skillSlug)
+  const inactivePath = join(getGlobalInactiveSkillsDir(), skillSlug)
+  const target = existsSync(activePath) ? activePath : inactivePath
+
+  if (!existsSync(target)) {
+    throw new Error(`Skill 不存在: ${skillSlug}`)
+  }
+
+  rmSyncWithRetry(target, { recursive: true, force: true })
+  console.log(`[全局 Skills] 已删除: ${skillSlug}`)
+}
+
+/** 在全局 global-skills/ 与 global-skills-inactive/ 之间移动来切换启用/禁用。影响所有共享该全局层的工作区。 */
+export function toggleGlobalSkill(skillSlug: string, enabled: boolean): void {
+  const activeDir = getGlobalSkillsDir()
+  const inactiveDir = getGlobalInactiveSkillsDir()
+
+  const srcDir = enabled ? inactiveDir : activeDir
+  const destDir = enabled ? activeDir : inactiveDir
+
+  const srcPath = join(srcDir, skillSlug)
+  const destPath = join(destDir, skillSlug)
+
+  if (!existsSync(srcPath)) {
+    throw new Error(`Skill 不存在: ${skillSlug}`)
+  }
+
+  if (existsSync(destPath)) {
+    throw new Error(`目标目录已存在同名 Skill: ${skillSlug}`)
+  }
+
+  renameWithRetry(srcPath, destPath)
+  console.log(`[全局 Skills] ${enabled ? '启用' : '禁用'}: ${skillSlug}`)
 }
 
 /**
@@ -1059,7 +1254,9 @@ export function getProjectSkills(workspaceSlug: string, projectId: string): Skil
   const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, projectId)
   const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, projectId)
   if (!activeDir || !inactiveDir) return []
-  return [...scanSkillsInDir(activeDir, true), ...scanSkillsInDir(inactiveDir, false)]
+  // 显式传 'project' scope：与 getAllEffectiveSkills 保持一致的类型契约，避免未来某处把这里的结果与
+  // 其他层合并展示时，因 scope 缺失被误归入默认的 'workspace'。
+  return [...scanSkillsInDir(activeDir, true, 'project'), ...scanSkillsInDir(inactiveDir, false, 'project')]
 }
 
 /**
@@ -1512,8 +1709,27 @@ function writeSkillImportSource(skillDir: string, source: SkillImportSource): vo
   writeFileSync(join(skillDir, SOURCE_META_FILE), JSON.stringify(source, null, 2), 'utf-8')
 }
 
+/**
+ * 校验 Skill slug 合法性：拒绝路径分隔符与 . / ..，防止通过 skillSlug 参数发起路径穿越（如
+ * skillSlug='../../etc' 使 join(getGlobalSkillsDir(), skillSlug) 解析到预制 Skill 目录之外）。
+ * 同目录下的 resolveAutoMemoryFilePath 已有类似防护，这里补齐 Skill 目录解析一侧的同样防护。
+ */
+function assertValidSkillSlug(skillSlug: string): void {
+  if (
+    typeof skillSlug !== 'string'
+    || skillSlug.length === 0
+    || skillSlug === '.'
+    || skillSlug === '..'
+    || skillSlug.includes('/')
+    || skillSlug.includes('\\')
+  ) {
+    throw new Error(`非法 Skill slug: ${skillSlug}`)
+  }
+}
+
 /** 解析 Skill 所在目录（active 或 inactive），不存在则返回 null */
 function resolveSkillDir(workspaceSlug: string, skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
   const active = join(getWorkspaceSkillsDir(workspaceSlug), skillSlug)
   if (existsSync(active)) return active
   const inactive = join(getInactiveSkillsDir(workspaceSlug), skillSlug)
@@ -1521,19 +1737,55 @@ function resolveSkillDir(workspaceSlug: string, skillSlug: string): string | nul
   return null
 }
 
-export function readWorkspaceSkillContent(workspaceSlug: string, skillSlug: string): string {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+/** 解析全局 Skill 所在目录（active 或 inactive），不存在则返回 null */
+function resolveGlobalSkillDir(skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
+  const active = join(getGlobalSkillsDir(), skillSlug)
+  if (existsSync(active)) return active
+  const inactive = join(getGlobalInactiveSkillsDir(), skillSlug)
+  if (existsSync(inactive)) return inactive
+  return null
+}
+
+/** 解析项目级 Skill 所在目录（active 或 inactive），不存在则返回 null */
+function resolveProjectSkillDir(workspaceSlug: string, projectId: string, skillSlug: string): string | null {
+  assertValidSkillSlug(skillSlug)
+  const workspaceRoot = getAgentWorkspacePath(workspaceSlug)
+  const activeDir = projectRepository.getProjectSkillsDirPath(workspaceRoot, projectId)
+  const inactiveDir = projectRepository.getProjectInactiveSkillsDirPath(workspaceRoot, projectId)
+  if (activeDir && existsSync(join(activeDir, skillSlug))) return join(activeDir, skillSlug)
+  if (inactiveDir && existsSync(join(inactiveDir, skillSlug))) return join(inactiveDir, skillSlug)
+  return null
+}
+
+/**
+ * 按作用域解析 Skill 所在目录，统一供内容/子文件类 IPC 复用。
+ * scope 默认 'workspace'（向后兼容旧调用方）。global 层不依赖 workspaceSlug/projectId。
+ */
+function resolveSkillDirForScope(
+  workspaceSlug: string,
+  skillSlug: string,
+  scope: SkillScope = 'workspace',
+  projectId?: string,
+): string | null {
+  if (scope === 'global') return resolveGlobalSkillDir(skillSlug)
+  if (scope === 'project') return projectId ? resolveProjectSkillDir(workspaceSlug, projectId, skillSlug) : null
+  return resolveSkillDir(workspaceSlug, skillSlug)
+}
+
+export function readWorkspaceSkillContent(workspaceSlug: string, skillSlug: string, scope: SkillScope = 'workspace', projectId?: string): string {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const mdPath = join(dir, 'SKILL.md')
   if (!existsSync(mdPath)) throw new Error(`SKILL.md 不存在: ${mdPath}`)
   return readFileSync(mdPath, 'utf-8')
 }
 
-export function writeWorkspaceSkillContent(workspaceSlug: string, skillSlug: string, content: string): void {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+export function writeWorkspaceSkillContent(workspaceSlug: string, skillSlug: string, content: string, scope: SkillScope = 'workspace', projectId?: string): void {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   writeFileSync(join(dir, 'SKILL.md'), content, 'utf-8')
-  console.log(`[Agent 工作区] 已更新 SKILL.md: ${workspaceSlug}/${skillSlug}`)
+  console.log(`[Agent 工作区] 已更新 SKILL.md（${scope}）: ${skillSlug}`)
 }
 
 // ===== Skill 子文件管理 =====
@@ -2076,15 +2328,15 @@ function buildSkillFileTree(rootDir: string, currentDir: string, depth: number):
   return nodes
 }
 
-export function listSkillFiles(workspaceSlug: string, skillSlug: string): SkillFileNode[] {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+export function listSkillFiles(workspaceSlug: string, skillSlug: string, scope: SkillScope = 'workspace', projectId?: string): SkillFileNode[] {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   return buildSkillFileTree(dir, dir, 0)
 }
 
-export function readSkillFile(workspaceSlug: string, skillSlug: string, relativePath: string): SkillFileContent {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+export function readSkillFile(workspaceSlug: string, skillSlug: string, relativePath: string, scope: SkillScope = 'workspace', projectId?: string): SkillFileContent {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const abs = resolveSkillChildPath(dir, relativePath)
   if (!existsSync(abs)) throw new Error(`文件不存在: ${relativePath}`)
 
@@ -2103,9 +2355,9 @@ export function readSkillFile(workspaceSlug: string, skillSlug: string, relative
   }
 }
 
-export function writeSkillFile(workspaceSlug: string, skillSlug: string, relativePath: string, content: string): void {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+export function writeSkillFile(workspaceSlug: string, skillSlug: string, relativePath: string, content: string, scope: SkillScope = 'workspace', projectId?: string): void {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const abs = resolveSkillChildPath(dir, relativePath)
 
   const byteLen = Buffer.byteLength(content, 'utf-8')
@@ -2132,9 +2384,11 @@ export function createSkillEntry(
   skillSlug: string,
   relativePath: string,
   type: 'file' | 'directory',
+  scope: SkillScope = 'workspace',
+  projectId?: string,
 ): void {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const abs = resolveSkillChildPath(dir, relativePath)
 
   if (existsSync(abs)) {
@@ -2153,15 +2407,15 @@ export function createSkillEntry(
   console.log(`[Agent 工作区] 已创建 Skill 子${type === 'directory' ? '目录' : '文件'}: ${workspaceSlug}/${skillSlug}/${relativePath}`)
 }
 
-export function deleteSkillEntry(workspaceSlug: string, skillSlug: string, relativePath: string): void {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+export function deleteSkillEntry(workspaceSlug: string, skillSlug: string, relativePath: string, scope: SkillScope = 'workspace', projectId?: string): void {
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const abs = resolveSkillChildPath(dir, relativePath)
   if (!existsSync(abs)) {
     throw new Error(`目标不存在: ${relativePath}`)
   }
   rmSyncWithRetry(abs, { recursive: true, force: true })
-  console.log(`[Agent 工作区] 已删除 Skill 子项: ${workspaceSlug}/${skillSlug}/${relativePath}`)
+  console.log(`[Agent 工作区] 已删除 Skill 子项（${scope}）: ${skillSlug}/${relativePath}`)
 }
 
 export function renameSkillEntry(
@@ -2169,9 +2423,11 @@ export function renameSkillEntry(
   skillSlug: string,
   fromRelative: string,
   toRelative: string,
+  scope: SkillScope = 'workspace',
+  projectId?: string,
 ): void {
-  const dir = resolveSkillDir(workspaceSlug, skillSlug)
-  if (!dir) throw new Error(`Skill 不存在: ${workspaceSlug}/${skillSlug}`)
+  const dir = resolveSkillDirForScope(workspaceSlug, skillSlug, scope, projectId)
+  if (!dir) throw new Error(`Skill 不存在: ${skillSlug}`)
   const fromAbs = resolveSkillChildPath(dir, fromRelative)
   const toAbs = resolveSkillChildPath(dir, toRelative)
   if (!existsSync(fromAbs)) {

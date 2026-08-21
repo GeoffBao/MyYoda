@@ -91,6 +91,7 @@ import { seedDefaultSkills, seedDefaultExpertTemplates, getExpertsDir } from './
 import { initializeReleaseNotes } from './lib/release-notes-service'
 import { seedBuiltinExperts } from './lib/expert-service'
 import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
+import { migrateGlobalScopes } from './lib/agent-global-scope-migration'
 import { stopAllAgents, killOrphanedClaudeSubprocesses, isAgentSessionActive, hasActiveAgentSessions } from './lib/agent-service'
 import { disposePiMcpConnections } from './lib/adapters/pi-mcp-tools'
 import { browserController } from './lib/browser-controller'
@@ -708,6 +709,9 @@ async function bootstrap(): Promise<void> {
   // 同步默认 Skills 模板到 ~/.myyoda/default-skills/
   safeRun('seedDefaultSkills', seedDefaultSkills)
   safeRun('seedDefaultExpertTemplates', seedDefaultExpertTemplates)
+
+  // 全局作用域迁移（MCP 全局化 / 全局 Skills；幂等，异步执行不阻塞启动）
+  await safeAwait('migrateGlobalScopes', migrateGlobalScopes)
 
   // 同步本地化版本历史到 ~/.myyoda/release-notes/
   safeRun('initializeReleaseNotes', initializeReleaseNotes)

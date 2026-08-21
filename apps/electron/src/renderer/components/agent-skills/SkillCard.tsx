@@ -5,7 +5,7 @@
  */
 
 import * as React from 'react'
-import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine } from 'lucide-react'
+import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine, Globe, AlertTriangle } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -36,8 +36,19 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
         'group relative flex h-full flex-col gap-3 rounded-xl border border-border/60 bg-content-area p-4 text-left transition-[border-color,box-shadow,background-color] duration-fast cursor-pointer',
         'hover:border-border hover:shadow-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         !skill.enabled && 'opacity-55',
+        skill.shadowedByGlobal && 'border-amber-500/40 bg-amber-500/[0.04]',
       )}
     >
+      {skill.shadowedByGlobal && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+              <AlertTriangle size={11} /> 已被遮蔽
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">存在同名全局 Skill，运行时优先生效全局版本，这份副本不会被使用</TooltipContent>
+        </Tooltip>
+      )}
       <div className="flex items-start gap-3">
         <div className="rounded-xl bg-amber-500/12 p-2 text-amber-500 shadow-sm shrink-0">
           <Sparkles size={18} />
@@ -69,6 +80,14 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
         {isBuiltin ? (
           <span className="flex items-center gap-1 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">
             <ShieldCheck size={12} /> 系统内置
+          </span>
+        ) : skill.scope === 'global' ? (
+          <span className="flex items-center gap-1 rounded-md bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+            <Globe size={12} /> 全局
+          </span>
+        ) : skill.scope === 'project' ? (
+          <span className="rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[11px] font-medium text-purple-600 dark:text-purple-400">
+            本项目
           </span>
         ) : skill.importSource ? (
           <span className="truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">

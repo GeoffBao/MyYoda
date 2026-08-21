@@ -892,6 +892,18 @@ export interface ElectronAPI {
   /** 保存工作区 MCP 配置 */
   saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => Promise<void>
 
+  /** 读取全局 MCP 配置（~/.myyoda/mcp.json，所有工作区共享） */
+  getGlobalMcpConfig: () => Promise<WorkspaceMcpConfig>
+
+  /** 保存全局 MCP 配置 */
+  saveGlobalMcpConfig: (config: WorkspaceMcpConfig) => Promise<void>
+
+  /** 获取全局作用域迁移后续提示（遗留工作区 mcp.json / 同名冲突后缀） */
+  getGlobalScopeReviewHints: () => Promise<import('@myyoda/shared').GlobalScopeReviewHints>
+
+  /** 获取全局 Skills 目录绝对路径（~/.myyoda/global-skills/） */
+  getGlobalSkillsDir: () => Promise<string>
+
   /** 测试 MCP 服务器连接 */
   testMcpServer: (name: string, entry: import('@myyoda/shared').McpServerEntry) => Promise<{ success: boolean; message: string }>
 
@@ -909,6 +921,15 @@ export interface ElectronAPI {
 
   /** 切换工作区 Skill 启用/禁用 */
   toggleWorkspaceSkill: (workspaceSlug: string, skillSlug: string, enabled: boolean) => Promise<void>
+
+  /** 获取全局+工作区+项目三层合并后的生效 Skill 列表（带 scope/shadowedByGlobal，projectId 为空时不合并项目层） */
+  getAllEffectiveSkills: (workspaceSlug: string | undefined, projectId?: string) => Promise<SkillMeta[]>
+
+  /** 删除全局 Skill */
+  deleteGlobalSkill: (skillSlug: string) => Promise<void>
+
+  /** 切换全局 Skill 启用/禁用 */
+  toggleGlobalSkill: (skillSlug: string, enabled: boolean) => Promise<void>
 
   /** 获取其他工作区的 Skill 列表 */
   getOtherWorkspaceSkills: (currentSlug: string) => Promise<OtherWorkspaceSkillsGroup[]>
@@ -977,29 +998,31 @@ export interface ElectronAPI {
   /** 安装社区市场 Skill 到工作区 */
   communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => Promise<CommunitySkillInstallResult>
 
+  // 以下 Skill 内容/子文件通道均支持可选 scope/projectId（默认 'workspace'），用于定位到全局/项目层 Skill。
+
   /** 读取 SKILL.md 全文内容 */
-  readSkillContent: (workspaceSlug: string, skillSlug: string) => Promise<string>
+  readSkillContent: (workspaceSlug: string, skillSlug: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<string>
 
   /** 写入 SKILL.md 全文内容 */
-  writeSkillContent: (workspaceSlug: string, skillSlug: string, content: string) => Promise<void>
+  writeSkillContent: (workspaceSlug: string, skillSlug: string, content: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<void>
 
   /** 列出 Skill 目录下的子文件树（不含 SKILL.md） */
-  listSkillFiles: (workspaceSlug: string, skillSlug: string) => Promise<import('@myyoda/shared').SkillFileNode[]>
+  listSkillFiles: (workspaceSlug: string, skillSlug: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<import('@myyoda/shared').SkillFileNode[]>
 
   /** 读取 Skill 目录下的子文件内容 */
-  readSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string) => Promise<import('@myyoda/shared').SkillFileContent>
+  readSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<import('@myyoda/shared').SkillFileContent>
 
   /** 写入 Skill 目录下的子文件内容（文本） */
-  writeSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, content: string) => Promise<void>
+  writeSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, content: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<void>
 
   /** 在 Skill 目录下创建文件或目录 */
-  createSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory') => Promise<void>
+  createSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory', scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<void>
 
   /** 删除 Skill 目录下的文件或目录 */
-  deleteSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string) => Promise<void>
+  deleteSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<void>
 
   /** 重命名/移动 Skill 目录下的文件或目录 */
-  renameSkillEntry: (workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string) => Promise<void>
+  renameSkillEntry: (workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => Promise<void>
 
   /** 获取工作区记忆摘要 */
   getWorkspaceMemorySummary: (workspaceSlug: string) => Promise<WorkspaceMemorySummary>
@@ -2512,6 +2535,22 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config)
   },
 
+  getGlobalMcpConfig: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_GLOBAL_MCP_CONFIG)
+  },
+
+  saveGlobalMcpConfig: (config: WorkspaceMcpConfig) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_GLOBAL_MCP_CONFIG, config)
+  },
+
+  getGlobalScopeReviewHints: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_GLOBAL_SCOPE_REVIEW_HINTS)
+  },
+
+  getGlobalSkillsDir: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_GLOBAL_SKILLS_DIR)
+  },
+
   testMcpServer: (name: string, entry: import('@myyoda/shared').McpServerEntry) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_MCP_SERVER, name, entry) as Promise<{ success: boolean; message: string }>
   },
@@ -2534,6 +2573,18 @@ const electronAPI: ElectronAPI = {
 
   toggleWorkspaceSkill: (workspaceSlug: string, skillSlug: string, enabled: boolean) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_SKILL, workspaceSlug, skillSlug, enabled)
+  },
+
+  getAllEffectiveSkills: (workspaceSlug: string | undefined, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_ALL_EFFECTIVE_SKILLS, workspaceSlug, projectId)
+  },
+
+  deleteGlobalSkill: (skillSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_GLOBAL_SKILL, skillSlug)
+  },
+
+  toggleGlobalSkill: (skillSlug: string, enabled: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_GLOBAL_SKILL, skillSlug, enabled)
   },
 
   getOtherWorkspaceSkills: (currentSlug: string) => {
@@ -2666,45 +2717,49 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL, workspaceSlug, skill)
   },
 
-  readSkillContent: (workspaceSlug: string, skillSlug: string) => {
+  readSkillContent: (workspaceSlug: string, skillSlug: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
     return ipcRenderer.invoke(
       AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
       workspaceSlug,
       skillSlug,
+      scope,
+      projectId,
     )
   },
 
-  writeSkillContent: (workspaceSlug: string, skillSlug: string, content: string) => {
+  writeSkillContent: (workspaceSlug: string, skillSlug: string, content: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
     return ipcRenderer.invoke(
       AGENT_IPC_CHANNELS.WRITE_SKILL_CONTENT,
       workspaceSlug,
       skillSlug,
       content,
+      scope,
+      projectId,
     )
   },
 
-  listSkillFiles: (workspaceSlug: string, skillSlug: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_SKILL_FILES, workspaceSlug, skillSlug)
+  listSkillFiles: (workspaceSlug: string, skillSlug: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_SKILL_FILES, workspaceSlug, skillSlug, scope, projectId)
   },
 
-  readSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.READ_SKILL_FILE, workspaceSlug, skillSlug, relativePath)
+  readSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.READ_SKILL_FILE, workspaceSlug, skillSlug, relativePath, scope, projectId)
   },
 
-  writeSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, content: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.WRITE_SKILL_FILE, workspaceSlug, skillSlug, relativePath, content)
+  writeSkillFile: (workspaceSlug: string, skillSlug: string, relativePath: string, content: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.WRITE_SKILL_FILE, workspaceSlug, skillSlug, relativePath, content, scope, projectId)
   },
 
-  createSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory') => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_SKILL_ENTRY, workspaceSlug, skillSlug, relativePath, type)
+  createSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, type: 'file' | 'directory', scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_SKILL_ENTRY, workspaceSlug, skillSlug, relativePath, type, scope, projectId)
   },
 
-  deleteSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_SKILL_ENTRY, workspaceSlug, skillSlug, relativePath)
+  deleteSkillEntry: (workspaceSlug: string, skillSlug: string, relativePath: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_SKILL_ENTRY, workspaceSlug, skillSlug, relativePath, scope, projectId)
   },
 
-  renameSkillEntry: (workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RENAME_SKILL_ENTRY, workspaceSlug, skillSlug, fromRelative, toRelative)
+  renameSkillEntry: (workspaceSlug: string, skillSlug: string, fromRelative: string, toRelative: string, scope?: import('@myyoda/shared').SkillScope, projectId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RENAME_SKILL_ENTRY, workspaceSlug, skillSlug, fromRelative, toRelative, scope, projectId)
   },
 
   getWorkspaceMemorySummary: (workspaceSlug: string) => {
