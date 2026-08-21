@@ -22,6 +22,9 @@ import {
   getWorkspaceSkillsDir,
   getInactiveSkillsDir,
   getDefaultSkillsDir,
+  getGlobalMcpPath,
+  getGlobalSkillsDir,
+  getGlobalInactiveSkillsDir,
   parseSkillVersion,
   RETIRED_DEFAULT_SKILL_SLUGS,
   isRetiredDefaultSkill,
@@ -826,11 +829,172 @@ export function saveWorkspaceMcpConfig(workspaceSlug: string, config: WorkspaceM
   }
 }
 
+// ===== 全局作用域 MCP（全局默认 + 项目覆盖合并） =====
+
+/** 读取全局 MCP 配置（~/.myyoda/mcp.json）；不存在时返回空配置 */
+export function getGlobalMcpConfig(): WorkspaceMcpConfig {
+  const mcpPath = getGlobalMcpPath()
+
+  if (!existsSync(mcpPath)) {
+    return { servers: {} }
+  }
+
+  try {
+    const raw = readFileSync(mcpPath, 'utf-8')
+    const parsed = JSON.parse(raw) as Partial<WorkspaceMcpConfig>
+    return normalizeWorkspaceMcpConfig(parsed)
+  } catch (error) {
+    console.error('[全局 MCP] 读取配置失败:', error)
+    return { servers: {} }
+  }
+}
+
+/** 保存全局 MCP 配置（~/.myyoda/mcp.json） */
+export function saveGlobalMcpConfig(config: WorkspaceMcpConfig): void {
+  const mcpPath = getGlobalMcpPath()
+
+  try {
+    writeFileSync(mcpPath, JSON.stringify(normalizeWorkspaceMcpConfig(config), null, 2), 'utf-8')
+    console.log('[全局 MCP] 已保存配置')
+  } catch (error) {
+    console.error('[全局 MCP] 保存配置失败:', error)
+    throw new Error('保存全局 MCP 配置失败')
+  }
+}
+
+/**
+ * 读取生效的 MCP 配置（全局单层）。
+ *
+ * MCP 是「全局唯一配置」：运行时只读 ~/.myyoda/mcp.json。工作区/嵌套项目的 mcp.json
+ * 已在 migrateGlobalScopes 中合并并改名为 .migrated；若仍发现未改名的遗留文件，
+ * 只打告警、不参与合并，避免和 UI「只编全局」的心智模型打架。
+ */
+export function getEffectiveMcpConfig(
+  workspaceSlug: string | undefined,
+  _projectId?: string | undefined,
+): WorkspaceMcpConfig {
+  if (workspaceSlug) {
+    warnLeftoverWorkspaceMcp(workspaceSlug)
+  }
+  return getGlobalMcpConfig()
+}
+
+const leftoverMcpWarned = new Set<string>()
+
+/** 遗留工作区 mcp.json 只告警一次，不覆盖全局配置 */
+function warnLeftoverWorkspaceMcp(workspaceSlug: string): void {
+  if (leftoverMcpWarned.has(workspaceSlug)) return
+  leftoverMcpWarned.add(workspaceSlug)
+  try {
+    if (existsSync(getWorkspaceMcpPath(workspaceSlug))) {
+      console.warn(
+        `[全局 MCP] 发现遗留工作区配置 ${getWorkspaceMcpPath(workspaceSlug)}，已忽略（MCP 仅为全局单层）。` +
+          '若迁移未完成，重启应用会重试改名为 .migrated。',
+      )
+    }
+  } catch {
+    leftoverMcpWarned.delete(workspaceSlug)
+  }
+}
+
 // ===== Skill 目录扫描 =====
 
-/** 扫描工作区活跃 Skills，仅返回 skills/ 下的 Skill */
+/** 扫描工作区 Skills（活跃 + 停用），scope=workspace */
 export function getWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
+  return [
+    ...scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, 'workspace'),
+    ...scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false, 'workspace'),
+  ]
+}
+
+/** 获取工作区所有 Skills（含活跃和不活跃），用于设置页 UI */
+export function getAllWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
+  const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true, 'workspace')
+  const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false, 'workspace')
+  return [...activeSkills, ...inactiveSkills]
+}
+
+// ===== 全局作用域 Skills（全局默认 + 项目覆盖合并） =====
+
+/** 获取全局所有 Skills（含活跃和不活跃，scope=global） */
+export function getGlobalSkills(): SkillMeta[] {
+  const activeSkills = scanSkillsInDir(getGlobalSkillsDir(), true, 'global')
+  const inactiveSkills = scanSkillsInDir(getGlobalInactiveSkillsDir(), false, 'global')
+  return [...activeSkills, ...inactiveSkills]
+}
+
+/**
+ * 获取全局 Skills 中已启用的 slug 集合（供运行时判断/UI 徽标使用）。
+ * 活跃目录存在但扫描失败时返回空集。
+ */
+export function getEnabledGlobalSkillSlugs(): Set<string> {
+  return new Set(scanSkillsInDir(getGlobalSkillsDir(), true, 'global').map((s) => s.slug))
+}
+
+/**
+ * 返回生效的 Skills 目录列表（三层：global < workspace < project）。
+ *
+ * - global：~/.myyoda/global-skills/（预制 skill 默认在此，所有工作区共享）
+ * - workspace：工作区 skills/（项目级，按项目隔离）
+ * - project：嵌套 Project 的 .context/skills/（仅绑定嵌套 Project 且已配置时存在）
+ *
+ * 注意：Pi SDK 按目录顺序加载，同名 skill 为 first-wins（先声明的 global 生效，
+ * 后加载的同名目录仅产生 collision 诊断）；global 实际优先级最高。
+ */
+export function getEffectiveSkillsDirs(
+  workspaceSlug: string | undefined,
+  projectId?: string | undefined,
+): string[] {
+  const dirs: string[] = []
+  dirs.push(getGlobalSkillsDir())
+
+  if (workspaceSlug) {
+    dirs.push(getWorkspaceSkillsDir(workspaceSlug))
+    if (projectId && hasProjectSkills(workspaceSlug, projectId)) {
+      const projectDir = getProjectSkillsDir(workspaceSlug, projectId)
+      if (projectDir) dirs.push(projectDir)
+    }
+  }
+
+  return dirs
+}
+
+/**
+ * 扫描各层 Skills（含活跃与停用），同名不去重。
+ *
+ * 运行时 Pi SDK 按 getEffectiveSkillsDirs 顺序 first-wins（全局优先）。
+ * 工作区/嵌套项目层与全局活跃同名的副本标记 shadowedByGlobal，UI 同时展示两张卡片。
+ */
+export function getAllEffectiveSkills(
+  workspaceSlug: string | undefined,
+  projectId?: string | undefined,
+): SkillMeta[] {
+  const globalActiveSlugs = new Set(scanSkillsInDir(getGlobalSkillsDir(), true, 'global').map((s) => s.slug))
+  const skills: SkillMeta[] = []
+
+  const layers: { dir: string; enabled: boolean; scope: SkillMeta['scope'] }[] = [
+    { dir: getGlobalSkillsDir(), enabled: true, scope: 'global' },
+    { dir: getGlobalInactiveSkillsDir(), enabled: false, scope: 'global' },
+  ]
+  if (workspaceSlug) {
+    layers.push({ dir: getWorkspaceSkillsDir(workspaceSlug), enabled: true, scope: 'workspace' })
+    layers.push({ dir: getInactiveSkillsDir(workspaceSlug), enabled: false, scope: 'workspace' })
+  }
+  if (workspaceSlug && projectId && hasProjectSkills(workspaceSlug, projectId)) {
+    const projectDir = getProjectSkillsDir(workspaceSlug, projectId)
+    if (projectDir) {
+      layers.push({ dir: projectDir, enabled: true, scope: 'project' })
+    }
+  }
+
+  for (const layer of layers) {
+    for (const skill of scanSkillsInDir(layer.dir, layer.enabled, layer.scope)) {
+      const isShadowed = skill.scope !== 'global' && globalActiveSlugs.has(skill.slug)
+      skills.push(isShadowed ? { ...skill, shadowedByGlobal: true } : skill)
+    }
+  }
+
+  return skills
 }
 
 /** 解析 SKILL.md 的 YAML frontmatter，支持单行值、block scalar（`|` / `>`）和多行缩进 */
@@ -893,7 +1057,8 @@ function parseSkillFrontmatter(content: string, slug: string, enabled: boolean):
 // ===== 工作区能力摘要 =====
 
 export function getWorkspaceCapabilities(workspaceSlug: string): WorkspaceCapabilities {
-  const mcpConfig = getWorkspaceMcpConfig(workspaceSlug)
+  // MCP 全局化：能力摘要读生效配置（全局 + 工作区/项目合并），工作区 mcp.json 已迁移改名
+  const mcpConfig = getEffectiveMcpConfig(workspaceSlug)
   const skills = getWorkspaceSkills(workspaceSlug)
   const builtinMcpServers = listBuiltinMcpServers({ workspaceSlug })
   const memory = getWorkspaceMemorySummary(workspaceSlug)
@@ -931,7 +1096,7 @@ function isSkillDirectoryEntry(dir: string, entry: Dirent): boolean {
   }
 }
 
-function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
+function scanSkillsInDir(dir: string, enabled: boolean, scope?: SkillMeta['scope']): SkillMeta[] {
   const skills: SkillMeta[] = []
 
   try {
@@ -946,6 +1111,7 @@ function scanSkillsInDir(dir: string, enabled: boolean): SkillMeta[] {
       try {
         const content = readFileSync(skillMdPath, 'utf-8')
         const meta = parseSkillFrontmatter(content, entry.name, enabled)
+        if (scope) (meta as SkillMeta & { scope?: string }).scope = scope
 
         // 如果是导入的 Skill，读取来源信息并检测更新
         const importSource = readSkillImportSource(join(dir, entry.name))

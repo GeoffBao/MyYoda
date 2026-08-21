@@ -306,6 +306,69 @@ export function getWorkspaceMcpPath(slug: string): string {
   return join(getAgentWorkspacePath(slug), 'mcp.json')
 }
 
+// ===== 全局作用域路径（全局默认 + 项目覆盖合并模型） =====
+
+/**
+ * 全局 MCP 配置文件路径（所有工作区共享的唯一配置；无工作区/项目覆盖层）
+ *
+ * @returns ~/.myyoda/mcp.json
+ */
+export function getGlobalMcpPath(): string {
+  return join(getConfigDir(), 'mcp.json')
+}
+
+/**
+ * 全局 Skills 目录路径（预制 skill 默认为全局；新建工作区不再复制）
+ *
+ * 如果目录不存在则自动创建。
+ *
+ * @returns ~/.myyoda/global-skills/
+ */
+export function getGlobalSkillsDir(): string {
+  const dir = join(getConfigDir(), 'global-skills')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+/**
+ * 全局停用 Skills 目录路径
+ *
+ * 如果目录不存在则自动创建。
+ *
+ * @returns ~/.myyoda/global-skills-inactive/
+ */
+export function getGlobalInactiveSkillsDir(): string {
+  const dir = join(getConfigDir(), 'global-skills-inactive')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+/**
+ * 全局作用域迁移进度文件路径（migrateGlobalScopes 幂等标记）
+ *
+ * @returns ~/.myyoda/.migration-global-scope.json
+ */
+export function getGlobalScopeMigrationStatePath(): string {
+  return join(getConfigDir(), '.migration-global-scope.json')
+}
+
+/**
+ * 全局作用域迁移备份目录路径
+ *
+ * @returns ~/.myyoda/.migration-backup/
+ */
+export function getGlobalScopeMigrationBackupDir(): string {
+  const dir = join(getConfigDir(), '.migration-backup')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
 /**
  * 获取指定工作区的会话自定义分组存储文件路径
  *
@@ -567,6 +630,9 @@ function defaultSkillCopyFilter(src: string): boolean {
  * - 缺失的 Skill：直接复制
  * - 已存在的 Skill：比较 SKILL.md 中的 version，bundled 更新时才覆盖
  *   （避免每次启动同步 4MB+ 文件阻塞主进程）
+ *
+ * 双层目标：default-skills 作为白名单快照（getDefaultSkillSlugs 依赖），
+ * global-skills 作为运行时全局层（所有工作区共享，见 getGlobalSkillsDir）。
  */
 export function seedDefaultSkills(): void {
   const { app } = require('electron')
@@ -579,10 +645,14 @@ export function seedDefaultSkills(): void {
     return
   }
 
-  const userDir = getDefaultSkillsDir()
+  // 双层目标：default-skills 作为白名单快照（getDefaultSkillSlugs 依赖），
+  // global-skills 作为运行时全局层（所有工作区共享，见 getGlobalSkillsDir）。
+  const targetDirs = [getDefaultSkillsDir(), getGlobalSkillsDir()]
 
-  // 清理已从 bundle 移除但缓存在用户目录的退役内置 Skills
-  removeRetiredDefaultSkills(userDir)
+  // 清理已从 bundle 移除但缓存的退役内置 Skills（两层都要清）
+  for (const dir of targetDirs) {
+    removeRetiredDefaultSkills(dir)
+  }
 
   try {
     const entries = readdirSync(bundledDir, { withFileTypes: true })
@@ -591,30 +661,33 @@ export function seedDefaultSkills(): void {
       if (!entry.isDirectory()) continue
 
       const source = join(bundledDir, entry.name)
-      const target = join(userDir, entry.name)
 
-      try {
-        if (!existsSync(target)) {
-          cpSync(source, target, { recursive: true, filter: defaultSkillCopyFilter })
-          console.log(`[配置] 已同步默认 Skill: ${entry.name}`)
-          continue
+      for (const targetDir of targetDirs) {
+        const target = join(targetDir, entry.name)
+
+        try {
+          if (!existsSync(target)) {
+            cpSync(source, target, { recursive: true, filter: defaultSkillCopyFilter })
+            console.log(`[配置] 已同步默认 Skill: ${entry.name} → ${targetDir}`)
+            continue
+          }
+
+          const bundledVer = parseSkillVersion(source)
+          const existingVer = parseSkillVersion(target)
+
+          if (compareSemver(bundledVer, existingVer) > 0) {
+            // rm-then-cp：rmSync 不依赖目标文件写权限（只读 .git/objects/ 等
+            // 0444 文件用 cpSync({ force: true }) 无法覆盖会 EACCES，但
+            // rmSync({ force: true }) 只需父目录可写就能 unlink）。
+            rmSync(target, { recursive: true, force: true })
+            cpSync(source, target, { recursive: true, filter: defaultSkillCopyFilter })
+            console.log(`[配置] 已升级默认 Skill: ${entry.name} (${existingVer} → ${bundledVer}) → ${targetDir}`)
+          }
+        } catch (err) {
+          // 单 skill 失败不影响其他 skill 同步。这里吞错是为了防止启动期 bootstrap
+          // 链路被任意一个 skill 的同步异常掀翻——窗口和托盘必须先出来。
+          console.warn(`[配置] 同步默认 Skill 失败 (${entry.name} → ${targetDir})，跳过:`, err)
         }
-
-        const bundledVer = parseSkillVersion(source)
-        const existingVer = parseSkillVersion(target)
-
-        if (compareSemver(bundledVer, existingVer) > 0) {
-          // rm-then-cp：rmSync 不依赖目标文件写权限（只读 .git/objects/ 等
-          // 0444 文件用 cpSync({ force: true }) 无法覆盖会 EACCES，但
-          // rmSync({ force: true }) 只需父目录可写就能 unlink）。
-          rmSync(target, { recursive: true, force: true })
-          cpSync(source, target, { recursive: true, filter: defaultSkillCopyFilter })
-          console.log(`[配置] 已升级默认 Skill: ${entry.name} (${existingVer} → ${bundledVer})`)
-        }
-      } catch (err) {
-        // 单 skill 失败不影响其他 skill 同步。这里吞错是为了防止启动期 bootstrap
-        // 链路被任意一个 skill 的同步异常掀翻——窗口和托盘必须先出来。
-        console.warn(`[配置] 同步默认 Skill 失败 (${entry.name})，跳过:`, err)
       }
     }
   } catch (err) {
