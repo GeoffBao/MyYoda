@@ -1158,7 +1158,14 @@ async function withOAuthDeviceCodeQr<T extends CodexOAuthDeviceCode | XaiOAuthDe
   }
 }
 
+let ipcHandlersRegistered = false
+
 export function registerIpcHandlers(): void {
+  if (ipcHandlersRegistered) {
+    console.warn('[IPC] 处理器已注册，跳过重复注册')
+    return
+  }
+  ipcHandlersRegistered = true
   console.log('[IPC] 正在注册 IPC 处理器...')
 
   // ===== 运行时相关 =====

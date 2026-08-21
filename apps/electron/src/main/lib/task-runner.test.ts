@@ -478,6 +478,29 @@ describe('TaskRunner', () => {
     )
   })
 
+  test('已结算 Run 只保留有界快照，不长期持有 ActiveRun', async () => {
+    const workspaceRoot = createTempWorkspaceRoot()
+    saveTaskSpec(workspaceRoot, buildSpec())
+    const host = new FakeConductorSessionHost()
+    let runSequence = 0
+    const runner = createRunner(workspaceRoot, host, 'unused', {
+      genRunId: () => `run-${++runSequence}`,
+    })
+
+    for (let index = 1; index <= 51; index += 1) {
+      const runId = `run-${index}`
+      runner.run('demo-task', { verifyOnComplete: false })
+      await flushAsyncWork()
+      host.completeSession(`session-${index}`, { workspaceId: 'ws-1', finalText: `done-${index}` })
+      await runner.waitUntilSettled('demo-task', runId)
+    }
+
+    expect(runner.getRunState('demo-task', 'run-1')).toBeNull()
+    expect(runner.getRunState('demo-task', 'run-51')).toEqual(
+      expect.objectContaining({ status: 'completed' }),
+    )
+  })
+
   test('失败后按 retry 设置重试，并将失败原因注入下一次 prompt', async () => {
     const workspaceRoot = createTempWorkspaceRoot()
     saveTaskSpec(workspaceRoot, buildSpec({

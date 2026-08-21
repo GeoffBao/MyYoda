@@ -175,7 +175,7 @@ export function registerCollaborationEventBus(eventBus: import('./agent-event-bu
         for (const be of blockedEvents.values()) {
           if (be.resolved) continue
           if (be.askUserRequestId === requestId || be.permissionRequestId === requestId) {
-            be.resolved = true
+            blockedEvents.delete(be.id)
             break
           }
         }
@@ -194,6 +194,12 @@ function getBlockedEventById(blockedEventId: string): BlockedEvent | undefined {
   return blockedEvents.get(blockedEventId)
 }
 
+function deleteBlockedEventsForDelegation(delegationId: string): void {
+  for (const [blockedEventId, blockedEvent] of blockedEvents) {
+    if (blockedEvent.delegationId === delegationId) blockedEvents.delete(blockedEventId)
+  }
+}
+
 /**
  * 清理内存中过多的已结束委派，避免 live Map 无界增长。
  * 仅清理 status !== 'running' 的记录；被清理项仍可通过持久化会话回查。
@@ -205,7 +211,10 @@ function pruneFinishedDelegations(): void {
   finished
     .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0))
     .slice(0, excess)
-    .forEach((item) => delegations.delete(item.delegationId))
+    .forEach((item) => {
+      delegations.delete(item.delegationId)
+      deleteBlockedEventsForDelegation(item.delegationId)
+    })
 }
 
 function jsonResult(payload: unknown): CollaborationToolResult {
@@ -354,6 +363,7 @@ function markDelegationFinished(
   record.error = fields.error
   record.resultSummary = fields.resultSummary
   updateAgentSessionMeta(record.childSessionId, { delegationStatus: status })
+  deleteBlockedEventsForDelegation(record.delegationId)
   record.resolveCompletion()
 }
 
@@ -1035,7 +1045,7 @@ export function buildPiCollaborationTools(
       async execute(_toolCallId: string, params: unknown) {
         const args = params as { delegationId: string; blockedEventId: string; answers?: Record<string, string>; permissionBehavior?: 'allow' | 'deny' }
         const blocked = getBlockedEventById(args.blockedEventId)
-        if (!blocked) throw new Error(`阻塞事件不存在: ${args.blockedEventId}`)
+        if (!blocked) return piJsonResult({ answered: false, note: '该阻塞事件不存在或已被解决' })
         if (blocked.resolved) return piJsonResult({ answered: false, note: '该阻塞事件已被解决' })
 
         const record = delegations.get(blocked.delegationId)
@@ -1054,6 +1064,7 @@ export function buildPiCollaborationTools(
               event: { type: 'ask_user_resolved', requestId: blocked.askUserRequestId },
             })
           }
+          if (blocked.resolved) blockedEvents.delete(blocked.id)
           return piJsonResult({ answered: blocked.resolved, type: 'ask_user' })
         }
 
@@ -1068,6 +1079,7 @@ export function buildPiCollaborationTools(
               event: { type: 'permission_resolved', requestId: blocked.permissionRequestId, behavior },
             })
           }
+          if (blocked.resolved) blockedEvents.delete(blocked.id)
           return piJsonResult({ answered: blocked.resolved, type: 'permission', behavior })
         }
 

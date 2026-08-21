@@ -2161,7 +2161,7 @@ ${workContext}`
               } catch {
                 /* 会话可能已删除 */
               }
-              completeRun(getAgentSessionMessages(sessionId), {
+              completeRun(undefined, {
                 stoppedByUser: wasStoppedByUser,
                 startedAt: streamStartedAt
               })
@@ -2463,7 +2463,7 @@ ${workContext}`
                 } catch {
                   /* 忽略 */
                 }
-                completeRun(getAgentSessionMessages(sessionId), {
+                completeRun(undefined, {
                   startedAt: streamStartedAt
                 })
                 return
@@ -2558,7 +2558,7 @@ ${workContext}`
                 // 轻量完成：UI 置空闲可输入，但 host 保持运行态（不 releaseActiveRun、不 break、不启动 drain 超时），
                 // while 循环继续 park 在 queryIterator.next()，等待后台任务完成时 SDK 自动 yield 的新一轮消息。
                 awaitingBackgroundWake = true
-                idleComplete(getAgentSessionMessages(sessionId), {
+                idleComplete(undefined, {
                   startedAt: streamStartedAt,
                   resultSubtype: capturedResultSubtype,
                   resultErrors: capturedResultErrors
@@ -2629,7 +2629,7 @@ ${workContext}`
               capturedResultErrors,
               missingFinalAnswer
             )
-            failRun(errorContent, getAgentSessionMessages(sessionId), {
+            failRun(errorContent, undefined, {
               startedAt: streamStartedAt,
               resultSubtype: EMPTY_RESPONSE_RESULT_SUBTYPE,
               resultErrors: [errorContent]
@@ -2650,7 +2650,7 @@ ${workContext}`
           }
 
           // 发送完成信号
-          completeRun(getAgentSessionMessages(sessionId), {
+          completeRun(undefined, {
             stoppedByUser: wasStoppedByUser,
             startedAt: streamStartedAt,
             resultSubtype: capturedResultSubtype,
@@ -2681,7 +2681,7 @@ ${workContext}`
             } catch {
               /* 会话可能已删除 */
             }
-            completeRun(getAgentSessionMessages(sessionId), {
+            completeRun(undefined, {
               stoppedByUser: wasStoppedByUser,
               startedAt: streamStartedAt
             })
@@ -2840,7 +2840,7 @@ ${workContext}`
             })
           }
 
-          failRun(userFacingError, getAgentSessionMessages(sessionId), { startedAt: streamStartedAt })
+          failRun(userFacingError, undefined, { startedAt: streamStartedAt })
 
           // 保留 sdkSessionId，确保下一轮能继续 resume（修复 #903）。
           // 此终止分支只会被「非 session-not-found」的错误命中（session 失效已在上文
@@ -2895,7 +2895,7 @@ ${workContext}`
         } as unknown as SDKMessage
         appendSDKMessages(sessionId, [retryErrorSDKMsg])
 
-        failRun(`${retryFailureMessage}: ${lastRetryableError}`, getAgentSessionMessages(sessionId), { startedAt: streamStartedAt })
+        failRun(`${retryFailureMessage}: ${lastRetryableError}`, undefined, { startedAt: streamStartedAt })
       }
     } finally {
       // 每轮终态统一捕获新增/修改文件；索引写入失败不得覆盖原有清理逻辑。
@@ -2934,14 +2934,16 @@ ${workContext}`
     const runGeneration = this.activeSessions.get(sessionId)
     this.activeSessions.delete(sessionId)
     this.sessionPermissionModes.delete(sessionId)
-    browserController.cancelSession(sessionId)
+    // 只清正在跑的 run：idle / stopBeforeRun 时 AskUser 仍由用户交互收尾
     if (runGeneration != null) {
+      askUserService.clearSessionPending(sessionId)
       this.stoppedBySessions.set(sessionId, runGeneration)
     } else if (stopBeforeRun) {
       // 队列启动状态已投影给 renderer 后，run 仍可能卡在预检阶段。
       // 记录这次停止，防止预检完成后错误地创建一个无法终止的新 query。
       this.stoppedBeforeRunSessions.add(sessionId)
     }
+    browserController.cancelSession(sessionId)
     this.queuedMessageUuids.delete(sessionId)
     this.adapter.abort(sessionId)
     console.log(`[Agent 编排] 已中止会话: ${sessionId}`)
@@ -3034,6 +3036,9 @@ ${workContext}`
     this.stoppedBeforeRunSessions.clear()
     this.queuedMessageUuids.clear()
     this.pendingUserSkillActivations.clear()
+    askUserService.clearAllPending()
+    permissionService.clearAllPending()
+    exitPlanService.clearAllPending()
   }
 
   // ===== 队列消息管理 =====

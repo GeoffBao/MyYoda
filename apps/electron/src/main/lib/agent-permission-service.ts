@@ -226,6 +226,14 @@ export class AgentPermissionService {
     }
   }
 
+  /** 应用退出时拒绝并释放全部挂起权限请求。 */
+  clearAllPending(): void {
+    for (const pending of this.pendingPermissions.values()) {
+      pending.resolve({ behavior: 'deny' as const, message: '应用正在退出' })
+    }
+    this.pendingPermissions.clear()
+  }
+
   /**
    * 获取当前所有待处理的权限请求（用于渲染进程重载后恢复状态）
    */

@@ -1,5 +1,6 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
+import type { Store } from 'jotai/vanilla/store'
 import type { BrowserViewState } from '@myyoda/shared'
 import { currentAgentSessionIdAtom } from './agent-atoms'
 
@@ -21,3 +22,21 @@ export const currentSessionBrowserStateAtom = atom<BrowserViewState | null>((get
   const sessionId = get(currentAgentSessionIdAtom)
   return sessionId ? get(browserStateMapAtom).get(sessionId) ?? null : null
 })
+
+function withoutSessionKey<T>(previous: Map<string, T>, sessionId: string): Map<string, T> {
+  if (!previous.has(sessionId)) return previous
+  const next = new Map(previous)
+  next.delete(sessionId)
+  return next
+}
+
+/** 删除/归档会话时释放浏览器面板按 sessionId 保存的运行态。 */
+export function cleanupDeletedBrowserSessionAtoms(store: Store, sessionId: string): void {
+  store.set(browserPanelOpenMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(browserPanelMinimizedMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(browserStateMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(browserPendingNavigationMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(browserFilePanelManualRestoreSessionIdsAtom, (prev) =>
+    prev.includes(sessionId) ? prev.filter((id) => id !== sessionId) : prev,
+  )
+}

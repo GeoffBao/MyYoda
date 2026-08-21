@@ -238,4 +238,17 @@ describe('AgentQueueCoordinator（排队消息主进程调度）', () => {
 
     expect(coordinator.listSnapshots('s1').map((snapshot) => snapshot.id)).toEqual(['m2'])
   })
+
+  test('Given clearAll 后 When 再入队或 pokeAll Then 不再派发', () => {
+    const { coordinator, startCalls } = makeCoordinator()
+    coordinator.enqueue(makeInput('s1', 'm1'))
+    expect(startCalls).toHaveLength(1)
+
+    coordinator.clearAll()
+    coordinator.enqueue(makeInput('s1', 'm2'))
+    coordinator.pokeAll()
+
+    expect(startCalls).toHaveLength(1)
+    expect(coordinator.listSnapshots('s1')).toEqual([])
+  })
 })

@@ -7,6 +7,7 @@
 
 import { atom } from 'jotai'
 import type { Getter } from 'jotai'
+import type { Store } from 'jotai/vanilla/store'
 import { atomFamily } from 'jotai-family'
 import { atomWithStorage, selectAtom } from 'jotai/utils'
 import type { AgentSessionMeta, AgentEvent, AgentWorkspace, AgentPendingFile, RetryAttempt, MyYodaPermissionMode, PermissionRequest, AskUserRequest, ExitPlanModeRequest, ThinkingConfig, AgentEffort, SDKMessage, UnstagedChangesResult } from '@myyoda/shared'
@@ -408,6 +409,18 @@ export const agentSessionInputStreamStateAtomFamily = atomFamily((sessionId: str
     areAgentInputStreamStatesEqual,
   ),
 )
+
+/**
+ * 删除/归档会话时释放流状态 family 的全部强引用缓存。
+ * 关闭 Tab 但保留会话时不能调用：后台运行仍需继续写入同一份 storage。
+ */
+export function removeAgentSessionStreamingStateAtoms(store: Store, sessionId: string): void {
+  store.set(agentSessionStreamingStateAtomFamily(sessionId), undefined)
+  agentSessionInputStreamStateAtomFamily.remove(sessionId)
+  agentSessionViewStreamStateAtomFamily.remove(sessionId)
+  agentSessionStreamingStateAtomFamily.remove(sessionId)
+  agentStreamingStateStorageAtomFamily.remove(sessionId)
+}
 
 /**
  * 实时 SDKMessage 累积 Map — Phase 2 新增
@@ -1334,6 +1347,63 @@ export const backgroundTasksAtomFamily = atomFamily((sessionId: string) =>
 
 /** 被用户手动打断的会话集合（仅当前 streaming 周期有效，reload 后清除） */
 export const stoppedByUserSessionsAtom = atom<Set<string>>(new Set<string>())
+
+function withoutSessionKey<T>(previous: Map<string, T>, sessionId: string): Map<string, T> {
+  if (!previous.has(sessionId)) return previous
+  const next = new Map(previous)
+  next.delete(sessionId)
+  return next
+}
+
+/**
+ * 删除/归档会话时统一清理 renderer 中按 sessionId 保存的 Agent 状态。
+ * 文件预览、Git diff 等跨模块状态仍由各自模块负责。
+ */
+export function cleanupDeletedAgentSessionAtoms(store: Store, sessionId: string): void {
+  const askUserRequestIds = new Set(
+    (store.get(allPendingAskUserRequestsAtom).get(sessionId) ?? []).map((request) => request.requestId),
+  )
+
+  store.set(agentStreamErrorsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentMessageRefreshAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentPromptSuggestionsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentSessionDraftsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentSessionDraftSyncVersionsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentSessionDraftHtmlAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentSessionMessageQueueAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentPermissionModeMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentAttachedDirectoriesMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentAttachedFilesMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(allPendingPermissionRequestsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(allPendingAskUserRequestsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(allPendingExitPlanRequestsAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(agentSessionPendingFilesAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(liveMessagesMapAtom, (prev) => withoutSessionKey(prev, sessionId))
+  store.set(askUserDraftsAtom, (prev) => {
+    if (askUserRequestIds.size === 0) return prev
+    const next = new Map(prev)
+    for (const requestId of askUserRequestIds) next.delete(requestId)
+    return next
+  })
+  store.set(stoppedByUserSessionsAtom, (prev) => {
+    if (!prev.has(sessionId)) return prev
+    const next = new Set(prev)
+    next.delete(sessionId)
+    return next
+  })
+
+  removeAgentSessionStreamingStateAtoms(store, sessionId)
+  agentLiveMessagesAtomFamily.remove(sessionId)
+  agentSessionDraftSyncVersionAtomFamily.remove(sessionId)
+  agentSessionDraftAtomFamily.remove(sessionId)
+  agentSessionDraftHtmlAtomFamily.remove(sessionId)
+  agentPendingFilesAtomFamily.remove(sessionId)
+  agentMessageQueueAtomFamily.remove(sessionId)
+  backgroundTasksAtomFamily.remove(sessionId)
+  agentSidePanelOpenAtomFamily.remove(sessionId)
+  sessionPersistedPermissionModeAtom.remove(sessionId)
+  sessionExistsAtom.remove(sessionId)
+}
 
 // ===== 初始化就绪状态 =====
 

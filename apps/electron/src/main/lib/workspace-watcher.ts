@@ -31,6 +31,7 @@ const WATCHER_RESTART_DELAY_MS = 5000
 /** 主监听或父目录监听的延迟重启定时器，停止时统一清理。 */
 const watcherRestartTimers = new Set<ReturnType<typeof setTimeout>>()
 let workspaceWatcherActive = false
+let workspaceWatcherGeneration = 0
 
 function scheduleWatcherRestart(callback: () => void): void {
   const timer = setTimeout(() => {
@@ -43,6 +44,10 @@ function scheduleWatcherRestart(callback: () => void): void {
 // 高频变动目录：跳过其中的变更事件，防止 node_modules / .next 等产生 IPC 事件风暴
 
 let watcher: FSWatcher | null = null
+let capabilitiesTimer: ReturnType<typeof setTimeout> | null = null
+let filesTimer: ReturnType<typeof setTimeout> | null = null
+let globalCapabilitiesTimer: ReturnType<typeof setTimeout> | null = null
+const changedWorkspaceFilePaths = new Set<string>()
 /** 全局 MCP 配置监听器（监听 ~/.myyoda/mcp.json 变化） */
 let globalMcpWatcher: FSWatcher | null = null
 
@@ -72,11 +77,19 @@ function notifyWorkspaceFilesChanged(changedPath?: string): void {
   if (changedPath) attachedChangedPaths.add(changedPath)
   attachedFilesTimer = setTimeout(() => {
     const changedPaths = [...attachedChangedPaths]
+    const generation = workspaceWatcherGeneration
+    const targetWindow = mainWin
     attachedChangedPaths.clear()
     attachedFilesTimer = null
     void filterExistingFiles(changedPaths).then((filePaths) => {
-      if (mainWin && !mainWin.isDestroyed()) {
-        mainWin.webContents.send(AGENT_IPC_CHANNELS.WORKSPACE_FILES_CHANGED, filePaths)
+      if (
+        workspaceWatcherActive
+        && generation === workspaceWatcherGeneration
+        && targetWindow
+        && mainWin === targetWindow
+        && !targetWindow.isDestroyed()
+      ) {
+        targetWindow.webContents.send(AGENT_IPC_CHANNELS.WORKSPACE_FILES_CHANGED, filePaths)
       }
     })
   }, DEBOUNCE_MS)
@@ -210,6 +223,7 @@ function watchUnavailableDirectoryParent(dirPath: string): void {
  */
 export function startWorkspaceWatcher(win: BrowserWindow): void {
   workspaceWatcherActive = true
+  const generation = ++workspaceWatcherGeneration
   mainWin = win
   // 会话附加目录只需在启动/监听器重启时恢复一次；LIST_SESSIONS 是高频读取路径，
   // 不能随每次列表 IPC 再遍历全部会话并触发同步 stat。
@@ -220,11 +234,6 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
     console.warn('[工作区监听] 目录不存在，跳过:', watchDir)
     return
   }
-
-  // 防抖定时器：按事件类型分别 debounce
-  let capabilitiesTimer: ReturnType<typeof setTimeout> | null = null
-  let filesTimer: ReturnType<typeof setTimeout> | null = null
-  const changedFilePaths = new Set<string>
 
   try {
     watcher = watch(watchDir, { recursive: true }, (_eventType, filename) => {
@@ -255,7 +264,12 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
         // MCP/Skills 变化 → 通知侧边栏刷新
         if (capabilitiesTimer) clearTimeout(capabilitiesTimer)
         capabilitiesTimer = setTimeout(() => {
-          if (!win.isDestroyed()) {
+          if (
+            workspaceWatcherActive
+            && generation === workspaceWatcherGeneration
+            && mainWin === win
+            && !win.isDestroyed()
+          ) {
             win.webContents.send(AGENT_IPC_CHANNELS.CAPABILITIES_CHANGED)
           }
           capabilitiesTimer = null
@@ -264,13 +278,18 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
         // 其他文件变化 → 通知文件浏览器刷新。删除或目录事件会发送空路径列表，
         // 仍让 Git Diff 刷新，但不会把非文件路径记录到会话改动中。
         if (filesTimer) clearTimeout(filesTimer)
-        changedFilePaths.add(join(watchDir, normalizedFilename))
+        changedWorkspaceFilePaths.add(join(watchDir, normalizedFilename))
         filesTimer = setTimeout(() => {
-          const paths = [...changedFilePaths]
-          changedFilePaths.clear()
+          const paths = [...changedWorkspaceFilePaths]
+          changedWorkspaceFilePaths.clear()
           filesTimer = null
           void filterExistingFiles(paths).then((filePaths) => {
-            if (!win.isDestroyed()) {
+            if (
+              workspaceWatcherActive
+              && generation === workspaceWatcherGeneration
+              && mainWin === win
+              && !win.isDestroyed()
+            ) {
               win.webContents.send(AGENT_IPC_CHANNELS.WORKSPACE_FILES_CHANGED, filePaths)
             }
           })
@@ -293,11 +312,15 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
     const globalMcpPath = getGlobalMcpPath()
     try {
       if (existsSync(globalMcpPath)) {
-        let globalCapabilitiesTimer: ReturnType<typeof setTimeout> | null = null
         globalMcpWatcher = watch(globalMcpPath, () => {
           if (globalCapabilitiesTimer) clearTimeout(globalCapabilitiesTimer)
           globalCapabilitiesTimer = setTimeout(() => {
-            if (!win.isDestroyed()) {
+            if (
+              workspaceWatcherActive
+              && generation === workspaceWatcherGeneration
+              && mainWin === win
+              && !win.isDestroyed()
+            ) {
               win.webContents.send(AGENT_IPC_CHANNELS.CAPABILITIES_CHANGED)
             }
             globalCapabilitiesTimer = null
@@ -325,8 +348,16 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
  */
 export function stopWorkspaceWatcher(): void {
   workspaceWatcherActive = false
+  workspaceWatcherGeneration += 1
   for (const timer of watcherRestartTimers) clearTimeout(timer)
   watcherRestartTimers.clear()
+  if (capabilitiesTimer) clearTimeout(capabilitiesTimer)
+  capabilitiesTimer = null
+  if (filesTimer) clearTimeout(filesTimer)
+  filesTimer = null
+  if (globalCapabilitiesTimer) clearTimeout(globalCapabilitiesTimer)
+  globalCapabilitiesTimer = null
+  changedWorkspaceFilePaths.clear()
   if (watcher) {
     watcher.close()
     watcher = null

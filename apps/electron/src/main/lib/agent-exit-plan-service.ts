@@ -154,6 +154,14 @@ export class AgentExitPlanService {
     }
   }
 
+  /** 应用退出时拒绝并释放全部挂起计划审批。 */
+  clearAllPending(): void {
+    for (const pending of this.pendingRequests.values()) {
+      pending.resolve({ behavior: 'deny', message: '应用正在退出' })
+    }
+    this.pendingRequests.clear()
+  }
+
   /**
    * 从工具输入中解析 allowedPrompts
    */

@@ -605,6 +605,7 @@ export function hasActiveAgentSessions(): boolean {
 /** 中止所有活跃的 Agent 会话（应用退出时调用） */
 export function stopAllAgents(): void {
   orchestrator.stopAll()
+  agentQueueCoordinator.clearAll()
 }
 
 /**
