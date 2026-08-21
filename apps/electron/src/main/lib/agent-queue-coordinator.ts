@@ -50,10 +50,13 @@ export class AgentQueueCoordinator {
   private readonly suppressed = new Map<string, string>()
   /** 后台任务等待中的会话（turn 主体结束但 task 还在飞），期间不派发新消息。 */
   private readonly backgroundWaiting = new Set<string>()
+  /** 应用退出后禁止再 enqueue / tryDispatch，避免 in-flight startRun 拉起新进程。 */
+  private shuttingDown = false
 
   constructor(private readonly options: AgentQueueCoordinatorOptions) {}
 
   enqueue(input: AgentDeferredQueueMessageInput): void {
+    if (this.shuttingDown) return
     const queue = this.queues.get(input.sessionId) ?? []
     if (queue.some((entry) => entry.input.queueMessageId === input.queueMessageId)) return
     queue.push({ input, displaySnapshot: input.displaySnapshot })
@@ -157,8 +160,18 @@ export class AgentQueueCoordinator {
     this.backgroundWaiting.delete(sessionId)
   }
 
+  /** 应用退出时释放全部会话队列，避免遗留 dispatch Promise。 */
+  clearAll(): void {
+    this.shuttingDown = true
+    this.queues.clear()
+    this.dispatching.clear()
+    this.suppressed.clear()
+    this.backgroundWaiting.clear()
+  }
+
   /** 外部状态变化（如渠道启用/禁用）后重新评估所有会话的队列。 */
   pokeAll(): void {
+    if (this.shuttingDown) return
     for (const sessionId of [...this.queues.keys()]) {
       this.tryDispatch(sessionId)
     }
@@ -175,6 +188,7 @@ export class AgentQueueCoordinator {
   }
 
   private tryDispatch(sessionId: string): void {
+    if (this.shuttingDown) return
     if (this.dispatching.has(sessionId)) return
     const queue = this.queues.get(sessionId)
     const head = queue?.[0]

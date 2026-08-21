@@ -172,6 +172,7 @@ const FAILED_STATUS = 'needs-review';
 /** 中断/孤儿节点回退到 todo，避免 UI 永久显示「运行中」 */
 const IDLE_STATUS = 'todo';
 const MAX_UNPARSED_REASKS = 2;
+const MAX_RETAINED_SETTLED_RUNS = 50;
 
 /** Run 只推进机器可控的 workflow；用户已设 done/cancelled 时绝不回写覆盖。 */
 function transitionTaskWorkflow(
@@ -236,6 +237,7 @@ class ActiveRun {
     private readonly runId: string,
     private readonly opts: ActiveRunOptions,
     private readonly deps: TaskRunnerDeps,
+    private readonly onSettled: (snapshot: RunSnapshot) => void,
   ) {
     this.edges = materializeDeps(spec);
     this.maxParallel = spec.max_parallel ?? deps.defaultMaxParallel ?? DEFAULT_MAX_PARALLEL;
@@ -666,6 +668,7 @@ class ActiveRun {
     const snap = this.snapshot();
     for (const resolve of this.settleResolvers) resolve(snap);
     this.settleResolvers = [];
+    this.onSettled(snap);
   }
 
   private async sendVerification(): Promise<void> {
@@ -840,10 +843,23 @@ function resolveParams(spec: TaskSpec, provided?: Record<string, unknown>): Reco
 
 export class TaskRunner {
   private readonly runs = new Map<string, ActiveRun>();
+  private readonly settledRuns = new Map<string, RunSnapshot>();
 
   constructor(private readonly deps: TaskRunnerDeps) {}
 
   private key(slug: string, runId: string): string { return `${slug}:${runId}`; }
+
+  private handleRunSettled(key: string, run: ActiveRun, snapshot: RunSnapshot): void {
+    if (this.runs.get(key) !== run) return
+    this.runs.delete(key)
+    this.settledRuns.delete(key)
+    this.settledRuns.set(key, snapshot)
+    while (this.settledRuns.size > MAX_RETAINED_SETTLED_RUNS) {
+      const oldestKey = this.settledRuns.keys().next().value
+      if (oldestKey === undefined) break
+      this.settledRuns.delete(oldestKey)
+    }
+  }
 
   private resolveTaskId(slug: string): string {
     const record = loadTaskRecord(this.deps.workspaceRoot, slug)
@@ -917,7 +933,9 @@ export class TaskRunner {
 
     transitionTaskWorkflow(this.deps.workspaceRoot, slug, 'started')
 
-    const run = new ActiveRun(
+    const runKey = this.key(slug, runId)
+    let run: ActiveRun
+    run = new ActiveRun(
       spec, slug, runId,
       {
         ...opts,
@@ -928,12 +946,14 @@ export class TaskRunner {
         verifyOnComplete,
       },
       this.deps,
+      (snapshot) => this.handleRunSettled(runKey, run, snapshot),
     );
-    this.runs.set(this.key(slug, runId), run);
+    this.settledRuns.delete(runKey)
+    this.runs.set(runKey, run);
     try {
       run.start();
     } catch (error) {
-      this.runs.delete(this.key(slug, runId))
+      this.runs.delete(runKey)
       transitionTaskWorkflow(this.deps.workspaceRoot, slug, 'settled')
       throw error
     }
@@ -967,7 +987,9 @@ export class TaskRunner {
     const legacyCwd = context?.effectiveCwd || started?.effectiveCwd
       ? {}
       : this.resolveEffectiveCwd(spec, orchestratorSessionId)
-    const run = new ActiveRun(
+    const runKey = this.key(slug, runId)
+    let run: ActiveRun
+    run = new ActiveRun(
       spec, slug, runId,
       {
         orchestratorSessionId,
@@ -978,16 +1000,19 @@ export class TaskRunner {
         verifyOnComplete: context?.verifyOnComplete ?? started?.verifyOnComplete ?? true,
       },
       this.deps,
+      (snapshot) => this.handleRunSettled(runKey, run, snapshot),
     );
     run.hydrate(log, (nodeId) => readNodeOutput(this.deps.workspaceRoot, slug, runId, nodeId));
-    this.runs.set(this.key(slug, runId), run);
+    this.settledRuns.delete(runKey)
+    this.runs.set(runKey, run);
     run.resumeFromHydrated();
     return run.snapshot();
   }
 
   async stop(slug: string, runId: string): Promise<void> { await this.runs.get(this.key(slug, runId))?.stop(); }
   getRunState(slug: string, runId: string): RunSnapshot | null {
-    return this.runs.get(this.key(slug, runId))?.snapshot() ?? null
+    const key = this.key(slug, runId)
+    return this.runs.get(key)?.snapshot() ?? this.settledRuns.get(key) ?? null
   }
 
   /** 扫描活跃运行并收敛孤儿节点；返回治愈数量 */
@@ -1004,8 +1029,14 @@ export class TaskRunner {
   }
 
   waitUntilSettled(slug: string, runId: string): Promise<RunSnapshot> {
-    const run = this.runs.get(this.key(slug, runId));
-    if (!run) return Promise.reject(new Error(`没有活跃的运行 ${slug}:${runId}`));
+    const key = this.key(slug, runId)
+    const run = this.runs.get(key);
+    if (!run) {
+      const snapshot = this.settledRuns.get(key)
+      return snapshot
+        ? Promise.resolve(snapshot)
+        : Promise.reject(new Error(`没有活跃的运行 ${slug}:${runId}`))
+    }
     return run.waitUntilSettled();
   }
 }

@@ -99,6 +99,8 @@ interface DingTalkImageAttachment {
 class DingTalkBridge {
   private client: DWClientInstance | null = null
   private state: DingTalkBridgeState = { status: 'disconnected' }
+  /** start/stop 代际；异步 start 只能提交当前代结果。 */
+  private lifecycleGeneration = 0
 
   /** 每个实例独立的 webhook 缓存 */
   private webhookCache = new Map<string, string>()
@@ -192,47 +194,77 @@ class DingTalkBridge {
       this.stop()
     }
 
+    const generation = ++this.lifecycleGeneration
     this.updateStatus({ status: 'connecting' })
 
+    let client: DWClientInstance | null = null
     try {
       const clientSecret = getDecryptedBotClientSecret(this.botConfig.id)
       const sdk = await import('dingtalk-stream-sdk-nodejs') as DWClientModule
+      if (generation !== this.lifecycleGeneration) return
 
-      this.client = new sdk.DWClient({
+      client = new sdk.DWClient({
         clientId: this.botConfig.clientId,
         clientSecret,
         keepAlive: true,
       })
+      const liveClient = client
 
       // 注册 CALLBACK：订阅机器人消息
-      this.client.registerCallbackListener(sdk.TOPIC_ROBOT, (msg: DWClientDownStream) => {
+      liveClient.registerCallbackListener(sdk.TOPIC_ROBOT, (msg: DWClientDownStream) => {
         this.client?.send(msg.headers.messageId, { status: sdk.EventAck.SUCCESS })
         this.handleRobotMessage(msg)
       })
 
       // 注册 EVENT：其他事件类型（自动 ACK）
-      this.client.registerAllEventListener((msg: DWClientDownStream) => {
+      liveClient.registerAllEventListener((msg: DWClientDownStream) => {
         console.log(`[钉钉 Bridge/${this.botConfig.name}] 收到事件:`, msg.headers.topic, msg.headers.eventType ?? '')
         return { status: sdk.EventAck.SUCCESS }
       })
 
-      await this.client.connect()
+      this.client = liveClient
+      await liveClient.connect()
+      const abandonIfStale = (): boolean => {
+        if (generation === this.lifecycleGeneration && this.client === liveClient) return false
+        if (this.pendingImagesCleanupTimer) {
+          clearInterval(this.pendingImagesCleanupTimer)
+          this.pendingImagesCleanupTimer = null
+        }
+        try { liveClient.disconnect() } catch { /* 忽略过期连接 */ }
+        if (this.client === liveClient) this.client = null
+        return true
+      }
+      if (abandonIfStale()) return
+
       this.commandHandler.subscribe()
       this.pendingImagesCleanupTimer = setInterval(() => this.cleanExpiredPendingImages(), 20 * 60 * 1000)
 
       this.updateStatus({ status: 'connected', connectedAt: Date.now() })
+      if (abandonIfStale()) {
+        this.commandHandler.unsubscribe()
+        this.updateStatus({ status: 'disconnected' })
+        return
+      }
       console.log(`[钉钉 Bridge/${this.botConfig.name}] Stream 连接已建立`)
     } catch (error) {
+      if (generation !== this.lifecycleGeneration) {
+        if (client) {
+          try { client.disconnect() } catch { /* 忽略过期连接 */ }
+          if (this.client === client) this.client = null
+        }
+        return
+      }
       const errorMessage = redactSensitiveLogText(error instanceof Error ? error.message : String(error))
       this.updateStatus({ status: 'error', errorMessage })
       console.error(`[钉钉 Bridge/${this.botConfig.name}] 连接失败:`, errorMessage)
-      this.client = null
+      if (this.client === client) this.client = null
       throw error
     }
   }
 
   /** 停止连接 */
   stop(): void {
+    this.lifecycleGeneration += 1
     if (this.client) {
       try {
         this.client.disconnect()

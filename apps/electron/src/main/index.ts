@@ -94,6 +94,7 @@ import { upgradeDefaultSkillsInWorkspaces } from './lib/agent-workspace-manager'
 import { migrateGlobalScopes } from './lib/agent-global-scope-migration'
 import { stopAllAgents, killOrphanedClaudeSubprocesses, isAgentSessionActive, hasActiveAgentSessions } from './lib/agent-service'
 import { disposePiMcpConnections } from './lib/adapters/pi-mcp-tools'
+import { createShutdownCoordinator } from './lib/shutdown-coordinator'
 import { browserController } from './lib/browser-controller'
 import { agentTerminalController } from './lib/agent-terminal'
 import { markRunningDelegationsAsInterrupted, markStaleTaskSessionsIdle } from './lib/agent-session-manager'
@@ -686,6 +687,10 @@ app.whenReady().then(bootstrap).catch(handleBootstrapFailure)
  * 单点失败不应阻止窗口和托盘的创建（用户至少要能看到界面）。
  */
 async function bootstrap(): Promise<void> {
+  // 最先注册 IPC：后续任一步骤失败时，降级窗口仍具备完整主进程 API。
+  // ipcMain.handle 不支持事务或安全重放，因此只能注册一次。
+  registerIpcHandlers()
+
   // 初始化 MyYoda 版本号（供 User-Agent 等全局标识使用）
   setAppVersion(app.getVersion())
 
@@ -725,9 +730,6 @@ async function bootstrap(): Promise<void> {
   // Create application menu
   const menu = createApplicationMenu()
   Menu.setApplicationMenu(menu)
-
-  // Register IPC handlers
-  registerIpcHandlers()
 
   // 收敛上次退出时遗留的运行中委派子会话（内存态丢失，无法续跑）
   safeRun('markRunningDelegationsAsInterrupted', markRunningDelegationsAsInterrupted)
@@ -903,43 +905,39 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  // 标记正在退出，让 close 事件不再阻止关闭
-  setQuitting()
+const MCP_QUIT_TIMEOUT_MS = 3_000
 
-  // 中止所有活跃的 Agent 和 Chat 子进程
-  stopAllAgents()
-  browserController.dispose()
-  agentTerminalController.disposeAll()
-  stopAllGenerations()
-  // 清理 Pi runtime 资源与残留子进程
-  killOrphanedClaudeSubprocesses()
-  // 清理更新器定时器
-  cleanupUpdater()
-  // repo map 符号缓存 flush（防抖窗口内最后更新立即落盘）
-  repoMapService.flushSync()
-  // 停止工作区文件监听
-  stopWorkspaceWatcher()
-  // 停止所有 Bridge
-  stopBridgeSelfHealing()
-  stopAllBridges()
-  // 停止定时任务调度器
-  stopScheduler()
-  stopPlanningReminderScheduler()
-  stopPlanningNativeSyncCoordinator()
-  // 释放飞书同步防休眠
-  stopFeishuSyncSleepBlocker()
-  // 注销全局快捷键
-  unregisterAllGlobalShortcuts()
-  // 销毁辅助窗口
-  destroyQuickTaskWindow()
-  destroyPlanningWindow()
-  destroyVoiceDictationWindow()
-  // 销毁 CodeClaw 服务与窗口
-  disposeCodeClawService()
-  destroyCodeClawWindow()
-  // 关闭 Pi MCP 桥接连接（释放 stdio 子进程）
-  disposePiMcpConnections().catch(() => {})
-  // Clean up system tray before quitting
-  destroyTray()
+const shutdownCoordinator = createShutdownCoordinator({
+  syncCleanupTasks: [
+    { name: '标记退出状态', run: setQuitting },
+    { name: '停止 Agent', run: stopAllAgents },
+    { name: '释放 Agent 浏览器', run: () => browserController.dispose() },
+    { name: '释放终端', run: () => agentTerminalController.disposeAll() },
+    { name: '停止 Chat 生成', run: stopAllGenerations },
+    { name: '清理 Pi runtime', run: killOrphanedClaudeSubprocesses },
+    { name: '停止更新器', run: cleanupUpdater },
+    { name: '写入 Repo Map 缓存', run: () => repoMapService.flushSync() },
+    { name: '停止工作区监听', run: stopWorkspaceWatcher },
+    { name: '停止 Bridge 自愈', run: stopBridgeSelfHealing },
+    { name: '停止 Bridge', run: stopAllBridges },
+    { name: '停止自动任务', run: stopScheduler },
+    { name: '停止提醒任务', run: stopPlanningReminderScheduler },
+    { name: '停止系统计划同步', run: stopPlanningNativeSyncCoordinator },
+    { name: '释放飞书防休眠', run: stopFeishuSyncSleepBlocker },
+    { name: '注销全局快捷键', run: unregisterAllGlobalShortcuts },
+    { name: '销毁快速任务窗口', run: destroyQuickTaskWindow },
+    { name: '销毁计划窗口', run: destroyPlanningWindow },
+    { name: '销毁语音输入窗口', run: destroyVoiceDictationWindow },
+    { name: '释放 CodeClaw 服务', run: disposeCodeClawService },
+    { name: '销毁 CodeClaw 窗口', run: destroyCodeClawWindow },
+    { name: '销毁系统托盘', run: destroyTray },
+  ],
+  asyncCleanup: disposePiMcpConnections,
+  requestQuit: () => app.quit(),
+  timeoutMs: MCP_QUIT_TIMEOUT_MS,
+  reportError: (name, error) => {
+    console.warn(`[退出清理] ${name}:`, error)
+  },
 })
+
+app.on('before-quit', (event) => shutdownCoordinator.handleBeforeQuit(event))

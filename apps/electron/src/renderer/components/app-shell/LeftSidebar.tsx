@@ -61,25 +61,16 @@ import {
   agentFileChangesCurrentRunAtom,
   agentDiffDataAtom,
   agentSidePanelOpenMapAtom,
-  agentSidePanelOpenAtomFamily,
   agentStreamingStatesAtom,
   liveMessagesMapAtom,
   agentSessionPendingFilesAtom,
-  agentSessionStreamingStateAtomFamily,
-  agentSessionViewStreamStateAtomFamily,
-  agentSessionInputStreamStateAtomFamily,
-  agentLiveMessagesAtomFamily,
   agentSessionDraftsAtom,
-  agentSessionDraftAtomFamily,
-  agentSessionDraftHtmlAtomFamily,
-  agentPendingFilesAtomFamily,
-  backgroundTasksAtomFamily,
-  sessionPersistedPermissionModeAtom,
-  sessionExistsAtom,
+  cleanupDeletedAgentSessionAtoms,
   automationGroupOrderAtom,
 } from '@/atoms/agent-atoms'
 import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
 import { previewPanelOpenMapAtom, previewFileMapAtom } from '@/atoms/preview-atoms'
+import { cleanupDeletedBrowserSessionAtoms } from '@/atoms/browser-atoms'
 import { clearPreviewCacheForSession } from '@/components/diff/DiffTabContent'
 import {
   tabsAtom,
@@ -879,19 +870,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       setSessionPendingFiles(deleteKey)
     }
 
-    // atomFamily 内部缓存（Jotai 对 string key 强引用 Map，不显式 remove 永不释放）。
-    // 删除/归档是会话的终态，连同草稿一起清理，无需像关闭 Tab 那样保留可恢复输入。
-    agentSessionStreamingStateAtomFamily.remove(id)
-    agentSessionViewStreamStateAtomFamily.remove(id)
-    agentSessionInputStreamStateAtomFamily.remove(id)
-    agentLiveMessagesAtomFamily.remove(id)
-    agentSessionDraftAtomFamily.remove(id)
-    agentSessionDraftHtmlAtomFamily.remove(id)
-    agentPendingFilesAtomFamily.remove(id)
-    backgroundTasksAtomFamily.remove(id)
-    agentSidePanelOpenAtomFamily.remove(id)
-    sessionPersistedPermissionModeAtom.remove(id)
-    sessionExistsAtom.remove(id)
+    // 删除/归档是会话终态，统一释放 Agent atoms 与 atomFamily 强引用缓存。
+    cleanupDeletedAgentSessionAtoms(store, id)
+    cleanupDeletedBrowserSessionAtoms(store, id)
 
     clearPreviewCacheForSession(id)
   }, [setConvModels, setConvContextLength, setConvThinking, setConvParallel, setConvPromptId, setPreviewPanelOpen, setPreviewFile, setDiffPanelTab, setDiffRefreshVersion, setDiffUnseen, setDiffUnseenFiles, setNonGitFileChanges, setFileChangesCurrentRun, setDiffData, setAgentSidePanelOpenMap, setSessionChannelMap, setSessionModelMap, setSessionPathMap, setSessionViewStateMap, setStreamingStates, setLiveMessagesMap, setSessionPendingFiles, store])

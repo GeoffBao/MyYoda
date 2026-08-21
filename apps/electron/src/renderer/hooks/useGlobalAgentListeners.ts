@@ -1440,6 +1440,7 @@ export function useGlobalAgentListeners(): void {
         unstable_batchedUpdates(() => {
         const backgroundTasksPending = data.backgroundTasksPending === true
         const hasStreamError = store.get(agentStreamErrorsAtom).has(data.sessionId)
+        if (!backgroundTasksPending) autoActivatedChangeTurns.delete(data.sessionId)
 
         // 后台任务等待态：turn 主体结束但仍有后台任务在飞行，UI 进入"空闲可输入"。
         // 不发"任务已完成"通知（任务并未真正完成）、不清后台任务列表、不重载消息——
@@ -1678,6 +1679,7 @@ export function useGlobalAgentListeners(): void {
     const cleanupError = window.electronAPI.onAgentStreamError(
       (data: { sessionId: string; error: string }) => {
         unstable_batchedUpdates(() => {
+        autoActivatedChangeTurns.delete(data.sessionId)
         console.error('[GlobalAgentListeners] 流式错误:', data.error)
 
         // 存储错误消息

@@ -1196,6 +1196,27 @@ function BotConfigCard({ bot, state, onSaved, onRemoved }: BotConfigCardProps): 
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<FeishuTestResult | null>(null)
   const [expanded, setExpanded] = React.useState(!bot.appId) // 新建的 Bot 默认展开
+  const botConnectionPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+  const botConnectionTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const botConnectionGenerationRef = React.useRef(0)
+  const toggleInFlightRef = React.useRef(false)
+  const mountedRef = React.useRef(true)
+
+  const clearBotConnectionPolling = React.useCallback(() => {
+    botConnectionGenerationRef.current += 1
+    if (botConnectionPollRef.current) clearInterval(botConnectionPollRef.current)
+    if (botConnectionTimeoutRef.current) clearTimeout(botConnectionTimeoutRef.current)
+    botConnectionPollRef.current = null
+    botConnectionTimeoutRef.current = null
+  }, [])
+
+  React.useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearBotConnectionPolling()
+    }
+  }, [clearBotConnectionPolling])
 
   // 加载已有 secret（使用 bot-specific API）
   React.useEffect(() => {
@@ -1249,52 +1270,70 @@ function BotConfigCard({ bot, state, onSaved, onRemoved }: BotConfigCardProps): 
   }, [appId, appSecret])
 
   /** 操作完成后主动拉取最新状态，确保 UI 同步 */
-  const refreshBotStates = React.useCallback(async () => {
+  const refreshBotStates = React.useCallback(async (expectedGeneration?: number): Promise<boolean> => {
     try {
       const multiState = await window.electronAPI.getFeishuMultiStatus?.()
-      if (multiState?.bots) {
-        setBotStates(multiState.bots)
-      }
+      if (!mountedRef.current) return false
+      if (expectedGeneration !== undefined && expectedGeneration !== botConnectionGenerationRef.current) return false
+      if (!multiState?.bots) return false
+      setBotStates(multiState.bots)
+      return true
     } catch { /* 忽略 */ }
+    return false
   }, [setBotStates])
 
   const handleToggle = React.useCallback(async () => {
-    if (isConnected) {
-      await window.electronAPI.stopFeishuBot(bot.id)
-      toast.success(`Bot "${bot.name}" 已停止`)
-      await refreshBotStates()
-    } else {
-      // 启动是异步的（10-15秒），不阻塞等待完成
-      // 先发起启动请求，然后轮询状态直到连接成功或失败
-      window.electronAPI.startFeishuBot(bot.id).catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : '启动失败')
-        refreshBotStates()
-      })
-      // 短暂等待让主进程设置 connecting 状态
-      await new Promise((r) => setTimeout(r, 300))
-      await refreshBotStates()
-      // 轮询直到状态不再是 connecting
-      const poll = setInterval(async () => {
-        try {
-          const multiState = await window.electronAPI.getFeishuMultiStatus?.()
-          if (multiState?.bots) {
-            setBotStates(multiState.bots)
-            const botState = multiState.bots[bot.id]
-            if (!botState || botState.status !== 'connecting') {
-              clearInterval(poll)
-              if (botState?.status === 'connected') {
-                toast.success(`Bot "${bot.name}" 已连接`)
+    if (toggleInFlightRef.current) return
+    toggleInFlightRef.current = true
+    clearBotConnectionPolling()
+    const pollGeneration = botConnectionGenerationRef.current
+    try {
+      if (isConnected) {
+        await window.electronAPI.stopFeishuBot(bot.id)
+        if (!mountedRef.current || pollGeneration !== botConnectionGenerationRef.current) return
+        toast.success(`Bot "${bot.name}" 已停止`)
+        await refreshBotStates(pollGeneration)
+      } else {
+        // 启动是异步的（10-15秒），不阻塞等待完成
+        // 先发起启动请求，然后轮询状态直到连接成功或失败
+        window.electronAPI.startFeishuBot(bot.id).catch((err: unknown) => {
+          if (!mountedRef.current || pollGeneration !== botConnectionGenerationRef.current) return
+          toast.error(err instanceof Error ? err.message : '启动失败')
+          void refreshBotStates(pollGeneration)
+        })
+        // 短暂等待让主进程设置 connecting 状态
+        await new Promise((r) => setTimeout(r, 300))
+        if (!mountedRef.current || pollGeneration !== botConnectionGenerationRef.current) return
+        await refreshBotStates(pollGeneration)
+        if (!mountedRef.current || pollGeneration !== botConnectionGenerationRef.current) return
+        // 轮询直到状态不再是 connecting
+        botConnectionPollRef.current = setInterval(async () => {
+          try {
+            const multiState = await window.electronAPI.getFeishuMultiStatus?.()
+            if (!mountedRef.current || pollGeneration !== botConnectionGenerationRef.current) return
+            if (multiState?.bots) {
+              setBotStates(multiState.bots)
+              const botState = multiState.bots[bot.id]
+              if (!botState || botState.status !== 'connecting') {
+                clearBotConnectionPolling()
+                if (botState?.status === 'connected') {
+                  toast.success(`Bot "${bot.name}" 已连接`)
+                }
               }
             }
+          } catch {
+            if (pollGeneration === botConnectionGenerationRef.current) {
+              clearBotConnectionPolling()
+            }
           }
-        } catch {
-          clearInterval(poll)
-        }
-      }, 1000)
-      // 安全超时：60秒后停止轮询
-      setTimeout(() => clearInterval(poll), 60_000)
+        }, 1000)
+        // 安全超时：60秒后停止轮询
+        botConnectionTimeoutRef.current = setTimeout(clearBotConnectionPolling, 60_000)
+      }
+    } finally {
+      toggleInFlightRef.current = false
     }
-  }, [bot.id, bot.name, isConnected, refreshBotStates, setBotStates])
+  }, [bot.id, bot.name, clearBotConnectionPolling, isConnected, refreshBotStates, setBotStates])
 
   const handleRemove = React.useCallback(async () => {
     try {

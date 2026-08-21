@@ -121,6 +121,14 @@ export class AgentAskUserService {
     }
   }
 
+  /** 应用退出时拒绝并释放全部挂起请求，避免遗留等待中的 Promise。 */
+  clearAllPending(): void {
+    for (const pending of this.pendingRequests.values()) {
+      pending.resolve({ behavior: 'deny', message: '应用正在退出' })
+    }
+    this.pendingRequests.clear()
+  }
+
   /**
    * 从工具输入中解析问题列表
    *

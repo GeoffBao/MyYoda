@@ -1,9 +1,24 @@
 import { describe, expect, test } from 'bun:test'
+import type { Atom } from 'jotai'
 import { createStore } from 'jotai/vanilla'
 import {
-  agentSessionInputStreamStateAtomFamily,
+  agentAttachedDirectoriesMapAtom,
+  agentAttachedFilesMapAtom,
+  agentMessageRefreshAtom,
+  agentPermissionModeMapAtom,
+  agentPromptSuggestionsAtom,
+  agentSessionDraftHtmlAtom,
+  agentSessionDraftsAtom,
+  agentSessionMessageQueueAtom,
+  agentStreamErrorsAtom,
+  allPendingAskUserRequestsAtom,
+  allPendingExitPlanRequestsAtom,
+  allPendingPermissionRequestsAtom,
   agentSessionStreamingStateAtomFamily,
+  agentSessionInputStreamStateAtomFamily,
   agentStreamingStatesAtom,
+  cleanupDeletedAgentSessionAtoms,
+  removeAgentSessionStreamingStateAtoms,
   applyAgentEvent,
   clearAgentStreamError,
   isRetryEventForCurrentStream,
@@ -383,5 +398,55 @@ describe('Agent 输入流状态订阅隔离', () => {
 
     expect(notifications).toBe(0)
     unsubscribe()
+  })
+})
+
+describe('Agent 流状态 atomFamily 生命周期', () => {
+  test('删除会话后重新获取 family 不再读到旧流状态', () => {
+    const store = createStore()
+    const sessionId = 'deleted-session'
+    const originalAtom = agentSessionStreamingStateAtomFamily(sessionId)
+    store.set(originalAtom, createStreamState())
+
+    removeAgentSessionStreamingStateAtoms(store, sessionId)
+
+    expect(store.get(originalAtom)).toBeUndefined()
+    expect(store.get(agentSessionStreamingStateAtomFamily(sessionId))).toBeUndefined()
+    expect(store.get(agentStreamingStatesAtom).has(sessionId)).toBe(false)
+  })
+
+  test('删除会话会清空所有按 sessionId 保存的运行态', () => {
+    const store = createStore()
+    const sessionId = 'deleted-session'
+    const expectMissing = <T,>(target: Atom<Map<string, T>>): void => {
+      expect(store.get(target).has(sessionId)).toBe(false)
+    }
+    store.set(agentStreamErrorsAtom, new Map([[sessionId, 'failed']]))
+    store.set(agentMessageRefreshAtom, new Map([[sessionId, 1]]))
+    store.set(agentPromptSuggestionsAtom, new Map([[sessionId, 'next']]))
+    store.set(agentSessionDraftsAtom, new Map([[sessionId, 'draft']]))
+    store.set(agentSessionDraftHtmlAtom, new Map([[sessionId, '<p>draft</p>']]))
+    store.set(agentSessionMessageQueueAtom, new Map([[sessionId, []]]))
+    store.set(agentPermissionModeMapAtom, new Map([[sessionId, 'plan']]))
+    store.set(agentAttachedDirectoriesMapAtom, new Map([[sessionId, ['D:/repo']]]))
+    store.set(agentAttachedFilesMapAtom, new Map([[sessionId, ['D:/repo/a.ts']]]))
+    store.set(allPendingPermissionRequestsAtom, new Map([[sessionId, []]]))
+    store.set(allPendingAskUserRequestsAtom, new Map([[sessionId, []]]))
+    store.set(allPendingExitPlanRequestsAtom, new Map([[sessionId, []]]))
+
+    cleanupDeletedAgentSessionAtoms(store, sessionId)
+
+    expectMissing(agentStreamErrorsAtom)
+    expectMissing(agentMessageRefreshAtom)
+    expectMissing(agentPromptSuggestionsAtom)
+    expectMissing(agentSessionDraftsAtom)
+    expectMissing(agentSessionDraftHtmlAtom)
+    expectMissing(agentSessionMessageQueueAtom)
+    expectMissing(agentPermissionModeMapAtom)
+    expectMissing(agentAttachedDirectoriesMapAtom)
+    expectMissing(agentAttachedFilesMapAtom)
+    expectMissing(allPendingPermissionRequestsAtom)
+    expectMissing(allPendingAskUserRequestsAtom)
+    expectMissing(allPendingExitPlanRequestsAtom)
   })
 })
