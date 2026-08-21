@@ -24,7 +24,7 @@ export interface PluginScopeOption {
   scope: PluginScope
 }
 
-const WORKSPACE_DESCRIPTION = 'MCP 全局共享（所有工作区）；Skills 为当前工作区叠加全局。'
+const WORKSPACE_DESCRIPTION = '连接器全局共享（所有工作区）；Skills 为当前工作区叠加全局。'
 
 function flagsOf(flags: Record<string, PluginScopeFlags> | undefined, projectId: string): PluginScopeFlags {
   return flags?.[projectId] ?? { hasOwnMcp: false, hasOwnSkills: false }
@@ -32,11 +32,11 @@ function flagsOf(flags: Record<string, PluginScopeFlags> | undefined, projectId:
 
 function describeProjectFlags(flags: PluginScopeFlags): string {
   if (flags.hasOwnMcp && flags.hasOwnSkills) {
-    return 'MCP 完全覆盖全局，仅本项目生效；含项目级 Skills'
+    return '连接器完全覆盖全局，仅本项目生效；含项目级 Skills'
   }
-  if (flags.hasOwnMcp) return 'MCP 完全覆盖全局，仅本项目生效'
+  if (flags.hasOwnMcp) return '连接器完全覆盖全局，仅本项目生效'
   if (flags.hasOwnSkills) return '含项目级 Skills'
-  return 'Skills 叠加工作区/全局；MCP 沿用全局配置'
+  return 'Skills 叠加工作区/全局；连接器沿用全局配置'
 }
 
 export function buildPluginScopeOptions(input: {
@@ -84,15 +84,15 @@ export function describePluginScope(scope: PluginScope): string {
   }
 }
 
-/** 内容区 notice：MCP / Skills 两维分开说，禁止「沿用 Workspace 默认」那种混写。 */
+/** 内容区 notice：连接器 / Skills 两维分开说，禁止「沿用 Workspace 默认」那种混写。 */
 export function describePluginScopeNotice(scope: PluginScope): string | null {
   switch (scope.kind) {
     case 'workspace':
       return null
     case 'project': {
       const mcpLine = scope.hasOwnMcp
-        ? 'MCP 完全覆盖全局，仅本项目生效'
-        : 'MCP 沿用全局配置'
+        ? '连接器完全覆盖全局，仅本项目生效'
+        : '连接器沿用全局配置'
       const skillsLine = scope.hasOwnSkills
         ? '含项目级 Skills'
         : 'Skills 叠加工作区/全局'
@@ -160,4 +160,13 @@ export function syncPluginScope(scope: PluginScope, options: readonly PluginScop
       return _exhaustive
     }
   }
+}
+
+/** 仅当项目已有连接器覆盖时才写入项目档；否则编辑沿用全局，避免把空配置存成整份覆盖。 */
+export function resolveMcpWriteProjectId(
+  scopeProjectId: string | null | undefined,
+  mcpIsProjectOverride: boolean,
+): string | null {
+  if (!mcpIsProjectOverride) return null
+  return scopeProjectId ?? null
 }

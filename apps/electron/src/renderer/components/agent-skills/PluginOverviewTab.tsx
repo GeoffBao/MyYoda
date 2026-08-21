@@ -1,10 +1,13 @@
 import * as React from 'react'
 import {
   ArrowRight,
-  Blocks,
+  CalendarClock,
   CheckCircle2,
+  ClipboardList,
+  Globe,
   Plug,
   Sparkles,
+  Users,
   Wrench,
 } from 'lucide-react'
 import type { PluginCenterTab } from '@/lib/plugin-center-model'
@@ -17,175 +20,229 @@ interface PluginOverviewTabProps {
   model: PluginOverviewModel
   onOpenTab: (tab: PluginCenterTab) => void
   onCreateExpert: () => void
+  onOpenConnector?: (sourceId: string) => void
 }
 
 export function PluginOverviewTab({
   model,
   onOpenTab,
   onCreateExpert,
+  onOpenConnector,
 }: PluginOverviewTabProps): React.ReactElement {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          label="已启用插件"
+    <div className="flex flex-col gap-8">
+      <section className="flex flex-wrap gap-2">
+        <StatChip
+          label="已启用"
           value={model.summary.enabledPlugins}
-          icon={<CheckCircle2 size={16} />}
+          onClick={() => onOpenTab('connectors')}
         />
-        <SummaryCard
-          label="需处理连接器"
+        <StatChip
+          label="需配置"
           value={model.summary.connectorsNeedingAttention}
-          icon={<Plug size={16} />}
+          tone={model.summary.connectorsNeedingAttention > 0 ? 'warning' : 'default'}
+          onClick={() => onOpenTab('connectors')}
         />
-        <SummaryCard
+        <StatChip
           label="可更新技能"
           value={model.summary.skillsWithUpdates}
-          icon={<Sparkles size={16} />}
+          onClick={() => onOpenTab('skills')}
         />
-        <SummaryCard
+        <StatChip
           label="内置能力"
           value={model.summary.builtinAbilities}
-          icon={<Wrench size={16} />}
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.25fr_0.9fr]">
-        <Panel title="待处理" empty="暂无需要处理的插件。">
-          {model.pendingItems.map((item) => (
-            <OverviewRow key={item.id} item={item} onOpenTab={onOpenTab} />
-          ))}
-        </Panel>
-        <Panel title="快捷入口">
+      {model.pendingItems.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <SectionTitle>待处理</SectionTitle>
+          <div className="flex flex-col gap-2">
+            {model.pendingItems.map((item) => (
+              <PendingRow
+                key={item.id}
+                item={item}
+                onOpenTab={onOpenTab}
+                onOpenConnector={onOpenConnector}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle>快捷入口</SectionTitle>
+        <div className="flex flex-wrap gap-2">
           {model.quickActions.map((item) => (
-            <OverviewRow
+            <button
               key={item.id}
-              item={item}
-              onOpenTab={onOpenTab}
-              onCreateExpert={onCreateExpert}
-            />
+              type="button"
+              onClick={() => {
+                if (item.id === 'new-expert') {
+                  onCreateExpert()
+                  return
+                }
+                if (item.actionTab) onOpenTab(item.actionTab)
+              }}
+              className="rounded-full bg-foreground/[0.05] px-3 py-1.5 text-[13px] font-medium text-foreground/85 transition-[background-color,transform] duration-fast ease-out hover:bg-foreground/[0.08] active:scale-[var(--press-scale)]"
+            >
+              {item.title}
+            </button>
           ))}
-        </Panel>
+        </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="推荐插件">
+      <section className="flex flex-col gap-3">
+        <SectionTitle>推荐</SectionTitle>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {model.recommendations.map((item) => (
-            <OverviewRow key={item.id} item={item} onOpenTab={onOpenTab} />
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                if (item.actionConnectorId && onOpenConnector) {
+                  onOpenConnector(item.actionConnectorId)
+                  return
+                }
+                if (item.actionTab) onOpenTab(item.actionTab)
+              }}
+              className="group flex flex-col gap-2 rounded-2xl border border-border/60 bg-content-area p-4 text-left transition-[border-color,box-shadow,transform] duration-fast ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[var(--press-scale)]"
+            >
+              <div className="flex size-9 items-center justify-center rounded-xl bg-foreground/[0.05] text-foreground/70">
+                <RecommendationIcon id={item.id} />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-foreground">{item.title}</div>
+                <div className="mt-0.5 line-clamp-2 text-[12px] leading-5 text-muted-foreground">
+                  {item.description}
+                </div>
+              </div>
+              <span className="text-[11px] font-medium text-primary opacity-70 transition-opacity duration-fast group-hover:opacity-100">
+                {item.actionLabel ?? '查看'} →
+              </span>
+            </button>
           ))}
-        </Panel>
-        <Panel title="内置能力">
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle>内置能力</SectionTitle>
+        <div className="flex flex-wrap gap-2">
           {model.builtinAbilities.map((item) => (
-            <OverviewRow key={item.id} item={item} onOpenTab={onOpenTab} />
+            <span
+              key={item.id}
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/[0.05] px-3 py-1.5 text-[13px] text-foreground/80"
+            >
+              <BuiltinIcon id={item.id} />
+              <span className="font-medium">{item.title}</span>
+              <span className="text-[11px] text-foreground/45">{item.description}</span>
+            </span>
           ))}
-        </Panel>
+        </div>
       </section>
     </div>
   )
 }
 
-interface SummaryCardProps {
+function SectionTitle({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <h2 className="text-sm font-semibold text-foreground">{children}</h2>
+}
+
+function StatChip({
+  label,
+  value,
+  tone = 'default',
+  onClick,
+}: {
   label: string
   value: number
-  icon: React.ReactNode
-}
-
-function SummaryCard({ label, value, icon }: SummaryCardProps): React.ReactElement {
+  tone?: 'default' | 'warning'
+  onClick?: () => void
+}): React.ReactElement {
+  const className = cnStat(tone, !!onClick)
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        <span className="text-[11px] text-foreground/50">{label}</span>
+        <span className="text-[15px] font-semibold tabular-nums">{value}</span>
+      </button>
+    )
+  }
   return (
-    <div className="rounded-2xl bg-content-area p-4 shadow-sm">
-      <div className="flex items-center justify-between text-foreground/45">
-        <span className="text-xs font-medium">{label}</span>
-        {icon}
-      </div>
-      <div className="mt-3 text-2xl font-semibold text-foreground">{value}</div>
+    <div className={className}>
+      <span className="text-[11px] text-foreground/50">{label}</span>
+      <span className="text-[15px] font-semibold tabular-nums">{value}</span>
     </div>
   )
 }
 
-interface PanelProps {
-  title: string
-  empty?: string
-  children: React.ReactNode
+function cnStat(tone: 'default' | 'warning', clickable: boolean): string {
+  return [
+    'inline-flex items-center gap-2 rounded-full px-3 py-1.5',
+    tone === 'warning' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-foreground/[0.05] text-foreground',
+    clickable ? 'transition-[background-color,transform] duration-fast ease-out hover:bg-foreground/[0.08] active:scale-[var(--press-scale)]' : '',
+  ].join(' ')
 }
 
-function Panel({ title, empty, children }: PanelProps): React.ReactElement {
-  const hasChildren = React.Children.count(children) > 0
-
-  return (
-    <section className="rounded-2xl bg-content-area p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Blocks size={15} className="text-foreground/45" />
-        {title}
-      </div>
-      <div className="flex flex-col gap-2">
-        {hasChildren ? children : (
-          <div className="rounded-xl bg-foreground/[0.04] p-3 text-sm text-foreground/50">
-            {empty ?? '暂无内容'}
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
-
-interface OverviewRowProps {
-  item: PluginOverviewItem
-  onOpenTab: (tab: PluginCenterTab) => void
-  onCreateExpert?: () => void
-}
-
-function OverviewRow({
+function PendingRow({
   item,
   onOpenTab,
-  onCreateExpert,
-}: OverviewRowProps): React.ReactElement {
-  if (item.id === 'new-expert' && onCreateExpert) {
-    return <ActionRow item={item} onClick={onCreateExpert} />
-  }
-  if (item.actionTab) {
-    const actionTab = item.actionTab
-    return <ActionRow item={item} onClick={() => onOpenTab(actionTab)} />
-  }
-  return (
-    <div className="rounded-xl bg-foreground/[0.04] px-3 py-2">
-      <RowText item={item} />
-    </div>
-  )
-}
-
-interface ActionRowProps {
+  onOpenConnector,
+}: {
   item: PluginOverviewItem
-  onClick: () => void
-}
-
-function ActionRow({ item, onClick }: ActionRowProps): React.ReactElement {
+  onOpenTab: (tab: PluginCenterTab) => void
+  onOpenConnector?: (sourceId: string) => void
+}): React.ReactElement {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="group flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.04] px-3 py-2 text-left transition-[background-color,transform] duration-fast ease-out hover:bg-foreground/[0.07] active:scale-[var(--press-scale)]"
+      onClick={() => {
+        if (item.actionConnectorId && onOpenConnector) {
+          onOpenConnector(item.actionConnectorId)
+          return
+        }
+        if (item.actionTab) onOpenTab(item.actionTab)
+      }}
+      className="group flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-content-area px-4 py-3 text-left transition-[border-color,background-color,transform] duration-fast ease-out hover:border-border hover:bg-foreground/[0.03] active:scale-[var(--press-scale)]"
     >
-      <RowText item={item} />
-      <ArrowRight
-        size={14}
-        className="shrink-0 text-foreground/40 transition-transform duration-fast ease-out group-hover:translate-x-0.5"
-      />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-foreground">{item.title}</span>
+        <span className="block truncate text-[12px] text-foreground/50">{item.description}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-primary">
+        {item.actionLabel ?? '去处理'}
+        <ArrowRight size={14} className="transition-transform duration-fast ease-out group-hover:translate-x-0.5" />
+      </span>
     </button>
   )
 }
 
-interface RowTextProps {
-  item: PluginOverviewItem
+function RecommendationIcon({ id }: { id: string }): React.ReactElement {
+  switch (id) {
+    case 'chrome-devtools':
+      return <Globe size={16} />
+    case 'web-search':
+      return <Sparkles size={16} />
+    case 'nano-banana':
+      return <Plug size={16} />
+    default:
+      return <CheckCircle2 size={16} />
+  }
 }
 
-function RowText({ item }: RowTextProps): React.ReactElement {
-  return (
-    <span className="min-w-0">
-      <span className="block truncate text-sm font-medium text-foreground/85">
-        {item.title}
-      </span>
-      <span className="block truncate text-xs text-foreground/50">
-        {item.description}
-      </span>
-    </span>
-  )
+function BuiltinIcon({ id }: { id: string }): React.ReactElement {
+  switch (id) {
+    case 'automation':
+      return <CalendarClock size={13} className="text-foreground/45" />
+    case 'collaboration':
+      return <Users size={13} className="text-foreground/45" />
+    case 'create-task':
+      return <ClipboardList size={13} className="text-foreground/45" />
+    case 'managed-browser':
+      return <Globe size={13} className="text-foreground/45" />
+    case 'planning':
+      return <Wrench size={13} className="text-foreground/45" />
+    default:
+      return <Wrench size={13} className="text-foreground/45" />
+  }
 }

@@ -4,6 +4,8 @@ import type {
   McpServerEntry,
   SkillMeta,
 } from '@myyoda/shared'
+import { isSystemBuiltinAbility, buildConnectorItems, isConnectorAttentionStatus } from './connectors-model'
+import type { PluginCenterTab } from './plugin-center-model'
 
 export interface PluginOverviewInput {
   skills: SkillMeta[]
@@ -18,7 +20,9 @@ export interface PluginOverviewItem {
   id: string
   title: string
   description: string
-  actionTab?: 'skills' | 'connectors' | 'memory'
+  actionTab?: PluginCenterTab
+  actionConnectorId?: string
+  actionLabel?: string
 }
 
 export interface PluginOverviewModel {
@@ -34,75 +38,54 @@ export interface PluginOverviewModel {
   builtinAbilities: PluginOverviewItem[]
 }
 
-const RUNTIME_ABILITY_IDS = new Set(['automation', 'collaboration', 'create-task'])
-
 function connectorPendingItem(
-  id: string,
-  title: string,
-  description?: string,
+  item: { sourceId: string; name: string; statusReason?: string; nextActionLabel?: string },
 ): PluginOverviewItem {
   return {
-    id: `connector:${id}`,
-    title: `${title} 需要处理`,
-    description: description ?? '连接器当前不可用，请检查配置或授权。',
+    id: `connector:${item.sourceId}`,
+    title: item.name,
+    description: item.statusReason ?? '连接器当前不可用，请检查配置或授权。',
     actionTab: 'connectors',
+    actionConnectorId: item.sourceId,
+    actionLabel: item.nextActionLabel ?? '去配置',
   }
 }
 
 export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOverviewModel {
   const enabledSkills = input.skills.filter((skill) => skill.enabled).length
   const skillsWithUpdates = input.skills.filter((skill) => skill.hasUpdate).length
-  const enabledUserMcp = input.userMcpEntries.filter(([, entry]) => entry.enabled && !entry.isBuiltin).length
 
-  const connectorBuiltins = input.builtinMcpServers.filter(
-    (server) => !RUNTIME_ABILITY_IDS.has(server.id),
-  )
-  const builtinSourceIds = new Set(connectorBuiltins.map((server) => server.id))
-  const uniqueChatTools = input.chatTools.filter(
-    (tool) => !builtinSourceIds.has(tool.meta.id) && !RUNTIME_ABILITY_IDS.has(tool.meta.id),
-  )
-
-  const availableBuiltinConnectors = connectorBuiltins.filter(
-    (server) => server.enabled && server.available,
-  )
-  const availableChatTools = uniqueChatTools.filter((tool) => tool.enabled && tool.available)
-  const unavailableBuiltinConnectors = connectorBuiltins.filter(
-    (server) => server.enabled && !server.available,
-  )
-  const unavailableChatTools = uniqueChatTools.filter(
-    (tool) => tool.enabled && !tool.available,
-  )
+  const connectors = buildConnectorItems({
+    builtinServers: input.builtinMcpServers,
+    userEntries: input.userMcpEntries,
+    chatTools: input.chatTools,
+  })
+  const attentionConnectors = connectors.filter((item) => isConnectorAttentionStatus(item.status))
+  const enabledConnectors = connectors.filter((item) => item.status === 'enabled')
 
   const builtinAbilities: PluginOverviewItem[] = [
     ...input.builtinMcpServers
-      .filter((server) => RUNTIME_ABILITY_IDS.has(server.id))
+      .filter((server) => isSystemBuiltinAbility(server.id))
       .map((server) => ({
         id: server.id,
         title: server.displayName,
         description: server.available
-          ? (server.enabled ? 'Runtime 已启用' : 'Runtime 已关闭')
-          : (server.availabilityReason ?? 'Runtime 当前不可用'),
+          ? (server.enabled ? '已启用' : '已关闭')
+          : (server.availabilityReason ?? '当前不可用'),
       })),
     {
       id: 'managed-browser',
       title: '受管浏览器',
-      description: '由 MyYoda Runtime 托管，按需对 Agent 可用。',
+      description: '按需对 Agent 可用',
     },
     {
       id: 'planning',
       title: 'Todo / 日程',
-      description: 'Pi Planning 工具，按任务场景对 Agent 可用。',
+      description: '按任务场景可用',
     },
   ]
 
-  const connectorPendingItems = [
-    ...unavailableBuiltinConnectors.map((server) =>
-      connectorPendingItem(server.id, server.displayName, server.availabilityReason),
-    ),
-    ...unavailableChatTools.map((tool) =>
-      connectorPendingItem(tool.meta.id, tool.meta.name),
-    ),
-  ]
+  const connectorPendingItems = attentionConnectors.map((item) => connectorPendingItem(item))
 
   return {
     summary: {
@@ -110,9 +93,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
         enabledSkills
         + input.expertsCount
         + input.teamsCount
-        + enabledUserMcp
-        + availableBuiltinConnectors.length
-        + availableChatTools.length,
+        + enabledConnectors.length,
       connectorsNeedingAttention: connectorPendingItems.length,
       skillsWithUpdates,
       builtinAbilities: builtinAbilities.length,
@@ -125,6 +106,7 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
             title: `${skillsWithUpdates} 个技能可更新`,
             description: '查看技能来源更新并决定是否同步。',
             actionTab: 'skills' as const,
+            actionLabel: '去更新',
           }]
         : []),
     ],
@@ -151,21 +133,28 @@ export function buildPluginOverviewModel(input: PluginOverviewInput): PluginOver
     ],
     recommendations: [
       {
-        id: 'github',
-        title: 'GitHub 连接器',
-        description: '研发与交付常用连接器。',
+        id: 'chrome-devtools',
+        title: 'Chrome 浏览器',
+        description: '打开真实网页、截图与检查 DOM。',
         actionTab: 'connectors',
+        actionConnectorId: 'chrome-devtools',
+        actionLabel: '查看',
       },
       {
-        id: 'code-review-expert',
-        title: '代码审查专家',
-        description: '为代码评审任务提供稳定角色。',
+        id: 'web-search',
+        title: '联网搜索',
+        description: '为 Agent 提供实时网页搜索。',
+        actionTab: 'connectors',
+        actionConnectorId: 'web-search',
+        actionLabel: '查看',
       },
       {
-        id: 'session-cleaner',
-        title: 'session-cleaner',
-        description: '清洗和整理长会话记录。',
-        actionTab: 'skills',
+        id: 'nano-banana',
+        title: 'Nano Banana 生图',
+        description: '用 Gemini 生成和编辑图片。',
+        actionTab: 'connectors',
+        actionConnectorId: 'nano-banana',
+        actionLabel: '查看',
       },
     ],
     builtinAbilities,

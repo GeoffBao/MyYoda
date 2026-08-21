@@ -19,9 +19,11 @@ interface OrgSkillImportDialogProps {
   workspaceSlug: string
   installedSkills: Array<{ slug: string }>
   onImported: () => void
+  /** 当前正在看项目档时说明导入仍写入工作区 Skills（组织导入无项目级接口） */
+  projectScoped?: boolean
 }
 
-export function OrgSkillImportDialog({ open, onOpenChange, workspaceSlug, installedSkills, onImported }: OrgSkillImportDialogProps): React.ReactElement {
+export function OrgSkillImportDialog({ open, onOpenChange, workspaceSlug, installedSkills, onImported, projectScoped }: OrgSkillImportDialogProps): React.ReactElement {
   const [memberships, setMemberships] = React.useState<OrganizationMembership[]>([])
   const [skills, setSkills] = React.useState<OrganizationSkill[]>([])
   const [selectedOrgId, setSelectedOrgId] = React.useState('')
@@ -97,7 +99,9 @@ export function OrgSkillImportDialog({ open, onOpenChange, workspaceSlug, instal
             从企业组织导入技能
           </DialogTitle>
           <DialogDescription>
-            选择组织中的 Skill 导入到当前工作区。管理员发布的 Skill 会随组织版本更新同步。
+            {projectScoped
+              ? '将导入到当前工作区 Skills，本项目会叠加使用。组织 Skill 暂不支持直接装进项目。'
+              : '选择组织中的 Skill 导入到当前工作区。管理员发布的 Skill 会随组织版本更新同步。'}
           </DialogDescription>
         </DialogHeader>
 

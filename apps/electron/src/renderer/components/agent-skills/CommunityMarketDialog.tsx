@@ -20,6 +20,8 @@ interface CommunityMarketDialogProps {
   workspaceSlug: string
   installedSkills: Array<{ slug: string }>
   onImported: () => void
+  /** 当前正在看项目档时说明安装仍写入工作区 Skills（社区市场无项目级安装接口） */
+  projectScoped?: boolean
 }
 
 /** 格式化下载量（1234 → 1.2k） */
@@ -30,7 +32,7 @@ function formatDownloads(n: number | undefined): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
-export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, installedSkills, onImported }: CommunityMarketDialogProps): React.ReactElement {
+export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, installedSkills, onImported, projectScoped }: CommunityMarketDialogProps): React.ReactElement {
   const [skills, setSkills] = React.useState<CommunitySkill[]>([])
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState<string | null>(null)
@@ -118,7 +120,9 @@ export function CommunityMarketDialog({ open, onOpenChange, workspaceSlug, insta
             )}
           </DialogTitle>
           <DialogDescription>
-            浏览社区贡献的 Agent Skills（{skills.length} 个），一键安装到当前工作区。由 MyYoda 官方维护，遵循各 Skill 的许可证。
+            {projectScoped
+              ? `浏览社区 Skills（${skills.length} 个）。将安装到当前工作区 Skills，本项目会叠加使用；项目专属副本请用「导入」。`
+              : `浏览社区贡献的 Agent Skills（${skills.length} 个），一键安装到当前工作区。由 MyYoda 官方维护，遵循各 Skill 的许可证。`}
           </DialogDescription>
         </DialogHeader>
 

@@ -8,8 +8,9 @@
  */
 
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
-import { getToolCredentials, getToolState } from '../chat-tool-config'
+import { getToolCredentials } from '../chat-tool-config'
 import { getBuiltinMcpDefinitions, type BuiltinMcpDefinition } from './baseline'
+import { resolveChromeDevtoolsAvailability } from './chrome-devtools-availability'
 import { isBuiltinMcpDefaultDisabled, isBuiltinMcpUserEnabled } from './settings'
 
 interface BuiltinMcpListContext {
@@ -26,35 +27,44 @@ function resolveAvailability(
   }
 
   const userEnabled = isBuiltinMcpUserEnabled(item.id)
-  if (!userEnabled) {
-    return {
-      enabled: false,
-      available: false,
-      availabilityReason: isBuiltinMcpDefaultDisabled(item.id)
-        ? '默认关闭，可手动开启'
-        : '已手动关闭',
-    }
-  }
 
+  // available = 依赖是否满足（关着也要探），enabled = 用户是否打开。
+  // 关掉不等于「没配」：有 Chrome / 有 Key 时显示已关闭，缺依赖才进需配置。
   if (item.id === 'collaboration') {
     const available = !!ctx.workspaceSlug
     return {
-      enabled: true,
+      enabled: userEnabled,
       available,
       availabilityReason: available ? undefined : '需要先选择工作区',
     }
   }
 
   if (item.id === 'nano-banana') {
-    const state = getToolState('nano-banana')
     const credentials = getToolCredentials('nano-banana')
-    const available = state.enabled && !!credentials.apiKey
+    const available = !!credentials.apiKey
     return {
-      enabled: true,
+      enabled: userEnabled,
       available,
-      availabilityReason: available
-        ? undefined
-        : state.enabled ? '需要配置 Gemini API Key' : 'Nano Banana 未启用',
+      availabilityReason: available ? undefined : '需要配置 Gemini API Key',
+    }
+  }
+
+  if (item.id === 'chrome-devtools') {
+    const chrome = resolveChromeDevtoolsAvailability()
+    return {
+      enabled: userEnabled,
+      available: chrome.available,
+      availabilityReason: chrome.available ? undefined : chrome.reason,
+    }
+  }
+
+  if (!userEnabled) {
+    return {
+      enabled: false,
+      available: true,
+      availabilityReason: isBuiltinMcpDefaultDisabled(item.id)
+        ? '默认关闭，可手动开启'
+        : '已手动关闭',
     }
   }
 

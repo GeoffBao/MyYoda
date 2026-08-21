@@ -1,8 +1,7 @@
 /**
- * ImportSkillDialog — 从其他工作区批量导入 Skill
+ * ImportSkillDialog — 批量导入 Skill
  *
- * 列出其他工作区可用的 Skill（自动过滤已安装的同名项），
- * 勾选多个后一键批量导入到当前工作区。导入完成后通过 toast 反馈结果。
+ * 工作区档：从其他工作区导入。项目档：从工作区默认或其他项目导入到当前项目。
  */
 
 import * as React from 'react'
@@ -28,6 +27,8 @@ interface ImportSkillDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workspaceSlug: string
+  /** 选中项目时导入到该项目 Skills；否则导入到当前工作区 */
+  projectId?: string | null
   installedSkills: SkillMeta[]
   onImported: () => void
 }
@@ -36,6 +37,7 @@ export function ImportSkillDialog({
   open,
   onOpenChange,
   workspaceSlug,
+  projectId,
   installedSkills,
   onImported,
 }: ImportSkillDialogProps): React.ReactElement {
@@ -46,13 +48,13 @@ export function ImportSkillDialog({
   const [importing, setImporting] = React.useState(false)
   const requestIdRef = React.useRef(0)
   const importOperationRef = React.useRef(0)
-  const dialogScopeRef = React.useRef({ open, workspaceSlug })
-  dialogScopeRef.current = { open, workspaceSlug }
+  const dialogScopeRef = React.useRef({ open, workspaceSlug, projectId })
+  dialogScopeRef.current = { open, workspaceSlug, projectId }
 
   React.useEffect(() => {
     importOperationRef.current += 1
     setImporting(false)
-  }, [workspaceSlug])
+  }, [workspaceSlug, projectId])
 
   React.useEffect(() => {
     const requestId = ++requestIdRef.current
@@ -72,14 +74,20 @@ export function ImportSkillDialog({
 
     void (async () => {
       try {
-        const groups = await window.electronAPI.getOtherWorkspaceSkills(workspaceSlug)
+        const groups: OtherWorkspaceSkillsGroup[] = projectId
+          ? (await window.electronAPI.getOtherProjectSkills(workspaceSlug, projectId)).map((group) => ({
+              workspaceSlug: `${group.sourceKind}:${group.sourceProjectId ?? ''}`,
+              workspaceName: group.sourceLabel,
+              skills: group.skills,
+            }))
+          : await window.electronAPI.getOtherWorkspaceSkills(workspaceSlug)
         if (requestIdRef.current !== requestId) return
         setOtherWorkspaces(groups)
       } catch (error) {
         if (requestIdRef.current !== requestId) return
-        console.error('[Agent 技能] 加载其他工作区 Skill 失败:', error)
+        console.error('[Agent 技能] 加载可导入 Skill 失败:', error)
         setOtherWorkspaces([])
-        toast.error('加载其他工作区 Skill 失败', {
+        toast.error('加载可导入 Skill 失败', {
           description: error instanceof Error ? error.message : '未知错误',
         })
       } finally {
@@ -91,7 +99,7 @@ export function ImportSkillDialog({
       // 让尚未完成的请求失效，防止旧工作区响应覆盖新状态。
       if (requestIdRef.current === requestId) requestIdRef.current += 1
     }
-  }, [open, workspaceSlug])
+  }, [open, projectId, workspaceSlug])
 
   const installedSlugs = React.useMemo(() => new Set(installedSkills.map((s) => s.slug)), [installedSkills])
 
@@ -155,11 +163,12 @@ export function ImportSkillDialog({
     onOpenChange(nextOpen)
   }
 
-  const isActiveImportOperation = (operationId: number, targetWorkspaceSlug: string): boolean => {
+  const isActiveImportOperation = (operationId: number, targetWorkspaceSlug: string, targetProjectId: string | null | undefined): boolean => {
     return (
       importOperationRef.current === operationId &&
       dialogScopeRef.current.open &&
-      dialogScopeRef.current.workspaceSlug === targetWorkspaceSlug
+      dialogScopeRef.current.workspaceSlug === targetWorkspaceSlug &&
+      (dialogScopeRef.current.projectId ?? null) === (targetProjectId ?? null)
     )
   }
 
@@ -167,13 +176,29 @@ export function ImportSkillDialog({
     if (!workspaceSlug || importing || !selectedWorkspace || selectedCount === 0) return
     const operationId = ++importOperationRef.current
     const targetWorkspaceSlug = workspaceSlug
-    const selections = selectedWorkspace.skills
-      .filter((s) => selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`))
-      .map((s) => ({ sourceSlug: selectedWorkspace.workspaceSlug, skillSlug: s.slug }))
+    const targetProjectId = projectId ?? null
     setImporting(true)
     try {
-      const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(targetWorkspaceSlug, selections)
-      if (!isActiveImportOperation(operationId, targetWorkspaceSlug)) return
+      const importResult = targetProjectId
+        ? await window.electronAPI.batchImportSkillsToProject(
+            targetWorkspaceSlug,
+            targetProjectId,
+            selectedWorkspace.skills
+              .filter((s) => selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`))
+              .map((s) => {
+                const separator = selectedWorkspace.workspaceSlug.indexOf(':')
+                const sourceKind = selectedWorkspace.workspaceSlug.slice(0, separator) === 'project' ? 'project' as const : 'workspace' as const
+                const sourceProjectId = selectedWorkspace.workspaceSlug.slice(separator + 1) || undefined
+                return { sourceKind, sourceProjectId, skillSlug: s.slug }
+              }),
+          )
+        : await window.electronAPI.batchImportSkillsFromWorkspaces(
+            targetWorkspaceSlug,
+            selectedWorkspace.skills
+              .filter((s) => selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`))
+              .map((s) => ({ sourceSlug: selectedWorkspace.workspaceSlug, skillSlug: s.slug })),
+          )
+      if (!isActiveImportOperation(operationId, targetWorkspaceSlug, targetProjectId)) return
 
       const failureDescription = getFailureDescription(importResult)
       if (importResult.imported > 0) {
@@ -198,11 +223,11 @@ export function ImportSkillDialog({
         })
       }
     } catch (error) {
-      if (!isActiveImportOperation(operationId, targetWorkspaceSlug)) return
+      if (!isActiveImportOperation(operationId, targetWorkspaceSlug, targetProjectId)) return
       console.error('[Agent 技能] 批量导入失败:', error)
       toast.error('批量导入失败', { description: error instanceof Error ? error.message : '未知错误' })
     } finally {
-      if (isActiveImportOperation(operationId, targetWorkspaceSlug)) setImporting(false)
+      if (isActiveImportOperation(operationId, targetWorkspaceSlug, targetProjectId)) setImporting(false)
     }
   }
 
@@ -210,9 +235,11 @@ export function ImportSkillDialog({
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
         <DialogHeader className="px-6 pb-4 pt-6">
-          <DialogTitle>从其他工作区批量导入 Skill</DialogTitle>
+          <DialogTitle>{projectId ? '导入 Skill 到当前项目' : '从其他工作区批量导入 Skill'}</DialogTitle>
           <DialogDescription>
-            从其他工作区勾选多个 Skill 导入到当前工作区。已安装的同名 Skill 会自动过滤。
+            {projectId
+              ? '从工作区默认或其他项目勾选 Skill，导入后只在本项目生效。已有的同名 Skill 会自动过滤。'
+              : '从其他工作区勾选多个 Skill 导入到当前工作区。已安装的同名 Skill 会自动过滤。'}
           </DialogDescription>
         </DialogHeader>
 
@@ -220,20 +247,20 @@ export function ImportSkillDialog({
           {loadingWorkspaces ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <Loader2 size={15} className="animate-spin" />
-              正在加载其他工作区 Skill...
+              正在加载可导入 Skill...
             </div>
           ) : availableWorkspaces.length === 0 ? (
             <SettingsCard divided={false}>
               <div className="py-10 text-center text-sm text-muted-foreground">
-                没有可导入的 Skill。其他工作区暂无 Skill，或者它们都已经安装到当前工作区了。
+                没有可导入的 Skill。来源暂无 Skill，或者它们都已经安装了。
               </div>
             </SettingsCard>
           ) : (
             <div className="space-y-2">
-              <div className="text-sm font-medium text-foreground">选择来源工作区</div>
+              <div className="text-sm font-medium text-foreground">{projectId ? '选择来源' : '选择来源工作区'}</div>
               <Select value={selectedWorkspaceSlug} onValueChange={handleWorkspaceChange} disabled={loadingWorkspaces || importing}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择来源工作区" />
+                  <SelectValue placeholder={projectId ? '选择来源' : '选择来源工作区'} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableWorkspaces.map((w) => (
@@ -310,7 +337,7 @@ export function ImportSkillDialog({
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-6 py-4">
           <span className="text-xs text-muted-foreground">
             {loadingWorkspaces
-              ? '正在加载其他工作区 Skill...'
+              ? '正在加载可导入 Skill...'
               : '勾选要导入的 Skill，已安装的同名 Skill 会自动过滤'}
           </span>
           <Button size="sm" onClick={() => void handleImport()} disabled={loadingWorkspaces || importing || selectedCount === 0}>

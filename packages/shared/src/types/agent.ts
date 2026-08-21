@@ -2251,6 +2251,8 @@ export const AGENT_IPC_CHANNELS = {
   GET_GLOBAL_SKILLS_DIR: 'agent:get-global-skills-dir',
   /** 测试 MCP 服务器连接 */
   TEST_MCP_SERVER: 'agent:test-mcp-server',
+  /** 测试内置连接器依赖（如 Chrome / npx） */
+  TEST_BUILTIN_CONNECTOR: 'agent:test-builtin-connector',
   /** 启用或关闭 MyYoda 内置 MCP */
   SET_BUILTIN_MCP_ENABLED: 'agent:set-builtin-mcp-enabled',
   /** 获取工作区 Skill 列表（仅工作区层，不含全局；展示完整三层请用 GET_ALL_EFFECTIVE_SKILLS） */

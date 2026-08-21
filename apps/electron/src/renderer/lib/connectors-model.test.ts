@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { BuiltinMcpServerSummary, ChatToolInfo, ChatToolMeta, McpServerEntry } from '@myyoda/shared'
-import { buildConnectorItems, isSystemBuiltinAbility } from './connectors-model'
+import {
+  buildConnectorItems,
+  classifyConnectorBlocker,
+  filterConnectorItems,
+  groupConnectorItems,
+  isSystemBuiltinAbility,
+} from './connectors-model'
 
 function builtin(
   id: string,
@@ -107,6 +113,20 @@ describe('connectors-model', () => {
       status: 'disabled',
       statusLabel: '已关闭',
       available: true,
+      categoryLabel: '我的连接',
+      sourceLabel: '我的连接',
+      typeLabel: 'MCP',
+      nextActionLabel: '去启用',
+      description: '本地命令连接器，启动后向 Agent 暴露工具。',
+    })
+    expect(items.find((item) => item.id === 'builtin:nano-banana')).toMatchObject({
+      sourceLabel: 'MyYoda 内置',
+      typeLabel: 'MCP',
+      nextActionLabel: '去配置',
+    })
+    expect(items.find((item) => item.id === 'custom:custom-api')).toMatchObject({
+      categoryLabel: '自定义',
+      typeLabel: 'HTTP',
     })
   })
 
@@ -176,5 +196,105 @@ describe('connectors-model', () => {
     })
 
     expect(items.map((item) => item.id)).toEqual(['mcp:filesystem'])
+  })
+
+  test('groups connectors by user-facing category, not MCP/API kind', () => {
+    const items = buildConnectorItems({
+      builtinServers: [
+        builtin('chrome-devtools', 'browser'),
+        builtin('nano-banana', 'media'),
+      ],
+      userEntries: [['filesystem', { type: 'stdio', command: 'npx', enabled: true }]],
+      chatTools: [
+        chatTool('web-search', '联网搜索', true, true),
+        chatTool('custom-api', 'Custom API', true, true, 'custom'),
+      ],
+    })
+
+    expect(groupConnectorItems(items).map((group) => group.categoryLabel)).toEqual([
+      '浏览器',
+      '媒体',
+      '搜索',
+      '我的连接',
+      '自定义',
+    ])
+  })
+
+  test('marks default-off missing credentials as needs_config, not disabled', () => {
+    const items = buildConnectorItems({
+      builtinServers: [
+        builtin('nano-banana', 'media', false, false, '需要配置 Gemini API Key'),
+      ],
+      userEntries: [],
+      chatTools: [chatTool('web-search', '联网搜索', false, false)],
+    })
+
+    expect(items.find((item) => item.sourceId === 'nano-banana')).toMatchObject({
+      status: 'needs_config',
+      statusLabel: '需配置',
+      nextActionLabel: '去配置',
+    })
+    expect(items.find((item) => item.sourceId === 'web-search')).toMatchObject({
+      status: 'needs_config',
+      statusLabel: '需配置',
+    })
+  })
+
+  test('marks missing Chrome as missing_dep even when the switch is off', () => {
+    const items = buildConnectorItems({
+      builtinServers: [
+        builtin('chrome-devtools', 'browser', false, false, '未检测到 Chrome，请安装 Google Chrome 后重试'),
+      ],
+      userEntries: [],
+      chatTools: [],
+    })
+
+    expect(items[0]).toMatchObject({
+      status: 'missing_dep',
+      statusLabel: '依赖缺失',
+      nextActionLabel: '去处理',
+    })
+  })
+
+  test('keeps configured but switched-off connectors as disabled', () => {
+    const items = buildConnectorItems({
+      builtinServers: [builtin('chrome-devtools', 'browser', false, true)],
+      userEntries: [],
+      chatTools: [chatTool('web-search', '联网搜索', false, true)],
+    })
+
+    expect(items.map((item) => item.status)).toEqual(['disabled', 'disabled'])
+  })
+
+  test('classifies connection failure and auth separately from missing config', () => {
+    expect(classifyConnectorBlocker('连接失败：ECONNREFUSED')).toBe('connect_failed')
+    expect(classifyConnectorBlocker('需要登录或 OAuth 授权')).toBe('needs_auth')
+    expect(classifyConnectorBlocker('需要配置 Gemini API Key')).toBe('needs_config')
+  })
+
+  test('filters connectors by lifecycle and category chips', () => {
+    const items = buildConnectorItems({
+      builtinServers: [
+        builtin('chrome-devtools', 'browser', false, false, '未检测到 Chrome，请安装 Google Chrome 后重试'),
+        builtin('nano-banana', 'media', true, false, '需要配置 Gemini API Key'),
+      ],
+      userEntries: [['local-db', { type: 'stdio', command: 'sqlite-mcp', enabled: false }]],
+      chatTools: [chatTool('web-search', '联网搜索', true, true)],
+    })
+
+    expect(filterConnectorItems(items, '', 'needs_config').map((item) => item.id)).toEqual([
+      'builtin:chrome-devtools',
+      'builtin:nano-banana',
+    ])
+    expect(filterConnectorItems(items, '', 'search').map((item) => item.id)).toEqual([
+      'api:web-search',
+    ])
+    expect(items.find((item) => item.sourceId === 'nano-banana')?.statusReason).toContain('Gemini')
+    expect(filterConnectorItems(items, 'gemini', 'all').map((item) => item.id)).toEqual([
+      'builtin:nano-banana',
+    ])
+    expect(filterConnectorItems(items, 'nano-banana', 'all').map((item) => item.id)).toEqual([
+      'builtin:nano-banana',
+    ])
   })
 })

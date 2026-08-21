@@ -71,7 +71,7 @@ describe('plugin-overview-model', () => {
     expect(overview.summary.skillsWithUpdates).toBe(2)
   })
 
-  test('creates pending items only for enabled unavailable connectors', () => {
+  test('creates pending items for connectors that cannot run, including default-off ones', () => {
     const overview = buildPluginOverviewModel({
       skills: [],
       expertsCount: 0,
@@ -87,12 +87,19 @@ describe('plugin-overview-model', () => {
       ],
     })
 
-    expect(overview.summary.connectorsNeedingAttention).toBe(2)
+    expect(overview.summary.connectorsNeedingAttention).toBe(4)
     expect(overview.pendingItems.map((item) => item.id)).toEqual([
       'connector:chrome-devtools',
+      'connector:disabled-builtin',
       'connector:missing-credential',
+      'connector:disabled-tool',
     ])
-    expect(overview.pendingItems[0]?.description).toBe('需要安装 Chrome')
+    expect(overview.pendingItems[0]).toMatchObject({
+      title: 'Chrome',
+      description: '需要安装 Chrome',
+      actionConnectorId: 'chrome-devtools',
+      actionLabel: '去处理',
+    })
   })
 
   test('classifies Runtime abilities outside connector and plugin counts', () => {

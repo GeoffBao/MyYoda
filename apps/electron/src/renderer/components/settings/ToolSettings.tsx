@@ -26,8 +26,13 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
   }
 }
 
+interface EmbeddedToolSettingsProps {
+  /** 嵌入连接器详情时隐藏 SettingsSection 标题与开关 */
+  embedded?: boolean
+}
+
 /** 联网搜索工具设置区域 */
-export function WebSearchSettings(): React.ReactElement {
+export function WebSearchSettings({ embedded = false }: EmbeddedToolSettingsProps): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
@@ -118,11 +123,14 @@ export function WebSearchSettings(): React.ReactElement {
     <SettingsSection
       title="联网搜索"
       description="启用后 AI 可以实时搜索互联网获取最新信息"
+      embedded={embedded}
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={handleToggle}
-        />
+        embedded ? undefined : (
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
+          />
+        )
       }
     >
       <SettingsCard divided={false}>
@@ -195,7 +203,7 @@ export function WebSearchSettings(): React.ReactElement {
 }
 
 /** Nano Banana 生图工具设置区域 */
-export function NanoBananaSettings(): React.ReactElement {
+export function NanoBananaSettings({ embedded = false }: EmbeddedToolSettingsProps): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -289,11 +297,14 @@ export function NanoBananaSettings(): React.ReactElement {
     <SettingsSection
       title="Nano Banana"
       description="启用后 AI 可以生成和编辑图片（基于 Gemini Image Generation）"
+      embedded={embedded}
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={handleToggle}
-        />
+        embedded ? undefined : (
+          <Switch
+            checked={enabled}
+            onCheckedChange={handleToggle}
+          />
+        )
       }
     >
       <SettingsCard divided={false}>

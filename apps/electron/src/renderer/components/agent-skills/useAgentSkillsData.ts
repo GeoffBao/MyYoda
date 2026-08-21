@@ -270,10 +270,10 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
       setCapabilities(nextCapabilities)
       setBuiltinMcpServers(nextCapabilities.builtinMcpServers)
       bumpCapabilitiesVersion((v) => v + 1)
-      toast.success(enabled ? '已启用内置 MCP' : '已关闭内置 MCP')
+      toast.success(enabled ? '已启用连接器' : '已关闭连接器')
     } catch (error) {
-      console.error('[Agent 技能] 切换内置 MCP 状态失败:', error)
-      toast.error('切换内置 MCP 状态失败')
+      console.error('[Agent 技能] 切换内置连接器状态失败:', error)
+      toast.error('切换连接器状态失败')
     }
   }, [workspaceSlug, bumpCapabilitiesVersion])
 
@@ -291,10 +291,10 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
       }
       setMcpConfig(newConfig)
       bumpCapabilitiesVersion((v) => v + 1)
-      toast.success(`已删除 MCP 服务器：${name}`)
+      toast.success(`已删除连接器：${name}`)
     } catch (error) {
-      console.error('[Agent 技能] 删除 MCP 服务器失败:', error)
-      toast.error('删除 MCP 服务器失败')
+      console.error('[Agent 技能] 删除连接器失败:', error)
+      toast.error('删除连接器失败')
     }
   }, [workspaceSlug, scopeProjectId, mcpConfig, mcpIsProjectOverride, bumpCapabilitiesVersion])
 

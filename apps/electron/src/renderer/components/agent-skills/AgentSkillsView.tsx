@@ -43,11 +43,12 @@ import { buildConnectorItems } from '@/lib/connectors-model'
 import {
   buildPluginScopeOptions,
   describePluginScopeNotice,
+  resolveMcpWriteProjectId,
   syncPluginScope,
   type PluginScope,
   type PluginScopeFlags,
 } from '@/lib/plugin-scope-model'
-import type { BuiltinMcpServerSummary, GlobalScopeReviewHints, McpServerEntry, SkillMeta } from '@myyoda/shared'
+import type { GlobalScopeReviewHints, McpServerEntry, SkillMeta } from '@myyoda/shared'
 import { useAgentSkillsData, getSkillKey } from './useAgentSkillsData'
 import { PluginOverviewTab } from './PluginOverviewTab'
 import { PluginScopeSelector } from './PluginScopeSelector'
@@ -56,7 +57,8 @@ import { LocalProjectBadge } from './LocalProjectBadge'
 import { SkillCard } from './SkillCard'
 import { SkillDetailSheet } from './SkillDetailSheet'
 import { McpDetailSheet } from './McpDetailSheet'
-import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
+import { AddConnectorMenu } from './AddConnectorMenu'
+import { CustomHttpConnectorDialog } from './CustomHttpConnectorDialog'
 import { ImportSkillDialog } from './ImportSkillDialog'
 
 import { OrgSkillImportDialog } from './OrgSkillImportDialog'
@@ -122,9 +124,11 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const scopeProjectId = pluginScope.kind === 'project' ? pluginScope.projectId : null
   // MCP 全局共享；Skills 三层 overlay。projectId 只在选中 Project 时传入。
   const data = useAgentSkillsData(scopeProjectId)
+  const mcpWriteProjectId = resolveMcpWriteProjectId(scopeProjectId, data.mcpIsProjectOverride)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const chatTools = useAtomValue(chatToolsAtom)
+  const setChatTools = useSetAtom(chatToolsAtom)
   const { createAgent } = useCreateSession()
 
   const [rawTab, setRawTab] = useAtom(agentSkillsTabAtom)
@@ -180,8 +184,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   // 存 getSkillKey(skill)（scope+slug 复合键），不能单存 slug——三层合并后同名可能跨 scope 存在多份（shadowedByGlobal 场景）
   const [selectedSkillKey, setSelectedSkillKey] = React.useState<string | null>(null)
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
+  const [httpDialogOpen, setHttpDialogOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
-  const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
   const [openConnectorSourceId, setOpenConnectorSourceId] = React.useState<string | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [showOrgImport, setShowOrgImport] = React.useState(false)
@@ -189,6 +193,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
   const [isDeletingSkill, setIsDeletingSkill] = React.useState(false)
   const [pendingDeleteMcpName, setPendingDeleteMcpName] = React.useState<string | null>(null)
+  const [pendingDeleteHttp, setPendingDeleteHttp] = React.useState<{ id: string; name: string } | null>(null)
   const [isDeletingMcp, setIsDeletingMcp] = React.useState(false)
   const [classifyingSkills, setClassifyingSkills] = React.useState(false)
   const [wsPopoverOpen, setWsPopoverOpen] = React.useState(false)
@@ -303,16 +308,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const selectedSkill = selectedSkillKey ? data.skills.find((s) => getSkillKey(s) === selectedSkillKey) ?? null : null
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
 
-  const configureBuiltinMcp = React.useCallback((serverId: string): void => {
-    if (serverId !== 'nano-banana') return
-    // 关闭内置 MCP 详情后，打开 nano-banana 的 ConnectorDetailDialog（DefaultBody 渲染 NanoBananaSettings）
-    setSelectedBuiltinMcp(null)
-    setOpenConnectorSourceId(serverId)
-  }, [])
-
   const consumeOpenConnector = React.useCallback((): void => {
     setOpenConnectorSourceId(null)
   }, [])
+
+  const openConnector = React.useCallback((sourceId: string): void => {
+    setTab('connectors')
+    setOpenConnectorSourceId(sourceId)
+  }, [setTab])
 
   const handleClassifySkills = React.useCallback(async (): Promise<void> => {
     if (classifyingSkills) return
@@ -527,16 +530,12 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           </button>
         )}
 
-        {/* 新增 MCP 服务器（连接器 Tab 工具条入口；列表头不再重复放添加按钮） */}
+        {/* 添加自定义连接（连接器 Tab 工具条；内置连接器已在列表中） */}
         {tab === 'connectors' && (
-          <button
-            type="button"
-            onClick={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <Plus size={14} />
-            <span>添加服务器</span>
-          </button>
+          <AddConnectorMenu
+            onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
+            onAddHttp={() => setHttpDialogOpen(true)}
+          />
         )}
       </div>
 
@@ -557,6 +556,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               model={pluginOverview}
               onOpenTab={setTab}
               onCreateExpert={handleCreateExpert}
+              onOpenConnector={openConnector}
             />
           ) : tab === 'experts' ? (
             <AgentExpertsView
@@ -599,14 +599,20 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               mcpIsProjectOverride={data.mcpIsProjectOverride}
               reviewHints={hintsDismissed ? null : globalScopeHints}
               onDismissHints={() => setHintsDismissed(true)}
-              onOpenMcp={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
-              onOpenBuiltin={setSelectedBuiltinMcp}
               onToggleBuiltin={data.toggleBuiltinMcp}
               onToggleMcp={data.toggleMcp}
               onAddMcp={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
+              onAddHttp={() => setHttpDialogOpen(true)}
+              workspaceSlug={data.workspaceSlug}
+              projectId={mcpWriteProjectId}
+              onUserMcpChanged={() => {
+                bumpCapabilities((v) => v + 1)
+                void data.reload()
+              }}
               openConnectorSourceId={openConnectorSourceId}
               onOpenConnectorConsumed={consumeOpenConnector}
               onRequestDeleteMcp={setPendingDeleteMcpName}
+              onRequestDeleteHttp={setPendingDeleteHttp}
             />
           ) : tab === 'memory' ? (
             // 记忆页始终工作区级；作用域选择器不改变记忆页
@@ -658,11 +664,11 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       <ConfirmDialog
         open={pendingDeleteMcpName !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteMcpName(null) }}
-        title={`确认删除 MCP 服务器「${pendingDeleteMcpName}」？`}
+        title={`确认删除连接器「${pendingDeleteMcpName}」？`}
         description={
           data.mcpIsProjectOverride
-            ? '将从本项目的 MCP 覆盖配置中删除，不影响全局配置。'
-            : '这是全局 MCP 配置，删除将影响所有工作区，且无法恢复。'
+            ? '将从本项目的连接器覆盖配置中删除，不影响全局配置。'
+            : '这是全局连接器配置，删除将影响所有工作区，且无法恢复。'
         }
         confirmLabel="删除"
         loadingLabel="删除中..."
@@ -677,6 +683,28 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
           if (editingMcp?.name === deletedName) {
             setMcpSheetOpen(false)
             setEditingMcp(null)
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteHttp !== null}
+        onOpenChange={(open) => { if (!open) setPendingDeleteHttp(null) }}
+        title={`确认删除连接器「${pendingDeleteHttp?.name}」？`}
+        description="删除后无法恢复。这是自定义 HTTP 连接器，不影响全局 MCP 配置。"
+        confirmLabel="删除"
+        loadingLabel="删除中..."
+        onConfirm={async () => {
+          if (!pendingDeleteHttp) return
+          const { id, name } = pendingDeleteHttp
+          try {
+            await window.electronAPI.deleteCustomChatTool(id)
+            setChatTools(await window.electronAPI.getChatTools())
+            toast.success(`已删除工具：${name}`)
+          } catch {
+            toast.error('删除工具失败')
+          } finally {
+            setPendingDeleteHttp(null)
           }
         }}
       />
@@ -703,17 +731,19 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         }}
       />
 
-      <BuiltinMcpDetailSheet
-        open={!!selectedBuiltinMcp}
-        server={selectedBuiltinMcp}
-        onOpenChange={(open) => { if (!open) setSelectedBuiltinMcp(null) }}
-        onConfigure={configureBuiltinMcp}
+      <CustomHttpConnectorDialog
+        open={httpDialogOpen}
+        onOpenChange={setHttpDialogOpen}
+        onCreated={() => {
+          void window.electronAPI.getChatTools().then(setChatTools)
+        }}
       />
 
       <ImportSkillDialog
         open={showImport}
         onOpenChange={setShowImport}
         workspaceSlug={data.workspaceSlug}
+        projectId={scopeProjectId}
         installedSkills={data.skills}
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
@@ -722,6 +752,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         open={showOrgImport}
         onOpenChange={setShowOrgImport}
         workspaceSlug={data.workspaceSlug}
+        projectScoped={!!scopeProjectId}
         installedSkills={data.skills}
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
@@ -730,6 +761,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
         open={showCommunityMarket}
         onOpenChange={setShowCommunityMarket}
         workspaceSlug={data.workspaceSlug}
+        projectScoped={!!scopeProjectId}
         installedSkills={data.skills}
         onImported={() => bumpCapabilities((v) => v + 1)}
       />
@@ -803,6 +835,12 @@ function SkillsTab({
 
   return (
     <div className="flex flex-col gap-8">
+      {isProjectScope && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-700 dark:text-amber-400">
+          <AlertTriangle size={14} className="shrink-0" />
+          社区安装与导入仍写入工作区 Skills，不会自动创建项目级副本。
+        </div>
+      )}
       {updateCount > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/[0.06] px-3 py-2 text-[13px] text-blue-600 dark:text-blue-400">
           有 {updateCount} 个 Skill 可更新到来源最新版本
