@@ -1105,9 +1105,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('excalidraw-gallery')
   }, [activeView, setActiveView, setAutomationForm])
 
-  /** 打开 Yoda 插件中心并切到连接器管理 */
-  const handleOpenConnectorsManagement = React.useCallback((): void => {
-    handleOpenSkills('connectors')
+  /** 打开插件中心总览（连接器是插件的一类，不单独并列入口） */
+  const handleOpenPlugins = React.useCallback((): void => {
+    handleOpenSkills('overview')
   }, [handleOpenSkills])
 
   // 切换模式时重置归档视图：Chat 用 viewMode，Agent 用状态筛选，统一回到活跃（对齐 Proma）。
@@ -3190,7 +3190,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               onDragEnd={handleProjectDragEnd}
               onConfigureProject={isAuto ? noopVoid : (workspaceId) => {
                 handleSelectProject(workspaceId)
-                handleOpenConnectorsManagement()
+                handleOpenPlugins()
               }}
               onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
               onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
@@ -3277,7 +3277,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleClearProjectBinding,
     handleCollapseExtraSessions,
     handleCreateProjectFromFolder,
-    handleOpenConnectorsManagement,
+    handleOpenPlugins,
     handleProjectDragEnd,
     handleProjectDragLeave,
     handleProjectDragOver,
@@ -3809,7 +3809,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         onDragEnd={noopVoid}
         onConfigureProject={isAuto ? noopVoid : (workspaceId) => {
           handleSelectProject(workspaceId)
-          handleOpenConnectorsManagement()
+          handleOpenPlugins()
         }}
         onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
         onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
@@ -5039,7 +5039,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               onSelect={() => onConfigureProject(group.workspace.id)}
             >
               <Settings size={14} />
-              配置插件与连接器
+              打开插件
             </DropdownMenuItem>
             <DropdownMenuSeparator className="my-0.5" />
             <DropdownMenuItem

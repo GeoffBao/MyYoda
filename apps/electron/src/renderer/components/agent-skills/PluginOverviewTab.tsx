@@ -35,7 +35,6 @@ export function PluginOverviewTab({
         <StatChip
           label="已启用"
           value={model.summary.enabledPlugins}
-          onClick={() => onOpenTab('connectors')}
         />
         <StatChip
           label="需配置"
