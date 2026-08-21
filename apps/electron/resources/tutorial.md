@@ -1,6 +1,6 @@
 # MyYoda 使用指南
 
-最后更新：2026 年 8 月 13 日
+最后更新：2026 年 8 月 21 日
 
 ---
 
@@ -129,7 +129,7 @@ Workspace 是顶层隔离容器，负责：
 
 - Chat / Project 共享的能力配置；
 - Project 会话和未归类会话；
-- Skills、MCP、专家绑定和标签的工作区默认层；
+- 技能叠加层（全局 + 工作区）；MCP 默认全局共享，不是每个工作区一份；
 - 记忆（Workspace 根目录 `AGENTS.md` 与 `memory/` 下的 auto-memory）；
 - Projects、Tasks、Automation 和 Workspace Files；
 - Workspace 级附加目录与附加文件；
@@ -145,9 +145,9 @@ Project 是 Workspace 内的长期工作容器，负责：
 - `MEMORY.md`：Project Knowledge；
 - 关联会话和 Project Task；
 - 默认 Agent 专家；
-- 可选的自己的 Skills / MCP 配置。
+- 可选的项目级技能叠加 / 自建 MCP（有则整份覆盖全局）。
 
-Project 默认使用 Workspace 的 Skills/MCP（不复制，只是引用）。如果一个 Project 需要与其他 Project 不同的能力集合，可以在 Yoda 插件里切到这个 Project，单独为它添加/删除 Skill 或 MCP 服务器——一旦 Project 有了自己的配置，就不再回退到 Workspace 默认，两者完全独立。Memory 不走这套机制，始终是 Workspace 级（另见第 12 节）。
+技能按全局 + 工作区 + 项目三层叠加。MCP 默认来自全局 `~/.myyoda/mcp.json`，所有工作区共享；只有 Project 自己配置过 MCP 时才整份覆盖全局，且仅该项目生效。在 Yoda 插件顶部用**作用域选择器**切到某个 Project，即可查看或编辑该项目层。Memory 始终是 Workspace 级（另见第 12 节）。
 
 ### Session cwd
 
@@ -158,21 +158,22 @@ Project 默认使用 Workspace 的 Skills/MCP（不复制，只是引用）。�
 ### 目录示意
 
 ```text
+~/.myyoda/mcp.json                 # 全局 MCP，所有工作区共享
 ~/.myyoda/agent-workspaces/{workspace-slug}/
 ├── AGENTS.md                     # Workspace 级长期指令（Agent 可写）
 ├── memory/                       # Workspace auto-memory 与用户画像（MEMORY.md 索引+主题文件）
 ├── workspace-files/              # Workspace 跨会话共享资料
 │   └── .context/                 # 跨会话 Context 文档
-├── mcp.json                      # Workspace MCP 配置
-├── skills/                       # Workspace Skills
-├── skills-inactive/              # 已禁用的 Workspace Skills
+├── mcp.json                      # 遗留工作区 MCP（已迁移到全局 ~/.myyoda/mcp.json）
+├── skills/                       # 工作区 Skills overlay
+├── skills-inactive/              # 已禁用的工作区 Skills
 ├── projects/
 │   └── {project-slug}/
 │       ├── config.json
 │       ├── assets/               # Project 资料
 │       ├── MEMORY.md             # Project Knowledge（托管项目默认位置）
-│       ├── skills/               # Project 自己的 Skills（可选，未配置时回退到 Workspace 默认）
-│       ├── mcp.json              # Project 自己的 MCP 配置（可选）
+│       ├── skills/               # Project Skills overlay（可选，与全局/工作区叠加）
+│       ├── mcp.json              # Project 自建 MCP（可选，有则整份覆盖全局）
 │       └── workdir/              # 没有外部目录时的托管工作目录
 ├── tasks/{task-slug}/             # 正式 Task 与 Run 数据
 ├── excalidraw/                   # Workspace 级 .excalidraw 画布
@@ -300,7 +301,7 @@ Project 是可执行、可追踪的 Agent 工作台，不限于程序员写代�
 - **会话**：属于该 Project 的 Project 会话；
 - **知识**：Project Knowledge，保存工程架构、命令、技术决策和注意事项；
 - **资料**：Project assets 和参考文件；
-- **设置**：Project 工作目录、颜色、描述和默认专家等配置；还有一个 Skills / MCP 摘要小节，显示该 Project 的 Skills/MCP 数量以及是否已自己配置过（还是沿用 Workspace 默认），点击“管理 →”可直接跳到 Yoda 插件并自动预选中这个 Project。
+- **设置**：Project 工作目录、颜色、描述和默认专家等配置；还有技能 / 连接器摘要，显示该 Project 是否有 Skills overlay、是否自建 MCP（未自建则仍显示全局 MCP），点击“管理 →”可跳到 Yoda 插件并用作用域选择器预选这个 Project。
 
 Project 页的“查看任务”会回到唯一的 Project 看板，并自动带上该 Project 的筛选条件，不会创建第二套任务数据。
 
@@ -410,27 +411,43 @@ MyYoda collaboration 子会话：
 
 ---
 
-## 11. Yoda 插件：专家、Skills、MCP 与 API
+## 11. Yoda 插件：总览、专家、专家团、技能、连接器与记忆
 
-点击**左侧栏的“Yoda 插件”图标**直接打开（不在设置页里）。Yoda 插件是 Chat 与 Project 共享的能力配置中心，一个全屏视图，内部按顶部切换六个平级 Tab：专家 / 专家团 / Skills / MCP / API / Memory。它不是某个单独模型，也不等于一个额外的 Agent 会话。
+点击**左侧栏的“Yoda 插件”图标**直接打开（不在设置页里）。Yoda 插件是 Chat 与 Project 共享的能力配置中心，一个全屏视图，内部按顶部切换六个平级 Tab：**总览 / 专家 / 专家团 / 技能 / 连接器 / 记忆**。它不是某个单独模型，也不等于一个额外的 Agent 会话。
 
-### 范围切换器：工作区默认 vs 具体 Project
+### 工作区切换与作用域选择器
 
-页面右上角的切换器决定 Skills 与 MCP 当前看到的是哪一层的配置：
+插件中心顶部有两套互不替代的选择器：
 
-- **全部项目共享**：当前 Workspace 的默认层，这个 Workspace 下所有 Project 都能用，也是今天大多数人的使用方式；
-- **某个具体 Project**：切到一个 Project 后，Skills/MCP 变成这个 Project 自己的。未单独配置时自动回退展示 Workspace 默认内容；一旦在这个范围下新增过 Skill 或 MCP 服务器，它就变成该 Project 自己的独立配置，不再回退。
-- 专家/专家团、API/增强工具、Memory 不受这个切换器影响，始终是全局或工作区级。
+- **工作区切换**：切换当前 Workspace。技能 overlay 和记忆跟着工作区走；MCP 默认仍是全局共享。
+- **作用域选择器**：在「默认配置」和某个 Project 之间切换。**默认配置 ≠「全部项目共享」**，也不等于「Workspace 默认 MCP」。
+
+作用域规则：
+
+- **MCP**：全局 `~/.myyoda/mcp.json`，所有工作区共享。只有某个 Project 自己配置过 MCP 时，才整份覆盖全局，且仅该 Project 生效。
+- **技能**：全局 + 工作区 + 项目三层叠加。
+- **专家 / Chat 工具 / builtin MCP**：全局，不受作用域选择器影响。
+- **记忆**：工作区级，不受作用域选择器影响。
+
+切到「默认配置」时：看到全局 MCP + 当前工作区 Skills（叠加全局）。切到某个 Project 后：若该 Project 未自建 MCP，仍显示全局 MCP；Skills 继续叠加（全局 + 工作区 + 该项目层，如有）。
+
+### 总览
+
+总览汇总已启用插件、需要处理的连接器、可更新技能，以及 **内置能力**。定时任务、协作子 Agent、创建任务、Planning（Todo / 日程）属于总览里的内置能力，**不是连接器**。受管浏览器也按 Runtime 内置能力展示。
 
 ### 专家
 
 专家是角色、身份和工作原则的组合。内置方向包括通用软件、驱动、应用、系统、通信、交付管理、架构、测试和代码审查等。
 
-Project 可以设置默认专家，Task 也可以单独选择专家。当前专家注入和 Skills/MCP 合并最明确的使用路径是 Project Task / TaskRunner；普通 Project 会话不要假设一定自动绑定了 Project 专家，应在任务或会话中明确说明需要的角色。
+Project 可以设置默认专家，Task 也可以单独选择专家。当前专家注入和技能/连接器合并最明确的使用路径是 Project Task / TaskRunner；普通 Project 会话不要假设一定自动绑定了 Project 专家，应在任务或会话中明确说明需要的角色。
 
-### Skills
+### 专家团
 
-Skills 是可复用的工作流、决策规则和 SOP，适合沉淀“以后遇到类似任务应该怎么做”，而不是堆放普通事实。
+专家团与专家平级：团长 + 成员。运行时团长拆解任务并委派成员执行，再汇总验收。在「插件 → 专家团」创建和编辑；专家与专家团都是全局配置，不受作用域选择器影响。
+
+### 技能
+
+技能（Skills）是可复用的工作流、决策规则和 SOP，适合沉淀“以后遇到类似任务应该怎么做”，而不是堆放普通事实。
 
 代表性内置 Skills 包括：
 
@@ -443,39 +460,33 @@ Skills 是可复用的工作流、决策规则和 SOP，适合沉淀“以后遇
 - `writing-plans`、`executing-plans`：规划和执行复杂实现；
 - `session-cleaner`：清洗和渐进读取会话记录。
 
-实际列表会随版本和 Workspace/Project 配置变化，以 Yoda 插件页面为准。
+实际列表会随版本和当前作用域的三层叠加变化，以 Yoda 插件 → 技能页面为准。
 
-**在 Project 之间共享 Skill**：切到某个 Project 后，Skills 页面的“导入”按钮会弹出“从工作区默认/其他项目批量导入 Skill”，可以从同一 Workspace 下的其他 Project 或工作区默认里批量勾选导入，不用手动拷文件夹。导入进 Project 的 Skill 不带来源追踪（不支持“一键更新”），需要同步时重新导入一次。工作区级仍然支持从其他工作区导入（“社区市场”旁边的“导入”按钮），两个导入入口不是同一个。
+**在 Project 之间共享 Skill**：切到某个 Project 后，技能页面的“导入”按钮会弹出“从工作区默认/其他项目批量导入 Skill”，可以从同一 Workspace 下的其他 Project 或工作区默认里批量勾选导入，不用手动拷文件夹。导入进 Project 的 Skill 不带来源追踪（不支持“一键更新”），需要同步时重新导入一次。工作区级仍然支持从其他工作区导入（“社区市场”旁边的“导入”按钮），两个导入入口不是同一个。
 
-### MCP
+### 连接器
 
-MCP 是 Agent 的外部工具扩展机制。可用能力取决于当前范围（Workspace 默认或某个 Project）的 MCP 配置，例如：
+连接器是面向用户的外部系统/工具接入入口。插件中心把它们放在同一个 Tab 里，底层可能是：
 
-- 浏览器导航、截图、DOM、网络与性能分析；
-- Automation 自动任务；
-- collaboration 协作子会话；
-- 创建 Project Task；
-- 图像生成或其他外部服务。
+- MCP Server（用户添加的 MCP，以及可作为连接器展示的 builtin MCP，例如 Brave Search、浏览器工具）；
+- API Key 工具（例如应用内 Tavily 联网搜索、Nano Banana）；
+- 自定义 HTTP 工具。
 
-在 Yoda 插件的 MCP 页面可以查看、启用、禁用和配置 MCP。使用 `#` 可以在输入框中精准引用某个 MCP。MCP 目前没有跨 Project/工作区的批量导入入口，需要在对应范围下手动逐个添加。
+普通用户只需要在「插件 → 连接器」里配置和启用；打开详情仍能看到底层类型。
 
-### API / 增强工具
+**Brave Search MCP 与 Tavily 联网搜索都属于连接器，但凭据不能混用。** 不要把 Brave Key 填到 Tavily 联网搜索配置中，也不要把 Tavily Key 填到 Brave MCP。
 
-Yoda 插件的 API 页管理应用内增强工具，例如：
+MCP 仍是 Agent 的外部工具扩展机制（stdio / HTTP / SSE）。使用 `#` 可以在输入框中精准引用某个 MCP。用户 MCP 默认写在全局 `~/.myyoda/mcp.json`；仅当某个 Project 自己配置过 MCP 时，该项目会整份覆盖全局。MCP 目前没有跨 Project/工作区的批量导入入口，需要在对应作用域下手动添加。
 
-- **联网搜索**：当前应用内实现使用 Tavily API，需要配置 Tavily Key；
-- **Nano Banana**：图像生成/处理能力，具体可用性取决于配置；
-- **自定义 HTTP 工具**：用户定义的 API 工具。
-
-Brave Search 是独立的 MCP Server，不等同于应用内 Tavily 联网搜索。启用 Brave MCP 后，Agent 才能通过对应 MCP 使用它；不要把 Brave Key 填到 Tavily 联网搜索配置中。
+定时任务、协作子 Agent、创建任务和 Planning 不在连接器里，见上方「总览」的内置能力。
 
 ---
 
 ## 12. 记忆（Memory）与 Project Knowledge
 
-### 记忆（Yoda 插件 → Memory Tab）
+### 记忆（Yoda 插件 → 记忆 Tab）
 
-打开左侧栏 **Yoda 插件** 后切到 **Memory** Tab（不再是独立的“Yoda 记忆”入口，已并入这里作为六个平级 Tab 之一）。它管理 Workspace 级长期记忆，始终不受页面右上角的 Skills/MCP 切换器影响：
+打开左侧栏 **Yoda 插件** 后切到 **记忆** Tab（不再是独立的“Yoda 记忆”入口，已并入这里作为六个平级 Tab 之一）。它管理 Workspace 级长期记忆，始终不受页面顶部作用域选择器影响：
 
 - Workspace 根目录的 `AGENTS.md`（Agent 可写的长期指令文件，旧版本叫 `CLAUDE.md`）；
 - `memory/MEMORY.md` 与主题文件（用户画像、协作偏好、纠错与经验等）；
@@ -493,16 +504,16 @@ Brave Search 是独立的 MCP Server，不等同于应用内 Tavily 联网搜索
 - 发布和测试流程；
 - 该 Project 特有的注意事项。
 
-也可以从 Project 设置页“Skills / MCP”小节旁边直接跳到 Yoda 插件并自动预选中这个 Project（不需要先回到左侧栏手动找）。
+也可以从 Project 设置页直接跳到 Yoda 插件并自动预选中这个 Project（不需要先回到左侧栏手动找）。
 
 ### 作用域选择
 
 | 内容 | 位置 |
 |------|------|
-| 用户偏好、跨项目经验、Workspace 规则 | 记忆（Yoda 插件 → Memory） |
+| 用户偏好、跨项目经验、Workspace 规则 | 记忆（Yoda 插件 → 记忆） |
 | 工程架构、命令、项目决策 | Project Knowledge |
-| 该 Project 单独的 Skills/MCP 能力集合 | Yoda 插件，切到具体 Project 后的 Skills/MCP Tab |
-| 可复用流程和决策树 | Yoda 插件 → Skills |
+| 该 Project 的技能叠加或自建 MCP | Yoda 插件，用作用域选择器切到该 Project 后的技能 / 连接器 Tab |
+| 可复用流程和决策树 | Yoda 插件 → 技能 |
 | 当前任务计划和临时过程 | 会话 `.context/` |
 | 可检索的跨项目知识产物 | Yoda 知识库（当前仍是 Preview） |
 
@@ -561,7 +572,7 @@ Chat 左栏的 **Yoda 知识库**是 Workspace 级知识库入口，设计目标
 
 ## 15. 当前设置与左侧栏入口
 
-**Yoda 插件不在设置页里，是左侧栏的独立全屏入口**（图标直接点击，不需要先打开设置）。“Yoda 记忆”已不再是独立入口，已并入 Yoda 插件作为其中的 **Memory** 子页（详见第 11、12 节）。
+**Yoda 插件不在设置页里，是左侧栏的独立全屏入口**（图标直接点击，不需要先打开设置）。“Yoda 记忆”已不再是独立入口，已并入 Yoda 插件作为其中的 **记忆** 子页（详见第 11、12 节）。
 
 当前设置页主要包含：
 
@@ -584,7 +595,7 @@ Chat 左栏的 **Yoda 知识库**是 Workspace 级知识库入口，设计目标
 
 | 入口 | 功能 |
 |------|------|
-| **Yoda 插件** | 专家、专家团、Skills、MCP、API/增强工具、Memory（工作区记忆）六个平级 Tab |
+| **Yoda 插件** | 总览、专家、专家团、技能、连接器、记忆（工作区记忆）六个平级 Tab |
 | **Yoda 知识库** | Workspace 级知识聚合入口（当前仍为 Preview，见第 13 节） |
 
 个别 Project 也可以在自己页面的“设置” Tab 里直接跳转到 Yoda 插件并自动预选中自己（见第 7 节）。
@@ -663,11 +674,11 @@ Chat 适合思考、阅读、分析和表达；Project 适合接触工作区、�
 
 ### Project Knowledge 和记忆（Memory）有什么区别？
 
-Project Knowledge 保存单个 Project 的工程事实；记忆（Yoda 插件 → Memory Tab，旧名“Yoda 记忆”）保存跨 Chat/Project、跨 Project 的稳定规则和用户偏好。不要把所有项目内容都写进 Workspace 级记忆。
+Project Knowledge 保存单个 Project 的工程事实；记忆（Yoda 插件 → 记忆 Tab，旧名“Yoda 记忆”）保存跨 Chat/Project、跨 Project 的稳定规则和用户偏好。不要把所有项目内容都写进 Workspace 级记忆。
 
-### 为什么我在某个 Project 里看不到工作区默认的 Skill 或 MCP？
+### 插件中心「默认配置」和某个 Project 看到的能力有什么不同？
 
-检查 Yoda 插件页面右上角的切换器——如果当前选中的是一个具体 Project 而不是“全部项目共享”，且这个 Project 已经自己配置过 Skills 或 MCP，它就不会再回退展示工作区默认的内容，两者完全独立。需要工作区默认的能力时，可以在该 Project 的 Skills 页点“导入”，从工作区默认里批量勾选导入需要的项。
+顶部有两套选择器：工作区切换，以及独立的**作用域选择器**（默认配置 / 某 Project）。默认配置看全局 MCP + 当前工作区 Skills；切到 Project 后，未自建 MCP 仍显示全局 MCP，Skills 继续叠加。默认配置不等于「全部项目共享」，也不等于 Workspace 默认 MCP。只有该 Project 自己配置过 MCP 时，连接器里的 MCP 才会整份换成项目配置。
 
 ### Yoda 知识库为什么没有搜索？
 
@@ -675,11 +686,11 @@ Project Knowledge 保存单个 Project 的工程事实；记忆（Yoda 插件 �
 
 ### 联网搜索应该填 Tavily 还是 Brave？
 
-Yoda 插件 → API 中的应用内联网搜索使用 Tavily Key。Brave Search 是独立 MCP，只有在 Yoda 插件 → MCP 中启用对应 Server 后，Agent 才能调用。两者配置不要混用。
+两者都属于「插件 → 连接器」，但凭据不能混用。应用内联网搜索使用 Tavily Key；Brave Search 是独立 MCP。不要把 Brave Key 填到 Tavily 配置中，也不要把 Tavily Key 填到 Brave MCP。
 
 ### Agent 专家什么时候生效？
 
-Project 可以设置默认专家，正式 Project Task 也可以单独选择专家。当前专家、Skills 和 MCP 的注入路径在 TaskRunner 中最明确；普通 Project 会话如需特定专家，应在任务中明确说明。
+Project 可以设置默认专家，正式 Project Task 也可以单独选择专家。当前专家、技能和连接器的注入路径在 TaskRunner 中最明确；普通 Project 会话如需特定专家，应在任务中明确说明。
 
 ### 画布为什么不在 Project 文件面板里？
 
@@ -696,9 +707,9 @@ Project 可以设置默认专家，正式 Project Task 也可以单独选择专�
 - 网络代理是否正确；
 - 当前模式是否支持该渠道。
 
-### Agent 工具或 MCP 不可用
+### Agent 工具或连接器不可用
 
-在**左侧栏 Yoda 插件 → MCP**（不在设置页里）中确认已启用，并检查外部命令、Node、npx、API Key 或服务地址是否可用。如果当前页面切到了某个具体 Project，记得确认看的是“全部项目共享”还是这个 Project 自己的配置——两者不同步，很容易看错范围。修改后重新发起一轮 Project 请求；如果外部 MCP 进程或环境仍未刷新，再尝试新建会话或重启应用。
+在**左侧栏 Yoda 插件 → 连接器**（不在设置页里）中确认已启用，并检查外部命令、Node、npx、API Key 或服务地址是否可用。先看顶部的工作区切换器和作用域选择器：默认配置看全局 MCP；切到 Project 后若该项目已自建 MCP，会整份覆盖全局，看起来像少了一批连接器。修改后重新发起一轮 Project 请求；如果外部 MCP 进程或环境仍未刷新，再尝试新建会话或重启应用。
 
 ### 自动任务没有运行
 

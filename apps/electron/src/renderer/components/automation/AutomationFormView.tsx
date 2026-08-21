@@ -1159,11 +1159,11 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
                   type="button"
                   className="ml-auto text-xs underline underline-offset-2 hover:text-foreground transition-colors"
                   onClick={() => {
-                    setAgentSkillsTab('mcp')
+                    setAgentSkillsTab('connectors')
                     setActiveView('agent-skills')
                   }}
                 >
-                  前往 MCP 管理
+                  前往连接器管理
                 </button>
               </div>
             ) : (

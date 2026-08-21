@@ -246,10 +246,10 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
     setActiveView('conversations')
   }, [currentWorkspaceId, selectWorkspace, setActiveProjectPageId, setProjectPageTab, setCodeMainView, setActiveView])
 
-  /** 打开该工作区的 MCP 与 Skills 配置（对齐 Proma 项目菜单：先切到该工作区，再进插件视图的 MCP tab） */
+  /** 打开该工作区的插件与连接器配置（先切到该工作区，再进入插件中心连接器 Tab） */
   const configureMcpAndSkills = React.useCallback((workspaceId: string) => {
     if (workspaceId !== currentWorkspaceId) selectWorkspace(workspaceId)
-    setAgentSkillsTab('mcp')
+    setAgentSkillsTab('connectors')
     setActiveView('agent-skills')
   }, [currentWorkspaceId, selectWorkspace, setAgentSkillsTab, setActiveView])
 
@@ -525,7 +525,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                               </DropdownMenuItem>
                               <DropdownMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
                                 <Settings size={13} />
-                                配置 MCP 与 Skills
+                                配置插件与连接器
                               </DropdownMenuItem>
                               {ws.projectRootPath ? (
                                 ws.projectRootStatus === 'missing' ? (
@@ -571,7 +571,7 @@ export function SidebarProjectsTab({ sessionHandlers }: SidebarProjectsTabProps)
                       </ContextMenuItem>
                       <ContextMenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => configureMcpAndSkills(wsId)}>
                         <Settings size={13} />
-                        配置 MCP 与 Skills
+                        配置插件与连接器
                       </ContextMenuItem>
                       <ContextMenuSeparator className="my-0.5" />
                       <ContextMenuItem

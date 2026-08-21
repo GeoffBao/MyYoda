@@ -74,6 +74,8 @@ export interface AgentSkillsData {
   deleteMcp: (name: string) => Promise<void>
   /** 在系统文件管理器中打开某个 Skill 所在目录（按其 scope 自动定位到 global/workspace/project） */
   openSkillFolder: (skill: SkillMeta) => void
+  /** 静默重读当前 scope（不把 loading 打回 true）。项目档下首次保存 MCP overlay 后必须调，否则内存仍是全局快照。 */
+  reload: () => Promise<void>
 }
 
 export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
@@ -318,5 +320,6 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     toggleBuiltinMcp,
     deleteMcp,
     openSkillFolder,
+    reload: loadData,
   }
 }

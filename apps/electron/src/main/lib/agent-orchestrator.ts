@@ -40,6 +40,7 @@ import { getSettings } from './settings-service'
 import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
 import { getAgentWorkspace, getLocalProjectRootStatus, getEffectiveMcpConfig, getEffectiveSkillsDirs, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir, getAgentDefaultWorkingDirectory } from './agent-workspace-manager'
+import { resolveEffectivePluginScope } from './agent-plugin-profile'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -478,7 +479,15 @@ export class AgentOrchestrator {
     const mcpServers: Record<string, Record<string, unknown>> = {}
     if (!workspaceSlug) return mcpServers
 
-    const mcpConfig = projectId && hasProjectMcpServers(workspaceSlug, projectId) ? getProjectMcpConfig(workspaceSlug, projectId) : getEffectiveMcpConfig(workspaceSlug)
+    const pluginScope = resolveEffectivePluginScope({
+      workspaceSlug,
+      projectId,
+      hasProjectMcp: !!(projectId && hasProjectMcpServers(workspaceSlug, projectId)),
+      hasProjectSkills: !!(projectId && hasProjectSkills(workspaceSlug, projectId)),
+    })
+    const mcpConfig = pluginScope.mcpScope === 'project' && projectId
+      ? getProjectMcpConfig(workspaceSlug, projectId)
+      : getEffectiveMcpConfig(workspaceSlug)
     for (const [name, entry] of Object.entries(mcpConfig.servers ?? {})) {
       if (!entry.enabled) continue
       if (name === 'memos-cloud') continue
@@ -1413,7 +1422,18 @@ export class AgentOrchestrator {
       const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug, sessionMeta?.projectId)
       // 与 buildMcpServers 同样的 fallback 规则：项目自己配置过 Skills 才用项目级目录，否则沿用工作区级目录（不影响存量会话）。
       // effectiveSkillsDir 仅代表“工作区/项目自有层”，用于技能激活来源标注（workspaceSkillsRoot）。
-      const effectiveSkillsDir = workspaceSlug ? (sessionMeta?.projectId && hasProjectSkills(workspaceSlug, sessionMeta.projectId) ? getProjectSkillsDir(workspaceSlug, sessionMeta.projectId) : getWorkspaceSkillsDir(workspaceSlug)) : undefined
+      const pluginScope = resolveEffectivePluginScope({
+        workspaceSlug,
+        projectId: sessionMeta?.projectId,
+        hasProjectMcp: !!(workspaceSlug && sessionMeta?.projectId && hasProjectMcpServers(workspaceSlug, sessionMeta.projectId)),
+        hasProjectSkills: !!(workspaceSlug && sessionMeta?.projectId && hasProjectSkills(workspaceSlug, sessionMeta.projectId)),
+      })
+      console.log(`[Agent 编排] 插件生效范围 mcpScope=${pluginScope.mcpScope} skillsDirScope=${pluginScope.skillsDirScope}`)
+      const effectiveSkillsDir = workspaceSlug
+        ? pluginScope.skillsDirScope === 'project' && sessionMeta?.projectId
+          ? getProjectSkillsDir(workspaceSlug, sessionMeta.projectId)
+          : getWorkspaceSkillsDir(workspaceSlug)
+        : undefined
       // 真正传给 SDK 的搜索路径需叠加全局层（Skills 全局化：~/.myyoda/global-skills/ 优先生效，
       // 否则预制 Skill 在迁移后会从实际会话中消失——见 getEffectiveSkillsDirs 注释）。
       const skillsSearchPaths = workspaceSlug ? getEffectiveSkillsDirs(workspaceSlug, sessionMeta?.projectId) : undefined

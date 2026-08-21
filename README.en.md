@@ -41,7 +41,7 @@ Subscription login channels are currently intended for Code. Chat availability d
 
 ### Projects and Long-Running Work
 
-- Workspaces isolate sessions, Skills, MCP, Memory, Projects, and shared files;
+- Workspaces isolate sessions, Skills, Memory, Projects, and shared files; MCP defaults to a global `~/.myyoda/mcp.json` shared by all workspaces;
 - Projects bind to the real repository through `workingDirectory` and keep reference assets and project memory;
 - Projects & Kanban provides Todo, In Progress, and Done columns by default;
 - TaskEditor can generate or manually edit a subtask DAG with orchestration models, dependencies, acceptance criteria, and repair limits;
@@ -50,8 +50,10 @@ Subscription login channels are currently intended for Code. Chat availability d
 
 ### Extensible Agent Capabilities
 
+- **Plugin Center**: a unified place for Overview, Experts, Expert Teams, Skills, Connectors, and Memory.
+- **Connectors**: user-facing external integrations backed by MCP, API-key tools, or custom HTTP tools. Automations, collaboration sub-agents, task creation, and Planning belong to Overview “built-in abilities”, not Connectors.
 - **Skills**: reusable workflows, decision rules, and standard operating procedures;
-- **MCP**: browser, Automation, collaboration, task creation, and external service tools;
+- **MCP**: the underlying tool-extension protocol; user MCP defaults to `~/.myyoda/mcp.json` and is shared across workspaces unless a Project has its own overlay (full replace, that Project only);
 - **Memory**: cross-session experience, user preferences, and long-lived Project knowledge;
 - **Context**: task plans, temporary notes, and shared workspace material;
 - **Agent Experts**: stable roles, rules, and capability bundles for engineering disciplines.
@@ -121,11 +123,11 @@ Workspace, Project, and session cwd are different concepts:
 | **Project assets / MEMORY.md** | Project references and long-lived context |
 
 ```text
+~/.myyoda/mcp.json                 # Global MCP, shared by all workspaces
 ~/.myyoda/agent-workspaces/{workspace}/
 ├── {session-id}/
 │   └── .context/              # Current task plans and temporary notes
 ├── workspace-files/           # Cross-session shared material
-├── mcp.json
 ├── skills/
 └── projects/
     └── {project}/
@@ -147,6 +149,7 @@ Core MyYoda data is stored under `~/.myyoda/` by default:
 ~/.myyoda/
 ├── settings.json
 ├── channels.json
+├── mcp.json                   # Global MCP, shared by all Workspaces
 ├── conversations/
 ├── agent-sessions/
 ├── agent-workspaces/

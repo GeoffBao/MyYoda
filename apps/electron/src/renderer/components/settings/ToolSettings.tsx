@@ -27,7 +27,7 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
 }
 
 /** 联网搜索工具设置区域 */
-function WebSearchSettings(): React.ReactElement {
+export function WebSearchSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
@@ -195,7 +195,7 @@ function WebSearchSettings(): React.ReactElement {
 }
 
 /** Nano Banana 生图工具设置区域 */
-function NanoBananaSettings(): React.ReactElement {
+export function NanoBananaSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -390,7 +390,7 @@ function NanoBananaSettings(): React.ReactElement {
 }
 
 /** 自定义工具列表区域 */
-function CustomToolsSection(): React.ReactElement | null {
+export function CustomToolsSection(): React.ReactElement | null {
   const tools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
 

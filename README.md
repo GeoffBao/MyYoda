@@ -41,7 +41,7 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 
 ### 项目与长任务执行
 
-- Workspace 隔离会话、Skills、MCP、Memory、Projects 和共享资料；
+- Workspace 隔离会话、Skills、Memory、Projects 和共享资料；MCP 默认全局共享（`~/.myyoda/mcp.json`）；
 - Project 绑定真实工程目录 `workingDirectory`，并保存参考资料和项目记忆；
 - **默认工作区目录**（设置 → 工作区）：未绑定项目的新会话回退使用的工程代码目录，配置后 Agent 直接在该目录下工作，目录失效时自动降级到会话隔离沙箱（不阻断）；
 - **项目目录失效一键恢复**：绑定目录被移动/删除后，报错卡片提供「重新关联目录」「设置默认工作区目录」，并自动探测父目录下可能的移动候选（如 `LuxAgents` → `LuxAgent`）供一键关联；
@@ -52,8 +52,10 @@ Projects & Kanban 位于 Code 内。进入 Code 后，可在“会话”和“�
 
 ### 可扩展的 Agent 能力
 
+- **插件中心**：以“万物即插件”为心智，统一管理专家、专家团、技能、连接器与记忆（总览 / 专家 / 专家团 / 技能 / 连接器 / 记忆）；
+- **连接器**：统一管理 MCP、API Key 工具、自定义 HTTP 工具与外部系统接入；定时任务、协作子 Agent、创建任务和 Planning 属于总览「内置能力」，不是连接器；
 - **Skills**：可复用的工作流、决策规则和 SOP；
-- **MCP**：浏览器、Automation、collaboration、任务创建及外部服务工具；
+- **MCP**：Agent 工具扩展协议；用户 MCP 默认写在 `~/.myyoda/mcp.json`，所有工作区共享；仅当 Project 自建 MCP 时整份覆盖、仅该项目生效；
 - **Memory**：跨会话经验、用户偏好和 Project 长期知识；
 - **Context**：当前任务计划、临时记录和跨会话资料；
 - **Agent 专家**：为不同工程领域提供稳定角色、规则和能力组合。
@@ -126,11 +128,11 @@ Workspace、Project 和会话 cwd 不是同一个概念：
 | **Project assets / MEMORY.md** | Project 参考资料和长期上下文 |
 
 ```text
+~/.myyoda/mcp.json                 # 全局 MCP，所有工作区共享
 ~/.myyoda/agent-workspaces/{workspace}/
 ├── {session-id}/
 │   └── .context/              # 当前会话的计划和临时记录
 ├── workspace-files/           # 跨会话共享资料
-├── mcp.json
 ├── skills/
 └── projects/
     └── {project}/
@@ -152,6 +154,7 @@ MyYoda 的核心数据默认保存在 `~/.myyoda/`：
 ~/.myyoda/
 ├── settings.json
 ├── channels.json
+├── mcp.json                   # 全局 MCP，所有工作区共享
 ├── conversations/
 ├── agent-sessions/
 ├── agent-workspaces/
