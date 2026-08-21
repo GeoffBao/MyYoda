@@ -1193,9 +1193,21 @@ export interface McpToolSummary {
 }
 
 /** MyYoda 内置 MCP 分类 */
-export type BuiltinMcpCategory = 'system' | 'automation' | 'collaboration' | 'memory' | 'media' | 'browser' | 'task'
+export type BuiltinMcpCategory = 'system' | 'automation' | 'collaboration' | 'memory' | 'media' | 'browser' | 'task' | 'office' | 'knowledge' | 'code' | 'design' | 'search' | 'data'
 
 /** MyYoda 内置 MCP 摘要，不写入工作区 mcp.json */
+/** 内置连接器来源与信任元数据（对标 OpenAI Plugins 的 author/homepage/repository） */
+export interface BuiltinMcpSourceInfo {
+  /** official=官方/社区发布，myyoda=MyYoda 自研桥接 */
+  vendor: 'official' | 'myyoda'
+  /** 发布者/维护方（如 GitHub / Figma / MyYoda） */
+  author?: string
+  /** 官网/文档主页 */
+  homepage?: string
+  /** 认证方式展示文案（如「Personal Access Token」「API Key」「无需凭据」「本地文件路径」） */
+  authType?: string
+}
+
 export interface BuiltinMcpServerSummary {
   id: string
   name: string
@@ -1206,6 +1218,10 @@ export interface BuiltinMcpServerSummary {
   available: boolean
   availabilityReason?: string
   tools: McpToolSummary[]
+  /** 来源与认证元数据（2026-08-19 起提供，旧数据可能缺失） */
+  source?: BuiltinMcpSourceInfo
+  /** 连接器将访问的数据/能力范围（对标 Trae 权限列表） */
+  permissions?: string[]
 }
 
 /** 工作区 MCP 配置文件 */
@@ -1256,6 +1272,8 @@ export interface SkillMeta {
   icon?: string
   version?: string
   enabled: boolean
+  /** 来源分层：system=系统预内置，connector=连接器携带，user=用户自安装（自己创建/市场下载/工作区导入） */
+  origin?: 'system' | 'connector' | 'user'
   /** 如果此 Skill 是从其他工作区导入的，则携带来源信息 */
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
@@ -1385,6 +1403,80 @@ export interface CommunitySkillInstallResult {
   slug: string
   name: string
   version: string
+}
+
+// ===== 市场目录（plugin_creator：可安装的第三方连接器/应用） =====
+
+/** 市场条目类型：连接器（MCP/API/CLI 注入）或 Skill（技能包） */
+export type MarketplaceItemType = 'connector' | 'skill' | 'cli'
+
+/** 市场条目来源：官方 / 社区 / MyYoda 自研 */
+export type MarketplaceVendor = 'official' | 'community' | 'myyoda'
+
+/** 市场条目（预置目录，对标 OpenAI Plugins / Trae Marketplace） */
+export interface MarketplaceItem {
+  /** 唯一 id（用于安装/卸载） */
+  id: string
+  /** 条目来源：local=内置官方目录，remote=远程社区 manifest */
+  source: 'local' | 'remote'
+  type: MarketplaceItemType
+  name: string
+  description: string
+  /** 品牌图标 key（渲染器用 getBuiltinMcpIcon / 内置 SVG） */
+  iconKey?: string
+  vendor: MarketplaceVendor
+  author?: string
+  homepage?: string
+  category?: string
+  /** 安装方式：npx MCP / 自研桥接 / CLI 命令 / skill 文件 */
+  installKind: 'npx-mcp' | 'bridge' | 'cli' | 'skill'
+  /** npx-mcp：注入命令（如 @modelcontextprotocol/server-github） */
+  npxPackage?: string
+  /** npx-mcp：启动参数 */
+  npxArgs?: string[]
+  /** cli：npm 包名（npx -y <cliPackage> 或全局安装后使用），如 @readwise/cli */
+  cliPackage?: string
+  /** cli：系统命令名（用于检测系统是否已安装，如 readwise / wecom-cli / vercel） */
+  cliCommand?: string
+  /** cli：认证检测命令（如 'wecom-cli auth show' / 'vercel whoami'） */
+  authCheckCommand?: string
+  /** cli：未认证关键词（如 'unauthorized' / 'not logged in'） */
+  authFailPattern?: string
+  /** cli：认证引导命令（如 'wecom-cli auth init' / 'vercel login'） */
+  authGuide?: string
+  /** cli：认证方式（qr=扫码弹窗默认；token=凭据表单输入 token） */
+  authKind?: 'qr' | 'token'
+  /** cli token 认证：写入 token 的子命令（如 readwise 的 login-with-token） */
+  authTokenCommand?: string
+  /** cli token 认证：token 获取页面链接（如 readwise.io/access_token） */
+  authTokenUrl?: string
+  /** cli：安装/使用提示（注入 Agent 系统提示的 CLI 用法说明，含认证步骤） */
+  cliHint?: string
+  /** npx-mcp：环境变量映射（key 为 npx 进程环境变量，value 为凭据配置键） */
+  envMap?: Record<string, string>
+  /** 需要用户在 UI 中填写的凭据字段定义（key=配置键，label=显示名，secret=是否密文） */
+  credentialFields?: Array<{ key: string; label: string; secret?: boolean; placeholder?: string }>
+  /** skill 安装：内嵌 skill 目录名（相对 marketplace/skills/<id>） */
+  skillFolder?: string
+}
+
+/** 市场条目 + 当前工作区安装状态 */
+export interface MarketplaceItemWithStatus extends MarketplaceItem {
+  installed: boolean
+  /** npx 连接器凭据是否已配置（UI 状态区分用） */
+  hasCredentials?: boolean
+  /** CLI 连接器系统是否已安装（command -v 检测） */
+  systemInstalled?: boolean
+  /** CLI 连接器是否已认证（auth check） */
+  authenticated?: boolean
+  /** 是否在 marketplaceInstalled 列表中（区分系统已装 vs 市场安装） */
+  marketplaceInstalled?: boolean
+  /** 预装连接器（第三方常驻连接器 Tab，但需点击安装后才可用，2026-08-20） */
+  preset?: boolean
+  /** 是否已启用（installed 且未被 marketplaceDisabled 停用；开关关闭时 installed=true 但 enabled=false，2026-08-19） */
+  enabled?: boolean
+  /** 用户是否已卸载/忽略（系统已装的 CLI 卸载后不再自动显示） */
+  ignored?: boolean
 }
 
 // ===== Skill 批量导入 =====
@@ -2336,11 +2428,6 @@ export const AGENT_IPC_CHANNELS = {
   /** 凭邀请码加入组织 */
   ORG_JOIN: 'org:join',
 
-  // 社区市场
-  /** 拉取社区市场清单 */
-  COMMUNITY_FETCH_MANIFEST: 'community:fetch-manifest',
-  /** 安装社区市场 Skill 到工作区 */
-  COMMUNITY_INSTALL_SKILL: 'community:install-skill',
 
   // 流式事件（主进程 → 渲染进程推送）
   /** Agent 流式事件 */

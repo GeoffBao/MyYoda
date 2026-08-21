@@ -46,9 +46,11 @@ export interface AgentSkillsData {
   toggleMcp: (name: string, enabled: boolean) => Promise<void>
   toggleBuiltinMcp: (id: string, enabled: boolean) => Promise<void>
   deleteMcp: (name: string) => Promise<void>
+  /** 重新拉取工作区能力摘要（凭据保存后刷新内置连接器卡片状态，如「需配置」→「已启用」） */
+  refreshBuiltinMcp: () => Promise<void>
 }
 
-export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
+export function useAgentSkillsData(projectId?: string | null, reloadKey = 0): AgentSkillsData {
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const bumpCapabilitiesVersion = useSetAtom(workspaceCapabilitiesVersionAtom)
@@ -110,10 +112,11 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
 
   // 只在进入页面、切换工作区或切换范围（Project/工作区默认）时读取；不订阅 capabilitiesVersion——
   // 文件监听会在切换开关后异步推送能力变化，这里刻意不订阅它，防止扫描 active/inactive 目录后重排当前列表。
+  // reloadKey 是显式刷新信号（市场安装/卸载技能时由父组件递增），不参与全局 capabilitiesVersion。
   React.useEffect(() => {
     setLoading(true)
     void loadData()
-  }, [loadData])
+  }, [loadData, reloadKey])
 
   const toggleSkill = React.useCallback(async (slug: string, enabled: boolean) => {
     try {
@@ -227,6 +230,18 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     }
   }, [workspaceSlug, scopeProjectId, mcpConfig, bumpCapabilitiesVersion])
 
+  /** 重新拉取工作区能力摘要（凭据保存后刷新内置连接器卡片状态，如「需配置」→「已启用」） */
+  const refreshBuiltinMcp = React.useCallback(async (): Promise<void> => {
+    if (!workspaceSlug) return
+    try {
+      const nextCapabilities = await window.electronAPI.getWorkspaceCapabilities(workspaceSlug)
+      setCapabilities(nextCapabilities)
+      setBuiltinMcpServers(nextCapabilities.builtinMcpServers)
+    } catch (error) {
+      console.error('[Agent 技能] 刷新内置连接器状态失败:', error)
+    }
+  }, [workspaceSlug])
+
   return {
     workspaceSlug,
     workspaceName: currentWorkspace?.name ?? '',
@@ -245,5 +260,6 @@ export function useAgentSkillsData(projectId?: string | null): AgentSkillsData {
     toggleMcp,
     toggleBuiltinMcp,
     deleteMcp,
+    refreshBuiltinMcp,
   }
 }

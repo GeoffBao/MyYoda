@@ -192,6 +192,7 @@ import type {
   CodeClawMiniRequest,
   CodeClawPeekRequest,
   CodeClawSize,
+  MarketplaceItemWithStatus,
 } from '@myyoda/shared'
 import type { ProjectConfig } from '@myyoda/shared/projects'
 import type { ExpertManifest, ExpertPackage, ExpertTemplate, TeamSquad } from '@myyoda/shared/experts'
@@ -970,13 +971,6 @@ export interface ElectronAPI {
   /** 从组织源更新已导入 Skill */
   orgUpdateSkill: (targetSlug: string, skillSlug: string) => Promise<SkillMeta>
 
-  // ── 社区市场 ───────────────────────────────
-
-  /** 拉取社区市场清单 */
-  communityFetchManifest: () => Promise<CommunitySkill[]>
-  /** 安装社区市场 Skill 到工作区 */
-  communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => Promise<CommunitySkillInstallResult>
-
   /** 读取 SKILL.md 全文内容 */
   readSkillContent: (workspaceSlug: string, skillSlug: string) => Promise<string>
 
@@ -1089,6 +1083,26 @@ export interface ElectronAPI {
 
   /** 测试工具连接 */
   testChatTool: (toolId: string) => Promise<{ success: boolean; message: string }>
+
+  /** 测试内置连接器连接（凭据验证） */
+  testBuiltinConnector: (connectorId: string) => Promise<{ success: boolean; message: string }>
+
+  /** 市场目录（plugin_creator）：列表（含安装状态与远程可用性） */
+  marketplaceList: (workspaceSlug: string) => Promise<{ items: MarketplaceItemWithStatus[] }>
+  /** 市场目录：安装条目 */
+  marketplaceInstall: (itemId: string) => Promise<void>
+  /** 市场目录：卸载条目（purgeSystem=true 时 CLI 同时 npm uninstall -g） */
+  marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => Promise<void>
+  /** 市场目录：开关（启用/停用注入） */
+  marketplaceToggle: (itemId: string, enabled: boolean) => Promise<void>
+  /** 市场目录：CLI 扫码授权启动（返回二维码 data URL + 扫码链接） */
+  marketplaceCliAuthStart: (itemId: string) => Promise<{ url?: string; qrDataUrl?: string; error?: string }>
+  /** 市场目录：CLI 认证状态（实时，授权轮询用） */
+  marketplaceCliAuthStatus: (itemId: string) => Promise<{ authenticated: boolean; error?: string }>
+  /** 市场目录：取消扫码授权（终止挂起的进程） */
+  marketplaceCliAuthCancel: () => Promise<void>
+  /** 市场目录：token 方式认证（Readwise 等，输入 token 写入凭据） */
+  marketplaceCliAuthToken: (itemId: string, token: string) => Promise<{ ok: boolean; error?: string }>
 
   // ===== AskUserQuestion 交互式问答 =====
 
@@ -2656,16 +2670,6 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ORG_UPDATE_SKILL, targetSlug, skillSlug)
   },
 
-  // ── 社区市场 ───────────────────────────────
-
-  communityFetchManifest: () => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_FETCH_MANIFEST)
-  },
-
-  communityInstallSkill: (workspaceSlug: string, skill: CommunitySkill) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL, workspaceSlug, skill)
-  },
-
   readSkillContent: (workspaceSlug: string, skillSlug: string) => {
     return ipcRenderer.invoke(
       AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
@@ -2842,6 +2846,36 @@ const electronAPI: ElectronAPI = {
 
   testChatTool: (toolId: string) => {
     return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.TEST_TOOL, toolId)
+  },
+
+  testBuiltinConnector: (connectorId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR, connectorId)
+  },
+
+  // 市场目录（plugin_creator）：列表 / 安装 / 卸载
+  marketplaceList: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST, workspaceSlug)
+  },
+  marketplaceInstall: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL, itemId)
+  },
+  marketplaceUninstall: (itemId: string, purgeSystem?: boolean) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL, itemId, purgeSystem)
+  },
+  marketplaceToggle: (itemId: string, enabled: boolean) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, itemId, enabled)
+  },
+  marketplaceCliAuthStart: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_START, itemId)
+  },
+  marketplaceCliAuthStatus: (itemId: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_STATUS, itemId)
+  },
+  marketplaceCliAuthCancel: () => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_CANCEL)
+  },
+  marketplaceCliAuthToken: (itemId: string, token: string) => {
+    return ipcRenderer.invoke(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_TOKEN, itemId, token)
   },
 
   // AskUserQuestion 交互式问答

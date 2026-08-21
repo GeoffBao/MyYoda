@@ -31,6 +31,11 @@ import {
 } from '../automation-scheduler'
 import { getAgentSessionMeta } from '../agent-session-manager'
 import { isBuiltinMcpUserEnabled } from '../builtin-mcp/settings'
+import { getToolCredentials } from '../chat-tool-config'
+import { buildWereadTools } from '../chat-tools/weread-tools'
+import { buildFetchTools } from '../chat-tools/fetch-tools'
+import { buildGitTools } from '../chat-tools/git-tools'
+import { buildSqliteTools } from '../chat-tools/sqlite-tools'
 import { buildPiCollaborationTools } from '../agent-collaboration-tools'
 import { getVisionRelayRouteLabel, inspectImageWithVisionRelay, isVisionRelayConfigured, isVisionRelayEligibleForModel } from '../vision-relay-service'
 import {
@@ -1115,6 +1120,43 @@ export async function buildPiBuiltinTools(
       tools.push(...collaborationTools as ToolDefinition[])
     } catch (error) {
       console.error('[Pi 桥接] 注入 collaboration 工具失败:', error)
+    }
+  }
+
+  // 微信读书知识桥接（2026-08-19）：官方无 MCP server，走官方 Agent Gateway + API Key。
+  // 注：Readwise 已于 2026-08-19 移除 REST 桥接，改由 readwise-cli skill（@readwise/cli）提供。
+  if (isBuiltinMcpUserEnabled('weread')) {
+    try {
+      tools.push(...buildWereadTools(sdk, () => getToolCredentials('weread').apiKey ?? ''))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 weread 工具失败:', error)
+    }
+  }
+
+  // 网页抓取桥接（2026-08-19）：npm 无官方 Node 版 fetch server（unscoped 包是供应链 canary），自研 defineTool。
+  if (isBuiltinMcpUserEnabled('fetch')) {
+    try {
+      tools.push(...buildFetchTools(sdk))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 fetch 工具失败:', error)
+    }
+  }
+
+  // Git 本地仓库桥接（2026-08-19）：只读 git 检查，作用于 agentCwd，自研 defineTool。
+  if (isBuiltinMcpUserEnabled('git')) {
+    try {
+      tools.push(...buildGitTools(sdk, () => ctx.agentCwd ?? ''))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 git 工具失败:', error)
+    }
+  }
+
+  // SQLite 桥接（2026-08-19）：Node 内置 node:sqlite 只读查询，DB 路径来自 toolCredentials['sqlite'].dbPath。
+  if (isBuiltinMcpUserEnabled('sqlite')) {
+    try {
+      tools.push(...buildSqliteTools(sdk, () => getToolCredentials('sqlite').dbPath ?? ''))
+    } catch (error) {
+      console.error('[Pi 桥接] 注入 sqlite 工具失败:', error)
     }
   }
 

@@ -1159,7 +1159,7 @@ export function AutomationFormView({ standalone = false }: { standalone?: boolea
                   type="button"
                   className="ml-auto text-xs underline underline-offset-2 hover:text-foreground transition-colors"
                   onClick={() => {
-                    setAgentSkillsTab('mcp')
+                    setAgentSkillsTab('connectors')
                     setActiveView('agent-skills')
                   }}
                 >

@@ -69,7 +69,7 @@ export interface NanoBananaContext {
 // ===== 默认配置 =====
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com'
-const DEFAULT_MODEL = 'gemini-3.1-flash-image-preview'
+const DEFAULT_MODEL = 'gemini-3.1-flash-image' // GA（preview 已于 2026-06-25 关停）
 
 // ===== 工具元数据 =====
 

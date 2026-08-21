@@ -6,6 +6,8 @@
  * chat-tools.json 管理工具开关和非记忆工具凭据。
  */
 
+import type { MarketplaceItem } from './agent'
+
 // ===== 工具元数据 =====
 
 /** 工具参数定义（简化格式，供用户/Agent 创建） */
@@ -74,6 +76,14 @@ export interface ChatToolsFileConfig {
   toolCredentials: Record<string, Record<string, string>>
   /** 自定义工具定义列表 */
   customTools: ChatToolMeta[]
+  /** 已从市场目录安装的条目 id（plugin_creator，2026-08-19） */
+  marketplaceInstalled?: string[]
+  /** 已安装但被用户停用的条目子集（缺省=全部启用；开关只改这里，不删安装记录，2026-08-19） */
+  marketplaceDisabled?: string[]
+  /** 用户主动卸载/忽略的条目 id（系统已装的 CLI 卸载后不再自动显示，2026-08-19） */
+  marketplaceIgnored?: string[]
+  /** 远程市场连接器安装快照（卸载/注入用，避免依赖网络） */
+  marketplaceRemoteItems?: Record<string, MarketplaceItem>
 }
 
 // ===== 渲染进程交互 =====
@@ -101,6 +111,24 @@ export const CHAT_TOOL_IPC_CHANNELS = {
   UPDATE_TOOL_CREDENTIALS: 'chat-tool:update-credentials',
   /** 测试工具连接 */
   TEST_TOOL: 'chat-tool:test',
+  /** 测试内置连接器连接（凭据验证） */
+  TEST_BUILTIN_CONNECTOR: 'builtin-mcp:test-connector',
+  /** 市场目录：列表（含安装状态） */
+  MARKETPLACE_LIST: 'marketplace:list',
+  /** 市场目录：安装条目 */
+  MARKETPLACE_INSTALL: 'marketplace:install',
+  /** 市场目录：卸载条目 */
+  MARKETPLACE_UNINSTALL: 'marketplace:uninstall',
+  /** 市场目录：开关（启用/停用注入） */
+  MARKETPLACE_TOGGLE: 'marketplace:toggle',
+  /** 市场目录：CLI 扫码授权启动（生成二维码） */
+  MARKETPLACE_CLI_AUTH_START: 'marketplace:cli-auth-start',
+  /** 市场目录：CLI 认证状态（实时） */
+  MARKETPLACE_CLI_AUTH_STATUS: 'marketplace:cli-auth-status',
+  /** 市场目录：取消扫码授权 */
+  MARKETPLACE_CLI_AUTH_CANCEL: 'marketplace:cli-auth-cancel',
+  /** 市场目录：token 方式认证 */
+  MARKETPLACE_CLI_AUTH_TOKEN: 'marketplace:cli-auth-token',
   /** 创建自定义工具 */
   CREATE_CUSTOM_TOOL: 'chat-tool:create-custom',
   /** 删除自定义工具 */

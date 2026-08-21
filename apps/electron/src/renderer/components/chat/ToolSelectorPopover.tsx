@@ -62,7 +62,7 @@ export function ToolSelectorPopover(): React.ReactElement {
   /** 跳转到 Yoda 插件视图（API/增强工具 Tab），Home / Code 两模式共享同一份配置 */
   const goToToolSettings = (): void => {
     setOpen(false)
-    setAgentSkillsTab('api')
+    setAgentSkillsTab('connectors')
     setActiveView('agent-skills')
   }
 

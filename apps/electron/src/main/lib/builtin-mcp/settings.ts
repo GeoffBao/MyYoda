@@ -13,7 +13,11 @@ import { getSettings, updateSettings } from '../settings-service'
  * 这些 MCP 需要用户额外配置（如 API Key）才有意义，默认不向 Agent 注入，
  * 需用户在能力列表中手动开启。
  */
-const DEFAULT_DISABLED_IDS = new Set<string>(['nano-banana', 'chrome-devtools'])
+const DEFAULT_DISABLED_IDS = new Set<string>([
+  'nano-banana', 'chrome-devtools', 'weread',
+  // Phase 2（2026-08-19）外部 npx 连接器与自研桥接连接器：默认关闭，凭据/手动开启
+  'github', 'gitlab', 'git', 'notion', 'figma', 'brave-search', 'exa', 'fetch', 'sqlite', 'browserbase',
+])
 
 /** 判断某个内置 MCP 是否默认关闭（需用户手动开启） */
 export function isBuiltinMcpDefaultDisabled(id: string): boolean {

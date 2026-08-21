@@ -15,6 +15,10 @@ import { Input } from '@/components/ui/input'
 import { SettingsSection, SettingsCard } from './primitives'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
+import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
+
+const WEREAD_TOOL_ID = 'weread'
+
 
 /** 刷新全局工具列表 atom */
 async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window.electronAPI.getChatTools>>) => void): Promise<void> {
@@ -27,7 +31,7 @@ async function refreshChatTools(setter: (tools: Awaited<ReturnType<typeof window
 }
 
 /** 联网搜索工具设置区域 */
-function WebSearchSettings(): React.ReactElement {
+export function WebSearchSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [showApiKey, setShowApiKey] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
@@ -195,7 +199,7 @@ function WebSearchSettings(): React.ReactElement {
 }
 
 /** Nano Banana 生图工具设置区域 */
-function NanoBananaSettings(): React.ReactElement {
+export function NanoBananaSettings(): React.ReactElement {
   const [apiKey, setApiKey] = React.useState('')
   const [baseUrl, setBaseUrl] = React.useState('')
   const [model, setModel] = React.useState('')
@@ -389,8 +393,181 @@ function NanoBananaSettings(): React.ReactElement {
   )
 }
 
+/**
+/**
+ * 微信读书工具设置区域
+ *
+ * 微信读书官方无 MCP server，走官方 Agent Gateway + API Key（wrk- 开头，
+ * 官方页面登录获取）。Key 保存到 chat-tools.json，注入时作为 Bearer 认证。
+ * 全只读：搜索书城、书架、划线/笔记、阅读统计。
+ */
+export function WereadSettings(): React.ReactElement {
+  const { workspaces, currentWorkspaceId } = useWorkspaceActions()
+  const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
+  const [apiKey, setApiKey] = React.useState('')
+  const [showKey, setShowKey] = React.useState(false)
+  const [enabled, setEnabled] = React.useState(false)
+  const [available, setAvailable] = React.useState(false)
+  const [availabilityReason, setAvailabilityReason] = React.useState<string | undefined>(undefined)
+  const [loading, setLoading] = React.useState(true)
+
+  const savedRef = React.useRef('')
+
+  const refreshServerState = React.useCallback(async (slug: string): Promise<void> => {
+    try {
+      const caps = await window.electronAPI.getWorkspaceCapabilities(slug)
+      const server = caps.builtinMcpServers.find((s) => s.id === WEREAD_TOOL_ID)
+      if (server) {
+        setEnabled(server.enabled)
+        setAvailable(server.available)
+        setAvailabilityReason(server.availabilityReason)
+      }
+    } catch (err) {
+      console.error('[微信读书设置] 刷新状态失败:', err)
+    }
+  }, [])
+
+  // 加载已保存 Key + 内置 MCP 开关/可用状态
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceSlug) {
+      setLoading(false)
+      return
+    }
+    Promise.all([
+      window.electronAPI.getChatToolCredentials(WEREAD_TOOL_ID),
+      window.electronAPI.getWorkspaceCapabilities(workspaceSlug),
+    ])
+      .then(([credentials, caps]) => {
+        if (cancelled) return
+        if (credentials.apiKey) setApiKey(credentials.apiKey)
+        savedRef.current = credentials.apiKey || ''
+        const server = caps.builtinMcpServers.find((s) => s.id === WEREAD_TOOL_ID)
+        if (server) {
+          setEnabled(server.enabled)
+          setAvailable(server.available)
+          setAvailabilityReason(server.availabilityReason)
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[微信读书设置] 加载失败:', err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [workspaceSlug])
+
+  /** 静默保存 Key（blur 时触发），保存后刷新可用状态 */
+  const handleBlurSave = React.useCallback(async (): Promise<void> => {
+    const current = apiKey.trim()
+    if (current === savedRef.current) return
+    try {
+      await window.electronAPI.updateChatToolCredentials(WEREAD_TOOL_ID, { apiKey: current })
+      savedRef.current = current
+      toast.success('微信读书设置已保存')
+      if (workspaceSlug) await refreshServerState(workspaceSlug)
+    } catch (error) {
+      console.error('[微信读书设置] 保存失败:', error)
+    }
+  }, [apiKey, workspaceSlug, refreshServerState])
+
+  const handleToggle = async (checked: boolean): Promise<void> => {
+    if (!workspaceSlug) {
+      toast.error('请先选择工作区')
+      return
+    }
+    try {
+      await window.electronAPI.setBuiltinMcpEnabled(workspaceSlug, WEREAD_TOOL_ID, checked)
+      setEnabled(checked)
+      await refreshServerState(workspaceSlug)
+      toast.success(checked ? '微信读书已启用' : '微信读书已关闭')
+    } catch (error) {
+      console.error('[微信读书设置] 切换失败:', error)
+      toast.error('切换微信读书状态失败')
+    }
+  }
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground py-8 text-center">加载中...</div>
+  }
+
+  return (
+    <SettingsSection
+      title="微信读书"
+      description="启用后 Agent 可以读取你的微信读书数据：书架、划线/笔记、阅读统计，整理读书笔记时引用你的真实阅读记录"
+      action={
+        <Switch
+          checked={enabled}
+          onCheckedChange={handleToggle}
+          disabled={!workspaceSlug}
+        />
+      }
+    >
+      <SettingsCard divided={false}>
+        <div className="space-y-4 p-4">
+          {/* 状态提示 */}
+          <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${available ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted/50 text-muted-foreground'}`}>
+            {available ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <XCircle size={16} className="mt-0.5 shrink-0" />}
+            <span>{available ? 'API Key 已配置，Agent 会话可读取你的微信读书数据' : (availabilityReason ?? '尚未配置 API Key')}</span>
+          </div>
+
+          {/* 引导说明 */}
+          <div className="rounded-lg bg-muted/50 p-3 space-y-2 text-sm text-muted-foreground">
+            <p>微信读书通过官方 Agent Gateway 接入，Agent 可搜索书城、查看书架与阅读进度、导出划线/笔记、阅读统计，全部<span className="font-medium text-foreground">只读</span>。</p>
+            <p className="text-xs">配置步骤：</p>
+            <ol className="text-xs list-decimal list-inside space-y-1">
+              <li>
+                访问{' '}
+                <a
+                  href="https://weread.qq.com/r/weread-skills"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  微信读书官方 Skill 页面
+                  <ExternalLink size={10} />
+                </a>
+                {' '}登录后获取 API Key（wrk- 开头）
+              </li>
+              <li>将 API Key 填入下方</li>
+              <li>开启上方开关，新会话中 Agent 即可读取你的阅读数据</li>
+            </ol>
+            <p className="text-xs text-muted-foreground/70">
+              ⚠️ 注意：API Key 是 OAuth Token，<span className="font-medium text-foreground">会过期</span>；失效时到官方页面重新生成并更新即可。
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">API Key</label>
+            <div className="relative">
+              <Input
+                type={showKey ? 'text' : 'password'}
+                placeholder="wrk-..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                onBlur={handleBlurSave}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                tabIndex={-1}
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">仅存本机 chat-tools.json；key 过期时重新生成即可</p>
+          </div>
+        </div>
+      </SettingsCard>
+    </SettingsSection>
+  )
+}
+
 /** 自定义工具列表区域 */
-function CustomToolsSection(): React.ReactElement | null {
+export function CustomToolsSection(): React.ReactElement | null {
   const tools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
 
@@ -475,6 +652,7 @@ export function EnhancedToolsPanel(): React.ReactElement {
   const [focusedTool, setFocusedTool] = useAtom(toolSettingsFocusAtom)
   const webSearchRef = React.useRef<HTMLDivElement>(null)
   const nanoBananaRef = React.useRef<HTMLDivElement>(null)
+  const wereadRef = React.useRef<HTMLDivElement>(null)
   const customToolsRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
@@ -482,6 +660,7 @@ export function EnhancedToolsPanel(): React.ReactElement {
     const refs: Record<ToolSettingsFocus, React.RefObject<HTMLDivElement>> = {
       'web-search': webSearchRef,
       'nano-banana': nanoBananaRef,
+      'weread': wereadRef,
       'custom-tools': customToolsRef,
     }
     window.requestAnimationFrame(() => {
@@ -500,6 +679,11 @@ export function EnhancedToolsPanel(): React.ReactElement {
       {/* Nano Banana 生图工具 */}
       <div ref={nanoBananaRef}>
         <NanoBananaSettings />
+      </div>
+
+      {/* 微信读书工具 */}
+      <div ref={wereadRef}>
+        <WereadSettings />
       </div>
 
       {/* 自定义工具 */}

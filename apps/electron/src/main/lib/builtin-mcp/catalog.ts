@@ -9,6 +9,7 @@
 
 import type { BuiltinMcpServerSummary } from '@myyoda/shared'
 import { getToolCredentials, getToolState } from '../chat-tool-config'
+import { hasNpxConnectorCredentials, NPX_CONNECTOR_SPECS } from './npx-connector-mcp'
 import { getBuiltinMcpDefinitions, type BuiltinMcpDefinition } from './baseline'
 import { isBuiltinMcpDefaultDisabled, isBuiltinMcpUserEnabled } from './settings'
 
@@ -58,6 +59,32 @@ function resolveAvailability(
     }
   }
 
+  if (item.id === 'weread') {
+    const apiKey = getToolCredentials('weread').apiKey
+    const available = !!apiKey?.trim()
+    return {
+      enabled: true,
+      available,
+      availabilityReason: available
+        ? undefined
+        : '需要在 API Tab 配置微信读书 API Key（wrk- 开头，官方页面获取）',
+    }
+  }
+
+  // Phase 2 外部 npx 连接器（GitHub/GitLab/Notion/Figma/Brave Search/Exa/Browserbase）：
+  // 凭据齐全才可用；自研桥接连接器（git/fetch/sqlite）无凭据要求，直接可用。
+  const npxSpec = NPX_CONNECTOR_SPECS.find((spec) => spec.id === item.id)
+  if (npxSpec) {
+    const available = hasNpxConnectorCredentials(npxSpec)
+    return {
+      enabled: true,
+      available,
+      availabilityReason: available
+        ? undefined
+        : `需要在连接器详情中配置凭据（${Object.keys(npxSpec.envMap ?? {}).length} 项）`,
+    }
+  }
+
   return { enabled: true, available: true }
 }
 
@@ -70,6 +97,8 @@ export function listBuiltinMcpServers(ctx: BuiltinMcpListContext = {}): BuiltinM
     category: item.category,
     tools: item.tools,
     toggleable: item.toggleable,
+    source: item.source,
+    permissions: item.permissions,
     ...resolveAvailability(item, ctx),
   }))
 }

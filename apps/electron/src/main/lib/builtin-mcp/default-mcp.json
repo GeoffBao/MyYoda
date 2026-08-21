@@ -39,6 +39,15 @@
           "name": "run_automation_now",
           "description": "立即运行一次定时任务。"
         }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      },
+      "permissions": [
+        "创建、更新、暂停、恢复或删除 MyYoda 定时任务"
       ]
     },
     {
@@ -88,6 +97,15 @@
           "name": "stop_delegations",
           "description": "批量停止协作子会话。"
         }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      },
+      "permissions": [
+        "创建协作子 Agent 会话并并行分发任务"
       ]
     },
     {
@@ -105,6 +123,15 @@
           "name": "generate_image",
           "description": "生成或编辑图片。"
         }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Google Gemini",
+        "homepage": "https://aistudio.google.com/",
+        "authType": "API Key"
+      },
+      "permissions": [
+        "调用 Google Gemini API 进行文本/代码生成"
       ]
     },
     {
@@ -118,16 +145,60 @@
       "defaultEnabled": false,
       "toggleable": true,
       "tools": [
-        { "name": "list_pages", "description": "列出当前浏览器页面。", "readOnly": true },
-        { "name": "navigate_page", "description": "导航到指定 URL。" },
-        { "name": "take_snapshot", "description": "获取页面可访问性快照，用于理解页面结构。", "readOnly": true },
-        { "name": "take_screenshot", "description": "截取页面或元素截图，用于视觉检查。", "readOnly": true },
-        { "name": "click", "description": "点击页面元素。" },
-        { "name": "type", "description": "向页面元素输入文本。" },
-        { "name": "evaluate_script", "description": "在页面上下文执行脚本，用于诊断页面状态。" },
-        { "name": "list_network_requests", "description": "查看页面网络请求。", "readOnly": true },
-        { "name": "performance_start_trace", "description": "开始性能追踪。" },
-        { "name": "performance_stop_trace", "description": "停止性能追踪并返回结果。", "readOnly": true }
+        {
+          "name": "list_pages",
+          "description": "列出当前浏览器页面。",
+          "readOnly": true
+        },
+        {
+          "name": "navigate_page",
+          "description": "导航到指定 URL。"
+        },
+        {
+          "name": "take_snapshot",
+          "description": "获取页面可访问性快照，用于理解页面结构。",
+          "readOnly": true
+        },
+        {
+          "name": "take_screenshot",
+          "description": "截取页面或元素截图，用于视觉检查。",
+          "readOnly": true
+        },
+        {
+          "name": "click",
+          "description": "点击页面元素。"
+        },
+        {
+          "name": "type",
+          "description": "向页面元素输入文本。"
+        },
+        {
+          "name": "evaluate_script",
+          "description": "在页面上下文执行脚本，用于诊断页面状态。"
+        },
+        {
+          "name": "list_network_requests",
+          "description": "查看页面网络请求。",
+          "readOnly": true
+        },
+        {
+          "name": "performance_start_trace",
+          "description": "开始性能追踪。"
+        },
+        {
+          "name": "performance_stop_trace",
+          "description": "停止性能追踪并返回结果。",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Chrome DevTools MCP",
+        "homepage": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+        "authType": "无需凭据（需本机 Chrome）"
+      },
+      "permissions": [
+        "通过 Chrome DevTools Protocol 操作本机 Chrome 标签页"
       ]
     },
     {
@@ -141,7 +212,726 @@
       "defaultEnabled": true,
       "toggleable": true,
       "tools": [
-        { "name": "create_task", "description": "创建一个 todo 状态的看板任务，不自动运行。" }
+        {
+          "name": "create_task",
+          "description": "创建一个 todo 状态的看板任务，不自动运行。"
+        }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      },
+      "permissions": [
+        "读取和写入 MyYoda Todo / 日程数据"
+      ]
+    },
+    {
+      "id": "weread",
+      "name": "weread",
+      "displayName": "微信读书",
+      "description": "让 Agent 读取你的微信读书数据：搜索书城、查看书架与阅读进度、导出划线/笔记、阅读统计与推荐，整理读书笔记时引用你的真实阅读记录。需要配置微信读书 API Key（wrk- 开头）。",
+      "category": "knowledge",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "search_books",
+          "description": "搜索微信读书书城。",
+          "readOnly": true
+        },
+        {
+          "name": "get_book_info",
+          "description": "查看书籍详情、章节目录与阅读进度。",
+          "readOnly": true
+        },
+        {
+          "name": "get_shelf",
+          "description": "查看书架全部条目。",
+          "readOnly": true
+        },
+        {
+          "name": "get_reading_stats",
+          "description": "获取阅读时长、天数与偏好分析。",
+          "readOnly": true
+        },
+        {
+          "name": "get_notebooks",
+          "description": "获取所有有笔记的书籍概览（划线/想法/书签计数）。",
+          "readOnly": true
+        },
+        {
+          "name": "get_underlines",
+          "description": "获取某本书的划线原文与想法。",
+          "readOnly": true
+        },
+        {
+          "name": "get_recommendations",
+          "description": "基于阅读偏好的个性化推荐。",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "微信读书",
+        "homepage": "https://weread.qq.com/",
+        "authType": "API Key（wrk-）"
+      },
+      "permissions": [
+        "读取书架、笔记、划线与书评"
+      ]
+    },
+    {
+      "id": "github",
+      "name": "github",
+      "displayName": "GitHub",
+      "description": "让 Agent 直接操作 GitHub 仓库：创建/搜索/合并 PR 与 Issue、管理分支、读写文件内容。需要配置 GitHub Personal Access Token。",
+      "category": "code",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "create_or_update_file",
+          "description": "创建或更新仓库文件",
+          "readOnly": true
+        },
+        {
+          "name": "search_repositories",
+          "description": "搜索 GitHub 仓库",
+          "readOnly": true
+        },
+        {
+          "name": "create_repository",
+          "description": "创建新仓库",
+          "readOnly": true
+        },
+        {
+          "name": "get_file_contents",
+          "description": "读取文件内容",
+          "readOnly": true
+        },
+        {
+          "name": "push_files",
+          "description": "批量推送文件",
+          "readOnly": true
+        },
+        {
+          "name": "create_issue",
+          "description": "创建 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "create_pull_request",
+          "description": "创建 Pull Request",
+          "readOnly": true
+        },
+        {
+          "name": "fork_repository",
+          "description": "Fork 仓库",
+          "readOnly": true
+        },
+        {
+          "name": "create_branch",
+          "description": "创建分支",
+          "readOnly": true
+        },
+        {
+          "name": "list_commits",
+          "description": "列出提交",
+          "readOnly": true
+        },
+        {
+          "name": "list_issues",
+          "description": "列出 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "list_pull_requests",
+          "description": "列出 PR",
+          "readOnly": true
+        },
+        {
+          "name": "merge_pull_request",
+          "description": "合并 PR",
+          "readOnly": true
+        },
+        {
+          "name": "get_issue",
+          "description": "读取 Issue 详情",
+          "readOnly": true
+        },
+        {
+          "name": "update_issue",
+          "description": "更新 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "add_issue_comment",
+          "description": "评论 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "search_code",
+          "description": "搜索代码",
+          "readOnly": true
+        },
+        {
+          "name": "search_issues",
+          "description": "搜索 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "search_users",
+          "description": "搜索用户",
+          "readOnly": true
+        },
+        {
+          "name": "get_me",
+          "description": "获取当前用户信息",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "GitHub",
+        "homepage": "https://github.com/settings/tokens",
+        "authType": "Personal Access Token"
+      },
+      "permissions": [
+        "读取仓库、Issues、Pull Requests、Commits、Branches"
+      ]
+    },
+    {
+      "id": "gitlab",
+      "name": "gitlab",
+      "displayName": "GitLab",
+      "description": "让 Agent 操作 GitLab：项目、MR、Issue、仓库文件与搜索。需要配置 GitLab Personal Access Token（可自定义 GitLab API 地址，支持自建实例）。",
+      "category": "code",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "create_or_update_file",
+          "description": "创建或更新仓库文件",
+          "readOnly": true
+        },
+        {
+          "name": "search_projects",
+          "description": "搜索项目",
+          "readOnly": true
+        },
+        {
+          "name": "create_repository",
+          "description": "创建新项目",
+          "readOnly": true
+        },
+        {
+          "name": "create_issue",
+          "description": "创建 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "create_merge_request",
+          "description": "创建 Merge Request",
+          "readOnly": true
+        },
+        {
+          "name": "fork_repository",
+          "description": "Fork 项目",
+          "readOnly": true
+        },
+        {
+          "name": "create_branch",
+          "description": "创建分支",
+          "readOnly": true
+        },
+        {
+          "name": "get_blob_content",
+          "description": "读取文件内容",
+          "readOnly": true
+        },
+        {
+          "name": "get_user_info",
+          "description": "获取用户信息",
+          "readOnly": true
+        },
+        {
+          "name": "get_current_user",
+          "description": "获取当前用户",
+          "readOnly": true
+        },
+        {
+          "name": "get_merge_request",
+          "description": "读取 MR 详情",
+          "readOnly": true
+        },
+        {
+          "name": "list_merge_requests",
+          "description": "列出 MR",
+          "readOnly": true
+        },
+        {
+          "name": "list_issues",
+          "description": "列出 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "update_issue",
+          "description": "更新 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "create_issue_note",
+          "description": "评论 Issue",
+          "readOnly": true
+        },
+        {
+          "name": "list_commits",
+          "description": "列出提交",
+          "readOnly": true
+        },
+        {
+          "name": "get_commit_info",
+          "description": "读取提交详情",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "GitLab",
+        "homepage": "https://gitlab.com/-/user_settings/personal_access_tokens",
+        "authType": "Personal Access Token"
+      },
+      "permissions": [
+        "读取项目、Issues、Merge Requests、Commits"
+      ]
+    },
+    {
+      "id": "git",
+      "name": "git",
+      "displayName": "Git 本地仓库",
+      "description": "让 Agent 对当前工作目录的 Git 仓库执行只读检查与安全操作：状态、差异、日志、分支与提交摘要。MyYoda 自研桥接，无需凭据。",
+      "category": "code",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "git_status",
+          "description": "查看工作区状态",
+          "readOnly": true
+        },
+        {
+          "name": "git_diff",
+          "description": "查看未暂存与已暂存差异",
+          "readOnly": true
+        },
+        {
+          "name": "git_log",
+          "description": "查看提交历史",
+          "readOnly": true
+        },
+        {
+          "name": "git_show",
+          "description": "查看某次提交详情",
+          "readOnly": true
+        },
+        {
+          "name": "git_branch",
+          "description": "列出本地与远程分支",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      },
+      "permissions": [
+        "读取本地仓库分支、提交、文件差异"
+      ]
+    },
+    {
+      "id": "notion",
+      "name": "notion",
+      "displayName": "Notion",
+      "description": "让 Agent 读写你的 Notion 工作区：搜索页面、读取/创建/更新内容、管理评论。需要配置 Notion Token（ntn_ 开头，需在 Notion 集成页面授权对应页面）。",
+      "category": "office",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "api_get_user",
+          "description": "获取当前用户信息",
+          "readOnly": true
+        },
+        {
+          "name": "api_get_me",
+          "description": "获取 Bot 用户信息",
+          "readOnly": true
+        },
+        {
+          "name": "api_search",
+          "description": "搜索工作区内容",
+          "readOnly": true
+        },
+        {
+          "name": "api_post_page",
+          "description": "创建页面",
+          "readOnly": true
+        },
+        {
+          "name": "api_get_page",
+          "description": "读取页面内容",
+          "readOnly": true
+        },
+        {
+          "name": "api_get_page_contents",
+          "description": "读取页面子内容",
+          "readOnly": true
+        },
+        {
+          "name": "api_patch_page",
+          "description": "更新页面",
+          "readOnly": true
+        },
+        {
+          "name": "api_post_comment",
+          "description": "添加评论",
+          "readOnly": true
+        },
+        {
+          "name": "api_get_block_children",
+          "description": "读取块子元素",
+          "readOnly": true
+        },
+        {
+          "name": "api_patch_block_children",
+          "description": "更新块子元素",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Notion",
+        "homepage": "https://www.notion.so/my-integrations",
+        "authType": "API Token（ntn_）"
+      },
+      "permissions": [
+        "读取已授权的页面与数据库内容"
+      ]
+    },
+    {
+      "id": "figma",
+      "name": "figma",
+      "displayName": "Figma",
+      "description": "让 Agent 读取你的 Figma 设计文件：文件/页面/组件信息、导出资源、变量与样式。需要配置 Figma Personal Access Token。",
+      "category": "design",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "get_figma_data",
+          "description": "读取 Figma 文件完整结构",
+          "readOnly": true
+        },
+        {
+          "name": "download_figma_images",
+          "description": "导出节点为图片",
+          "readOnly": true
+        },
+        {
+          "name": "get_file",
+          "description": "获取文件信息",
+          "readOnly": true
+        },
+        {
+          "name": "get_file_nodes",
+          "description": "获取指定节点",
+          "readOnly": true
+        },
+        {
+          "name": "get_images",
+          "description": "导出图片",
+          "readOnly": true
+        },
+        {
+          "name": "get_image_fills",
+          "description": "获取图片填充",
+          "readOnly": true
+        },
+        {
+          "name": "get_file_versions",
+          "description": "获取版本历史",
+          "readOnly": true
+        },
+        {
+          "name": "get_comments",
+          "description": "获取评论",
+          "readOnly": true
+        },
+        {
+          "name": "post_comment",
+          "description": "发表评论",
+          "readOnly": true
+        },
+        {
+          "name": "get_team_components",
+          "description": "获取团队组件",
+          "readOnly": true
+        },
+        {
+          "name": "get_file_components",
+          "description": "获取文件组件",
+          "readOnly": true
+        },
+        {
+          "name": "get_component",
+          "description": "获取组件详情",
+          "readOnly": true
+        },
+        {
+          "name": "get_style",
+          "description": "获取样式",
+          "readOnly": true
+        },
+        {
+          "name": "get_team_component_sets",
+          "description": "获取团队组件集",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Figma",
+        "homepage": "https://www.figma.com/developers/api",
+        "authType": "Personal Access Token"
+      },
+      "permissions": [
+        "读取文件、图层、样式与组件库"
+      ]
+    },
+    {
+      "id": "brave-search",
+      "name": "brave_search",
+      "displayName": "Brave Search",
+      "description": "让 Agent 使用 Brave Search 进行联网搜索与本地搜索。需要配置 Brave Search API Key（brave.com/search/api 免费申请）。",
+      "category": "search",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "brave_web_search",
+          "description": "Brave 网页搜索",
+          "readOnly": true
+        },
+        {
+          "name": "brave_local_search",
+          "description": "Brave 本地搜索（商家/地点）",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Brave",
+        "homepage": "https://brave.com/search/api/",
+        "authType": "API Key"
+      },
+      "permissions": [
+        "发起公开网络搜索请求"
+      ]
+    },
+    {
+      "id": "exa",
+      "name": "exa",
+      "displayName": "Exa",
+      "description": "让 Agent 使用 Exa 进行语义化搜索与内容获取（擅长找相似内容、深度研究）。需要配置 Exa API Key（dashboard.exa.ai 获取）。",
+      "category": "search",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "web_search_exa",
+          "description": "Exa 语义化网页搜索",
+          "readOnly": true
+        },
+        {
+          "name": "get_code_context_exa",
+          "description": "获取代码上下文",
+          "readOnly": true
+        },
+        {
+          "name": "deep_researcher_start",
+          "description": "启动深度研究",
+          "readOnly": true
+        },
+        {
+          "name": "get_deep_research_updates",
+          "description": "获取研究进度",
+          "readOnly": true
+        },
+        {
+          "name": "get_deep_research_results",
+          "description": "获取研究结果",
+          "readOnly": true
+        },
+        {
+          "name": "crawling_exa",
+          "description": "爬取网页内容",
+          "readOnly": true
+        },
+        {
+          "name": "company_research_exa",
+          "description": "公司研究",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Exa",
+        "homepage": "https://dashboard.exa.ai/api-keys",
+        "authType": "API Key"
+      },
+      "permissions": [
+        "发起语义/关键词网络搜索"
+      ]
+    },
+    {
+      "id": "fetch",
+      "name": "fetch",
+      "displayName": "网页抓取",
+      "description": "让 Agent 抓取任意 URL 并转换为干净的 Markdown 文本（静态页面、无需登录）。MyYoda 自研桥接，无需凭据。",
+      "category": "search",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "fetch_url",
+          "description": "抓取网页并转换为 Markdown",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "无需凭据"
+      },
+      "permissions": [
+        "抓取公开 HTTP 网页内容"
+      ]
+    },
+    {
+      "id": "sqlite",
+      "name": "sqlite",
+      "displayName": "SQLite 数据库",
+      "description": "让 Agent 查询本地 SQLite 数据库（只读 SELECT 或配置 DB 路径后执行）。MyYoda 自研桥接（Node 内置 sqlite），无需凭据。",
+      "category": "data",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "sqlite_list_tables",
+          "description": "列出所有表",
+          "readOnly": true
+        },
+        {
+          "name": "sqlite_describe_table",
+          "description": "查看表结构",
+          "readOnly": true
+        },
+        {
+          "name": "sqlite_query",
+          "description": "执行 SQL 查询",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "myyoda",
+        "author": "MyYoda",
+        "homepage": "https://github.com/GeoffBao/MyYoda",
+        "authType": "本地文件路径"
+      },
+      "permissions": [
+        "只读查询本地 SQLite 数据库"
+      ]
+    },
+    {
+      "id": "browserbase",
+      "name": "browserbase",
+      "displayName": "Browserbase",
+      "description": "让 Agent 使用 Browserbase 云端浏览器自动化（Stagehand 驱动，适合复杂网页交互与爬取）。需要配置 Browserbase API Key 与 Project ID。",
+      "category": "search",
+      "kind": "internal",
+      "deletable": false,
+      "defaultEnabled": false,
+      "toggleable": true,
+      "tools": [
+        {
+          "name": "browserbase_session_create",
+          "description": "创建浏览器会话",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_session_list",
+          "description": "列出会话",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_stagehand_act",
+          "description": "执行浏览器操作",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_stagehand_extract",
+          "description": "提取页面数据",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_stagehand_observe",
+          "description": "观察页面元素",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_screenshot",
+          "description": "截图",
+          "readOnly": true
+        },
+        {
+          "name": "browserbase_tab_list",
+          "description": "列出标签页",
+          "readOnly": true
+        }
+      ],
+      "source": {
+        "vendor": "official",
+        "author": "Browserbase",
+        "homepage": "https://browserbase.com/dashboard",
+        "authType": "API Key + Project ID"
+      },
+      "permissions": [
+        "创建和管理云端浏览器会话"
       ]
     }
   ]

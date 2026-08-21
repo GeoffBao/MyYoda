@@ -29,6 +29,15 @@ export interface BuiltinMcpDefinition {
   /** 是否提供开关（基础设施型如 myyoda-cloud 置 false） */
   toggleable: boolean
   tools: McpToolSummary[]
+  /** 来源与认证元数据（对标 OpenAI Plugins 的 author/homepage；可选） */
+  source?: {
+    vendor: 'official' | 'myyoda'
+    author?: string
+    homepage?: string
+    authType?: string
+  }
+  /** 连接器将访问的数据/能力范围（对标 Trae 权限列表） */
+  permissions?: string[]
 }
 
 const DEFINITIONS: BuiltinMcpDefinition[] = (manifest.servers as unknown as BuiltinMcpDefinition[]).map((s) => ({

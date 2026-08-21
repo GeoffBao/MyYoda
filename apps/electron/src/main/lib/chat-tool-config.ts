@@ -20,6 +20,10 @@ const DEFAULT_CONFIG: ChatToolsFileConfig = {
   },
   toolCredentials: {},
   customTools: [],
+  marketplaceInstalled: [],
+  marketplaceDisabled: [],
+  marketplaceIgnored: [],
+  marketplaceRemoteItems: {},
 }
 
 /**
@@ -39,6 +43,10 @@ export function getChatToolsConfig(): ChatToolsFileConfig {
       toolStates: { ...DEFAULT_CONFIG.toolStates, ...data.toolStates },
       toolCredentials: data.toolCredentials ?? {},
       customTools: data.customTools ?? [],
+      marketplaceInstalled: data.marketplaceInstalled ?? [],
+      marketplaceDisabled: data.marketplaceDisabled ?? [],
+      marketplaceIgnored: data.marketplaceIgnored ?? [],
+      marketplaceRemoteItems: data.marketplaceRemoteItems ?? {},
     }
   } catch (error) {
     console.error('[Chat 工具配置] 读取失败:', error)

@@ -413,7 +413,6 @@ import {
   orgListMembers,
   orgListSkills,
 } from './lib/org-skill-service'
-import { fetchCommunityManifest, installCommunitySkill } from './lib/community-skill-service'
 import { projectRepository } from './lib/project-repository'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
@@ -3347,24 +3346,6 @@ export function registerIpcHandlers(): void {
 
   // ── 社区市场 ─────────────────────────────────
 
-  // 拉取社区市场清单
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.COMMUNITY_FETCH_MANIFEST,
-    async (): Promise<CommunitySkill[]> => {
-      return fetchCommunityManifest()
-    }
-  )
-
-  // 安装社区市场 Skill 到工作区
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.COMMUNITY_INSTALL_SKILL,
-    async (_, workspaceSlug: string, skill: CommunitySkill): Promise<CommunitySkillInstallResult> => {
-      const { getWorkspaceSkillsDir } = await import('./lib/config-paths')
-      const dir = getWorkspaceSkillsDir(workspaceSlug)
-      return installCommunitySkill(dir, skill)
-    }
-  )
-
   ipcMain.handle(
     AGENT_IPC_CHANNELS.READ_SKILL_CONTENT,
     async (_, workspaceSlug: string, skillSlug: string): Promise<string> => {
@@ -3818,6 +3799,69 @@ export function registerIpcHandlers(): void {
     CHAT_TOOL_IPC_CHANNELS.DELETE_CUSTOM_TOOL,
     async (_, toolId: string): Promise<void> => {
       deleteCustomTool(toolId)
+    }
+  )
+
+  // 测试内置连接器连接（凭据验证）
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.TEST_BUILTIN_CONNECTOR,
+    async (_, connectorId: string): Promise<{ success: boolean; message: string }> => {
+      const { testBuiltinConnectorConnection } = await import('./lib/builtin-mcp/connector-test')
+      return testBuiltinConnectorConnection(connectorId)
+    }
+  )
+
+  // 市场目录（plugin_creator）：列表 / 安装 / 卸载
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_LIST,
+    async (_, workspaceSlug: string): Promise<{ items: import('@myyoda/shared').MarketplaceItemWithStatus[] }> => {
+      const { listMarketplaceItems } = await import('./lib/marketplace/marketplace-service')
+      return listMarketplaceItems(workspaceSlug)
+    }
+  )
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_INSTALL,
+    async (_, itemId: string): Promise<void> => {
+      const { installMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+      return installMarketplaceItem(itemId)
+    }
+  )
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_UNINSTALL,
+    async (_, itemId: string, purgeSystem?: boolean): Promise<void> => {
+      const { uninstallMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+      return uninstallMarketplaceItem(itemId, purgeSystem)
+    }
+  )
+  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_TOGGLE, async (_, itemId: string, enabled: boolean): Promise<void> => {
+    const { toggleMarketplaceItem } = await import('./lib/marketplace/marketplace-service')
+    toggleMarketplaceItem(itemId, enabled)
+  })
+
+  // CLI 连接器扫码授权（企业微信等）：启动生成二维码 / 实时查状态 / 取消
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_START,
+    async (_, itemId: string): Promise<import('./lib/marketplace/cli-auth').CliAuthStartResult> => {
+      const { cliAuthStart } = await import('./lib/marketplace/cli-auth')
+      return cliAuthStart(itemId)
+    }
+  )
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_STATUS,
+    async (_, itemId: string): Promise<{ authenticated: boolean; error?: string }> => {
+      const { cliAuthStatus } = await import('./lib/marketplace/cli-auth')
+      return cliAuthStatus(itemId)
+    }
+  )
+  ipcMain.handle(CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_CANCEL, async (): Promise<void> => {
+    const { cliAuthCancel } = await import('./lib/marketplace/cli-auth')
+    return cliAuthCancel()
+  })
+  ipcMain.handle(
+    CHAT_TOOL_IPC_CHANNELS.MARKETPLACE_CLI_AUTH_TOKEN,
+    async (_, itemId: string, token: string): Promise<{ ok: boolean; error?: string }> => {
+      const { cliAuthToken } = await import('./lib/marketplace/cli-auth')
+      return cliAuthToken(itemId, token)
     }
   )
 
