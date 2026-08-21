@@ -39,7 +39,7 @@ import { resolveTitleChannel, resolveTitleModel } from './title-model-selection'
 import { getSettings } from './settings-service'
 import { resolveProxyUrlForModel } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
-import { getAgentWorkspace, getLocalProjectRootStatus, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir, getAgentDefaultWorkingDirectory } from './agent-workspace-manager'
+import { getAgentWorkspace, getLocalProjectRootStatus, getEffectiveMcpConfig, getEffectiveSkillsDirs, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceDefaultWorkingDirectory, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved, hasProjectMcpServers, getProjectMcpConfig, hasProjectSkills, getProjectSkillsDir, getAgentDefaultWorkingDirectory } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getWorkspaceFilesDir, getBundledCliPath, getWorkspaceSkillsDir, getSdkConfigDir } from './config-paths'
 import { getRegistryPathFromRegistry } from './windows-env'
 import { projectRepository } from './project-repository'
@@ -469,14 +469,16 @@ export class AgentOrchestrator {
   /**
    * 构建 MCP 服务器配置。
    *
-   * 若会话绑定了嵌套 Project 且该 Project 已自己配置过 MCP 服务器，用项目级覆盖工作区级；
-   * 否则（未绑定项目、项目未自己配置过）100% 沿用工作区级行为，不影响存量会话。
+   * 若会话绑定了嵌套 Project 且该 Project 已自己配置过 MCP 服务器，用项目级完全覆盖全局级；
+   * 否则（未绑定项目、项目未自己配置过）读生效全局 MCP 配置（getEffectiveMcpConfig，
+   * 即 ~/.myyoda/mcp.json）。注意：不能用 getWorkspaceMcpConfig——工作区级 mcp.json 在
+   * migrateGlobalScopes 完成后会被改名为 .migrated，继续读旧路径会让存量工作区的 MCP 服务器静默消失。
    */
   private buildMcpServers(workspaceSlug: string | undefined, projectId: string | undefined): Record<string, Record<string, unknown>> {
     const mcpServers: Record<string, Record<string, unknown>> = {}
     if (!workspaceSlug) return mcpServers
 
-    const mcpConfig = projectId && hasProjectMcpServers(workspaceSlug, projectId) ? getProjectMcpConfig(workspaceSlug, projectId) : getWorkspaceMcpConfig(workspaceSlug)
+    const mcpConfig = projectId && hasProjectMcpServers(workspaceSlug, projectId) ? getProjectMcpConfig(workspaceSlug, projectId) : getEffectiveMcpConfig(workspaceSlug)
     for (const [name, entry] of Object.entries(mcpConfig.servers ?? {})) {
       if (!entry.enabled) continue
       if (name === 'memos-cloud') continue
@@ -1409,8 +1411,12 @@ export class AgentOrchestrator {
       // 10. 构建 MCP 服务器配置 + 记忆工具 + 生图工具 + 自定义工具
       // toolPolicy=none 用于 task.yaml 生成草稿：只允许模型产出文本，不暴露任何会产生副作用的工具。
       const mcpServers = toolsDisabled ? {} : this.buildMcpServers(workspaceSlug, sessionMeta?.projectId)
-      // 与 buildMcpServers 同样的 fallback 规则：项目自己配置过 Skills 才用项目级目录，否则沿用工作区级目录（不影响存量会话）
+      // 与 buildMcpServers 同样的 fallback 规则：项目自己配置过 Skills 才用项目级目录，否则沿用工作区级目录（不影响存量会话）。
+      // effectiveSkillsDir 仅代表“工作区/项目自有层”，用于技能激活来源标注（workspaceSkillsRoot）。
       const effectiveSkillsDir = workspaceSlug ? (sessionMeta?.projectId && hasProjectSkills(workspaceSlug, sessionMeta.projectId) ? getProjectSkillsDir(workspaceSlug, sessionMeta.projectId) : getWorkspaceSkillsDir(workspaceSlug)) : undefined
+      // 真正传给 SDK 的搜索路径需叠加全局层（Skills 全局化：~/.myyoda/global-skills/ 优先生效，
+      // 否则预制 Skill 在迁移后会从实际会话中消失——见 getEffectiveSkillsDirs 注释）。
+      const skillsSearchPaths = workspaceSlug ? getEffectiveSkillsDirs(workspaceSlug, sessionMeta?.projectId) : undefined
       if (!toolsDisabled && isBuiltinMcpUserEnabled('chrome-devtools')) {
         injectChromeDevtoolsMcpServer(mcpServers)
       }
@@ -1485,6 +1491,7 @@ export class AgentOrchestrator {
       const dynamicCtx = buildDynamicContext({
         workspaceName: workspace?.name,
         workspaceSlug,
+        ...(sessionMeta?.projectId ? { projectId: sessionMeta.projectId } : {}),
         agentCwd,
         ...(projectContext ? { projectContext } : {}),
         ...(workspaceDefaultWorkingDirectory ? { workspaceDefaultWorkingDirectory } : {}),
@@ -2014,9 +2021,9 @@ ${workContext}`
         ...(allAdditionalDirectories.length > 0 && {
           additionalDirectories: allAdditionalDirectories
         }),
-        ...(workspaceSlug && effectiveSkillsDir
+        ...(workspaceSlug && skillsSearchPaths && skillsSearchPaths.length > 0
           ? {
-              additionalSkillPaths: [effectiveSkillsDir],
+              additionalSkillPaths: skillsSearchPaths,
               skillWorkspaceSlug: workspaceSlug
             }
           : {}),

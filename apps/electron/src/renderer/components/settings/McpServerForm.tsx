@@ -28,9 +28,9 @@ interface EditingServer {
 interface McpServerFormProps {
   /** 编辑模式传入已有服务器，创建模式传 null */
   server: EditingServer | null
-  /** 当前工作区 slug */
+  /** 当前工作区 slug：仅 projectId 分支需要（定位项目存储位置），MCP 已全局化不再按工作区隔离 */
   workspaceSlug: string
-  /** 嵌套 Project id；传入时读写路由到该 Project 自己的 MCP 配置，不传则仍为工作区级（今天的行为） */
+  /** 嵌套 Project id；传入且该 Project 已自己配置过时，读写完全覆盖到项目专属 MCP 配置；不传则读写全局唯一配置 */
   projectId?: string | null
   onSaved: () => void
   onChanged?: () => void
@@ -123,12 +123,14 @@ function buildEntryFromValues(values: McpFormValues, includeTestResult = false):
 }
 
 export function McpServerForm({ server, workspaceSlug, projectId, onSaved, onChanged, onCancel }: McpServerFormProps): React.ReactElement {
+  // MCP 已全局化：projectId 未传或项目未自己配置过时读写全局唯一配置（~/.myyoda/mcp.json，所有工作区共享）；
+  // 项目已自己配置过时完全覆盖为项目专属配置。workspaceSlug 仅项目分支需要。
   const readMcpConfig = React.useCallback(
-    () => (projectId ? window.electronAPI.getProjectMcpConfig(workspaceSlug, projectId) : window.electronAPI.getWorkspaceMcpConfig(workspaceSlug)),
+    () => (projectId ? window.electronAPI.getProjectMcpConfig(workspaceSlug, projectId) : window.electronAPI.getGlobalMcpConfig()),
     [workspaceSlug, projectId],
   )
   const writeMcpConfig = React.useCallback(
-    (config: WorkspaceMcpConfig) => (projectId ? window.electronAPI.saveProjectMcpConfig(workspaceSlug, projectId, config) : window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, config)),
+    (config: WorkspaceMcpConfig) => (projectId ? window.electronAPI.saveProjectMcpConfig(workspaceSlug, projectId, config) : window.electronAPI.saveGlobalMcpConfig(config)),
     [workspaceSlug, projectId],
   )
   const isEdit = server !== null

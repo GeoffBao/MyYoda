@@ -9,7 +9,7 @@ import * as React from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
-import { Sparkles, Pencil, Save, X, FolderOpen, RefreshCw, Trash2, ArrowLeft } from 'lucide-react'
+import { Sparkles, Pencil, Save, X, FolderOpen, RefreshCw, Trash2, ArrowLeft, Globe, AlertTriangle } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -24,6 +24,8 @@ import { extractSkillBody, rebuildSkillMd } from './skillMdUtils'
 interface SkillDetailSheetProps {
   skill: SkillMeta | null
   workspaceSlug: string
+  /** 嵌套 Project id；仅当 skill.scope === 'project' 时需要，用于定位内容/子文件 */
+  projectId?: string | null
   isBuiltin: boolean
   updating: boolean
   onOpenChange: (open: boolean) => void
@@ -49,6 +51,7 @@ export function SkillDetailSheet(props: SkillDetailSheetProps): React.ReactEleme
 function SkillDetailBody({
   skill,
   workspaceSlug,
+  projectId,
   isBuiltin,
   updating,
   onOpenChange,
@@ -58,6 +61,7 @@ function SkillDetailBody({
   onOpenFolder,
   onChanged,
 }: SkillDetailSheetProps & { skill: SkillMeta }): React.ReactElement {
+  const scope = skill.scope ?? 'workspace'
   const [content, setContent] = React.useState<string | null>(null)
   const [loadingContent, setLoadingContent] = React.useState(true)
 
@@ -73,14 +77,14 @@ function SkillDetailBody({
 
   React.useEffect(() => {
     setLoadingContent(true)
-    window.electronAPI.readSkillContent(workspaceSlug, skill.slug)
+    window.electronAPI.readSkillContent(workspaceSlug, skill.slug, scope, projectId ?? undefined)
       .then((text) => setContent(text))
       .catch((err) => {
         console.error('[SkillDetail] 加载内容失败:', err)
         setContent(null)
       })
       .finally(() => setLoadingContent(false))
-  }, [skill.slug, workspaceSlug])
+  }, [skill.slug, workspaceSlug, scope, projectId])
 
   const body = React.useMemo(() => extractSkillBody(content ?? ''), [content])
 
@@ -95,7 +99,7 @@ function SkillDetailBody({
     setSaving(true)
     try {
       const newContent = rebuildSkillMd(content, { name: editName, description: editDescription })
-      await window.electronAPI.writeSkillContent(workspaceSlug, skill.slug, newContent)
+      await window.electronAPI.writeSkillContent(workspaceSlug, skill.slug, newContent, scope, projectId ?? undefined)
       setContent(newContent)
       setIsEditingMeta(false)
       onChanged()
@@ -113,7 +117,7 @@ function SkillDetailBody({
     setSaving(true)
     try {
       const newContent = rebuildSkillMd(content, { body: editBody })
-      await window.electronAPI.writeSkillContent(workspaceSlug, skill.slug, newContent)
+      await window.electronAPI.writeSkillContent(workspaceSlug, skill.slug, newContent, scope, projectId ?? undefined)
       setContent(newContent)
       setIsEditingBody(false)
       onChanged()
@@ -127,10 +131,14 @@ function SkillDetailBody({
   }
 
   const sourceLabel = isBuiltin
-    ? '系统内置'
-    : skill.importSource
-      ? `从 ${skill.importSource.sourceWorkspaceName} 导入`
-      : '当前工作区'
+    ? '系统内置（全局）'
+    : scope === 'global'
+      ? '全局（所有工作区共享）'
+      : scope === 'project'
+        ? '当前项目'
+        : skill.importSource
+          ? `从 ${skill.importSource.sourceWorkspaceName} 导入`
+          : '当前工作区'
 
   return (
     <div className="flex h-full flex-col min-h-0">
@@ -153,6 +161,16 @@ function SkillDetailBody({
               {skill.version && (
                 <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                   v{skill.version}
+                </span>
+              )}
+              {scope === 'global' && (
+                <span className="flex shrink-0 items-center gap-1 rounded-md bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                  <Globe size={11} /> 全局
+                </span>
+              )}
+              {scope === 'project' && (
+                <span className="shrink-0 rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[11px] font-medium text-purple-600 dark:text-purple-400">
+                  本项目
                 </span>
               )}
             </div>
@@ -196,6 +214,21 @@ function SkillDetailBody({
             </Tooltip>
           )}
         </div>
+
+        {/* 遮蔽警示：工作区/项目层与全局同名，运行时优先生效全局版本，这份副本实际不会被 Agent 使用 */}
+        {skill.shadowedByGlobal && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] leading-5 text-amber-700 dark:text-amber-400">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>存在同名全局 Skill，运行时优先生效全局版本——这份副本实际不会被 Agent 使用。建议重命名或删除，避免混淆。</span>
+          </div>
+        )}
+        {/* 全局提示：明确告知编辑范围，避免用户以为只改了自己工作区那份 */}
+        {scope === 'global' && !skill.shadowedByGlobal && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-3 py-2 text-[13px] text-indigo-600 dark:text-indigo-400">
+            <Globe size={14} className="shrink-0" />
+            <span>全局 Skill，修改将对所有工作区生效</span>
+          </div>
+        )}
       </div>
 
       {loadingContent ? (
@@ -314,6 +347,8 @@ function SkillDetailBody({
                 <SkillFilesPanel
                   workspaceSlug={workspaceSlug}
                   skillSlug={skill.slug}
+                  scope={scope}
+                  projectId={projectId}
                   onFileCountChange={setFileCount}
                 />
               </div>

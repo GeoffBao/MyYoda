@@ -1246,6 +1246,9 @@ export interface SkillImportSource {
   sourceRemoved?: boolean
 }
 
+/** Skill 所在作用域层级：global(全局共享) / workspace(工作区级) / project(嵌套 Project 级) */
+export type SkillScope = 'global' | 'workspace' | 'project'
+
 /** 工作区 Skill 元数据 */
 export interface SkillMeta {
   slug: string
@@ -1260,6 +1263,18 @@ export interface SkillMeta {
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
   hasUpdate?: boolean
+  /** 所在作用域层级；仅由 getAllEffectiveSkills / getWorkspaceSkills 等聚合查询函数填充 */
+  scope?: SkillScope
+  /** 工作区/项目层与全局活跃 Skill 同名时为 true：该副本被全局层遮蔽，运行时以 global 优先生效，UI 需提示用户 */
+  shadowedByGlobal?: boolean
+}
+
+/** 全局作用域迁移后续提示：供设置页展示遗留配置 / 合并冲突，避免用户对「已迁移」的数据变化毫无感知 */
+export interface GlobalScopeReviewHints {
+  /** 仍存在未清理 mcp.json 的工作区 slug 列表（迁移未完成或重命名重试失败） */
+  leftoverWorkspaceMcp: string[]
+  /** 合并时因同名冲突而带上 "@xxx" 后缀保留的 MCP server 名称（全名，如 "filesystem@team-a"） */
+  mcpSuffixedServers: string[]
 }
 
 /** 其他工作区 Skill 分组（导入对话框用） */
@@ -2222,15 +2237,23 @@ export const AGENT_IPC_CHANNELS = {
   // 工作区能力（MCP + Skill）
   /** 获取工作区能力摘要 */
   GET_CAPABILITIES: 'agent:get-capabilities',
-  /** 获取工作区 MCP 配置 */
+  /** 获取工作区 MCP 配置（已迁移，仅给迁移脚本/向后兼容保留，UI 请改用 GET_GLOBAL_MCP_CONFIG） */
   GET_MCP_CONFIG: 'agent:get-mcp-config',
-  /** 保存工作区 MCP 配置 */
+  /** 保存工作区 MCP 配置（同上，已迁移） */
   SAVE_MCP_CONFIG: 'agent:save-mcp-config',
+  /** 读取全局 MCP 配置（~/.myyoda/mcp.json，所有工作区共享） */
+  GET_GLOBAL_MCP_CONFIG: 'agent:get-global-mcp-config',
+  /** 保存全局 MCP 配置 */
+  SAVE_GLOBAL_MCP_CONFIG: 'agent:save-global-mcp-config',
+  /** 获取全局作用域迁移后续提示（遗留工作区 mcp.json / 同名冲突后缀） */
+  GET_GLOBAL_SCOPE_REVIEW_HINTS: 'agent:get-global-scope-review-hints',
+  /** 获取全局 Skills 目录绝对路径（~/.myyoda/global-skills/） */
+  GET_GLOBAL_SKILLS_DIR: 'agent:get-global-skills-dir',
   /** 测试 MCP 服务器连接 */
   TEST_MCP_SERVER: 'agent:test-mcp-server',
   /** 启用或关闭 MyYoda 内置 MCP */
   SET_BUILTIN_MCP_ENABLED: 'agent:set-builtin-mcp-enabled',
-  /** 获取工作区 Skill 列表 */
+  /** 获取工作区 Skill 列表（仅工作区层，不含全局；展示完整三层请用 GET_ALL_EFFECTIVE_SKILLS） */
   GET_SKILLS: 'agent:get-skills',
   /** 获取工作区 Skills 目录绝对路径 */
   GET_SKILLS_DIR: 'agent:get-skills-dir',
@@ -2238,6 +2261,12 @@ export const AGENT_IPC_CHANNELS = {
   DELETE_SKILL: 'agent:delete-skill',
   /** 切换工作区 Skill 启用/禁用 */
   TOGGLE_SKILL: 'agent:toggle-skill',
+  /** 获取全局+工作区+项目三层合并后的生效 Skill 列表（带 scope/shadowedByGlobal） */
+  GET_ALL_EFFECTIVE_SKILLS: 'agent:get-all-effective-skills',
+  /** 删除全局 Skill */
+  DELETE_GLOBAL_SKILL: 'agent:delete-global-skill',
+  /** 切换全局 Skill 启用/禁用 */
+  TOGGLE_GLOBAL_SKILL: 'agent:toggle-global-skill',
   /** 获取其他工作区的 Skill 列表 */
   GET_OTHER_WORKSPACE_SKILLS: 'agent:get-other-workspace-skills',
 

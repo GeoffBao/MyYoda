@@ -21,7 +21,7 @@ import {
   X,
   RefreshCw,
 } from 'lucide-react'
-import type { SkillFileNode, SkillFileContent } from '@myyoda/shared'
+import type { SkillFileNode, SkillFileContent, SkillScope } from '@myyoda/shared'
 import { Button } from '@/components/ui/button'
 import { SettingsCard } from './primitives'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,9 @@ import { cn } from '@/lib/utils'
 interface SkillFilesPanelProps {
   workspaceSlug: string
   skillSlug: string
+  /** Skill 所在作用域；默认 'workspace'。global 时不依赖 workspaceSlug，project 时需传 projectId */
+  scope?: SkillScope
+  projectId?: string | null
   /** 文件总数（不含目录）变化时通知父组件，用于 Tab 徽章 */
   onFileCountChange?: (count: number) => void
 }
@@ -51,7 +54,7 @@ function countTree(nodes: SkillFileNode[]): { files: number; dirs: number } {
   return { files, dirs }
 }
 
-export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }: SkillFilesPanelProps): React.ReactElement {
+export function SkillFilesPanel({ workspaceSlug, skillSlug, scope = 'workspace', projectId, onFileCountChange }: SkillFilesPanelProps): React.ReactElement {
   const [tree, setTree] = React.useState<SkillFileNode[]>([])
   const [loading, setLoading] = React.useState(true)
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
@@ -77,7 +80,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
   const refreshTree = React.useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      const nodes = await window.electronAPI.listSkillFiles(workspaceSlug, skillSlug)
+      const nodes = await window.electronAPI.listSkillFiles(workspaceSlug, skillSlug, scope, projectId ?? undefined)
       setTree(nodes)
       onFileCountChangeRef.current?.(countTree(nodes).files)
     } catch (err) {
@@ -86,7 +89,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
     } finally {
       setLoading(false)
     }
-  }, [workspaceSlug, skillSlug])
+  }, [workspaceSlug, skillSlug, scope, projectId])
 
   React.useEffect(() => {
     void refreshTree()
@@ -102,7 +105,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
       setEditing(false)
       setLoadingFile(true)
       try {
-        const result = await window.electronAPI.readSkillFile(workspaceSlug, skillSlug, relativePath)
+        const result = await window.electronAPI.readSkillFile(workspaceSlug, skillSlug, relativePath, scope, projectId ?? undefined)
         setFileContent(result)
         setEditText(result.content ?? '')
       } catch (err) {
@@ -113,7 +116,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
         setLoadingFile(false)
       }
     },
-    [workspaceSlug, skillSlug],
+    [workspaceSlug, skillSlug, scope, projectId],
   )
 
   const toggleExpand = (path: string): void => {
@@ -129,7 +132,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
     if (!fileContent) return
     setSaving(true)
     try {
-      await window.electronAPI.writeSkillFile(workspaceSlug, skillSlug, fileContent.relativePath, editText)
+      await window.electronAPI.writeSkillFile(workspaceSlug, skillSlug, fileContent.relativePath, editText, scope, projectId ?? undefined)
       setFileContent({ ...fileContent, content: editText, size: new Blob([editText]).size })
       setEditing(false)
       toast.success('已保存')
@@ -161,7 +164,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
     }
     const relativePath = creating.parent ? `${creating.parent}/${name}` : name
     try {
-      await window.electronAPI.createSkillEntry(workspaceSlug, skillSlug, relativePath, creating.type)
+      await window.electronAPI.createSkillEntry(workspaceSlug, skillSlug, relativePath, creating.type, scope, projectId ?? undefined)
       toast.success(`已创建${creating.type === 'directory' ? '目录' : '文件'}: ${name}`)
       setCreating(null)
       setCreateName('')
@@ -177,7 +180,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
     const label = node.type === 'directory' ? '目录及其内容' : '文件'
     if (!window.confirm(`确认删除${label} "${node.relativePath}"？此操作不可撤销。`)) return
     try {
-      await window.electronAPI.deleteSkillEntry(workspaceSlug, skillSlug, node.relativePath)
+      await window.electronAPI.deleteSkillEntry(workspaceSlug, skillSlug, node.relativePath, scope, projectId ?? undefined)
       toast.success('已删除')
       if (selected === node.relativePath || (node.type === 'directory' && selected?.startsWith(node.relativePath + '/'))) {
         setSelected(null)
@@ -209,7 +212,7 @@ export function SkillFilesPanel({ workspaceSlug, skillSlug, onFileCountChange }:
     const parentParts = node.relativePath.split('/').slice(0, -1)
     const newRel = parentParts.length ? `${parentParts.join('/')}/${newName}` : newName
     try {
-      await window.electronAPI.renameSkillEntry(workspaceSlug, skillSlug, node.relativePath, newRel)
+      await window.electronAPI.renameSkillEntry(workspaceSlug, skillSlug, node.relativePath, newRel, scope, projectId ?? undefined)
       toast.success('已重命名')
       if (selected === node.relativePath) {
         setSelected(newRel)

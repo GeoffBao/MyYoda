@@ -1,12 +1,13 @@
 /**
  * 全局作用域启动迁移（migrateGlobalScopes）
  *
- * 将旧的"工作区全隔离"模型一次性迁移到"MCP 全局唯一 + Skills 全局默认 / 本工作区覆盖"模型：
+ * 将旧的"工作区全隔离"模型一次性迁移到"MCP 全局唯一 + Skills 全局 < 工作区 < 项目三层叠加"模型：
  *
  * 1. MCP：所有工作区 mcp.json + 嵌套 Project 的 .context/mcp.json 合并进全局 ~/.myyoda/mcp.json
  *    - 同名 server 冲突：保留"默认工作区"（最早创建）版本，其余以 `{name}@{slug}` 后缀保留并告警
  * 2. Skills：~/.myyoda/default-skills/ 复制到 ~/.myyoda/global-skills/（已存在不覆盖）
  *    - 存量工作区 skills/ 中属于预制白名单（getDefaultSkillSlugs）的 skill 复制上浮到全局
+ *    - 运行时三层叠加生效（getEffectiveSkillsDirs），global 优先级最高（first-wins），工作区/项目层同名仅产生 collision 诊断，不是真正的“覆盖”
  *
  * AGENTS.md 与 Memory 仍按工作区基线管理，本迁移不改动它们。
  *
@@ -50,7 +51,7 @@ import { projectRepository } from './project-repository'
 import {
   getProjectMcpConfigPath,
   readProjectMcpConfigRaw,
-} from '../../../../../packages/shared/src/projects/storage'
+} from '@myyoda/shared/projects/storage'
 import type { GlobalScopeReviewHints, WorkspaceMcpConfig } from '@myyoda/shared'
 
 interface MigrationState {
@@ -121,6 +122,23 @@ function copySkillDir(source: string, target: string): Promise<void> {
   })
 }
 
+/**
+ * 粗粒度内容相等判断：用于识别“重复合并同一份未变化的源配置”场景，避免幂等重跑时产生无意义的假冲突。
+ *
+ * 背景：migrateMcpToGlobal 每次运行都以当前全局配置作为 merged 的初始值。若 saveGlobalMcpConfig
+ * 成功但 writeState 未能将 'mcp' 步骤标记为完成（磁盘写入失败/进程被杀等窗口），下次启动会
+ * 重跑本步骤，此时工作区源文件尚未被改名（mcp-rename 是后续独立步骤），内容与上一轮完全相同，
+ * 不应被当作真实冲突再次生成 xxx@xxx 后缀项。同一份未修改的磁盘 JSON 文件两次 parse 字段顺序稳定，
+ * JSON.stringify 比较足够识别这种重跑场景（不追求通用深度相等，只针对这个窄义场景）。
+ */
+function isSameServerEntry(a: WorkspaceMcpConfig['servers'][string], b: WorkspaceMcpConfig['servers'][string]): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b)
+  } catch {
+    return false
+  }
+}
+
 // ===== 1. MCP 合并 =====
 
 /**
@@ -149,9 +167,15 @@ function migrateMcpToGlobal(): string[] {
   }
   const merged: WorkspaceMcpConfig['servers'] = { ...getGlobalMcpConfig().servers }
 
-  // 先合并非默认工作区：同名冲突一律加后缀保留，不覆盖任何已有配置
-  for (const workspace of workspaces) {
-    if (workspace.slug === defaultWorkspace.slug) continue
+  // 非默认工作区按 createdAt 升序（最早创建优先）确定性遍历：同名冲突时“谁保留原名”不再取决于
+  // listAgentWorkspaces 的任意返回顺序，跨用户/跨重跑结果可复现。
+  const nonDefaultWorkspaces = workspaces
+    .filter((ws) => ws.slug !== defaultWorkspace.slug)
+    .sort((a, b) => a.createdAt - b.createdAt)
+
+  // 先合并非默认工作区：同名且内容不同才算真冲突（加后缀保留，不覆盖任何已有配置）；
+  // 内容相同则視为重跑同一份数据，静默跳过
+  for (const workspace of nonDefaultWorkspaces) {
     const workspaceMcpPath = getWorkspaceMcpPath(workspace.slug)
     if (!existsSync(workspaceMcpPath)) continue
 
@@ -161,7 +185,7 @@ function migrateMcpToGlobal(): string[] {
     if (Object.keys(servers).length === 0) continue
 
     for (const [name, entry] of Object.entries(servers)) {
-      if (name in merged) {
+      if (name in merged && !isSameServerEntry(merged[name]!, entry)) {
         const suffixedName = `${name}@${workspace.slug}`
         merged[suffixedName] = entry
         warnings.push(`MCP 服务器 "${name}"（工作区 ${workspace.slug}）与既有配置同名，已以 "${suffixedName}" 保留`)
@@ -179,7 +203,7 @@ function migrateMcpToGlobal(): string[] {
       const config = getWorkspaceMcpConfig(defaultWorkspace.slug)
       const servers = config.servers ?? {}
       for (const [name, entry] of Object.entries(servers)) {
-        if (name in merged) {
+        if (name in merged && !isSameServerEntry(merged[name]!, entry)) {
           const overridden = merged[name]!
           merged[`${name}@default-overridden`] = overridden
           warnings.push(`MCP 服务器 "${name}" 被默认工作区覆盖，旧配置已以 "${name}@default-overridden" 保留`)
@@ -189,8 +213,8 @@ function migrateMcpToGlobal(): string[] {
     }
   }
 
-  // 嵌套 Project 的 .context/mcp.json
-  for (const workspace of workspaces) {
+  // 嵌套 Project 的 .context/mcp.json：工作区遍历顺序同样改为确定性排序，保持与上面一致
+  for (const workspace of [...workspaces].sort((a, b) => a.createdAt - b.createdAt)) {
     const workspaceRoot = join(getAgentWorkspacesDir(), workspace.slug)
     const scannedProjectSlugs = new Set<string>()
 
@@ -204,7 +228,7 @@ function migrateMcpToGlobal(): string[] {
         const raw = readProjectMcpConfigRaw(workspaceRoot, project.config.slug)
         const normalized = normalizeWorkspaceMcpConfig(raw as Partial<WorkspaceMcpConfig>)
         for (const [name, entry] of Object.entries(normalized.servers ?? {})) {
-          if (name in merged) {
+          if (name in merged && !isSameServerEntry(merged[name]!, entry)) {
             const suffixedName = `${name}@project-${project.config.slug}`
             merged[suffixedName] = entry
             warnings.push(`MCP 服务器 "${name}"（项目 ${project.config.slug}）与既有配置同名，已以 "${suffixedName}" 保留`)
@@ -233,7 +257,7 @@ function migrateMcpToGlobal(): string[] {
           const raw = JSON.parse(rawContent) as Partial<WorkspaceMcpConfig>
           const normalized = normalizeWorkspaceMcpConfig(raw)
           for (const [name, serverEntry] of Object.entries(normalized.servers ?? {})) {
-            if (name in merged) {
+            if (name in merged && !isSameServerEntry(merged[name]!, serverEntry)) {
               const suffixedName = `${name}@project-extra-${entry.name}`
               merged[suffixedName] = serverEntry
               warnings.push(`MCP 服务器 "${name}"（额外扫描项目 ${entry.name}）与既有配置同名，已以 "${suffixedName}" 保留`)
@@ -317,6 +341,21 @@ async function liftWorkspaceDefaultSkillsToGlobal(): Promise<string[]> {
   return warnings
 }
 
+/**
+ * 粗略判断两个 Skill 目录内容是否一致（仅比较 SKILL.md 文本）。
+ * 仅用于避免把用户自建的同名 Skill（例如用户自己也写了一个叫 code-review 的 skill）误判为
+ * “从 default-skills 复制的冗余副本”而被清理——只按目录名（slug）匹配不能区分这两种情况。
+ */
+function isSameSkillContent(dirA: string, dirB: string): boolean {
+  try {
+    const a = readFileSync(join(dirA, 'SKILL.md'), 'utf-8')
+    const b = readFileSync(join(dirB, 'SKILL.md'), 'utf-8')
+    return a === b
+  } catch {
+    return false
+  }
+}
+
 /** 步骤 2c：清理存量工作区中的预制 skill 副本（含已退役内置，移入备份目录，不再参与运行时/UI，可回滚） */
 function cleanupWorkspaceDefaultSkillCopies(): string[] {
   const warnings: string[] = []
@@ -327,6 +366,7 @@ function cleanupWorkspaceDefaultSkillCopies(): string[] {
   const backupRoot = join(getGlobalScopeMigrationBackupDir(), 'workspace-skills')
   // 同时清理：在工作区存在但全局也已有的同名预制 skill（说明是从 default-skills 复制的冗余副本）
   const globalSkillSlugs = getEnabledGlobalSkillSlugs()
+  const globalSkillsDir = getGlobalSkillsDir()
 
   for (const workspace of listAgentWorkspaces()) {
     const workspaceSkillsDir = getWorkspaceSkillsDir(workspace.slug)
@@ -336,8 +376,11 @@ function cleanupWorkspaceDefaultSkillCopies(): string[] {
       try {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
           if (!entry.isDirectory()) continue
-          // 清理条件：属于预制/退役白名单 OR 已在全局存在（冗余副本）
-          const shouldCleanup = cleanupSlugs.has(entry.name) || globalSkillSlugs.has(entry.name)
+          // 清理条件：① 属于预制/退役白名单（官方名单，无需内容校验）；
+          // ② 同名且内容与全局相同（真冗余副本）——仅按目录名匹配会误删用户自建的同名 Skill，必须加内容校验。
+          const isRedundantGlobalCopy = globalSkillSlugs.has(entry.name)
+            && isSameSkillContent(join(dir, entry.name), join(globalSkillsDir, entry.name))
+          const shouldCleanup = cleanupSlugs.has(entry.name) || isRedundantGlobalCopy
           if (!shouldCleanup) continue
 
           const source = join(dir, entry.name)
@@ -349,7 +392,7 @@ function cleanupWorkspaceDefaultSkillCopies(): string[] {
             } else {
               renameSync(source, targetBackupDir)
             }
-            const reason = cleanupSlugs.has(entry.name) ? '预制技能' : '全局已有冗余副本'
+            const reason = cleanupSlugs.has(entry.name) ? '预制技能' : '全局已有内容相同的冗余副本'
             console.log(`[迁移] 已清理工作区 ${reason}: ${workspace.slug}/${entry.name} → 备份目录`)
           } catch (error) {
             warnings.push(`清理工作区预制 skill 副本 ${entry.name}（${workspace.slug}）失败: ${error instanceof Error ? error.message : error}`)

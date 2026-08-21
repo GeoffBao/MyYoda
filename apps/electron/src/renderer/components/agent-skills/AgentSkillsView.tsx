@@ -17,7 +17,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
-import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2 } from 'lucide-react'
+import { Blocks, Check, ChevronDown, ChevronRight, FolderOpen, Search, Plus, Store, Sparkles, Loader2, Building2, Globe, AlertTriangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -97,7 +97,8 @@ version: "1.0.0"
 
 export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): React.ReactElement {
   const { workspaces, currentWorkspaceId, selectWorkspace } = useWorkspaceActions()
-  // 对齐「项目=工作区」：Skills/MCP 全部工作区级（无嵌套项目覆盖），顶部选择器只做工作区切换
+  // 顶部选择器只做工作区切换（无嵌套项目覆盖）。注意：MCP 现已全局化，切换工作区不会改变 MCP 列表；
+  // Skills 为全局+工作区两层叠加（见 useAgentSkillsData 注释）。
   const data = useAgentSkillsData(null)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
@@ -124,6 +125,19 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       .catch((cause) => console.error('[AgentSkills] 加载专家数量失败:', cause))
     return () => { cancelled = true }
   }, [])
+
+  // MCP 全局作用域迁移后续提示（遗留工作区 mcp.json / 同名冲突后缀）：
+  // 只在进入 MCP Tab 时拉一次，避免与 Skills/专家等无关 Tab 也发请求。
+  const [globalScopeHints, setGlobalScopeHints] = React.useState<import('@myyoda/shared').GlobalScopeReviewHints | null>(null)
+  const [hintsDismissed, setHintsDismissed] = React.useState(false)
+  React.useEffect(() => {
+    if (tab !== 'mcp') return
+    let cancelled = false
+    window.electronAPI.getGlobalScopeReviewHints()
+      .then((hints) => { if (!cancelled) setGlobalScopeHints(hints) })
+      .catch((cause) => console.error('[AgentSkills] 获取迁移提示失败:', cause))
+    return () => { cancelled = true }
+  }, [tab])
   const [selectedSkillSlug, setSelectedSkillSlug] = React.useState<string | null>(null)
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
@@ -150,9 +164,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
     })
   }, [data.skills, q])
 
-  const customSkills = filteredSkills.filter((s) => !data.defaultSkillSlugs.has(s.slug))
-  const builtinSkills = filteredSkills.filter((s) => data.defaultSkillSlugs.has(s.slug))
   const updateCount = data.skills.filter((s) => s.hasUpdate).length
+  const shadowedCount = data.skills.filter((s) => s.shadowedByGlobal).length
 
   const userMcpEntries = React.useMemo(() => {
     return Object.entries(data.mcpConfig.servers ?? {})
@@ -183,10 +196,6 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 
   const selectedSkill = data.skills.find((s) => s.slug === selectedSkillSlug) ?? null
   const selectedIsBuiltin = selectedSkill ? data.defaultSkillSlugs.has(selectedSkill.slug) : false
-
-  const openSkillFolder = (slug: string): void => {
-    if (data.skillsDir) window.electronAPI.openFile(`${data.skillsDir}/${slug}`)
-  }
 
   const configureBuiltinMcp = React.useCallback((serverId: string): void => {
     const focusMap: Partial<Record<string, ToolSettingsFocus>> = {
@@ -458,10 +467,10 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
             />
           ) : tab === 'skills' ? (
             <SkillsTab
-              customSkills={customSkills}
-              builtinSkills={builtinSkills}
+              skills={filteredSkills}
               total={data.skills.length}
               updateCount={updateCount}
+              shadowedCount={shadowedCount}
               updatingSkill={data.updatingSkill}
               isProjectScope={false}
               isBuiltin={(slug) => data.defaultSkillSlugs.has(slug)}
@@ -475,6 +484,9 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               userEntries={userMcpEntries}
               builtinServers={builtinMcpServers}
               total={mcpCount}
+              mcpIsProjectOverride={data.mcpIsProjectOverride}
+              reviewHints={hintsDismissed ? null : globalScopeHints}
+              onDismissHints={() => setHintsDismissed(true)}
               onOpen={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
               onOpenBuiltin={setSelectedBuiltinMcp}
               onToggle={data.toggleMcp}
@@ -494,13 +506,14 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
       <SkillDetailSheet
         skill={selectedSkill}
         workspaceSlug={data.workspaceSlug}
+        projectId={null}
         isBuiltin={selectedIsBuiltin}
         updating={data.updatingSkill === selectedSkill?.slug}
         onOpenChange={(open) => { if (!open) setSelectedSkillSlug(null) }}
         onToggle={(enabled) => selectedSkill && data.toggleSkill(selectedSkill.slug, enabled)}
         onUpdate={() => selectedSkill && data.updateSkill(selectedSkill.slug)}
         onRequestDelete={() => selectedSkill && setPendingDeleteSkill(selectedSkill)}
-        onOpenFolder={() => selectedSkill && openSkillFolder(selectedSkill.slug)}
+        onOpenFolder={() => selectedSkill && data.openSkillFolder(selectedSkill)}
         onChanged={() => bumpCapabilities((v) => v + 1)}
       />
 
@@ -587,10 +600,12 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
 // ===== Skills Tab =====
 
 interface SkillsTabProps {
-  customSkills: SkillMeta[]
-  builtinSkills: SkillMeta[]
+  /** 全量生效 Skill（已按搜索过滤），内部按 scope 分组渲染 */
+  skills: SkillMeta[]
   total: number
   updateCount: number
+  /** 被同名全局 Skill 遮蔽、实际不生效的工作区/项目层副本数量 */
+  shadowedCount: number
   updatingSkill: string | null
   /** 当前是否处于嵌套 Project 范围（仅影响空列表提示文案中“其他工作区”/“其他项目”的描述） */
   isProjectScope: boolean
@@ -603,10 +618,10 @@ interface SkillsTabProps {
 }
 
 function SkillsTab({
-  customSkills,
-  builtinSkills,
+  skills,
   total,
   updateCount,
+  shadowedCount,
   updatingSkill,
   isProjectScope,
   isBuiltin,
@@ -634,9 +649,15 @@ function SkillsTab({
       />
     )
   }
-  if (customSkills.length === 0 && builtinSkills.length === 0) {
+  if (skills.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 Skill" hint="试试更换搜索关键词。" />
   }
+
+  // 按作用域分组：项目（最具体）→ 工作区（日常自定义/导入）→ 全局（预置 + 所有工作区共享，最通用），
+  // 与阶段性“优先看自己当前上下文”的阅读习惯一致。
+  const projectSkills = skills.filter((s) => s.scope === 'project')
+  const workspaceSkills = skills.filter((s) => s.scope !== 'project' && s.scope !== 'global')
+  const globalSkills = skills.filter((s) => s.scope === 'global')
 
   return (
     <div className="flex flex-col gap-8">
@@ -645,11 +666,29 @@ function SkillsTab({
           有 {updateCount} 个 Skill 可更新到来源最新版本
         </div>
       )}
-      {customSkills.length > 0 && (
-        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+      {shadowedCount > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-700 dark:text-amber-400">
+          <AlertTriangle size={14} className="shrink-0" />
+          有 {shadowedCount} 个 Skill 与全局同名、实际不会生效（卡片右上角标注“已被遮蔽”），建议重命名或删除
+        </div>
       )}
-      {builtinSkills.length > 0 && (
-        <SkillSection title="系统内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+      {projectSkills.length > 0 && (
+        <SkillSection title="本项目 Skills" skills={projectSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+      )}
+      {workspaceSkills.length > 0 && (
+        <SkillSection title="工作区 Skills" skills={workspaceSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+      )}
+      {globalSkills.length > 0 && (
+        <SkillSection
+          title="全局 Skills"
+          subtitle="所有工作区共享"
+          skills={globalSkills}
+          isBuiltin={isBuiltin}
+          updatingSkill={updatingSkill}
+          onOpen={onOpen}
+          onToggle={onToggle}
+          onUpdate={onUpdate}
+        />
       )}
     </div>
   )
@@ -657,6 +696,8 @@ function SkillsTab({
 
 interface SkillSectionProps {
   title: string
+  /** 可选副标题，用于补充说明该层的作用范围（如“所有工作区共享”） */
+  subtitle?: string
   skills: SkillMeta[]
   isBuiltin: (slug: string) => boolean
   updatingSkill: string | null
@@ -665,7 +706,7 @@ interface SkillSectionProps {
   onUpdate: (slug: string) => void
 }
 
-function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
+function SkillSection({ title, subtitle, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set())
   const groups = React.useMemo(() => groupSkills(skills), [skills])
 
@@ -683,6 +724,7 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
       <div className="flex items-center gap-2 px-1">
         <span className="text-[13px] font-medium text-foreground/55">{title}</span>
         <span className="text-[12px] tabular-nums text-foreground/35">{skills.length}</span>
+        {subtitle && <span className="text-[12px] text-foreground/30">· {subtitle}</span>}
       </div>
       <div className="flex flex-col gap-4">
         {groups.map((group) => {
@@ -727,6 +769,11 @@ interface McpTabProps {
   userEntries: Array<[string, McpServerEntry]>
   builtinServers: BuiltinMcpServerSummary[]
   total: number
+  /** 当前 MCP 列表是否来自项目覆盖（true）而非全局配置（false） */
+  mcpIsProjectOverride: boolean
+  /** 全局作用域迁移后续提示：null 表示无需展示（无数据或已关闭） */
+  reviewHints: import('@myyoda/shared').GlobalScopeReviewHints | null
+  onDismissHints: () => void
   onOpen: (name: string, entry: McpServerEntry) => void
   onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
   onToggle: (name: string, enabled: boolean) => void
@@ -735,34 +782,92 @@ interface McpTabProps {
   onAdd: () => void
 }
 
-function McpTab({ userEntries, builtinServers, total, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd }: McpTabProps): React.ReactElement {
+function McpTab({ userEntries, builtinServers, total, mcpIsProjectOverride, reviewHints, onDismissHints, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd }: McpTabProps): React.ReactElement {
+  const hasReviewHints = !!reviewHints && (reviewHints.leftoverWorkspaceMcp.length > 0 || reviewHints.mcpSuffixedServers.length > 0)
+
+  // 作用域说明：常驻但低调，让用户理解“切换工作区为什么 MCP 列表不变”不是 bug
+  const scopeBanner = (
+    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-content-area px-3 py-2 text-[13px] text-foreground/60">
+      {mcpIsProjectOverride ? (
+        <>
+          <FolderOpen size={14} className="shrink-0 text-purple-500" />
+          <span>当前项目已配置专属 MCP，完全覆盖全局配置，仅本项目生效</span>
+        </>
+      ) : (
+        <>
+          <Globe size={14} className="shrink-0 text-indigo-500" />
+          <span>MCP 为全局配置，所有工作区共享使用；切换工作区不会改变这份列表</span>
+        </>
+      )}
+    </div>
+  )
+
+  // 迁移后续提示：只在确实存在遗留/冲突时出现，可一键关闭（本次 Tab 会话内不再出现，下次进入若仍未处理会重新提醒）
+  const hintsBanner = hasReviewHints && reviewHints && (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[13px] leading-5 text-amber-700 dark:text-amber-400">
+      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+      <div className="flex-1 space-y-1">
+        <div>升级时已将各工作区的 MCP 合并进全局配置，发现以下需要你确认：</div>
+        {reviewHints.mcpSuffixedServers.length > 0 && (
+          <div className="text-amber-600/80 dark:text-amber-400/70">
+            同名冲突已加后缀保留：{reviewHints.mcpSuffixedServers.join('、')}（可在下方列表里重命名或删除冗余项）
+          </div>
+        )}
+        {reviewHints.leftoverWorkspaceMcp.length > 0 && (
+          <div className="text-amber-600/80 dark:text-amber-400/70">
+            以下工作区迁移尚未完成：{reviewHints.leftoverWorkspaceMcp.join('、')}（重启 MyYoda 会自动重试）
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onDismissHints}
+        className="shrink-0 rounded p-1 text-amber-600/60 transition-colors hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-400/60"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
+
   if (total === 0) {
     return (
-      <EmptyState
-        icon={<Plus className="size-8 text-foreground/30" />}
-        title="还没有 MCP 服务器"
-        hint="点击右上角「添加服务器」开始，或在 Project 模式下让 MyYoda 帮你查找并配置。"
-        action={
-          <button
-            type="button"
-            onClick={onAdd}
-            className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <Plus size={14} />
-            <span>添加服务器</span>
-          </button>
-        }
-      />
+      <div className="flex flex-col gap-4">
+        {scopeBanner}
+        {hintsBanner}
+        <EmptyState
+          icon={<Plus className="size-8 text-foreground/30" />}
+          title="还没有 MCP 服务器"
+          hint="点击右上角「添加服务器」开始，或在 Project 模式下让 MyYoda 帮你查找并配置。"
+          action={
+            <button
+              type="button"
+              onClick={onAdd}
+              className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            >
+              <Plus size={14} />
+              <span>添加服务器</span>
+            </button>
+          }
+        />
+      </div>
     )
   }
   if (userEntries.length === 0 && builtinServers.length === 0) {
-    return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
+    return (
+      <div className="flex flex-col gap-4">
+        {scopeBanner}
+        {hintsBanner}
+        <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-8">
+      {scopeBanner}
+      {hintsBanner}
       {userEntries.length > 0 && (
-        <McpSection title="我的 MCP" count={userEntries.length}>
+        <McpSection title={mcpIsProjectOverride ? '本项目 MCP' : '全局 MCP'} count={userEntries.length}>
           {userEntries.map(([name, entry]) => (
             <McpCard
               key={name}
