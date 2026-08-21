@@ -67,6 +67,7 @@ import { getActiveAccelerator, getAcceleratorDisplay } from '@/lib/shortcut-regi
 import { registerShortcut } from '@/lib/shortcut-registry'
 import { supportsChannelPlanQuota, channelPlanQuotaRefreshVersionAtom } from '@/lib/channel-plan-quota'
 import { previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
+import { canvasPanelOpenMapAtom } from '@/atoms/canvas-panel-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 import { todoPlanningGroupsAtom } from '@/atoms/planning-atoms'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
@@ -2964,15 +2965,25 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
   // ===== 预览面板状态（toggle 快捷键，分屏布局在 MainArea） =====
   const setPreviewOpenMap = useSetAtom(previewPanelOpenMapAtom)
+  const setCanvasOpenMapForToggle = useSetAtom(canvasPanelOpenMapAtom)
 
   const togglePreviewPanel = React.useCallback(() => {
+    let willOpen = false
     setPreviewOpenMap((prev) => {
       const m = new Map(prev)
       const current = m.get(sessionId) ?? false
-      m.set(sessionId, !current)
+      willOpen = !current
+      m.set(sessionId, willOpen)
       return m
     })
-  }, [sessionId, setPreviewOpenMap])
+    if (willOpen) {
+      setCanvasOpenMapForToggle((prev) => {
+        const m = new Map(prev)
+        m.set(sessionId, false)
+        return m
+      })
+    }
+  }, [sessionId, setPreviewOpenMap, setCanvasOpenMapForToggle])
 
   React.useEffect(() => {
     return registerShortcut('toggle-preview-panel', togglePreviewPanel)

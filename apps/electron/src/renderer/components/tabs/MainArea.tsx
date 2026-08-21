@@ -15,16 +15,19 @@ import {
   activeTabAtom,
   scratchPadPanelOpenAtom,
   rightWorkspaceSplitRatioAtom,
+  browserWorkspaceSplitRatioAtom,
 } from '@/atoms/tab-atoms'
 import { Panel } from '@/components/app-shell/Panel'
 import { WelcomeView } from '@/components/welcome/WelcomeView'
 import { previewPanelOpenMapAtom, previewSplitRatioAtom } from '@/atoms/preview-atoms'
+import { canvasPanelOpenMapAtom } from '@/atoms/canvas-panel-atoms'
 import { PreviewPanel } from '@/components/diff/PreviewPanel'
 import { ScratchPadPane } from '@/components/scratch-pad/ScratchPadView'
 import { closeScratchInSplit } from '@/components/scratch-pad/scratch-pad-opener'
 import { useTrackSessionView } from '@/hooks/useTrackSessionView'
 import { TabBar } from './TabBar'
 import { TabContent } from './TabContent'
+import { computeRightWorkspaceLayout, type RightWorkspacePanel } from './right-workspace-layout'
 import { AutomationFormView } from '@/components/automation/AutomationFormView'
 import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
@@ -32,6 +35,7 @@ import { RepoWikiView } from '@/components/repo-wiki/RepoWikiView'
 import { BotHubSettings } from '@/components/settings/BotHubSettings'
 import { DiscoverView } from '@/components/discover/DiscoverView'
 import { ExcalidrawView } from '@/components/excalidraw/ExcalidrawView'
+import { CanvasPanel } from '@/components/excalidraw/CanvasPanel'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
@@ -80,6 +84,7 @@ export function MainArea(): React.ReactElement {
   const contentTabId = activeTab?.type === 'agent' ? activeTabId : deferredActiveTabId
 
   const previewOpenMap = useAtomValue(previewPanelOpenMapAtom)
+  const canvasOpenMap = useAtomValue(canvasPanelOpenMapAtom)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
   const [browserStateMap, setBrowserStateMap] = useAtom(browserStateMapAtom)
@@ -88,8 +93,10 @@ export function MainArea(): React.ReactElement {
   const [terminalStateMap, setTerminalStateMap] = useAtom(terminalStateMapAtom)
   const [splitRatio, setSplitRatio] = useAtom(previewSplitRatioAtom)
   const [rightWorkspaceRatio, setRightWorkspaceRatio] = useAtom(rightWorkspaceSplitRatioAtom)
+  const [browserWorkspaceRatio, setBrowserWorkspaceRatio] = useAtom(browserWorkspaceSplitRatioAtom)
   const previewDragging = React.useRef(false)
   const rightWorkspaceDragging = React.useRef(false)
+  const browserWorkspaceDragging = React.useRef(false)
   const browserSessionId = activeTab?.type === 'agent' ? activeTab.sessionId : null
 
   // 原生 WebContentsView 不受 React DOM 卸载同步控制。Session 或主视图切换时先在
@@ -203,16 +210,20 @@ export function MainArea(): React.ReactElement {
   const previewOpen =
     activeTab?.type === 'agent'
     && (previewOpenMap.get(activeTab.sessionId) ?? false)
-    && !showBrowserPanel
-    && !showBrowserClosing
   const previewSessionId = activeTab?.type === 'agent' ? activeTab.sessionId : null
   const scratchPanelOpen = useAtomValue(scratchPadPanelOpenAtom)
   const showScratchPanel =
     activeTab?.type === 'agent'
     && scratchPanelOpen
     && activeView === 'conversations'
-    && !showBrowserPanel
-    && !showBrowserClosing
+
+  // 画布：文档槽的第二种内容类型，与 Preview 互斥展示（互斥关系由 TabBar.tsx 的
+  // toggleCanvas / useOpenPreview 在打开时互相关闭对方维护，这里只读状态）。
+  const canvasSessionId = activeTab?.type === 'agent' ? activeTab.sessionId : null
+  const canvasOpen =
+    activeTab?.type === 'agent'
+    && (canvasOpenMap.get(activeTab.sessionId) ?? false)
+    && activeView === 'conversations'
 
   const requestCloseBrowser = React.useCallback((sessionId: string) => {
     setBrowserClosingState({ sessionId, state: browserStateMap.get(sessionId) ?? null })
@@ -276,8 +287,12 @@ export function MainArea(): React.ReactElement {
 
   const showPreview = (previewOpen || closing) && previewSessionId && activeView === 'conversations'
   const showPreviewClosingOnly = closing && !previewOpen
-  const showPreviewPane = !!showPreview && !(showPreviewClosingOnly && showScratchPanel)
-  const showBothRightPanels = showPreviewPane && showScratchPanel
+  const showPreviewPane = !!showPreview && !(showPreviewClosingOnly && showScratchPanel) && !canvasOpen
+  const showCanvasPane = canvasOpen && !!canvasSessionId
+  // "文档槽"= Preview 或 Canvas 二选一展示；showBothRightPanels 改名语义扩展为
+  // "文档槽 + Scratch 同时存在"，用于旧的两栏拖拽逻辑判断（Browser 的三栏逻辑见下方新增变量）。
+  const showDocSlot = showPreviewPane || showCanvasPane
+  const showBothRightPanels = showDocSlot && showScratchPanel
 
   const handlePreviewDragStart = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -351,6 +366,42 @@ export function MainArea(): React.ReactElement {
     document.addEventListener('mouseup', onMouseUp)
   }, [rightWorkspaceRatio, setRightWorkspaceRatio])
 
+  const handleBrowserWorkspaceDragStart = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    browserWorkspaceDragging.current = true
+    const startX = e.clientX
+    const startRatio = browserWorkspaceRatio
+    const containerEl = (e.currentTarget as HTMLElement).closest('[data-right-workspace]') as HTMLElement | null
+    const containerWidth = containerEl?.clientWidth ?? 1
+    let rafId = 0
+
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    document.querySelectorAll('iframe').forEach((f) => { (f as HTMLElement).style.pointerEvents = 'none' })
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!browserWorkspaceDragging.current) return
+      if (rafId) return
+      rafId = requestAnimationFrame(() => {
+        rafId = 0
+        const delta = ev.clientX - startX
+        const newRatio = Math.max(0.3, Math.min(0.7, startRatio + delta / containerWidth))
+        setBrowserWorkspaceRatio(newRatio)
+      })
+    }
+    const onMouseUp = () => {
+      browserWorkspaceDragging.current = false
+      if (rafId) cancelAnimationFrame(rafId)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      document.querySelectorAll('iframe').forEach((f) => { (f as HTMLElement).style.pointerEvents = '' })
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [browserWorkspaceRatio, setBrowserWorkspaceRatio])
+
   const handleCloseScratchPanel = React.useCallback(() => {
     closeScratchInSplit(store)
   }, [store])
@@ -368,7 +419,10 @@ export function MainArea(): React.ReactElement {
   }, [tabs, activeTabId, setActiveTabId])
 
   // 关闭动画期间右侧面板脱离 flex 流，保持原宽度，只使用 transform/opacity 做退出动画。
-  const rightPanelClosing = showBrowserClosing || (closing && !showScratchPanel)
+  // Browser / 文档槽 / Scratch 可共存后，只有右侧没有任何稳定面板留下时，
+  // 才能让整个右侧工作区进入 closing overlay；否则只移除正在关闭的子面板。
+  const hasStableRightPanel = showBrowserPanel || previewOpen || showCanvasPane || showScratchPanel
+  const rightPanelClosing = (showBrowserClosing || closing) && !hasStableRightPanel
   const closingOverlayStyle: React.CSSProperties | undefined = rightPanelClosing
     ? {
         position: 'absolute',
@@ -382,17 +436,37 @@ export function MainArea(): React.ReactElement {
       }
     : undefined
 
+  React.useEffect(() => {
+    if (!showBrowserClosing || rightPanelClosing || !browserClosingState) return
+    const frameId = requestAnimationFrame(() => clearClosedBrowser(browserClosingState.sessionId))
+    return () => cancelAnimationFrame(frameId)
+  }, [browserClosingState, clearClosedBrowser, rightPanelClosing, showBrowserClosing])
+
+  React.useEffect(() => {
+    if (!closing || rightPanelClosing || previewOpen) return
+    const frameId = requestAnimationFrame(() => setClosingState(false))
+    return () => cancelAnimationFrame(frameId)
+  }, [closing, previewOpen, rightPanelClosing])
+
   // 左侧容器宽度：右侧工作区打开时固定占 splitRatio；关闭动画结束后再恢复全宽。
-  const showRightPanel = showBrowserPanel || showBrowserClosing || showScratchPanel || showPreviewPane
+  const showRightPanel = showBrowserPanel || showBrowserClosing || showScratchPanel || showPreviewPane || showCanvasPane
   const leftFlexStyle: React.CSSProperties = showRightPanel
     ? { flex: `0 0 calc(${splitRatio * 100}% - 6px)` }
     : { flex: '1 1 auto' }
-  const previewPaneStyle: React.CSSProperties = showBothRightPanels
-    ? { flex: `0 0 calc(${rightWorkspaceRatio * 100}% - 4px)` }
-    : { flex: '1 1 auto' }
-  const scratchPaneStyle: React.CSSProperties = showBothRightPanels
-    ? { flex: `0 0 calc(${(1 - rightWorkspaceRatio) * 100}% - 4px)` }
-    : { flex: '1 1 auto' }
+  const visibleRightPanels = React.useMemo<RightWorkspacePanel[]>(() => {
+    const panels: RightWorkspacePanel[] = []
+    if (showBrowserPanel || showBrowserClosing) panels.push('browser')
+    if (showDocSlot) panels.push('doc')
+    if (showScratchPanel) panels.push('scratch')
+    return panels
+  }, [showBrowserPanel, showBrowserClosing, showDocSlot, showScratchPanel])
+  const rightWorkspaceLayout = React.useMemo(
+    () => computeRightWorkspaceLayout(visibleRightPanels, browserWorkspaceRatio, rightWorkspaceRatio),
+    [visibleRightPanels, browserWorkspaceRatio, rightWorkspaceRatio],
+  )
+  const docPaneStyle: React.CSSProperties = rightWorkspaceLayout.doc ?? { flex: '1 1 auto' }
+  const scratchPaneStyle: React.CSSProperties = rightWorkspaceLayout.scratch ?? { flex: '1 1 auto' }
+  const browserPaneStyle: React.CSSProperties = rightWorkspaceLayout.browser ?? { flex: '1 1 auto' }
 
   return (
     <>
@@ -468,7 +542,7 @@ export function MainArea(): React.ReactElement {
             )}
           </div>
 
-          {/* 右侧：预览/草稿工作区。Preview 和草稿可在同一右侧槽位内并排显示。 */}
+          {/* 右侧：Browser / 文档槽（Preview 或 Canvas）/ Scratch 最多三栏共存。 */}
           {showRightPanel && (
             <div
               className={cn(rightPanelClosing ? 'animate-preview-slide-out' : 'flex flex-1 min-w-0')}
@@ -476,7 +550,7 @@ export function MainArea(): React.ReactElement {
               onAnimationEnd={(e) => {
                 if (!rightPanelClosing || e.target !== e.currentTarget) return
                 if (showBrowserClosing && browserClosingState) clearClosedBrowser(browserClosingState.sessionId)
-                else if (closing) setClosingState(false)
+                if (closing) setClosingState(false)
               }}
             >
               {!rightPanelClosing && (
@@ -487,7 +561,7 @@ export function MainArea(): React.ReactElement {
               )}
               <div className="flex flex-1 min-w-0 h-full overflow-hidden" data-right-workspace>
                 {(showBrowserPanel || showBrowserClosing) && browserPanelSessionId && (
-                  <div className="min-w-0 h-full overflow-hidden flex-1">
+                  <div className="min-w-0 h-full overflow-hidden" style={browserPaneStyle}>
                     <BrowserPanel
                       key={browserPanelSessionId}
                       sessionId={browserPanelSessionId}
@@ -498,9 +572,20 @@ export function MainArea(): React.ReactElement {
                     />
                   </div>
                 )}
+                {(showBrowserPanel || showBrowserClosing) && (showDocSlot || showScratchPanel) && (
+                  <div
+                    className="w-[8px] cursor-col-resize bg-border/40 hover:bg-primary/30 active:bg-primary/50 transition-colors flex-shrink-0 self-stretch"
+                    onMouseDown={handleBrowserWorkspaceDragStart}
+                  />
+                )}
                 {showPreviewPane && previewSessionId && (
-                  <div className="min-w-0 h-full overflow-hidden" style={previewPaneStyle}>
+                  <div className="min-w-0 h-full overflow-hidden" style={docPaneStyle}>
                     <PreviewPanel sessionId={previewSessionId} />
+                  </div>
+                )}
+                {showCanvasPane && canvasSessionId && (
+                  <div className="min-w-0 h-full overflow-hidden" style={docPaneStyle}>
+                    <CanvasPanel sessionId={canvasSessionId} />
                   </div>
                 )}
                 {showBothRightPanels && (

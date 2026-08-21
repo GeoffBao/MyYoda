@@ -10,7 +10,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
-import { Globe2, PanelRight, SquareTerminal } from 'lucide-react'
+import { Globe2, PanelRight, PenTool, SquareTerminal } from 'lucide-react'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -48,6 +48,8 @@ import { cn } from '@/lib/utils'
 import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelMinimizedMapAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 // 终端入口：所有 Agent 会话开放（warmup 预启动 + 多实例）。
 import { terminalPanelOpenMapAtom } from '@/atoms/terminal-atoms'
+import { canvasPanelOpenMapAtom } from '@/atoms/canvas-panel-atoms'
+import { previewPanelOpenMapAtom } from '@/atoms/preview-atoms'
 // 右侧文件面板打开时 MainArea 会被挤窄，不再到达窗口真实右边缘，Windows WindowControls
 // 避让宽度不能继续相对 TabBar 自身右边缘硬编码，否则浏览器/终端按钮会被错位到面板中间。
 import { rightFilePanelVisibleAtom } from '@/atoms/layout-atoms'
@@ -277,6 +279,11 @@ function TabBarInner({
   const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
   // 终端对所有 Agent 会话开放；cwd 由主进程 resolveSessionCwd 解析（project/worktree/沙箱回退）
   const showTerminalButton = Boolean(activeAgentSession)
+  // 画布按钮：固定排终端左边，显示条件与终端/浏览器一致（有 Agent 会话即可）。
+  const showCanvasButton = Boolean(activeAgentSession)
+  const [canvasOpenMap, setCanvasOpenMap] = useAtom(canvasPanelOpenMapAtom)
+  const setPreviewOpenMapForCanvas = useSetAtom(previewPanelOpenMapAtom)
+  const isCanvasOpen = activeAgentSession ? canvasOpenMap.get(activeAgentSession.id) === true : false
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const browserMinimizedMap = useAtomValue(browserPanelMinimizedMapAtom)
   const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
@@ -291,7 +298,7 @@ function TabBarInner({
   // 已不是窗口真实右边缘，真正的 WindowControls 浮在面板上方而不是 TabBar 上方，此时不应再预留 126px。
   const mainAreaReachesWindowEdge = !useAtomValue(rightFilePanelVisibleAtom)
   const effectiveIsWindows = isWindows && mainAreaReachesWindowEdge
-  const actionLayout = getTabBarActionLayout(effectiveIsWindows, showOpenPanelButton, showBrowserButton, showTerminalButton)
+  const actionLayout = getTabBarActionLayout(effectiveIsWindows, showOpenPanelButton, showBrowserButton, showTerminalButton, showCanvasButton)
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
@@ -325,6 +332,26 @@ function TabBarInner({
       setTerminalOpenMap((previous) => { const next = new Map(previous); next.set(sessionId, true); return next })
     }
   }, [activeAgentSession, setTerminalOpenMap, terminalOpenMap])
+
+  // 画布按钮：toggle 当前会话文档槽的画布展示。打开画布时顺带关闭 Preview
+  // （文档槽同一时刻只展示一份内容），关闭画布不影响 Preview 的记忆状态。
+  const toggleCanvas = React.useCallback(() => {
+    if (!activeAgentSession) return
+    const sessionId = activeAgentSession.id
+    const nextOpen = canvasOpenMap.get(sessionId) !== true
+    setCanvasOpenMap((previous) => {
+      const next = new Map(previous)
+      next.set(sessionId, nextOpen)
+      return next
+    })
+    if (nextOpen) {
+      setPreviewOpenMapForCanvas((previous) => {
+        const next = new Map(previous)
+        next.set(sessionId, false)
+        return next
+      })
+    }
+  }, [activeAgentSession, canvasOpenMap, setCanvasOpenMap, setPreviewOpenMapForCanvas])
 
   React.useEffect(() => {
     const sessionId = activeAgentSession?.id ?? null
@@ -545,8 +572,11 @@ function TabBarInner({
         hasMinimizedBrowser={hasMinimizedBrowser}
         showTerminalButton={showTerminalButton}
         isTerminalOpen={activeAgentSession ? terminalOpenMap.get(activeAgentSession.id) === true : false}
+        showCanvasButton={showCanvasButton}
+        isCanvasOpen={isCanvasOpen}
         onOpenBrowser={openBrowser}
         onOpenTerminal={openTerminal}
+        onToggleCanvas={toggleCanvas}
       />
 
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
@@ -564,16 +594,22 @@ function ShortcutGuideButton({
   hasMinimizedBrowser,
   showTerminalButton,
   isTerminalOpen,
+  showCanvasButton,
+  isCanvasOpen,
   onOpenBrowser,
   onOpenTerminal,
+  onToggleCanvas,
 }: {
   positionClassName: string
   showBrowserButton: boolean
   hasMinimizedBrowser: boolean
   showTerminalButton: boolean
   isTerminalOpen: boolean
+  showCanvasButton: boolean
+  isCanvasOpen: boolean
   onOpenBrowser: () => void
   onOpenTerminal: () => void
+  onToggleCanvas: () => void
 }): React.ReactElement {
   if (!showBrowserButton) return <></>
   return (
@@ -583,6 +619,25 @@ function ShortcutGuideButton({
         positionClassName,
       )}
     >
+      {showCanvasButton && showTerminalButton && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn('h-7 w-7', isCanvasOpen && 'bg-accent text-accent-foreground')}
+              onClick={() => onToggleCanvas()}
+            >
+              <PenTool className="size-3.5" />
+              <span className="sr-only">打开画布</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{isCanvasOpen ? '关闭画布' : '打开画布'}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
       {showTerminalButton && (
         <Tooltip>
           <TooltipTrigger asChild>
