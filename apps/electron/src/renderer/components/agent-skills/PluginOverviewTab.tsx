@@ -12,15 +12,53 @@ import {
 } from 'lucide-react'
 import type { PluginCenterTab } from '@/lib/plugin-center-model'
 import type {
+  PluginOverviewAction,
   PluginOverviewItem,
   PluginOverviewModel,
 } from '@/lib/plugin-overview-model'
 
-interface PluginOverviewTabProps {
-  model: PluginOverviewModel
+interface PluginOverviewHandlers {
   onOpenTab: (tab: PluginCenterTab) => void
   onCreateExpert: () => void
   onOpenConnector?: (connectorId: string) => void
+  onOpenCommunityMarket?: () => void
+  onOpenMessaging?: () => void
+}
+
+interface PluginOverviewTabProps extends PluginOverviewHandlers {
+  model: PluginOverviewModel
+}
+
+function dispatchOverviewItem(
+  item: PluginOverviewItem,
+  handlers: PluginOverviewHandlers,
+): void {
+  const action: PluginOverviewAction | undefined = item.action
+    ?? (item.actionConnectorId ? 'open-connector' : item.actionTab ? 'open-tab' : undefined)
+  switch (action) {
+    case 'open-community-market':
+      handlers.onOpenCommunityMarket?.()
+      return
+    case 'open-messaging':
+      handlers.onOpenMessaging?.()
+      return
+    case 'create-expert':
+      handlers.onCreateExpert()
+      return
+    case 'open-connector':
+      if (item.actionConnectorId) handlers.onOpenConnector?.(item.actionConnectorId)
+      return
+    case 'open-tab':
+      if (item.actionTab) handlers.onOpenTab(item.actionTab)
+      return
+    case undefined:
+      if (item.id === 'new-expert') handlers.onCreateExpert()
+      return
+    default: {
+      const _exhaustive: never = action
+      return _exhaustive
+    }
+  }
 }
 
 export function PluginOverviewTab({
@@ -28,7 +66,16 @@ export function PluginOverviewTab({
   onOpenTab,
   onCreateExpert,
   onOpenConnector,
+  onOpenCommunityMarket,
+  onOpenMessaging,
 }: PluginOverviewTabProps): React.ReactElement {
+  const handlers: PluginOverviewHandlers = {
+    onOpenTab,
+    onCreateExpert,
+    onOpenConnector,
+    onOpenCommunityMarket,
+    onOpenMessaging,
+  }
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-wrap gap-2">
@@ -61,8 +108,7 @@ export function PluginOverviewTab({
               <PendingRow
                 key={item.id}
                 item={item}
-                onOpenTab={onOpenTab}
-                onOpenConnector={onOpenConnector}
+                onActivate={() => dispatchOverviewItem(item, handlers)}
               />
             ))}
           </div>
@@ -76,13 +122,7 @@ export function PluginOverviewTab({
             <button
               key={item.id}
               type="button"
-              onClick={() => {
-                if (item.id === 'new-expert') {
-                  onCreateExpert()
-                  return
-                }
-                if (item.actionTab) onOpenTab(item.actionTab)
-              }}
+              onClick={() => dispatchOverviewItem(item, handlers)}
               className="rounded-full bg-foreground/[0.05] px-3 py-1.5 text-[13px] font-medium text-foreground/85 transition-[background-color,transform] duration-fast ease-out hover:bg-foreground/[0.08] active:scale-[var(--press-scale)]"
             >
               {item.title}
@@ -98,13 +138,7 @@ export function PluginOverviewTab({
             <button
               key={item.id}
               type="button"
-              onClick={() => {
-                if (item.actionConnectorId && onOpenConnector) {
-                  onOpenConnector(item.actionConnectorId)
-                  return
-                }
-                if (item.actionTab) onOpenTab(item.actionTab)
-              }}
+              onClick={() => dispatchOverviewItem(item, handlers)}
               className="group flex flex-col gap-2 rounded-2xl border border-border/60 bg-content-area p-4 text-left transition-[border-color,box-shadow,transform] duration-fast ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[var(--press-scale)]"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-foreground/[0.05] text-foreground/70">
@@ -185,23 +219,15 @@ function cnStat(tone: 'default' | 'warning', clickable: boolean): string {
 
 function PendingRow({
   item,
-  onOpenTab,
-  onOpenConnector,
+  onActivate,
 }: {
   item: PluginOverviewItem
-  onOpenTab: (tab: PluginCenterTab) => void
-  onOpenConnector?: (connectorId: string) => void
+  onActivate: () => void
 }): React.ReactElement {
   return (
     <button
       type="button"
-      onClick={() => {
-        if (item.actionConnectorId && onOpenConnector) {
-          onOpenConnector(item.actionConnectorId)
-          return
-        }
-        if (item.actionTab) onOpenTab(item.actionTab)
-      }}
+      onClick={onActivate}
       className="group flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-content-area px-4 py-3 text-left transition-[border-color,background-color,transform] duration-fast ease-out hover:border-border hover:bg-foreground/[0.03] active:scale-[var(--press-scale)]"
     >
       <span className="min-w-0">
