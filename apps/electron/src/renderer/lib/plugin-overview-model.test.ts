@@ -97,6 +97,7 @@ describe('plugin-overview-model', () => {
     expect(overview.pendingItems[0]).toMatchObject({
       title: 'Chrome',
       description: '需要安装 Chrome',
+      action: 'open-connector',
       actionConnectorId: 'builtin:chrome-devtools',
       actionLabel: '去处理',
     })
@@ -159,5 +160,38 @@ describe('plugin-overview-model', () => {
     expect(availableBuiltin.summary.enabledPlugins).toBe(1)
     expect(availableBuiltin.summary.connectorsNeedingAttention).toBe(0)
     expect(availableBuiltin.pendingItems).toHaveLength(0)
+  })
+
+  test('exposes product surfaces in quick actions and namespaced recommendation ids', () => {
+    const overview = buildPluginOverviewModel({
+      skills: [],
+      expertsCount: 0,
+      teamsCount: 0,
+      builtinMcpServers: [],
+      userMcpEntries: [],
+      chatTools: [],
+    })
+
+    expect(overview.quickActions.map((item) => item.id)).toEqual([
+      'community-market',
+      'messaging',
+      'add-connector',
+      'install-skill',
+      'memory',
+      'new-expert',
+    ])
+    expect(overview.quickActions[0]).toMatchObject({
+      action: 'open-community-market',
+      title: '社区市场',
+    })
+    expect(overview.quickActions[1]).toMatchObject({
+      action: 'open-messaging',
+      title: '消息与通知',
+    })
+    expect(overview.recommendations.map((item) => item.actionConnectorId)).toEqual([
+      'builtin:chrome-devtools',
+      'api:web-search',
+      'builtin:nano-banana',
+    ])
   })
 })

@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
-import { agentSkillsTabAtom } from '@/atoms/active-view'
+import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { chatToolsAtom } from '@/atoms/chat-tool-atoms'
 import { serverKanbanProjectsAtom } from '@/atoms/project-atoms'
 import { filterPickableKanbanProjects } from '@/components/app-shell/kanban/types'
@@ -126,6 +126,7 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
   const data = useAgentSkillsData(scopeProjectId)
   const mcpWriteProjectId = resolveMcpWriteProjectId(scopeProjectId, data.mcpIsProjectOverride)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
+  const setActiveView = useSetAtom(activeViewAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const chatTools = useAtomValue(chatToolsAtom)
   const setChatTools = useSetAtom(chatToolsAtom)
@@ -559,6 +560,8 @@ export function AgentSkillsView({ embedded = false }: { embedded?: boolean }): R
               onOpenTab={setTab}
               onCreateExpert={handleCreateExpert}
               onOpenConnector={openConnector}
+              onOpenCommunityMarket={() => setShowCommunityMarket(true)}
+              onOpenMessaging={() => setActiveView('messaging')}
             />
           ) : tab === 'experts' ? (
             <AgentExpertsView
